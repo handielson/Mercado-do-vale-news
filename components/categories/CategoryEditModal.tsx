@@ -213,7 +213,12 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
                     <div className="pt-6 border-t border-slate-200">
                         <CustomFieldsEditor
                             fields={config.custom_fields || []}
-                            onChange={(fields) => setConfig({ ...config, custom_fields: fields })}
+                            onChange={(fields) => {
+                                console.log('🔄 [CategoryEditModal] CustomFieldsEditor onChange called');
+                                console.log('📝 [CategoryEditModal] New fields:', fields);
+                                console.log('🔢 [CategoryEditModal] New fields count:', fields.length);
+                                setConfig({ ...config, custom_fields: fields });
+                            }}
                         />
                     </div>
 
@@ -456,6 +461,11 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
                                 </div>
 
                                 {/* Custom Fields (Dynamic) */}
+                                {(() => {
+                                    console.log('🔍 [EAN Autofill] Custom fields:', config.custom_fields);
+                                    console.log('🔍 [EAN Autofill] Custom fields count:', config.custom_fields?.length || 0);
+                                    return null;
+                                })()}
                                 {config.custom_fields && config.custom_fields.length > 0 && (
                                     <div className="space-y-2">
                                         <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Campos Personalizados</p>

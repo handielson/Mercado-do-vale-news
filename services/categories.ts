@@ -119,6 +119,10 @@ async function getById(id: string): Promise<Category | null> {
 async function update(id: string, input: CategoryInput): Promise<Category> {
     const companyId = await getCompanyId();
 
+    console.log('💾 [CategoryService] Updating category:', id);
+    console.log('📝 [CategoryService] Input config:', JSON.stringify(input.config, null, 2));
+    console.log('🔢 [CategoryService] Custom fields count:', input.config?.custom_fields?.length || 0);
+
     const slug = input.name
         .toLowerCase()
         .normalize('NFD')
@@ -139,6 +143,9 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
         .single();
 
     if (error) throw new Error(`Failed to update category: ${error.message}`);
+
+    console.log('✅ [CategoryService] Saved config:', JSON.stringify(data.config, null, 2));
+    console.log('✅ [CategoryService] Saved custom fields:', data.config?.custom_fields?.length || 0);
 
     return {
         id: data.id,

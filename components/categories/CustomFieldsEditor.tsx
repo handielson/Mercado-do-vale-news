@@ -152,7 +152,11 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                 options: newField.type === 'dropdown' ? newField.options : undefined,
                 placeholder: newField.placeholder
             };
+            console.log('➕ [CustomFieldsEditor] Adding new field:', field);
+            console.log('📋 [CustomFieldsEditor] Current fields count:', fields.length);
+            console.log('🔄 [CustomFieldsEditor] Calling onChange with new field...');
             onChange([...fields, field]);
+            console.log('✅ [CustomFieldsEditor] onChange called successfully');
         }
 
         setNewField({ name: '', type: 'text', requirement: 'optional', options: [] });
