@@ -7,6 +7,7 @@ import { ClientTypes } from '../utils/field-standards';
 import { ProductListPage } from '../pages/admin/products/ProductListPage';
 import { ProductFormPage } from '../pages/admin/products/ProductFormPage';
 import { ProductDetailPage } from '../pages/admin/products/ProductDetailPage';
+import { BulkRegistrationPage } from '../pages/admin/products/BulkRegistrationPage';
 import CategorySettingsPage from '../pages/admin/settings/categories/index';
 import NewCategoryPage from '../pages/admin/settings/categories/new';
 import EditCategoryPage from '../pages/admin/settings/categories/[id]/edit';
@@ -92,6 +93,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><ProductDetailPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/products/bulk",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><BulkRegistrationPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

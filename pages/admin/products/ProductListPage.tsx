@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, Package } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
@@ -24,6 +24,10 @@ export const ProductListPage: React.FC = () => {
         navigate('/admin/products/new');
     };
 
+    const handleBulkRegistration = () => {
+        navigate('/admin/products/bulk');
+    };
+
     const handleEditProduct = (product: Product) => {
         navigate(`/admin/products/${product.id}`);
     };
@@ -38,13 +42,22 @@ export const ProductListPage: React.FC = () => {
                         Gerencie o catálogo de produtos do sistema
                     </p>
                 </div>
-                <button
-                    onClick={handleNewProduct}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                >
-                    <Plus className="w-5 h-5" />
-                    <span className="font-medium">Novo Produto</span>
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={handleBulkRegistration}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+                    >
+                        <Package className="w-5 h-5" />
+                        <span className="font-medium">Cadastro em Massa</span>
+                    </button>
+                    <button
+                        onClick={handleNewProduct}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                    >
+                        <Plus className="w-5 h-5" />
+                        <span className="font-medium">Novo Produto</span>
+                    </button>
+                </div>
             </div>
 
             {/* Error Message */}

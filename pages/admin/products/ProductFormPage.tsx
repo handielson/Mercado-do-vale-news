@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ArrowLeft } from 'lucide-react';
 import { ProductForm } from '../../../components/products/ProductForm';
@@ -14,18 +14,25 @@ import { productService } from '../../../services/products';
 export const ProductFormPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const [product, setProduct] = useState<Product | undefined>();
     const [isLoading, setIsLoading] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
 
     const isEditMode = id && id !== 'new';
 
+    // Get EAN from navigation state if provided
+    const eanFromState = (location.state as any)?.ean;
+
     // Fetch product data if editing
     useEffect(() => {
         if (isEditMode) {
             fetchProduct();
+        } else if (eanFromState) {
+            // Pre-fill EAN for new product
+            setProduct({ ean: eanFromState } as Product);
         }
-    }, [id]);
+    }, [id, eanFromState]);
 
     const fetchProduct = async () => {
         if (!id) return;

@@ -195,6 +195,24 @@ async function search(query: string): Promise<Product[]> {
 }
 
 /**
+ * Search products by EAN (returns array for bulk operations)
+ */
+async function searchByEAN(ean: string): Promise<Product[]> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('ean', ean)
+        .limit(10); // Allow multiple products with same EAN
+
+    if (error) throw new Error(`Failed to search by EAN: ${error.message}`);
+
+    return (data || []).map(transformFromDB);
+}
+
+/**
  * Transform database row to Product type
  */
 function transformFromDB(row: any): Product {
@@ -236,5 +254,6 @@ export const productService = {
     create,
     update,
     delete: deleteProduct,
-    search
+    search,
+    searchByEAN
 };
