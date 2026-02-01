@@ -18,6 +18,7 @@ import { SmartInput } from '../ui/SmartInput';
 import { compressImage } from '../../utils/image-compression';
 import { generateProductName } from '../../utils/product-name-generator';
 import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText } from 'lucide-react';
+import { useEANAutofill } from './hooks/useEANAutofill';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -39,11 +40,14 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
     // Estado para rastrear se o nome foi editado manualmente
     const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
 
-    // Estado para EAN auto-fill
-    const [isSearchingEAN, setIsSearchingEAN] = useState(false);
-    const [eanSearchMessage, setEANSearchMessage] = useState<string>('');
-    const [isDuplicateEAN, setIsDuplicateEAN] = useState(false);
-    const [existingProduct, setExistingProduct] = useState<Product | null>(null);
+    // EAN auto-fill hook
+    const {
+        isSearchingEAN,
+        eanSearchMessage,
+        isDuplicateEAN,
+        existingProduct,
+        searchByEAN
+    } = useEANAutofill({ watch, setValue, initialData });
 
     // Estado para indicadores de preço
     const [priceStats, setPriceStats] = useState<{
@@ -149,118 +153,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
 
     // 3. Auto-fill form when scanning existing product EAN
     useEffect(() => {
-        const searchByEAN = async () => {
-            const eans = watch('eans');
-            if (!eans || eans.length === 0 || !eans[0]) {
-                setEANSearchMessage('');
-                setIsDuplicateEAN(false);
-                setExistingProduct(null);
-                return;
-            }
-
-            const firstEAN = eans[0].trim();
-
-            // Only search when EAN is complete (13 digits)
-            if (firstEAN.length !== 13) {
-                setEANSearchMessage('');
-                setIsDuplicateEAN(false);
-                setExistingProduct(null);
-                return;
-            }
-
-            // Don't search if we're editing an existing product
-            if (initialData?.id) {
-                return;
-            }
-
-            setIsSearchingEAN(true);
-            setEANSearchMessage('🔍 Buscando produto...');
-
-            try {
-                const { productService } = await import('../../services/products');
-                const { categoryService } = await import('../../services/categories');
-                const foundProduct = await productService.getByEan(firstEAN);
-
-                if (foundProduct) {
-                    // Get category configuration
-                    const category = await categoryService.getById(foundProduct.category_id);
-                    const autoFillConfig = category?.config?.ean_autofill_config;
-                    const autoFillEnabled = autoFillConfig?.enabled ?? true;
-                    const excludedFields = autoFillConfig?.exclude_fields || [];
-
-                    console.log('🔍 [EAN Autofill] Found product:', foundProduct.name);
-                    console.log('⚙️ [EAN Autofill] Config:', { autoFillEnabled, excludedFields });
-
-                    // SEMPRE bloqueia criação de produto duplicado
-                    setIsDuplicateEAN(true);
-                    setExistingProduct(foundProduct);
-                    setEANSearchMessage('⚠️ Código de barras já cadastrado neste produto!');
-
-                    // AUTO-FILL: Preencher campos se habilitado
-                    if (autoFillEnabled) {
-                        console.log('✅ [EAN Autofill] Autofill ENABLED - filling fields...');
-
-                        // Helper function to check if field should be filled
-                        const shouldFill = (fieldName: string) => {
-                            const isExcluded = excludedFields.includes(fieldName);
-                            console.log(`  ${isExcluded ? '❌' : '✅'} ${fieldName}: ${isExcluded ? 'EXCLUDED' : 'filling'}`);
-                            return !isExcluded;
-                        };
-
-                        // Fill basic fields
-                        if (shouldFill('category_id')) setValue('category_id', foundProduct.category_id);
-                        if (shouldFill('brand') && foundProduct.brand) setValue('brand', foundProduct.brand);
-                        if (shouldFill('model') && foundProduct.model) setValue('model', foundProduct.model);
-                        if (shouldFill('name')) setValue('name', foundProduct.name);
-                        if (shouldFill('description') && foundProduct.description) setValue('description', foundProduct.description);
-
-                        // Fill specs (check with specs. prefix)
-                        if (foundProduct.specs) {
-                            if (shouldFill('specs.color') && foundProduct.specs.color) setValue('specs.color', foundProduct.specs.color);
-                            if (shouldFill('specs.storage') && foundProduct.specs.storage) setValue('specs.storage', foundProduct.specs.storage);
-                            if (shouldFill('specs.ram') && foundProduct.specs.ram) setValue('specs.ram', foundProduct.specs.ram);
-                            if (shouldFill('specs.version') && foundProduct.specs.version) setValue('specs.version', foundProduct.specs.version);
-                            if (shouldFill('specs.battery_health') && foundProduct.specs.battery_health) setValue('specs.battery_health', foundProduct.specs.battery_health);
-
-                            // Fill custom fields
-                            Object.keys(foundProduct.specs).forEach(key => {
-                                if (!['color', 'storage', 'ram', 'version', 'battery_health', 'imei1', 'imei2', 'serial'].includes(key)) {
-                                    if (shouldFill(`specs.${key}`)) {
-                                        setValue(`specs.${key}`, foundProduct.specs[key]);
-                                    }
-                                }
-                            });
-                        }
-
-                        // Fill prices
-                        if (shouldFill('price_cost') && foundProduct.price_cost) setValue('price_cost', foundProduct.price_cost);
-                        if (shouldFill('price_retail') && foundProduct.price_retail) setValue('price_retail', foundProduct.price_retail);
-                        if (shouldFill('price_reseller') && foundProduct.price_reseller) setValue('price_reseller', foundProduct.price_reseller);
-                        if (shouldFill('price_wholesale') && foundProduct.price_wholesale) setValue('price_wholesale', foundProduct.price_wholesale);
-
-                        setEANSearchMessage('✨ Campos preenchidos automaticamente (respeitando exclusões)');
-                        setTimeout(() => setEANSearchMessage('⚠️ Código de barras já cadastrado!'), 2000);
-                    } else {
-                        console.log('❌ [EAN Autofill] Autofill DISABLED');
-                    }
-                } else {
-                    // EAN NOVO - Permitir criação
-                    setIsDuplicateEAN(false);
-                    setExistingProduct(null);
-                    setEANSearchMessage('ℹ️ Produto novo - preencha os dados');
-                    setTimeout(() => setEANSearchMessage(''), 3000);
-                }
-            } catch (error) {
-                console.error('Error searching by EAN:', error);
-                setEANSearchMessage('⚠️ Erro ao buscar produto');
-                setTimeout(() => setEANSearchMessage(''), 3000);
-            } finally {
-                setIsSearchingEAN(false);
-            }
-        };
-
         searchByEAN();
-    }, [watch('eans'), initialData?.id, setValue]);
+    }, [watch('eans')]);
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
