@@ -15,6 +15,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
 
   if (isLoading) return null; // Wait for AuthContext to resolve
 
+  console.log('🔒 [ProtectedRoute] user:', user, 'isLoading:', isLoading);
+
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }

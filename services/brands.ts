@@ -1,86 +1,27 @@
-
 import { Brand, BrandInput } from '../types/brand';
+import { supabase } from './supabase';
 
 /**
- * BRAND SERVICE
- * Complete CRUD operations with localStorage persistence
- * 
- * ANTIGRAVITY PROTOCOL:
- * - localStorage key: antigravity_brands_v1
- * - Auto-generate slugs from names
- * - Timestamp tracking (created, updated)
- * - Follows same pattern as categoryService
+ * BRAND SERVICE - Supabase Implementation
+ * Multi-tenant service with Row Level Security
  */
 
-const STORAGE_KEY = 'antigravity_brands_v1';
+// TEMPORARY: Hardcoded company_id until we implement auth
+const TEMP_COMPANY_ID = 'mercado-do-vale';
 
-// Default brands for initial setup
-const defaultBrands: Brand[] = [
-    {
-        id: 'brand-1',
-        name: 'Apple',
-        slug: 'apple',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'brand-2',
-        name: 'Samsung',
-        slug: 'samsung',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'brand-3',
-        name: 'Xiaomi',
-        slug: 'xiaomi',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'brand-4',
-        name: 'Motorola',
-        slug: 'motorola',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'brand-5',
-        name: 'LG',
-        slug: 'lg',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'brand-6',
-        name: 'Asus',
-        slug: 'asus',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'brand-7',
-        name: 'Dell',
-        slug: 'dell',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'brand-8',
-        name: 'HP',
-        slug: 'hp',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    }
-];
+/**
+ * Get company_id from companies table by slug
+ */
+async function getCompanyId(): Promise<string> {
+    const { data, error } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('slug', TEMP_COMPANY_ID)
+        .single();
+
+    if (error) throw new Error(`Failed to get company: ${error.message}`);
+    return data.id;
+}
 
 /**
  * Generate URL-friendly slug from brand name
@@ -95,119 +36,143 @@ function generateSlug(name: string): string {
 }
 
 /**
- * Generate unique ID
+ * List all brands
  */
-function generateId(): string {
-    return `brand-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+async function list(): Promise<Brand[]> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('brands')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('name');
+
+    if (error) throw new Error(`Failed to fetch brands: ${error.message}`);
+
+    return (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        active: true, // Not in DB schema yet, default to true
+        created: row.created_at,
+        updated: row.updated_at
+    }));
 }
 
 /**
- * Load brands from localStorage
+ * Get brand by ID
  */
-function loadFromStorage(): Brand[] {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            return JSON.parse(stored);
-        }
-    } catch (error) {
-        console.error('Error loading brands from localStorage:', error);
+async function getById(id: string): Promise<Brand | null> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('brands')
+        .select('*')
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .single();
+
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch brand: ${error.message}`);
     }
-    return defaultBrands;
+
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        active: true,
+        created: data.created_at,
+        updated: data.updated_at
+    };
 }
 
 /**
- * Save brands to localStorage
+ * Create new brand
  */
-function saveToStorage(brands: Brand[]): void {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(brands));
-    } catch (error) {
-        console.error('Error saving brands to localStorage:', error);
-    }
+async function create(input: BrandInput): Promise<Brand> {
+    const companyId = await getCompanyId();
+    const slug = generateSlug(input.name);
+
+    const { data, error } = await supabase
+        .from('brands')
+        .insert({
+            company_id: companyId,
+            name: input.name,
+            slug
+        })
+        .select()
+        .single();
+
+    if (error) throw new Error(`Failed to create brand: ${error.message}`);
+
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        active: true,
+        created: data.created_at,
+        updated: data.updated_at
+    };
 }
 
-// Initialize brands from storage
-let brands: Brand[] = loadFromStorage();
+/**
+ * Update existing brand
+ */
+async function update(id: string, input: BrandInput): Promise<Brand> {
+    const companyId = await getCompanyId();
+    const slug = generateSlug(input.name);
+
+    const { data, error } = await supabase
+        .from('brands')
+        .update({
+            name: input.name,
+            slug
+        })
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .select()
+        .single();
+
+    if (error) throw new Error(`Failed to update brand: ${error.message}`);
+
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        active: true,
+        created: data.created_at,
+        updated: data.updated_at
+    };
+}
 
 /**
- * Brand Service
+ * Delete brand
  */
+async function deleteBrand(id: string): Promise<void> {
+    const companyId = await getCompanyId();
+
+    const { error } = await supabase
+        .from('brands')
+        .delete()
+        .eq('id', id)
+        .eq('company_id', companyId);
+
+    if (error) throw new Error(`Failed to delete brand: ${error.message}`);
+}
+
+/**
+ * Get only active brands (all brands for now since we don't have active field)
+ */
+async function listActive(): Promise<Brand[]> {
+    return list();
+}
+
 export const brandService = {
-    /**
-     * List all brands
-     */
-    async list(): Promise<Brand[]> {
-        return Promise.resolve([...brands]);
-    },
-
-    /**
-     * Get brand by ID
-     */
-    async getById(id: string): Promise<Brand | null> {
-        const brand = brands.find(b => b.id === id);
-        return Promise.resolve(brand || null);
-    },
-
-    /**
-     * Create new brand
-     */
-    async create(input: BrandInput): Promise<Brand> {
-        const now = new Date().toISOString();
-        const newBrand: Brand = {
-            id: generateId(),
-            name: input.name,
-            slug: generateSlug(input.name),
-            active: input.active !== undefined ? input.active : true,
-            logo_url: input.logo_url,
-            created: now,
-            updated: now
-        };
-
-        brands.push(newBrand);
-        saveToStorage(brands);
-
-        return Promise.resolve(newBrand);
-    },
-
-    /**
-     * Update existing brand
-     */
-    async update(id: string, input: BrandInput): Promise<Brand> {
-        const index = brands.findIndex(b => b.id === id);
-
-        if (index === -1) {
-            throw new Error(`Brand with id ${id} not found`);
-        }
-
-        const updated: Brand = {
-            ...brands[index],
-            name: input.name,
-            slug: generateSlug(input.name),
-            active: input.active !== undefined ? input.active : brands[index].active,
-            logo_url: input.logo_url !== undefined ? input.logo_url : brands[index].logo_url,
-            updated: new Date().toISOString()
-        };
-
-        brands[index] = updated;
-        saveToStorage(brands);
-
-        return Promise.resolve(updated);
-    },
-
-    /**
-     * Delete brand
-     */
-    async delete(id: string): Promise<void> {
-        brands = brands.filter(b => b.id !== id);
-        saveToStorage(brands);
-        return Promise.resolve();
-    },
-
-    /**
-     * Get only active brands
-     */
-    async listActive(): Promise<Brand[]> {
-        return Promise.resolve(brands.filter(b => b.active));
-    }
+    list,
+    getById,
+    create,
+    update,
+    delete: deleteBrand,
+    listActive
 };

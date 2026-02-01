@@ -1,80 +1,27 @@
-
 import { Model, ModelInput } from '../types/model';
+import { supabase } from './supabase';
 
 /**
- * MODEL SERVICE
- * Complete CRUD operations with localStorage persistence
- * 
- * ANTIGRAVITY PROTOCOL:
- * - localStorage key: antigravity_models_v1
- * - Auto-generate slugs from names
- * - Timestamp tracking (created, updated)
- * - Follows same pattern as brandService
- * - Models are associated with brands
+ * MODEL SERVICE - Supabase Implementation
+ * Multi-tenant service with Row Level Security
  */
 
-const STORAGE_KEY = 'antigravity_models_v1';
+// TEMPORARY: Hardcoded company_id until we implement auth
+const TEMP_COMPANY_ID = 'mercado-do-vale';
 
-// Default models for initial setup (associated with default brands)
-const defaultModels: Model[] = [
-    // Apple Models
-    {
-        id: 'model-1',
-        name: 'iPhone 13',
-        slug: 'iphone-13',
-        brand_id: 'brand-1', // Apple
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'model-2',
-        name: 'iPhone 14',
-        slug: 'iphone-14',
-        brand_id: 'brand-1', // Apple
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'model-3',
-        name: 'iPhone 15',
-        slug: 'iphone-15',
-        brand_id: 'brand-1', // Apple
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    // Samsung Models
-    {
-        id: 'model-4',
-        name: 'Galaxy S23',
-        slug: 'galaxy-s23',
-        brand_id: 'brand-2', // Samsung
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'model-5',
-        name: 'Galaxy S24',
-        slug: 'galaxy-s24',
-        brand_id: 'brand-2', // Samsung
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    // Xiaomi Models
-    {
-        id: 'model-6',
-        name: 'Redmi Note 12',
-        slug: 'redmi-note-12',
-        brand_id: 'brand-3', // Xiaomi
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    }
-];
+/**
+ * Get company_id from companies table by slug
+ */
+async function getCompanyId(): Promise<string> {
+    const { data, error } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('slug', TEMP_COMPANY_ID)
+        .single();
+
+    if (error) throw new Error(`Failed to get company: ${error.message}`);
+    return data.id;
+}
 
 /**
  * Generate URL-friendly slug from model name
@@ -89,133 +36,184 @@ function generateSlug(name: string): string {
 }
 
 /**
- * Generate unique ID
+ * List all models
  */
-function generateId(): string {
-    return `model-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+async function list(): Promise<Model[]> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('models')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('name');
+
+    if (error) throw new Error(`Failed to fetch models: ${error.message}`);
+
+    return (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        brand_id: row.brand_id,
+        active: true,
+        created: row.created_at,
+        updated: row.updated_at
+    }));
 }
 
 /**
- * Load models from localStorage
+ * Get model by ID
  */
-function loadFromStorage(): Model[] {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            return JSON.parse(stored);
-        }
-    } catch (error) {
-        console.error('Error loading models from localStorage:', error);
+async function getById(id: string): Promise<Model | null> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('models')
+        .select('*')
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .single();
+
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch model: ${error.message}`);
     }
-    return defaultModels;
+
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        brand_id: data.brand_id,
+        active: true,
+        created: data.created_at,
+        updated: data.updated_at
+    };
 }
 
 /**
- * Save models to localStorage
+ * Get models by brand ID
  */
-function saveToStorage(models: Model[]): void {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(models));
-    } catch (error) {
-        console.error('Error saving models to localStorage:', error);
-    }
+async function listByBrand(brandId: string): Promise<Model[]> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('models')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('brand_id', brandId)
+        .order('name');
+
+    if (error) throw new Error(`Failed to fetch models by brand: ${error.message}`);
+
+    return (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        brand_id: row.brand_id,
+        active: true,
+        created: row.created_at,
+        updated: row.updated_at
+    }));
 }
 
-// Initialize models from storage
-let models: Model[] = loadFromStorage();
+/**
+ * Create new model
+ */
+async function create(input: ModelInput): Promise<Model> {
+    const companyId = await getCompanyId();
+    const slug = generateSlug(input.name);
+
+    const { data, error } = await supabase
+        .from('models')
+        .insert({
+            company_id: companyId,
+            brand_id: input.brand_id,
+            name: input.name,
+            slug
+        })
+        .select()
+        .single();
+
+    if (error) throw new Error(`Failed to create model: ${error.message}`);
+
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        brand_id: data.brand_id,
+        active: true,
+        created: data.created_at,
+        updated: data.updated_at
+    };
+}
 
 /**
- * Model Service
+ * Update existing model
  */
+async function update(id: string, input: ModelInput): Promise<Model> {
+    const companyId = await getCompanyId();
+    const slug = generateSlug(input.name);
+
+    const { data, error } = await supabase
+        .from('models')
+        .update({
+            name: input.name,
+            slug,
+            brand_id: input.brand_id
+        })
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .select()
+        .single();
+
+    if (error) throw new Error(`Failed to update model: ${error.message}`);
+
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        brand_id: data.brand_id,
+        active: true,
+        created: data.created_at,
+        updated: data.updated_at
+    };
+}
+
+/**
+ * Delete model
+ */
+async function deleteModel(id: string): Promise<void> {
+    const companyId = await getCompanyId();
+
+    const { error } = await supabase
+        .from('models')
+        .delete()
+        .eq('id', id)
+        .eq('company_id', companyId);
+
+    if (error) throw new Error(`Failed to delete model: ${error.message}`);
+}
+
+/**
+ * Get only active models
+ */
+async function listActive(): Promise<Model[]> {
+    return list();
+}
+
+/**
+ * Get active models by brand
+ */
+async function listActiveByBrand(brandId: string): Promise<Model[]> {
+    return listByBrand(brandId);
+}
+
 export const modelService = {
-    /**
-     * List all models
-     */
-    async list(): Promise<Model[]> {
-        return Promise.resolve([...models]);
-    },
-
-    /**
-     * Get model by ID
-     */
-    async getById(id: string): Promise<Model | null> {
-        const model = models.find(m => m.id === id);
-        return Promise.resolve(model || null);
-    },
-
-    /**
-     * Get models by brand ID
-     */
-    async listByBrand(brandId: string): Promise<Model[]> {
-        return Promise.resolve(models.filter(m => m.brand_id === brandId && m.active));
-    },
-
-    /**
-     * Create new model
-     */
-    async create(input: ModelInput): Promise<Model> {
-        const now = new Date().toISOString();
-        const newModel: Model = {
-            id: generateId(),
-            name: input.name,
-            slug: generateSlug(input.name),
-            brand_id: input.brand_id,
-            active: input.active !== undefined ? input.active : true,
-            created: now,
-            updated: now
-        };
-
-        models.push(newModel);
-        saveToStorage(models);
-
-        return Promise.resolve(newModel);
-    },
-
-    /**
-     * Update existing model
-     */
-    async update(id: string, input: ModelInput): Promise<Model> {
-        const index = models.findIndex(m => m.id === id);
-
-        if (index === -1) {
-            throw new Error(`Model with id ${id} not found`);
-        }
-
-        const updated: Model = {
-            ...models[index],
-            name: input.name,
-            slug: generateSlug(input.name),
-            brand_id: input.brand_id,
-            active: input.active !== undefined ? input.active : models[index].active,
-            updated: new Date().toISOString()
-        };
-
-        models[index] = updated;
-        saveToStorage(models);
-
-        return Promise.resolve(updated);
-    },
-
-    /**
-     * Delete model
-     */
-    async delete(id: string): Promise<void> {
-        models = models.filter(m => m.id !== id);
-        saveToStorage(models);
-        return Promise.resolve();
-    },
-
-    /**
-     * Get only active models
-     */
-    async listActive(): Promise<Model[]> {
-        return Promise.resolve(models.filter(m => m.active));
-    },
-
-    /**
-     * Get active models by brand
-     */
-    async listActiveByBrand(brandId: string): Promise<Model[]> {
-        return Promise.resolve(models.filter(m => m.brand_id === brandId && m.active));
-    }
+    list,
+    getById,
+    listByBrand,
+    create,
+    update,
+    delete: deleteModel,
+    listActive,
+    listActiveByBrand
 };
