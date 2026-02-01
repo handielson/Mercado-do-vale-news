@@ -2,15 +2,18 @@
 
 ## 🛡️ ANTIGRAVITY PROTOCOL
 
-### **CRITICAL RULE: Maximum Component Size**
+### **Component Size Guidelines**
 
-| Metric | Limit | Action Required |
-|--------|-------|-----------------|
-| **Lines of Code** | **150 lines** | 🔴 **MUST** refactor immediately |
-| **File Size** | **10 KB** | ⚠️ **SHOULD** consider refactoring |
-| **Functions** | **10 functions** | ⚠️ **SHOULD** extract to hooks/utils |
+| Component Type | Max Lines | Example |
+|----------------|-----------|---------|
+| **Simple Components** | 150 lines | Button, Input, Card, Badge |
+| **Form Sections** | 300 lines | ProductBasicInfo, ProductPricing |
+| **Complex Forms** | 400 lines | ProductForm, CategoryEditModal |
+| **Pages** | 500 lines | Dashboard, Settings, Reports |
 
-> **Note:** This is stricter than the previous 500-line limit to ensure maximum modularity and maintainability.
+🔴 **HARD LIMIT: 500 lines** - Anything above MUST be refactored immediately
+
+> **Note:** These limits balance maintainability with practicality. Simple components should stay small, but complex forms can be larger as long as they're well-organized.
 
 ### Why These Limits?
 
