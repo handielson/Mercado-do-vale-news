@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, RefreshCw } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
@@ -119,13 +119,23 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
 
                 <button
                     type="button"
-                    onClick={() => setShowCreateDialog(true)}
-                    disabled={!brandId}
-                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!brandId ? 'Selecione uma marca primeiro' : 'Novo Modelo'}
+                    onClick={loadModels}
+                    disabled={isLoading}
+                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                    title="Atualizar lista de modelos"
+                >
+                    <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
+
+                <a
+                    href="/admin/settings/models"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center"
+                    title="Gerenciar Modelos (abre em nova aba)"
                 >
                     <Plus className="w-5 h-5" />
-                </button>
+                </a>
             </div>
 
             {error && (

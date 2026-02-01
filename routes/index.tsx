@@ -7,7 +7,9 @@ import { ClientTypes } from '../utils/field-standards';
 import { ProductListPage } from '../pages/admin/products/ProductListPage';
 import { ProductFormPage } from '../pages/admin/products/ProductFormPage';
 import { ProductDetailPage } from '../pages/admin/products/ProductDetailPage';
-import { CategorySettings } from '../pages/admin/CategorySettings';
+import CategorySettingsPage from '../pages/admin/settings/categories/index';
+import NewCategoryPage from '../pages/admin/settings/categories/new';
+import EditCategoryPage from '../pages/admin/settings/categories/[id]/edit';
 import { GovernancePage } from '../pages/admin/GovernancePage';
 import { DevDiaryPage } from '../pages/admin/DevDiaryPage';
 import { BrandsPage } from '../pages/admin/settings/BrandsPage';
@@ -97,7 +99,23 @@ export const router = createBrowserRouter([
     path: "/admin/settings/categories",
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
-        <AdminLayout><CategorySettings /></AdminLayout>
+        <AdminLayout><CategorySettingsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/categories/new",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><NewCategoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/categories/:id/edit",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><EditCategoryPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

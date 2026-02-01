@@ -85,6 +85,20 @@ export const FIELD_DICTIONARY: Record<string, FieldDefinition> = {
         required: false,
         description: 'Número IMEI do dispositivo (usa IMEIInput component)'
     },
+    model_name: {
+        label: 'Nome do Modelo',
+        placeholder: 'Ex: Iphone 14 pro max',
+        format: 'capitalize',
+        required: true,
+        description: 'Nome do modelo com capitalização automática (mesma formatação do nome do produto)'
+    },
+    nome_cor: {
+        label: 'Nome da Cor',
+        placeholder: 'Ex: Azul Meia-Noite, Preto',
+        format: 'titlecase',
+        required: true,
+        description: 'Nome da cor do produto (capitaliza cada palavra)'
+    },
 
     // Pricing Fields (use CurrencyInput component)
     price_cost: {

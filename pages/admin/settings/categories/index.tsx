@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Edit2, Plus } from 'lucide-react';
-import { Category, CategoryInput } from '../../types/category';
-import { categoryService } from '../../services/categories';
-import { CategoryEditModal } from '../../components/categories/CategoryEditModal';
+import { Category } from '../../../../types/category';
+import { categoryService } from '../../../../services/categories';
 
 /**
- * CategorySettings Page
+ * CategorySettings Page (List View)
  * Admin interface for managing category configurations
+ * 
+ * ANTIGRAVITY PROTOCOL:
+ * - List view only (no modal)
+ * - Redirects to dedicated pages for create/edit
  */
-export const CategorySettings: React.FC = () => {
+export default function CategorySettingsPage() {
+    const navigate = useNavigate();
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
         loadCategories();
@@ -31,31 +34,11 @@ export const CategorySettings: React.FC = () => {
     };
 
     const handleEdit = (category: Category) => {
-        setEditingCategory(category);
-        setIsModalOpen(true);
+        navigate(`/admin/settings/categories/${category.id}/edit`);
     };
 
     const handleCreate = () => {
-        setEditingCategory(null);
-        setIsModalOpen(true);
-    };
-
-    const handleSave = async (id: string | null, data: CategoryInput) => {
-        if (id) {
-            // Update existing category
-            await categoryService.update(id, data);
-        } else {
-            // Create new category
-            await categoryService.create(data);
-        }
-        await loadCategories();
-        setIsModalOpen(false);
-        setEditingCategory(null);
-    };
-
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
-        setEditingCategory(null);
+        navigate('/admin/settings/categories/new');
     };
 
     const getConfigSummary = (category: Category): string => {
@@ -166,14 +149,6 @@ export const CategorySettings: React.FC = () => {
                     </div>
                 </div>
             </div>
-
-            {/* Edit Modal */}
-            <CategoryEditModal
-                category={editingCategory}
-                isOpen={isModalOpen}
-                onClose={handleCloseModal}
-                onSave={handleSave}
-            />
         </div>
     );
-};
+}

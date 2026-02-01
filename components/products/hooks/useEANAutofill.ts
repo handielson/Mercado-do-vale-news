@@ -119,6 +119,12 @@ export function useEANAutofill({
                     if (shouldFill('price_reseller') && foundProduct.price_reseller) setValue('price_reseller', foundProduct.price_reseller);
                     if (shouldFill('price_wholesale') && foundProduct.price_wholesale) setValue('price_wholesale', foundProduct.price_wholesale);
 
+                    // Fill images if configured to reuse
+                    if (shouldFill('images') && foundProduct.images && foundProduct.images.length > 0) {
+                        setValue('images', foundProduct.images);
+                        console.log('📸 [EAN Autofill] Images reused:', foundProduct.images.length);
+                    }
+
                     setEANSearchMessage('✨ Campos preenchidos automaticamente (respeitando exclusões)');
                     setTimeout(() => setEANSearchMessage('⚠️ Código de barras já cadastrado!'), 2000);
                 } else {

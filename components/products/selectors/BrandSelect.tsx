@@ -1,7 +1,6 @@
 
-
 import React, { useState, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, RefreshCw } from 'lucide-react';
 import { brandService } from '../../../services/brands';
 import { Brand } from '../../../types/brand';
 
@@ -54,17 +53,25 @@ export const BrandSelect: React.FC<BrandSelectProps> = ({
 
         try {
             setIsCreating(true);
+            console.log('🔵 [BrandSelect] Creating brand:', newBrandName.trim());
+
             const newBrand = await brandService.create({
                 name: newBrandName.trim(),
                 active: true
             });
+
+            console.log('✅ [BrandSelect] Brand created successfully:', newBrand);
+
             await loadBrands(); // Reload to get updated list
             onChange(newBrand.name); // Set the new brand as selected
             setNewBrandName('');
             setShowCreateDialog(false);
         } catch (error) {
-            console.error('Error creating brand:', error);
-            alert('Erro ao criar marca');
+            console.error('❌ [BrandSelect] Error creating brand:', error);
+
+            // More detailed error message
+            const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+            alert(`Erro ao criar marca: ${errorMessage}`);
         } finally {
             setIsCreating(false);
         }
@@ -89,12 +96,23 @@ export const BrandSelect: React.FC<BrandSelectProps> = ({
 
                 <button
                     type="button"
-                    onClick={() => setShowCreateDialog(true)}
-                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-                    title="Nova Marca"
+                    onClick={loadBrands}
+                    disabled={isLoading}
+                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                    title="Atualizar lista de marcas"
+                >
+                    <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
+
+                <a
+                    href="/admin/settings/brands"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center"
+                    title="Gerenciar Marcas (abre em nova aba)"
                 >
                     <Plus className="w-5 h-5" />
-                </button>
+                </a>
             </div>
 
             {error && (

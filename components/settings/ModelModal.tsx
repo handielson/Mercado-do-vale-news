@@ -1,10 +1,10 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { Model, ModelInput } from '../../types/model';
 import { Brand } from '../../types/brand';
 import { modelService } from '../../services/models';
 import { brandService } from '../../services/brands';
+import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -30,6 +30,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         loadBrands();
@@ -151,10 +152,28 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                             Nome do Modelo <span className="text-red-500">*</span>
                         </label>
                         <input
+                            ref={inputRef}
                             type="text"
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Ex: iPhone 13, Galaxy S24, Redmi Note 12..."
+                            onChange={(e) => {
+                                const cursorPosition = e.target.selectionStart || 0;
+                                const rawValue = e.target.value;
+
+                                // Get format from field dictionary
+                                const fieldDef = getFieldDefinition('name');
+                                const format = fieldDef?.format || 'capitalize';
+                                const formatted = applyFieldFormat(rawValue, format);
+
+                                setName(formatted);
+
+                                // Restore cursor position after formatting
+                                setTimeout(() => {
+                                    if (inputRef.current) {
+                                        inputRef.current.setSelectionRange(cursorPosition, cursorPosition);
+                                    }
+                                }, 0);
+                            }}
+                            placeholder="Ex: Iphone 14 pro max"
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoFocus
                         />

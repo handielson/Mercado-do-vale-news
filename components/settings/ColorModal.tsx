@@ -1,9 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { Color, ColorInput } from '../../types/color';
 import { colorService, COLOR_MAP } from '../../services/colors';
+import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
 
+// Force recompilation - Color name formatting with cursor preservation
 interface ColorModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -27,6 +29,7 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
     const [active, setActive] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (color) {
@@ -117,9 +120,27 @@ export const ColorModal: React.FC<ColorModalProps> = ({ isOpen, onClose, onSave,
                             Nome da Cor <span className="text-red-500">*</span>
                         </label>
                         <input
+                            ref={inputRef}
                             type="text"
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            onChange={(e) => {
+                                const cursorPosition = e.target.selectionStart || 0;
+                                const rawValue = e.target.value;
+
+                                // Get format from field dictionary
+                                const fieldDef = getFieldDefinition('nome_cor');
+                                const format = fieldDef?.format || 'titlecase';
+                                const formatted = applyFieldFormat(rawValue, format);
+
+                                setName(formatted);
+
+                                // Restore cursor position after formatting
+                                setTimeout(() => {
+                                    if (inputRef.current) {
+                                        inputRef.current.setSelectionRange(cursorPosition, cursorPosition);
+                                    }
+                                }, 0);
+                            }}
                             placeholder="Ex: Azul Meia-Noite, Preto..."
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoFocus
