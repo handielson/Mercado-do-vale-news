@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Category, CategoryConfig, CategoryInput, FieldRequirement, CustomField } from '../../types/category';
 import { CustomFieldsEditor } from './CustomFieldsEditor';
+import { getBasicFields, getSpecFields, getPriceFields } from '../../config/product-fields';
 
 interface CategoryEditModalProps {
     category: Category | null;
@@ -265,14 +266,7 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Informações Básicas</p>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                        {[
-                                            { key: 'category_id', label: 'Categoria' },
-                                            { key: 'brand', label: 'Marca' },
-                                            { key: 'model', label: 'Modelo' },
-                                            { key: 'name', label: 'Nome do Produto' },
-                                            { key: 'sku', label: 'SKU' },
-                                            { key: 'description', label: 'Descrição' }
-                                        ].map(field => (
+                                        {getBasicFields().map(field => (
                                             <label
                                                 key={field.key}
                                                 className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer text-xs"
@@ -306,16 +300,7 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Especificações</p>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                        {[
-                                            { key: 'specs.imei1', label: 'IMEI 1' },
-                                            { key: 'specs.imei2', label: 'IMEI 2' },
-                                            { key: 'specs.serial', label: 'Serial' },
-                                            { key: 'specs.color', label: 'Cor' },
-                                            { key: 'specs.storage', label: 'Armazenamento' },
-                                            { key: 'specs.ram', label: 'RAM' },
-                                            { key: 'specs.version', label: 'Versão' },
-                                            { key: 'specs.battery_health', label: 'Saúde da Bateria' }
-                                        ].map(field => (
+                                        {getSpecFields().map(field => (
                                             <label
                                                 key={field.key}
                                                 className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer text-xs"
@@ -349,12 +334,7 @@ export const CategoryEditModal: React.FC<CategoryEditModalProps> = ({
                                 <div className="space-y-2">
                                     <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Preços</p>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                        {[
-                                            { key: 'price_cost', label: 'Preço de Custo' },
-                                            { key: 'price_retail', label: 'Preço Varejo' },
-                                            { key: 'price_reseller', label: 'Preço Revenda' },
-                                            { key: 'price_wholesale', label: 'Preço Atacado' }
-                                        ].map(field => (
+                                        {getPriceFields().map(field => (
                                             <label
                                                 key={field.key}
                                                 className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer text-xs"
