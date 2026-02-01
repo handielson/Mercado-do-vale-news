@@ -1,301 +1,240 @@
-
-import { pb } from './pb';
 import { Product, ProductInput } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
-import { validateProduct } from '../schemas/product';
+import { supabase } from './supabase';
 
 /**
- * PRODUCT SERVICE
- * Hybrid service layer with localStorage persistence
- * Data survives page refreshes in DEV_MODE
+ * PRODUCT SERVICE - Supabase Implementation
+ * Multi-tenant service with Row Level Security
  */
 
-const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
-const STORAGE_KEY = 'antigravity_products_v1';
-
-// Default mock products (used as fallback)
-const defaultProducts: Product[] = [
-    {
-        id: 'mock-1',
-        category_id: 'cat-1', // Celulares
-        brand: 'Apple',
-        model: 'iPhone 13',
-        name: 'iPhone 13 128GB Azul',
-        sku: 'APPLE-IP13-128-BLUE',
-        price_retail: 399900,      // R$ 3.999,00
-        price_reseller: 379900,    // R$ 3.799,00
-        price_wholesale: 359900,   // R$ 3.599,00
-        images: [
-            'https://images.unsplash.com/photo-1632661674596-df8be070a5c5?w=400'
-        ],
-        eans: ['7891234567890'],
-        specs: {
-            storage: '128GB',
-            ram: '4GB',
-            color: 'Azul',
-            display: '6.1"',
-            network: '5G'
-        },
-        status: ProductStatus.ACTIVE,
-        created: new Date('2024-01-15').toISOString(),
-        updated: new Date('2024-01-15').toISOString()
-    },
-    {
-        id: 'mock-2',
-        category_id: 'cat-3', // Acessórios
-        brand: 'Generic',
-        model: 'Silicone Case',
-        name: 'Capa Silicone iPhone 13 - Preta',
-        sku: 'ACC-CASE-IP13-BLK',
-        price_retail: 4900,        // R$ 49,00
-        price_reseller: 3900,      // R$ 39,00
-        price_wholesale: 2900,     // R$ 29,00
-        images: [],
-        eans: ['7891234567892'],
-        specs: {
-            color: 'Preta',
-            material: 'Silicone'
-        },
-        status: ProductStatus.ACTIVE,
-        created: new Date('2024-01-18').toISOString(),
-        updated: new Date('2024-01-18').toISOString()
-    }
-];
+// TEMPORARY: Hardcoded company_id until we implement auth
+const TEMP_COMPANY_ID = 'mercado-do-vale';
 
 /**
- * Load products from localStorage
+ * Get company_id from companies table by slug
  */
-function loadFromStorage(): Product[] {
-    if (!DEV_MODE) return [];
+async function getCompanyId(): Promise<string> {
+    const { data, error } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('slug', TEMP_COMPANY_ID)
+        .single();
 
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            const products = JSON.parse(stored);
-            console.log('📦 Loaded products from localStorage:', products.length);
-            return products;
-        }
-    } catch (error) {
-        console.error('Error loading products from localStorage:', error);
-    }
-
-    // First time: save defaults and return them
-    console.log('🔧 Initializing localStorage with default products');
-    saveToStorage(defaultProducts);
-    return defaultProducts;
+    if (error) throw new Error(`Failed to get company: ${error.message}`);
+    return data.id;
 }
-
-/**
- * Save products to localStorage
- */
-function saveToStorage(products: Product[]): void {
-    if (!DEV_MODE) return;
-
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-        console.log('💾 Saved products to localStorage:', products.length);
-    } catch (error) {
-        console.error('Error saving products to localStorage:', error);
-    }
-}
-
-/**
- * Delay helper for simulating async operations
- */
-const delay = () => new Promise(resolve => setTimeout(resolve, 300));
 
 /**
  * List all products
  */
 async function list(): Promise<Product[]> {
-    if (DEV_MODE) {
-        console.log('🔧 DEV MODE: Fetching products from localStorage');
-        await delay();
-        return loadFromStorage();
-    }
+    const companyId = await getCompanyId();
 
-    try {
-        const products = await pb.collection('products').getFullList<Product>();
-        return products;
-    } catch (error) {
-        console.error('Error fetching products:', error);
-        return [];
-    }
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('name');
+
+    if (error) throw new Error(`Failed to fetch products: ${error.message}`);
+
+    return (data || []).map(transformFromDB);
 }
 
 /**
  * Get product by ID
  */
-async function getById(id: string): Promise<Product> {
-    if (DEV_MODE) {
-        console.log(`🔧 DEV MODE: Fetching product ${id} from localStorage`);
-        await delay();
-        const products = loadFromStorage();
-        const product = products.find(p => p.id === id);
-        if (!product) {
-            throw new Error('Produto não encontrado');
-        }
-        return product;
+async function getById(id: string): Promise<Product | null> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .single();
+
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch product: ${error.message}`);
     }
 
-    try {
-        const product = await pb.collection('products').getOne<Product>(id);
-        return product;
-    } catch (error) {
-        console.error('Error fetching product:', error);
-        throw new Error('Produto não encontrado');
+    return transformFromDB(data);
+}
+
+/**
+ * Get product by EAN
+ */
+async function getByEan(ean: string): Promise<Product | null> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('ean', ean)
+        .single();
+
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch product by EAN: ${error.message}`);
     }
+
+    return transformFromDB(data);
 }
 
 /**
  * Create new product
  */
 async function create(input: ProductInput): Promise<Product> {
-    // Validate input
-    const validation = validateProduct(input);
-    if (!validation.success) {
-        throw new Error('Dados inválidos: ' + validation.error);
-    }
+    const companyId = await getCompanyId();
 
-    if (DEV_MODE) {
-        console.log('🔧 DEV MODE: Creating product', input);
-        await delay();
-
-        const products = loadFromStorage();
-        const newProduct: Product = {
-            id: `prod-${Date.now()}`,
-            ...input,
-            images: input.images || [],
-            eans: input.eans || [],
+    const { data, error } = await supabase
+        .from('products')
+        .insert({
+            company_id: companyId,
+            category_id: input.category_id,
+            brand_id: input.brand_id || null,
+            model_id: input.model_id || null,
+            name: input.name,
+            sku: input.sku || null,
+            description: input.description || null,
+            ean: input.ean || null,
+            alternative_eans: input.alternative_eans || [],
             specs: input.specs || {},
-            created: new Date().toISOString(),
-            updated: new Date().toISOString()
-        };
+            price_cost: input.price_cost || null,
+            price_retail: input.price_retail || null,
+            price_reseller: input.price_reseller || null,
+            price_wholesale: input.price_wholesale || null,
+            ncm: input.ncm || null,
+            cest: input.cest || null,
+            origin: input.origin || null,
+            weight_kg: input.weight_kg || null,
+            dimensions: input.dimensions || null,
+            stock_quantity: input.stock_quantity || 0
+        })
+        .select()
+        .single();
 
-        products.push(newProduct);
-        saveToStorage(products);
-        return newProduct;
-    }
+    if (error) throw new Error(`Failed to create product: ${error.message}`);
 
-    try {
-        const record = await pb.collection('products').create(input);
-        return record as unknown as Product;
-    } catch (error) {
-        console.error('Error creating product:', error);
-        throw new Error('Erro ao criar produto');
-    }
+    return transformFromDB(data);
 }
 
 /**
  * Update existing product
  */
 async function update(id: string, input: ProductInput): Promise<Product> {
-    // Validate input
-    const validation = validateProduct(input);
-    if (!validation.success) {
-        throw new Error('Dados inválidos: ' + validation.error);
-    }
+    const companyId = await getCompanyId();
 
-    if (DEV_MODE) {
-        console.log('🔧 DEV MODE: Updating product', id, input);
-        await delay();
+    const { data, error } = await supabase
+        .from('products')
+        .update({
+            category_id: input.category_id,
+            brand_id: input.brand_id || null,
+            model_id: input.model_id || null,
+            name: input.name,
+            sku: input.sku || null,
+            description: input.description || null,
+            ean: input.ean || null,
+            alternative_eans: input.alternative_eans || [],
+            specs: input.specs || {},
+            price_cost: input.price_cost || null,
+            price_retail: input.price_retail || null,
+            price_reseller: input.price_reseller || null,
+            price_wholesale: input.price_wholesale || null,
+            ncm: input.ncm || null,
+            cest: input.cest || null,
+            origin: input.origin || null,
+            weight_kg: input.weight_kg || null,
+            dimensions: input.dimensions || null,
+            stock_quantity: input.stock_quantity || 0
+        })
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .select()
+        .single();
 
-        const products = loadFromStorage();
-        const index = products.findIndex(p => p.id === id);
-        if (index === -1) {
-            throw new Error('Produto não encontrado');
-        }
+    if (error) throw new Error(`Failed to update product: ${error.message}`);
 
-        const updatedProduct: Product = {
-            ...products[index],
-            ...input,
-            updated: new Date().toISOString()
-        };
-
-        products[index] = updatedProduct;
-        saveToStorage(products);
-        return updatedProduct;
-    }
-
-    try {
-        const record = await pb.collection('products').update(id, input);
-        return record as unknown as Product;
-    } catch (error) {
-        console.error('Error updating product:', error);
-        throw new Error('Erro ao atualizar produto');
-    }
+    return transformFromDB(data);
 }
 
 /**
  * Delete product
  */
-async function remove(id: string): Promise<void> {
-    if (DEV_MODE) {
-        console.log('🔧 DEV MODE: Deleting product', id);
-        await delay();
+async function deleteProduct(id: string): Promise<void> {
+    const companyId = await getCompanyId();
 
-        const products = loadFromStorage();
-        const filtered = products.filter(p => p.id !== id);
-        saveToStorage(filtered);
-        return;
-    }
+    const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', id)
+        .eq('company_id', companyId);
 
-    try {
-        await pb.collection('products').delete(id);
-    } catch (error) {
-        console.error('Error deleting product:', error);
-        throw new Error('Erro ao deletar produto');
-    }
+    if (error) throw new Error(`Failed to delete product: ${error.message}`);
 }
 
 /**
- * Find product by EAN barcode
+ * Search products by name or EAN
  */
-async function findByEAN(ean: string): Promise<Product | null> {
-    if (!ean || ean.length !== 13) {
-        return null;
-    }
+async function search(query: string): Promise<Product[]> {
+    const companyId = await getCompanyId();
 
-    if (DEV_MODE) {
-        console.log(`🔧 DEV MODE: Searching product by EAN ${ean}`);
-        await delay();
-        const products = loadFromStorage();
-        const product = products.find(p => p.eans && p.eans.includes(ean));
-        return product || null;
-    }
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyId)
+        .or(`name.ilike.%${query}%,ean.ilike.%${query}%,sku.ilike.%${query}%`)
+        .order('name')
+        .limit(50);
 
-    try {
-        // Search for product with this EAN in the array
-        const products = await pb.collection('products').getFullList<Product>({
-            filter: `eans ~ "${ean}"`
-        });
-        return products.length > 0 ? products[0] : null;
-    } catch (error) {
-        console.error('Error searching product by EAN:', error);
-        return null;
-    }
+    if (error) throw new Error(`Failed to search products: ${error.message}`);
+
+    return (data || []).map(transformFromDB);
 }
 
 /**
- * Get price statistics for a product (last purchase price and average stock price)
+ * Transform database row to Product type
  */
-async function getPriceStats(productId: string): Promise<{
-    lastPurchasePrice: number | null;
-    averageStockPrice: number | null;
-}> {
-    // TODO: Implement when inventory/purchase history is available
+function transformFromDB(row: any): Product {
     return {
-        lastPurchasePrice: null,
-        averageStockPrice: null
+        id: row.id,
+        category_id: row.category_id,
+        brand_id: row.brand_id,
+        model_id: row.model_id,
+        brand: '', // Will be populated by join in future
+        model: '', // Will be populated by join in future
+        name: row.name,
+        sku: row.sku,
+        description: row.description,
+        ean: row.ean,
+        eans: row.alternative_eans || [],
+        alternative_eans: row.alternative_eans || [],
+        specs: row.specs || {},
+        price_cost: row.price_cost,
+        price_retail: row.price_retail,
+        price_reseller: row.price_reseller,
+        price_wholesale: row.price_wholesale,
+        ncm: row.ncm,
+        cest: row.cest,
+        origin: row.origin,
+        weight_kg: row.weight_kg,
+        dimensions: row.dimensions,
+        stock_quantity: row.stock_quantity || 0,
+        images: [], // Will be handled by storage in future
+        status: ProductStatus.ACTIVE,
+        created: row.created_at,
+        updated: row.updated_at
     };
 }
 
 export const productService = {
     list,
     getById,
-    findByEAN,
-    getPriceStats,
+    getByEan,
     create,
     update,
-    remove
+    delete: deleteProduct,
+    search
 };
