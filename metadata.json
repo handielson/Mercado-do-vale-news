@@ -1,0 +1,8 @@
+{
+  "name": "Mercado do Vale",
+  "description": "Enterprise-grade modular ERP/E-commerce with high-complexity architecture, multi-tiered pricing, serial tracking, and robust financial controls.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

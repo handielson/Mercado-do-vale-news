@@ -1,0 +1,317 @@
+
+[
+  {
+    "name": "users",
+    "type": "auth",
+    "system": false,
+    "schema": [
+      {
+        "name": "cpf",
+        "type": "text",
+        "required": true,
+        "unique": true,
+        "options": {
+          "min": 11,
+          "max": 14,
+          "pattern": ""
+        }
+      },
+      {
+        "name": "type",
+        "type": "select",
+        "required": true,
+        "options": {
+          "maxSelect": 1,
+          "values": [
+            "varejo",
+            "revenda",
+            "atacado"
+          ]
+        }
+      },
+      {
+        "name": "address_json",
+        "type": "json",
+        "required": false,
+        "options": {}
+      }
+    ]
+  },
+  {
+    "name": "products",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "name",
+        "type": "text",
+        "required": true,
+        "options": {}
+      },
+      {
+        "name": "sku",
+        "type": "text",
+        "required": true,
+        "unique": true,
+        "options": {}
+      },
+      {
+        "name": "price_retail",
+        "type": "number",
+        "required": true,
+        "options": {
+          "min": 0
+        }
+      },
+      {
+        "name": "price_reseller",
+        "type": "number",
+        "required": true,
+        "options": {
+          "min": 0
+        }
+      },
+      {
+        "name": "price_wholesale",
+        "type": "number",
+        "required": true,
+        "options": {
+          "min": 0
+        }
+      },
+      {
+        "name": "images",
+        "type": "file",
+        "required": false,
+        "options": {
+          "maxSelect": 5,
+          "maxSize": 5242880,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/svg+xml",
+            "image/gif",
+            "image/webp"
+          ],
+          "thumbs": [
+            "100x100"
+          ]
+        }
+      },
+      {
+        "name": "eans",
+        "type": "json",
+        "required": false,
+        "options": {}
+      },
+      {
+        "name": "status",
+        "type": "select",
+        "required": true,
+        "options": {
+          "maxSelect": 1,
+          "values": [
+            "active",
+            "inactive",
+            "out_of_stock",
+            "discontinued"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "units",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "product",
+        "type": "relation",
+        "required": true,
+        "options": {
+          "collectionId": "products",
+          "cascadeDelete": false,
+          "maxSelect": 1
+        }
+      },
+      {
+        "name": "imei_1",
+        "type": "text",
+        "required": false,
+        "unique": true,
+        "options": {}
+      },
+      {
+        "name": "imei_2",
+        "type": "text",
+        "required": false,
+        "options": {}
+      },
+      {
+        "name": "serial_number",
+        "type": "text",
+        "required": false,
+        "unique": true,
+        "options": {}
+      }
+    ]
+  },
+  {
+    "name": "settings",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "company_name",
+        "type": "text",
+        "required": true,
+        "options": {}
+      },
+      {
+        "name": "logo_main",
+        "type": "file",
+        "required": false,
+        "options": {
+          "maxSelect": 1,
+          "maxSize": 5242880,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/svg+xml"
+          ]
+        }
+      },
+      {
+        "name": "logo_dark",
+        "type": "file",
+        "required": false,
+        "options": {
+          "maxSelect": 1,
+          "maxSize": 5242880,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/svg+xml"
+          ]
+        }
+      },
+      {
+        "name": "theme_colors",
+        "type": "json",
+        "required": false,
+        "options": {}
+      },
+      {
+        "name": "whatsapp_config",
+        "type": "json",
+        "required": false,
+        "options": {}
+      }
+    ]
+  },
+  {
+    "name": "brands",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "name",
+        "type": "text",
+        "required": true,
+        "options": {}
+      },
+      {
+        "name": "warranty_days_new",
+        "type": "number",
+        "required": true,
+        "options": {
+          "min": 0
+        }
+      },
+      {
+        "name": "warranty_days_used",
+        "type": "number",
+        "required": true,
+        "options": {
+          "min": 0
+        }
+      }
+    ]
+  },
+  {
+    "name": "banners",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "image",
+        "type": "file",
+        "required": true,
+        "options": {
+          "maxSelect": 1,
+          "maxSize": 5242880,
+          "mimeTypes": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        }
+      },
+      {
+        "name": "audience",
+        "type": "select",
+        "required": true,
+        "options": {
+          "maxSelect": 1,
+          "values": [
+            "varejo",
+            "atacado",
+            "ambos"
+          ]
+        }
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "required": false,
+        "options": {}
+      }
+    ]
+  },
+  {
+    "name": "audit_logs",
+    "type": "base",
+    "system": false,
+    "schema": [
+      {
+        "name": "user",
+        "type": "relation",
+        "required": true,
+        "options": {
+          "collectionId": "users",
+          "cascadeDelete": false,
+          "maxSelect": 1
+        }
+      },
+      {
+        "name": "action",
+        "type": "text",
+        "required": true,
+        "options": {}
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "required": false,
+        "options": {}
+      },
+      {
+        "name": "metadata",
+        "type": "json",
+        "required": false,
+        "options": {}
+      }
+    ]
+  }
+]
