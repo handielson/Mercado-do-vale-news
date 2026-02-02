@@ -22,16 +22,19 @@ export function ProductPricing({ watch, setValue }: ProductPricingProps) {
                     <p className="text-xs text-slate-500 mt-1">💰 Preço de compra</p>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Preço Varejo *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Margem Varejo *</label>
                     <CurrencyInput value={watch('price_retail')} onChange={(val) => setValue('price_retail', val)} />
+                    <p className="text-xs text-slate-500 mt-1">💰 Lucro desejado para vendas no varejo</p>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Preço Revenda *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Margem Revenda *</label>
                     <CurrencyInput value={watch('price_reseller')} onChange={(val) => setValue('price_reseller', val)} />
+                    <p className="text-xs text-slate-500 mt-1">💼 Lucro desejado para revendedores</p>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Preço Atacado *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Margem Atacado *</label>
                     <CurrencyInput value={watch('price_wholesale')} onChange={(val) => setValue('price_wholesale', val)} />
+                    <p className="text-xs text-slate-500 mt-1">📦 Lucro desejado para vendas no atacado</p>
                 </div>
             </div>
 
