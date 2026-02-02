@@ -212,7 +212,15 @@ export default function CustomerFormPage() {
             navigate('/admin/customers');
         } catch (err: any) {
             console.error('Error saving customer:', err);
-            toast.error(err.message || 'Erro ao salvar cliente');
+
+            // Check for duplicate CPF/CNPJ error
+            if (err.message?.includes('unique_customer_per_company') ||
+                err.message?.includes('duplicate key') ||
+                err.code === '23505') {
+                toast.error(`Este ${documentType} já está cadastrado para esta empresa`);
+            } else {
+                toast.error(err.message || 'Erro ao salvar cliente');
+            }
         } finally {
             setSaving(false);
         }
@@ -321,7 +329,7 @@ export default function CustomerFormPage() {
                             </div>
                             <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    {documentType}
+                                    {documentType} *
                                 </label>
                                 <input
                                     type="text"
@@ -331,6 +339,7 @@ export default function CustomerFormPage() {
                                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     placeholder={documentType === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00'}
                                     maxLength={documentType === 'CPF' ? 14 : 18}
+                                    required
                                 />
                             </div>
                         </div>
@@ -424,7 +433,7 @@ export default function CustomerFormPage() {
                             />
                         </div>
 
-                        <div className="relative">
+                        <div className="md:col-span-1">
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                 Número
                             </label>
@@ -450,7 +459,7 @@ export default function CustomerFormPage() {
                             </div>
                         </div>
 
-                        <div className="col-span-3">
+                        <div className="md:col-span-3">
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                 Complemento
                             </label>
