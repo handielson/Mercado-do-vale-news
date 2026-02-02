@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText } from 'lucide-react';
+import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { customFieldsService } from '../../services/custom-fields';
 import { Customer, CustomerInput, CustomerAddress } from '../../types/customer';
 import { CustomField } from '../../types';
+import { validateCpfCnpj, formatCpfCnpj, formatPhone, validateEmail } from '../../utils/cpfCnpjValidation';
 
 /**
  * Customer Form Page
@@ -23,7 +25,6 @@ export default function CustomerFormPage() {
     // State
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
 
     // Form data
@@ -70,7 +71,7 @@ export default function CustomerFormPage() {
             }
         } catch (err) {
             console.error('Error loading customer:', err);
-            setError('Erro ao carregar cliente');
+            toast.error('Erro ao carregar cliente');
         } finally {
             setLoading(false);
         }
@@ -86,26 +87,16 @@ export default function CustomerFormPage() {
         }
     };
 
-    // Validate CPF/CNPJ
-    const validateCpfCnpj = (value: string): boolean => {
-        const cleaned = value.replace(/\D/g, '');
-        if (cleaned.length !== 11 && cleaned.length !== 14) return false;
-        return true;
-    };
+    // Validate CPF/CNPJ on blur
+    const handleCpfCnpjBlur = (value: string) => {
+        if (!value) return;
 
-    // Format CPF/CNPJ
-    const formatCpfCnpj = (value: string): string => {
-        const cleaned = value.replace(/\D/g, '');
-        if (cleaned.length <= 11) {
-            return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        const formatted = formatCpfCnpj(value);
+        updateField('cpf_cnpj', formatted);
+
+        if (!validateCpfCnpj(value)) {
+            toast.error('CPF/CNPJ inválido');
         }
-        return cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-    };
-
-    // Format phone
-    const formatPhone = (value: string): string => {
-        const cleaned = value.replace(/\D/g, '');
-        return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
     };
 
     // Search CEP
@@ -141,29 +132,35 @@ export default function CustomerFormPage() {
 
         // Validation
         if (!formData.name.trim()) {
-            setError('Nome é obrigatório');
+            toast.error('Nome é obrigatório');
             return;
         }
 
         if (formData.cpf_cnpj && !validateCpfCnpj(formData.cpf_cnpj)) {
-            setError('CPF/CNPJ inválido');
+            toast.error('CPF/CNPJ inválido');
+            return;
+        }
+
+        if (formData.email && !validateEmail(formData.email)) {
+            toast.error('Email inválido');
             return;
         }
 
         try {
             setSaving(true);
-            setError(null);
 
             if (isEditing && id) {
                 await customerService.update(id, formData);
+                toast.success('Cliente atualizado com sucesso!');
             } else {
                 await customerService.create(formData);
+                toast.success('Cliente criado com sucesso!');
             }
 
             navigate('/admin/customers');
         } catch (err: any) {
             console.error('Error saving customer:', err);
-            setError(err.message || 'Erro ao salvar cliente');
+            toast.error(err.message || 'Erro ao salvar cliente');
         } finally {
             setSaving(false);
         }
@@ -227,12 +224,7 @@ export default function CustomerFormPage() {
                 </div>
             </div>
 
-            {/* Error Message */}
-            {error && (
-                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-                    {error}
-                </div>
-            )}
+
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -266,7 +258,7 @@ export default function CustomerFormPage() {
                                 type="text"
                                 value={formData.cpf_cnpj}
                                 onChange={(e) => updateField('cpf_cnpj', e.target.value)}
-                                onBlur={(e) => updateField('cpf_cnpj', formatCpfCnpj(e.target.value))}
+                                onBlur={(e) => handleCpfCnpjBlur(e.target.value)}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="000.000.000-00"
                             />

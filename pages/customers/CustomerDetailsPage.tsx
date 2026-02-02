@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Edit, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer } from '../../types/customer';
 
@@ -42,16 +43,16 @@ export default function CustomerDetailsPage() {
         }
     };
 
-    // Delete customer
     const handleDelete = async () => {
         if (!id) return;
 
         try {
             await customerService.delete(id);
+            toast.success('Cliente deletado com sucesso');
             navigate('/admin/customers');
         } catch (err) {
             console.error('Error deleting customer:', err);
-            alert('Erro ao deletar cliente');
+            toast.error('Erro ao deletar cliente');
         }
     };
 

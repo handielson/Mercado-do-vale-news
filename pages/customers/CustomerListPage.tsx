@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Users, Plus, Search, Filter, Edit, Trash2, Eye, UserCheck, UserX } from 'lucide-react';
+import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer, CustomerFilters } from '../../types/customer';
 
@@ -49,15 +50,15 @@ export default function CustomerListPage() {
         setFilters({ ...filters, search: searchTerm });
     };
 
-    // Delete handler
     const handleDelete = async (id: string) => {
         try {
             await customerService.delete(id);
+            toast.success('Cliente deletado com sucesso');
             setDeleteConfirm(null);
             loadCustomers();
         } catch (err) {
             console.error('Error deleting customer:', err);
-            alert('Erro ao deletar cliente');
+            toast.error('Erro ao deletar cliente');
         }
     };
 
