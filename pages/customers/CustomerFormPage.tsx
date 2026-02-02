@@ -433,7 +433,7 @@ export default function CustomerFormPage() {
                             />
                         </div>
 
-                        <div className="md:col-span-1">
+                        <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                 Número
                             </label>
@@ -459,7 +459,7 @@ export default function CustomerFormPage() {
                             </div>
                         </div>
 
-                        <div className="md:col-span-3">
+                        <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                 Complemento
                             </label>
