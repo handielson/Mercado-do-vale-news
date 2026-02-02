@@ -32,6 +32,7 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
     { key: 'specs.version', label: 'Versão', category: 'spec' },
     { key: 'specs.battery_health', label: 'Saúde da Bateria', category: 'spec' },
     { key: 'specs.battery_mah', label: 'Bateria (mAh)', category: 'spec' },
+    { key: 'specs.display', label: 'Display (pol)', category: 'spec' },
 
     // Media
     { key: 'images', label: 'Imagens', category: 'basic' },

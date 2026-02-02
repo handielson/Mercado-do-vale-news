@@ -94,24 +94,27 @@ async function create(input: ProductInput): Promise<Product> {
         .insert({
             company_id: companyId,
             category_id: input.category_id,
-            brand_id: input.brand_id || null,
-            model_id: input.model_id || null,
+            brand: input.brand,
+            model: input.model,
             name: input.name,
             sku: input.sku || null,
             description: input.description || null,
             ean: input.ean || null,
             alternative_eans: input.alternative_eans || [],
             specs: input.specs || {},
-            price_cost: input.price_cost || null,
-            price_retail: input.price_retail || null,
-            price_reseller: input.price_reseller || null,
-            price_wholesale: input.price_wholesale || null,
+            price_cost: input.price_cost,
+            price_retail: input.price_retail,
+            price_reseller: input.price_reseller,
+            price_wholesale: input.price_wholesale,
+            images: input.images || [],
             ncm: input.ncm || null,
             cest: input.cest || null,
             origin: input.origin || null,
             weight_kg: input.weight_kg || null,
             dimensions: input.dimensions || null,
-            stock_quantity: input.stock_quantity || 0
+            stock_quantity: input.stock_quantity || 0,
+            status: input.status,
+            track_inventory: input.track_inventory
         })
         .select()
         .single();
@@ -131,24 +134,27 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         .from('products')
         .update({
             category_id: input.category_id,
-            brand_id: input.brand_id || null,
-            model_id: input.model_id || null,
+            brand: input.brand,
+            model: input.model,
             name: input.name,
             sku: input.sku || null,
             description: input.description || null,
             ean: input.ean || null,
             alternative_eans: input.alternative_eans || [],
             specs: input.specs || {},
-            price_cost: input.price_cost || null,
-            price_retail: input.price_retail || null,
-            price_reseller: input.price_reseller || null,
-            price_wholesale: input.price_wholesale || null,
+            price_cost: input.price_cost,
+            price_retail: input.price_retail,
+            price_reseller: input.price_reseller,
+            price_wholesale: input.price_wholesale,
+            images: input.images || [],
             ncm: input.ncm || null,
             cest: input.cest || null,
             origin: input.origin || null,
             weight_kg: input.weight_kg || null,
             dimensions: input.dimensions || null,
-            stock_quantity: input.stock_quantity || 0
+            stock_quantity: input.stock_quantity || 0,
+            status: input.status,
+            track_inventory: input.track_inventory
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -219,10 +225,8 @@ function transformFromDB(row: any): Product {
     return {
         id: row.id,
         category_id: row.category_id,
-        brand_id: row.brand_id,
-        model_id: row.model_id,
-        brand: '', // Will be populated by join in future
-        model: '', // Will be populated by join in future
+        brand: row.brand || '',
+        model: row.model || '',
         name: row.name,
         sku: row.sku,
         description: row.description,
@@ -240,8 +244,9 @@ function transformFromDB(row: any): Product {
         weight_kg: row.weight_kg,
         dimensions: row.dimensions,
         stock_quantity: row.stock_quantity || 0,
-        images: [], // Will be handled by storage in future
-        status: ProductStatus.ACTIVE,
+        images: row.images || [],
+        status: row.status || ProductStatus.ACTIVE,
+        track_inventory: row.track_inventory !== false,
         created: row.created_at,
         updated: row.updated_at
     };

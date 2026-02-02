@@ -1,25 +1,27 @@
 import React from 'react';
-import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
+import { UseFormWatch, UseFormSetValue, FieldErrors } from 'react-hook-form';
 import { ProductInput } from '../../../types/product';
 import { CategoryConfig } from '../../../types/category';
 import { IMEIInput } from '../../ui/IMEIInput';
 import { ColorSelect } from '../selectors/ColorSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
 import { VersionSelect } from '../selectors/VersionSelect';
-import { Package } from 'lucide-react';
+import { Package, RefreshCw } from 'lucide-react';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
     watch: UseFormWatch<ProductInput>;
     setValue: UseFormSetValue<ProductInput>;
-    errors?: any;
+    errors: FieldErrors<ProductInput>;
+    onRefresh?: () => void;
 }
 
 export function ProductSpecifications({
     categoryConfig,
     watch,
     setValue,
-    errors
+    errors,
+    onRefresh
 }: ProductSpecificationsProps) {
     if (!categoryConfig) return null;
 
@@ -32,16 +34,30 @@ export function ProductSpecifications({
 
     return (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-4">
-            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                <Package size={18} className="text-blue-600" />
-                Especificações Técnicas
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <Package size={18} className="text-blue-600" />
+                    Especificações Técnicas
+                </h3>
+                {onRefresh && (
+                    <button
+                        type="button"
+                        onClick={onRefresh}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Recarregar campos customizados"
+                    >
+                        <RefreshCw size={14} />
+                        Atualizar Campos
+                    </button>
+                )}
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-auto min-h-fit">
+            {/* Grid responsivo com alinhamento consistente - Max 3 colunas para evitar sobreposição */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 {/* IMEI 1 */}
                 {categoryConfig.imei1 !== 'off' && (
-                    <div>
+                    <div className="space-y-1">
                         <IMEIInput
                             label="IMEI 1"
                             value={watch('specs.imei1') || ''}
@@ -49,15 +65,15 @@ export function ProductSpecifications({
                             required={categoryConfig.imei1 === 'required'}
                             placeholder="Digite 15 dígitos"
                         />
-                        {categoryConfig.imei1 === 'required' && errors?.specs?.message && (
-                            <span className="text-xs text-red-500">{errors.specs.message}</span>
+                        {categoryConfig.imei1 === 'required' && errors?.specs?.imei1?.message && (
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.imei1.message}</p>
                         )}
                     </div>
                 )}
 
                 {/* IMEI 2 */}
                 {categoryConfig.imei2 !== 'off' && (
-                    <div>
+                    <div className="space-y-1">
                         <IMEIInput
                             label="IMEI 2"
                             value={watch('specs.imei2') || ''}
@@ -65,87 +81,99 @@ export function ProductSpecifications({
                             required={categoryConfig.imei2 === 'required'}
                             placeholder="Digite 15 dígitos"
                         />
-                        {categoryConfig.imei2 === 'required' && errors?.specs?.message && (
-                            <span className="text-xs text-red-500">{errors.specs.message}</span>
+                        {categoryConfig.imei2 === 'required' && errors?.specs?.imei2?.message && (
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.imei2.message}</p>
                         )}
                     </div>
                 )}
 
                 {/* SERIAL */}
                 {categoryConfig.serial !== 'off' && (
-                    <div>
+                    <div className="space-y-1">
                         <FieldLabel label="Serial" required={categoryConfig.serial === 'required'} />
                         <input
                             type="text"
                             value={watch('specs.serial') || ''}
                             onChange={(e) => setValue('specs.serial', e.target.value.toUpperCase().trim())}
-                            className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase"
+                            className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase ${errors?.specs?.serial ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
+                                }`}
                             placeholder="Ex: SN123456789"
                         />
-                        {categoryConfig.serial === 'required' && errors?.specs?.message && (
-                            <span className="text-xs text-red-500">{errors.specs.message}</span>
+                        {errors?.specs?.serial && (
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.serial.message}</p>
                         )}
                     </div>
                 )}
 
                 {/* COR */}
                 {categoryConfig.color !== 'off' && (
-                    <div>
+                    <div className="space-y-1">
                         <FieldLabel label="Cor Predominante" required={categoryConfig.color === 'required'} />
                         <ColorSelect
-                            value={watch('specs.color')}
+                            value={watch('specs.color') || ''}
                             onChange={(val) => setValue('specs.color', val)}
-                            error={categoryConfig.color === 'required' ? errors?.specs?.message : undefined}
                         />
+                        {categoryConfig.color === 'required' && errors?.specs?.color && (
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.color.message}</p>
+                        )}
                     </div>
                 )}
 
                 {/* ARMAZENAMENTO */}
                 {categoryConfig.storage !== 'off' && (
-                    <div>
+                    <div className="space-y-1">
                         <FieldLabel label="Armazenamento" required={categoryConfig.storage === 'required'} />
                         <CapacitySelect
-                            type="storage"
-                            value={watch('specs.storage')}
+                            value={watch('specs.storage') || ''}
                             onChange={(val) => setValue('specs.storage', val)}
-                            error={categoryConfig.storage === 'required' ? errors?.specs?.message : undefined}
+                            label="Armazenamento"
+                            placeholder="Selecione o armazenamento"
                         />
+                        {categoryConfig.storage === 'required' && errors?.specs?.storage && (
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.storage.message}</p>
+                        )}
                     </div>
                 )}
 
                 {/* RAM */}
                 {categoryConfig.ram !== 'off' && (
-                    <div>
+                    <div className="space-y-1">
                         <FieldLabel label="Memória RAM" required={categoryConfig.ram === 'required'} />
                         <CapacitySelect
-                            type="ram"
-                            value={watch('specs.ram')}
+                            value={watch('specs.ram') || ''}
                             onChange={(val) => setValue('specs.ram', val)}
-                            error={categoryConfig.ram === 'required' ? errors?.specs?.message : undefined}
+                            label="RAM"
+                            placeholder="Selecione a RAM"
                         />
+                        {categoryConfig.ram === 'required' && errors?.specs?.ram && (
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.ram.message}</p>
+                        )}
                     </div>
                 )}
 
                 {/* VERSÃO */}
                 {categoryConfig.version !== 'off' && (
-                    <div>
+                    <div className="space-y-1">
                         <FieldLabel label="Versão" required={categoryConfig.version === 'required'} />
                         <VersionSelect
-                            value={watch('specs.version')}
+                            value={watch('specs.version') || ''}
                             onChange={(val) => setValue('specs.version', val)}
-                            error={categoryConfig.version === 'required' ? errors?.specs?.message : undefined}
                         />
+                        {categoryConfig.version === 'required' && errors?.specs?.version && (
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.version.message}</p>
+                        )}
                     </div>
                 )}
 
                 {/* SAÚDE DA BATERIA */}
                 {categoryConfig.battery_health !== 'off' && (
-                    <div>
+                    <div className="space-y-1">
                         <FieldLabel label="Saúde Bateria" required={categoryConfig.battery_health === 'required'} />
                         <select
                             value={watch('specs.battery_health') || ''}
                             onChange={(e) => setValue('specs.battery_health', e.target.value)}
-                            className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${errors?.specs?.battery_health ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
+                                }`}
                         >
                             <option value="">Selecione</option>
                             <option value="100">100% (Nova)</option>
@@ -157,8 +185,8 @@ export function ProductSpecifications({
                             <option value="70-74">70-74%</option>
                             <option value="<70">Abaixo de 70%</option>
                         </select>
-                        {categoryConfig.battery_health === 'required' && errors?.specs?.message && (
-                            <span className="text-xs text-red-500">{errors.specs.message}</span>
+                        {errors?.specs?.battery_health && (
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.battery_health.message}</p>
                         )}
                     </div>
                 )}
@@ -168,14 +196,13 @@ export function ProductSpecifications({
                     if (customField.requirement === 'off') return null;
 
                     return (
-                        <div key={customField.id}>
+                        <div key={customField.id} className="space-y-1">
                             <FieldLabel
                                 label={customField.name}
                                 required={customField.requirement === 'required'}
                             />
 
-
-                            {/* Text-based inputs - includes all text formats from dictionary */}
+                            {/* Text-based inputs */}
                             {(customField.type === 'text' ||
                                 customField.type === 'capitalize' ||
                                 customField.type === 'uppercase' ||
@@ -251,10 +278,6 @@ export function ProductSpecifications({
                                     rows={3}
                                     className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                                 />
-                            )}
-
-                            {customField.requirement === 'required' && errors?.specs?.message && (
-                                <span className="text-xs text-red-500">{errors.specs.message}</span>
                             )}
                         </div>
                     );

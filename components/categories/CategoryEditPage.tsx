@@ -54,21 +54,16 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
             const category = await categoryService.getById(id);
             if (category) {
                 setName(category.name);
+
+                console.log('[CategoryEditPage] Loading category:', category.name);
+                console.log('[CategoryEditPage] Config:', category.config);
+
+                // Use spread operator to load ALL fields from database (Database-First Architecture)
                 setConfig({
-                    imei1: category.config.imei1 || 'optional',
-                    imei2: category.config.imei2 || 'optional',
-                    serial: category.config.serial || 'optional',
-                    color: category.config.color || 'optional',
-                    storage: category.config.storage || 'optional',
-                    ram: category.config.ram || 'optional',
-                    version: category.config.version || 'optional',
-                    battery_health: category.config.battery_health || 'optional',
+                    ...category.config,
+                    // Ensure required nested objects exist
                     custom_fields: category.config.custom_fields || [],
-                    ean_autofill_config: category.config.ean_autofill_config || { enabled: true, exclude_fields: [] },
-                    auto_name_enabled: category.config.auto_name_enabled,
-                    auto_name_template: category.config.auto_name_template,
-                    auto_name_fields: category.config.auto_name_fields,
-                    auto_name_separator: category.config.auto_name_separator
+                    ean_autofill_config: category.config.ean_autofill_config || { enabled: true, exclude_fields: [] }
                 });
             }
         } catch (error) {

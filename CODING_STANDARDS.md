@@ -83,7 +83,65 @@ import { ProductFields } from '@/utils/field-standards';
 if (field === ProductFields.IMEI1) { ... }
 ```
 
----
+### 5. Database-First Dynamic Fields Pattern
+
+**ALWAYS** use spread operator when loading config objects from database to support dynamic fields:
+
+#### ❌ Problem: Hardcoded Field Loading
+
+**Symptoms:**
+- New fields added to database don't appear in UI
+- Field values don't persist after save/reload
+- `config[fieldKey]` returns `undefined` for dynamic fields
+
+**Root Cause:**
+```tsx
+// ❌ BAD: Hardcoded fields - ignores dynamic fields from database
+const loadCategory = async (id: string) => {
+    const category = await categoryService.getById(id);
+    setConfig({
+        imei1: category.config.imei1 || 'optional',
+        imei2: category.config.imei2 || 'optional',
+        serial: category.config.serial || 'optional',
+        // display field is NOT here! ❌
+        // Any new fields added to database are ignored! ❌
+    });
+};
+```
+
+#### ✅ Solution: Spread Operator Pattern
+
+```tsx
+// ✅ GOOD: Spread operator loads ALL fields dynamically
+const loadCategory = async (id: string) => {
+    const category = await categoryService.getById(id);
+    setConfig({
+        ...category.config,  // ← Loads ALL fields from database!
+        // Only override specific nested objects if needed:
+        custom_fields: category.config.custom_fields || [],
+        ean_autofill_config: category.config.ean_autofill_config || { enabled: true, exclude_fields: [] }
+    });
+};
+```
+
+**Benefits:**
+- ✅ **Zero maintenance**: New fields work automatically
+- ✅ **Database-First**: Single source of truth
+- ✅ **Type-safe**: TypeScript index signature handles dynamic keys
+- ✅ **Future-proof**: No code changes when adding fields
+
+**When to Use:**
+- Loading category configurations
+- Loading product specifications
+- Loading any JSONB config from Supabase
+- Any object with dynamic fields from database
+
+**Related Files:**
+- `components/categories/CategoryEditPage.tsx` - Example implementation
+- `types/category.ts` - CategoryConfig with index signature
+- `services/custom-fields.ts` - Dynamic field service
+
+
 
 ## 🏗️ Component Architecture
 

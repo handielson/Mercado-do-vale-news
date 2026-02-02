@@ -19,6 +19,7 @@ export const productSchema = z.object({
     sku: z.string().min(3, 'SKU deve ter pelo menos 3 caracteres'),
 
     // Pricing (in centavos) - Fixed NaN issue with z.coerce
+    price_cost: z.coerce.number().min(0, 'Preço de custo deve ser maior ou igual a zero').nullable().optional(),
     price_retail: z.coerce.number().min(0, 'Preço varejo deve ser maior ou igual a zero'),
     price_reseller: z.coerce.number().min(0, 'Preço revenda deve ser maior ou igual a zero'),
     price_wholesale: z.coerce.number().min(0, 'Preço atacado deve ser maior ou igual a zero'),
@@ -35,42 +36,67 @@ export const productSchema = z.object({
         errorMap: () => ({ message: 'Status inválido' })
     }),
 
-    // Fiscal Fields
-    ncm: z.string().max(8).optional(),
-    cest: z.string().max(7).optional(),
-    origin: z.string().optional(),
+    // Fiscal Fields - Accept null, empty strings, and undefined
+    ncm: z.string().max(8).nullable().optional()
+        .transform(val => !val || val === '' ? undefined : val),
+    cest: z.string().max(7).nullable().optional()
+        .transform(val => !val || val === '' ? undefined : val),
+    origin: z.string().nullable().optional()
+        .transform(val => !val || val === '' ? undefined : val),
 
-    // Logistics Fields (Fixed NaN issue)
-    // z.coerce converts string to number automatically
-    // .or(z.literal('')) allows empty string from HTML inputs
-    // .nullable() allows null values
-    // .transform() converts empty/null to undefined
-    weight_kg: z.coerce.number().min(0).optional()
-        .or(z.literal(''))
-        .or(z.null())
-        .transform(val => val === '' || val === null ? undefined : val),
+    // Logistics Fields - Truly optional, allow empty values, with postal limits
+    weight_kg: z.union([
+        z.number()
+            .min(0, 'Peso deve ser maior ou igual a zero')
+            .max(30, 'Peso máximo permitido pelos Correios: 30kg'),
+        z.nan(),
+        z.null(),
+        z.undefined()
+    ]).optional().transform(val => {
+        if (val === null || val === undefined || Number.isNaN(val) || val === 0) return undefined;
+        return val;
+    }),
 
     dimensions: z.object({
-        width_cm: z.coerce.number().min(0).optional()
-            .or(z.literal(''))
-            .or(z.null())
-            .transform(val => val === '' || val === null ? undefined : val),
-        height_cm: z.coerce.number().min(0).optional()
-            .or(z.literal(''))
-            .or(z.null())
-            .transform(val => val === '' || val === null ? undefined : val),
-        depth_cm: z.coerce.number().min(0).optional()
-            .or(z.literal(''))
-            .or(z.null())
-            .transform(val => val === '' || val === null ? undefined : val)
+        width_cm: z.union([
+            z.number()
+                .min(0, 'Largura deve ser maior ou igual a zero')
+                .max(105, 'Largura máxima permitida pelos Correios: 105cm'),
+            z.nan(),
+            z.null(),
+            z.undefined()
+        ]).optional().transform(val => {
+            if (val === null || val === undefined || Number.isNaN(val) || val === 0) return undefined;
+            return val;
+        }),
+        height_cm: z.union([
+            z.number()
+                .min(0, 'Altura deve ser maior ou igual a zero')
+                .max(105, 'Altura máxima permitida pelos Correios: 105cm'),
+            z.nan(),
+            z.null(),
+            z.undefined()
+        ]).optional().transform(val => {
+            if (val === null || val === undefined || Number.isNaN(val) || val === 0) return undefined;
+            return val;
+        }),
+        depth_cm: z.union([
+            z.number()
+                .min(16, 'Profundidade mínima permitida pelos Correios: 16cm')
+                .max(105, 'Profundidade máxima permitida pelos Correios: 105cm'),
+            z.nan(),
+            z.null(),
+            z.undefined()
+        ]).optional().transform(val => {
+            if (val === null || val === undefined || Number.isNaN(val) || val === 0) return undefined;
+            return val;
+        })
     }).optional(),
 
     // Inventory Control
     track_inventory: z.boolean().default(true),
-    stock_quantity: z.coerce.number().int().min(0).optional()
-        .or(z.literal(''))
-        .or(z.null())
-        .transform(val => val === '' || val === null ? undefined : val)
+    stock_quantity: z.coerce.number().int().min(0).nullable().optional()
+        .transform(val => val === null || val === 0 ? undefined : val)
 }).refine(
     (data) => data.price_retail >= data.price_reseller,
     {

@@ -8,6 +8,7 @@ import { ProductListPage } from '../pages/admin/products/ProductListPage';
 import { ProductFormPage } from '../pages/admin/products/ProductFormPage';
 import { ProductDetailPage } from '../pages/admin/products/ProductDetailPage';
 import { BulkRegistrationPage } from '../pages/admin/products/BulkRegistrationPage';
+import { InventoryPage } from '../pages/admin/inventory/InventoryPage';
 import CategorySettingsPage from '../pages/admin/settings/categories/index';
 import NewCategoryPage from '../pages/admin/settings/categories/new';
 import EditCategoryPage from '../pages/admin/settings/categories/[id]/edit';
@@ -21,6 +22,7 @@ import { RamsPage } from '../pages/admin/settings/RamsPage';
 import { VersionsPage } from '../pages/admin/settings/VersionsPage';
 import { BatteryHealthsPage } from '../pages/admin/settings/BatteryHealthsPage';
 import { FieldConfigPage } from '../pages/admin/settings/FieldConfigPage';
+import { PaymentFeesPage } from '../pages/admin/settings/PaymentFeesPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => (
@@ -101,6 +103,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><BulkRegistrationPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/inventory",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><InventoryPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
@@ -189,6 +199,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><FieldConfigPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/payment-fees",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><PaymentFeesPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

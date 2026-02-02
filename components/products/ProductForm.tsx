@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { toast } from 'sonner';
 import { productSchema } from '../../schemas/product';
 import { Product, ProductInput } from '../../types/product';
 import { CategoryConfig } from '../../types/category';
@@ -58,7 +59,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
         formState: { errors }
     } = useForm<ProductInput>({
         resolver: zodResolver(productSchema),
-        defaultValues: initialData || {
+        defaultValues: {
             status: 'active',
             images: [],
             specs: {},
@@ -66,9 +67,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             price_cost: 0,
             price_retail: 0,
             price_reseller: 0,
-            price_wholesale: 0
+            price_wholesale: 0,
+            ...initialData // Spread initialData AFTER defaults to override with actual values
         }
     });
+
+    // DEBUG: Log initialData to see what's coming from database
+    useEffect(() => {
+        if (initialData) {
+            console.log('🔍 ProductForm initialData:', initialData);
+            console.log('💰 price_cost value:', initialData.price_cost);
+            console.log('💰 price_retail value:', initialData.price_retail);
+        }
+    }, [initialData]);
 
     // EAN auto-fill hook (DEPOIS do useForm)
     const {
@@ -102,23 +113,25 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
         loadBrandId();
     }, [selectedBrand]);
 
-    // 1. Efeito para carregar as regras quando a Categoria muda
+    // 1. Função para carregar as regras da categoria
+    const loadCategoryConfig = async () => {
+        if (!selectedCategoryId) {
+            setCategoryConfig(null);
+            return;
+        }
+        try {
+            const category = await categoryService.getById(selectedCategoryId);
+            if (category) {
+                console.log("Config carregada:", category.config); // Debug
+                setCategoryConfig(category.config);
+            }
+        } catch (error) {
+            console.error("Erro ao carregar config da categoria:", error);
+        }
+    };
+
+    // 2. Efeito para carregar as regras quando a Categoria muda
     useEffect(() => {
-        const loadCategoryConfig = async () => {
-            if (!selectedCategoryId) {
-                setCategoryConfig(null);
-                return;
-            }
-            try {
-                const category = await categoryService.getById(selectedCategoryId);
-                if (category) {
-                    console.log("Config carregada:", category.config); // Debug
-                    setCategoryConfig(category.config);
-                }
-            } catch (error) {
-                console.error("Erro ao carregar config da categoria:", error);
-            }
-        };
         loadCategoryConfig();
     }, [selectedCategoryId]);
 
@@ -186,8 +199,17 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             const processedImages: string[] = [];
             for (const file of filesToProcess) {
                 const compressed = await compressImage(file);
-                const objectUrl = URL.createObjectURL(compressed);
-                processedImages.push(objectUrl);
+
+                // Convert to base64 for permanent storage
+                const reader = new FileReader();
+                const base64Promise = new Promise<string>((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(compressed);
+                });
+
+                const base64String = await base64Promise;
+                processedImages.push(base64String);
             }
             const newImages = [...currentImages, ...processedImages];
             setValue('images', newImages);
@@ -251,8 +273,37 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
         }
     };
 
+    // Wrapper para onSubmit que mostra toast de erro
+    const handleFormSubmit = handleSubmit(
+        onSubmit,
+        (errors) => {
+            console.error('Validation errors:', errors);
+
+            // Log detalhado de cada erro
+            console.group('🔴 ERROS DE VALIDAÇÃO DETALHADOS:');
+            Object.entries(errors).forEach(([field, error]) => {
+                console.error(`  ❌ ${field}:`, error?.message || error);
+            });
+            console.groupEnd();
+
+            // Conta quantos campos têm erro
+            const errorCount = Object.keys(errors).length;
+
+            // Mostra toast com mensagem específica
+            if (errorCount > 0) {
+                toast.error(
+                    `Preencha todos os campos obrigatórios (${errorCount} ${errorCount === 1 ? 'campo' : 'campos'} com erro)`,
+                    {
+                        duration: 5000,
+                        description: 'Verifique os campos destacados em vermelho'
+                    }
+                );
+            }
+        }
+    );
+
     return (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 pb-20">
+        <form onSubmit={handleFormSubmit} className="space-y-6 pb-20">
             {/* 0. SCANNER DE CÓDIGO DE BARRAS + 1. INFORMAÇÕES BÁSICAS */}
             <ProductBasicInfo
                 watch={watch}
@@ -274,6 +325,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 watch={watch}
                 setValue={setValue}
                 errors={errors}
+                onRefresh={loadCategoryConfig}
             />
 
             {/* 3. PRECIFICAÇÃO */}
@@ -336,6 +388,15 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                     <Package size={18} className="text-slate-500" />
                     Logística & Expedição
                 </h3>
+
+                {/* Info box with postal limits */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm mb-4">
+                    <p className="font-medium text-blue-900 mb-1">📦 Limites dos Correios</p>
+                    <p className="text-blue-700 text-xs">
+                        Peso: até 30kg • Dimensões: 16-105cm (C), até 105cm (L+A), até 200cm (C+L+A)
+                    </p>
+                </div>
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Peso (kg)</label>
@@ -345,6 +406,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                             placeholder="0.000"
                             className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                         />
+                        <p className="text-xs text-slate-500 mt-1">
+                            💡 Ex: 1.5 (um quilo e meio) ou 0.250 (250 gramas)
+                        </p>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Largura (cm)</label>

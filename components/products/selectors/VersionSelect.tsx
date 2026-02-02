@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, RefreshCw } from 'lucide-react';
 import { versionService } from '../../../services/versions';
 import { Version } from '../../../types/version';
 
@@ -85,6 +85,16 @@ export const VersionSelect: React.FC<VersionSelectProps> = ({
                         </option>
                     ))}
                 </select>
+
+                <button
+                    type="button"
+                    onClick={loadVersions}
+                    disabled={isLoading}
+                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                    title="Atualizar lista de versões"
+                >
+                    <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
 
                 <button
                     type="button"

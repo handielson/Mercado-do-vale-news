@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { CategoryConfig, FieldRequirement } from '../../../types/category';
+import { customFieldsService } from '../../../services/custom-fields';
 
 interface FieldConfigSectionProps {
     config: CategoryConfig;
@@ -25,7 +27,7 @@ interface DynamicField {
  * - Controlled by parent via props
  * - Radio buttons for required/optional/off states
  * - Checkboxes for EAN exclusion and auto-naming
- * - DYNAMIC: Loads available fields from field-dictionary
+ * - DYNAMIC: Loads available fields from Supabase (Database-First)
  */
 export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
     config,
@@ -36,33 +38,44 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
     onAutoNamingFieldsChange
 }) => {
     const [availableFields, setAvailableFields] = useState<DynamicField[]>([]);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     useEffect(() => {
         loadAvailableFields();
     }, []);
 
     const loadAvailableFields = async () => {
-        // Get fields from product-fields configuration
-        const { getBasicFields, getSpecFields } = await import('../../../config/product-fields');
+        setIsRefreshing(true);
+        try {
+            // Load fields from Supabase (Database-First Architecture)
+            const fields = await customFieldsService.list();
 
-        const basicFields = getBasicFields();
-        const specFields = getSpecFields();
+            console.log('🔍 [FieldConfigSection] All fields from Supabase:', fields.length);
+            console.log('🔍 [FieldConfigSection] Display field:', fields.find(f => f.key === 'display'));
 
-        // Map to DynamicField format
-        const allFields: DynamicField[] = [
-            ...basicFields.map(f => ({ key: f.key, label: f.label, category: 'basic' as const })),
-            ...specFields.map(f => ({
-                // Remove 'specs.' prefix from key for config storage
-                key: f.key.replace('specs.', ''),
-                label: f.label,
-                category: 'specs' as const
-            }))
-        ];
+            // Map to DynamicField format
+            const allFields: DynamicField[] = fields
+                .filter(f => f.category === 'basic' || f.category === 'spec')
+                .map(f => ({
+                    key: f.key,
+                    label: f.label,
+                    category: f.category === 'basic' ? 'basic' : 'specs'
+                }));
 
-        // Sort alphabetically by label
-        allFields.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+            console.log('🔍 [FieldConfigSection] Filtered fields:', allFields.length);
+            console.log('🔍 [FieldConfigSection] Display in filtered:', allFields.find(f => f.key === 'display'));
 
-        setAvailableFields(allFields);
+            // Sort alphabetically by label
+            allFields.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+
+            setAvailableFields(allFields);
+        } catch (error) {
+            console.error('Error loading custom fields:', error);
+            // Show user-friendly error
+            alert('Erro ao carregar campos customizados. Verifique sua conexão.');
+        } finally {
+            setIsRefreshing(false);
+        }
     };
 
     const handleEANExclusionToggle = (fieldKey: string, checked: boolean) => {
@@ -81,9 +94,21 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
 
     return (
         <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                🚦 Configuração Completa de Campos
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">
+                    🚦 Configuração Completa de Campos
+                </h3>
+                <button
+                    type="button"
+                    onClick={loadAvailableFields}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                    title="Recarregar lista de campos"
+                >
+                    <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+                    Atualizar
+                </button>
+            </div>
 
             <p className="text-sm text-slate-600 mb-4">
                 Configure visibilidade, obrigatoriedade, exclusão do EAN e uso na geração automática de nome
@@ -136,10 +161,20 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                             </thead>
                             <tbody className="divide-y divide-slate-200">
                                 {availableFields.map((field) => {
-                                    const fieldKey = field.key as keyof CategoryConfig;
-                                    const currentValue = config[fieldKey] as FieldRequirement || 'optional';
+                                    // Access config directly without TypeScript cast issues
+                                    const currentValue = (config[field.key] as FieldRequirement) || 'optional';
                                     const isEANExcluded = eanExcludedFields.includes(field.key);
                                     const isInAutoNaming = autoNamingFields.includes(field.key);
+
+                                    // Debug: Log field config
+                                    if (field.key === 'display') {
+                                        console.log(`🔍 [FieldConfigSection] display field:`, {
+                                            fieldKey: field.key,
+                                            currentValue,
+                                            configValue: config[field.key],
+                                            fullConfig: config
+                                        });
+                                    }
 
                                     return (
                                         <tr key={field.key} className="hover:bg-slate-50 transition-colors">
@@ -156,7 +191,7 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                                                     type="radio"
                                                     name={field.key}
                                                     checked={currentValue === 'off'}
-                                                    onChange={() => onChange(fieldKey, 'off')}
+                                                    onChange={() => onChange(field.key as keyof CategoryConfig, 'off')}
                                                     className="w-4 h-4 text-red-600 focus:ring-red-500 cursor-pointer"
                                                 />
                                             </td>
@@ -165,7 +200,7 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                                                     type="radio"
                                                     name={field.key}
                                                     checked={currentValue === 'optional'}
-                                                    onChange={() => onChange(fieldKey, 'optional')}
+                                                    onChange={() => onChange(field.key as keyof CategoryConfig, 'optional')}
                                                     className="w-4 h-4 text-yellow-600 focus:ring-yellow-500 cursor-pointer"
                                                 />
                                             </td>
@@ -174,7 +209,7 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                                                     type="radio"
                                                     name={field.key}
                                                     checked={currentValue === 'required'}
-                                                    onChange={() => onChange(fieldKey, 'required')}
+                                                    onChange={() => onChange(field.key as keyof CategoryConfig, 'required')}
                                                     className="w-4 h-4 text-green-600 focus:ring-green-500 cursor-pointer"
                                                 />
                                             </td>

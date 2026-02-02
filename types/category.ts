@@ -60,21 +60,28 @@ export interface CustomField {
 /**
  * Category Configuration
  * Controls which fields are shown and required for products/units in this category
+ * 
+ * ANTIGRAVITY PROTOCOL: Database-First Architecture
+ * - Fields are loaded dynamically from custom_fields table
+ * - Index signature allows any field from database
+ * - Known fields are typed for autocomplete
  */
 export interface CategoryConfig {
     // Inventory Identifiers (Unit level)
-    imei1: FieldRequirement;           // IMEI 1 tracking (15 digits)
-    imei2: FieldRequirement;           // IMEI 2 tracking (15 digits)
-    serial: FieldRequirement;          // Serial number
+    imei1?: FieldRequirement;           // IMEI 1 tracking (15 digits)
+    imei2?: FieldRequirement;           // IMEI 2 tracking (15 digits)
+    serial?: FieldRequirement;          // Serial number
 
     // Product Specifications
-    color: FieldRequirement;           // Device color
-    storage: FieldRequirement;         // Storage capacity (128GB, 256GB)
-    ram: FieldRequirement;             // RAM capacity (4GB, 8GB)
-    version: FieldRequirement;         // Regional variant (Global, China)
+    color?: FieldRequirement;           // Device color
+    storage?: FieldRequirement;         // Storage capacity (128GB, 256GB)
+    ram?: FieldRequirement;             // RAM capacity (4GB, 8GB)
+    version?: FieldRequirement;         // Regional variant (Global, China)
 
     // Condition-based fields
-    battery_health: FieldRequirement;  // Battery health % (for used items)
+    battery_health?: FieldRequirement;  // Battery health % (for used items)
+    battery_mah?: FieldRequirement;     // Battery capacity (mAh)
+    display?: FieldRequirement;         // Display size (pol)
 
     // Custom Fields (dynamic)
     custom_fields?: CustomField[];     // User-defined fields
@@ -92,6 +99,10 @@ export interface CategoryConfig {
     // DEPRECATED (kept for backward compatibility)
     auto_name_fields?: string[];       // Fields to compose the name (ex: ['model', 'ram', 'storage', 'color'])
     auto_name_separator?: string;      // Separator between fields (default: ' ', can be '/', '-', etc.)
+
+    // Index signature for dynamic fields from database
+    // Allows any field loaded from custom_fields table
+    [key: string]: FieldRequirement | CustomField[] | any | undefined;
 }
 
 /**
