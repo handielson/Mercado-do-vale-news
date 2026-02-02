@@ -88,6 +88,15 @@ export default function CustomerFormPage() {
         }
     };
 
+    // Capitalize name (first letter of each word)
+    const capitalizeName = (name: string): string => {
+        return name
+            .toLowerCase()
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    };
+
     // Validate CPF/CNPJ on blur
     const handleCpfCnpjBlur = (value: string) => {
         if (!value) return;
@@ -322,7 +331,7 @@ export default function CustomerFormPage() {
                             <input
                                 type="text"
                                 value={formData.name}
-                                onChange={(e) => updateField('name', e.target.value)}
+                                onChange={(e) => updateField('name', capitalizeName(e.target.value))}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="Digite o nome do cliente"
                                 required
