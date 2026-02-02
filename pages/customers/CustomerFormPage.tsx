@@ -26,6 +26,7 @@ export default function CustomerFormPage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
+    const [documentType, setDocumentType] = useState<'CPF' | 'CNPJ'>('CPF');
 
     // Form data
     const [formData, setFormData] = useState<CustomerInput>({
@@ -94,8 +95,19 @@ export default function CustomerFormPage() {
         const formatted = formatCpfCnpj(value);
         updateField('cpf_cnpj', formatted);
 
+        // Validate based on selected type
+        const cleaned = value.replace(/\D/g, '');
+        if (documentType === 'CPF' && cleaned.length > 0 && cleaned.length !== 11) {
+            toast.error('CPF deve ter 11 dígitos');
+            return;
+        }
+        if (documentType === 'CNPJ' && cleaned.length > 0 && cleaned.length !== 14) {
+            toast.error('CNPJ deve ter 14 dígitos');
+            return;
+        }
+
         if (!validateCpfCnpj(value)) {
-            toast.error('CPF/CNPJ inválido');
+            toast.error(`${documentType} inválido`);
         }
     };
 
@@ -136,9 +148,20 @@ export default function CustomerFormPage() {
             return;
         }
 
-        if (formData.cpf_cnpj && !validateCpfCnpj(formData.cpf_cnpj)) {
-            toast.error('CPF/CNPJ inválido');
-            return;
+        if (formData.cpf_cnpj) {
+            const cleaned = formData.cpf_cnpj.replace(/\D/g, '');
+            if (documentType === 'CPF' && cleaned.length !== 11) {
+                toast.error('CPF deve ter 11 dígitos');
+                return;
+            }
+            if (documentType === 'CNPJ' && cleaned.length !== 14) {
+                toast.error('CNPJ deve ter 14 dígitos');
+                return;
+            }
+            if (!validateCpfCnpj(formData.cpf_cnpj)) {
+                toast.error(`${documentType} inválido`);
+                return;
+            }
         }
 
         if (formData.email && !validateEmail(formData.email)) {
@@ -250,18 +273,37 @@ export default function CustomerFormPage() {
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                CPF / CNPJ
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.cpf_cnpj}
-                                onChange={(e) => updateField('cpf_cnpj', e.target.value)}
-                                onBlur={(e) => handleCpfCnpjBlur(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="000.000.000-00"
-                            />
+                        <div className="col-span-2 grid grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Tipo de Documento
+                                </label>
+                                <select
+                                    value={documentType}
+                                    onChange={(e) => {
+                                        setDocumentType(e.target.value as 'CPF' | 'CNPJ');
+                                        updateField('cpf_cnpj', '');
+                                    }}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="CPF">CPF</option>
+                                    <option value="CNPJ">CNPJ</option>
+                                </select>
+                            </div>
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    {documentType}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.cpf_cnpj}
+                                    onChange={(e) => updateField('cpf_cnpj', e.target.value)}
+                                    onBlur={(e) => handleCpfCnpjBlur(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder={documentType === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00'}
+                                    maxLength={documentType === 'CPF' ? 14 : 18}
+                                />
+                            </div>
                         </div>
 
                         <div>
