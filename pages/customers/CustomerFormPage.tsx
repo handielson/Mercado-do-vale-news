@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText } from 'lucide-react';
+import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { customFieldsService } from '../../services/custom-fields';
@@ -137,6 +137,34 @@ export default function CustomerFormPage() {
             console.error('Error searching CEP:', err);
             toast.error('Erro ao buscar CEP');
         }
+    };
+
+    // Build full address for Google Maps
+    const getFullAddress = () => {
+        const addr = formData.address;
+        if (!addr?.street || !addr?.number || !addr?.city || !addr?.state) {
+            return null;
+        }
+
+        const parts = [
+            addr.street,
+            addr.number,
+            addr.complement,
+            addr.neighborhood,
+            addr.city,
+            addr.state,
+            'Brasil'
+        ].filter(Boolean);
+
+        return parts.join(', ');
+    };
+
+    // Get Google Maps URL
+    const getGoogleMapsUrl = () => {
+        const fullAddress = getFullAddress();
+        if (!fullAddress) return null;
+
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
     };
 
     // Handle submit
@@ -396,17 +424,30 @@ export default function CustomerFormPage() {
                             />
                         </div>
 
-                        <div>
+                        <div className="relative">
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                 Número
                             </label>
-                            <input
-                                type="text"
-                                value={formData.address?.number || ''}
-                                onChange={(e) => updateAddress('number', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="123"
-                            />
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={formData.address?.number || ''}
+                                    onChange={(e) => updateAddress('number', e.target.value)}
+                                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="123"
+                                />
+                                {getGoogleMapsUrl() && (
+                                    <a
+                                        href={getGoogleMapsUrl()!}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                        title="Abrir no Google Maps"
+                                    >
+                                        <ExternalLink className="w-5 h-5" />
+                                    </a>
+                                )}
+                            </div>
                         </div>
 
                         <div className="col-span-3">
