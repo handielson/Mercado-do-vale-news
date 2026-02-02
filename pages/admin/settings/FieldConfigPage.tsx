@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { FileText, RefreshCw, Plus, Trash2, Pencil } from 'lucide-react';
 import { customFieldsService, CustomField } from '../../../services/custom-fields';
 import { CustomFieldModal } from '../../../components/settings/CustomFieldModal';
 
@@ -16,6 +16,7 @@ export function FieldConfigPage() {
     const [fields, setFields] = useState<CustomField[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCustomFieldModal, setShowCustomFieldModal] = useState(false);
+    const [editingField, setEditingField] = useState<CustomField | null>(null);
 
     useEffect(() => {
         loadFields();
@@ -100,21 +101,39 @@ export function FieldConfigPage() {
         }
 
         try {
-            // Immediately remove from UI for instant feedback
-            setFields(prevFields => prevFields.filter(f => f.id !== fieldId));
-
-            // Delete from database
             await customFieldsService.delete(fieldId);
-
-            // Force refresh from database (bypass cache)
             await loadFields();
-
             alert('✅ Campo deletado com sucesso!');
         } catch (error: any) {
             console.error('Error deleting field:', error);
             alert(`❌ Erro ao deletar campo: ${error.message}`);
-            // Reload on error to restore correct state
+        }
+    };
+
+    const handleEditField = (field: CustomField) => {
+        setEditingField(field);
+        setShowCustomFieldModal(true);
+    };
+
+    const handleUpdateField = async (formData: any) => {
+        if (!editingField) return;
+
+        try {
+            await customFieldsService.update(editingField.id, {
+                label: formData.label,
+                field_type: formData.field_type || formData.format,
+                category: formData.category,
+                placeholder: formData.placeholder,
+                help_text: formData.description
+            });
+
             await loadFields();
+            setShowCustomFieldModal(false);
+            setEditingField(null);
+            alert('✅ Campo atualizado com sucesso!');
+        } catch (error: any) {
+            console.error('Error updating field:', error);
+            alert(`❌ Erro ao atualizar campo: ${error.message}`);
         }
     };
 
@@ -248,17 +267,29 @@ export function FieldConfigPage() {
                                         )}
                                     </td>
                                     <td className="px-6 py-4 text-sm text-center">
-                                        {!field.is_system ? (
-                                            <button
-                                                onClick={() => handleDeleteField(field.id)}
-                                                className="text-red-600 hover:text-red-800 transition-colors"
-                                                title="Deletar campo customizado"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        ) : (
-                                            <span className="text-slate-300">—</span>
-                                        )}
+                                        <div className="flex items-center justify-center gap-2">
+                                            {!field.is_system && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleEditField(field)}
+                                                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                        title="Editar campo"
+                                                    >
+                                                        <Pencil size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteField(field.id)}
+                                                        className="text-red-600 hover:text-red-800 transition-colors"
+                                                        title="Deletar campo customizado"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </>
+                                            )}
+                                            {field.is_system && (
+                                                <span className="text-slate-300">—</span>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -271,9 +302,13 @@ export function FieldConfigPage() {
             {showCustomFieldModal && (
                 <CustomFieldModal
                     isOpen={showCustomFieldModal}
-                    onClose={() => setShowCustomFieldModal(false)}
-                    onCreate={handleCreateCustomField}
+                    onClose={() => {
+                        setShowCustomFieldModal(false);
+                        setEditingField(null);
+                    }}
+                    onCreate={editingField ? handleUpdateField : handleCreateCustomField}
                     formatOptions={formatOptions}
+                    editingField={editingField}
                 />
             )}
         </div>

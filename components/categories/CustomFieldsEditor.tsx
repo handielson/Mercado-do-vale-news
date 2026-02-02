@@ -107,7 +107,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
         if (!newField.name?.trim()) return;
 
         if (isEditing && editingField) {
-            // Update existing field
+            // EDITING: Keep existing structure (don't change to reference)
             onChange(fields.map(f =>
                 f.id === editingField.id
                     ? {
@@ -122,17 +122,34 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                     : f
             ));
         } else {
-            // Add new field
-            const field: CustomField = {
-                id: `custom-${Date.now()}`,
-                name: newField.name!.trim(),
-                key: generateKey(newField.name!),
-                type: newField.type || 'text',
-                requirement: newField.requirement || 'optional',
-                options: newField.type === 'dropdown' ? newField.options : undefined,
-                placeholder: newField.placeholder
-            };
-            console.log('➕ [CustomFieldsEditor] Adding new field:', field);
+            // ADDING NEW FIELD
+            // Check if field comes from library (has Supabase UUID)
+            const isLibraryField = newField.id && newField.id.length > 20; // UUID format
+
+            let field: any;
+
+            if (isLibraryField) {
+                // NEW FORMAT: Save reference to library field
+                field = {
+                    id: `custom-${Date.now()}`,
+                    field_id: newField.id, // Reference to library
+                    requirement: newField.requirement || 'optional'
+                };
+                console.log('➕ [CustomFieldsEditor] Adding library field reference:', field);
+            } else {
+                // OLD FORMAT: Custom field created inline (backward compatibility)
+                field = {
+                    id: `custom-${Date.now()}`,
+                    name: newField.name!.trim(),
+                    key: generateKey(newField.name!),
+                    type: newField.type || 'text',
+                    requirement: newField.requirement || 'optional',
+                    options: newField.type === 'dropdown' ? newField.options : undefined,
+                    placeholder: newField.placeholder
+                };
+                console.log('➕ [CustomFieldsEditor] Adding custom inline field:', field);
+            }
+
             console.log('📋 [CustomFieldsEditor] Current fields count:', fields.length);
             console.log('🔄 [CustomFieldsEditor] Calling onChange with new field...');
             onChange([...fields, field]);

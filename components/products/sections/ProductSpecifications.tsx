@@ -7,6 +7,7 @@ import { ColorSelect } from '../selectors/ColorSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
 import { VersionSelect } from '../selectors/VersionSelect';
 import { Package, RefreshCw } from 'lucide-react';
+import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -23,6 +24,11 @@ export function ProductSpecifications({
     errors,
     onRefresh
 }: ProductSpecificationsProps) {
+    // ANTIGRAVITY PROTOCOL: Custom Fields Synchronization
+    // Enrich custom fields with data from library (supports old & new formats)
+    const { fields: customFields, loading: fieldsLoading } = useEnrichedCustomFields(
+        categoryConfig?.custom_fields
+    );
     if (!categoryConfig) return null;
 
     // Helper para Labels com Asterisco
@@ -192,36 +198,61 @@ export function ProductSpecifications({
                 )}
 
                 {/* CUSTOM FIELDS - Dynamic rendering */}
-                {categoryConfig.custom_fields?.map((customField) => {
-                    if (customField.requirement === 'off') return null;
+                {fieldsLoading ? (
+                    <div className="text-sm text-slate-500">Carregando campos...</div>
+                ) : (
+                    customFields?.map((customField) => {
+                        if (customField.requirement === 'off') return null;
 
-                    return (
-                        <div key={customField.id} className="space-y-1">
-                            <FieldLabel
-                                label={customField.name}
-                                required={customField.requirement === 'required'}
-                            />
+                        return (
+                            <div key={customField.id} className="space-y-1">
+                                <FieldLabel
+                                    label={customField.name}
+                                    required={customField.requirement === 'required'}
+                                />
 
-                            {/* Text-based inputs */}
-                            {(customField.type === 'text' ||
-                                customField.type === 'capitalize' ||
-                                customField.type === 'uppercase' ||
-                                customField.type === 'lowercase' ||
-                                customField.type === 'titlecase' ||
-                                customField.type === 'sentence' ||
-                                customField.type === 'slug' ||
-                                customField.type === 'alphanumeric' ||
-                                customField.type === 'numeric' ||
-                                customField.type === 'phone' ||
-                                customField.type === 'cpf' ||
-                                customField.type === 'cnpj' ||
-                                customField.type === 'cep' ||
-                                customField.type === 'date_br' ||
-                                customField.type === 'date_br_short' ||
-                                customField.type === 'date_iso' ||
-                                customField.type === 'ncm' ||
-                                customField.type === 'ean13' ||
-                                customField.type === 'cest') && (
+                                {/* Text-based inputs */}
+                                {(customField.type === 'text' ||
+                                    customField.type === 'capitalize' ||
+                                    customField.type === 'uppercase' ||
+                                    customField.type === 'lowercase' ||
+                                    customField.type === 'titlecase' ||
+                                    customField.type === 'sentence' ||
+                                    customField.type === 'slug' ||
+                                    customField.type === 'alphanumeric' ||
+                                    customField.type === 'numeric' ||
+                                    customField.type === 'phone' ||
+                                    customField.type === 'cpf' ||
+                                    customField.type === 'cnpj' ||
+                                    customField.type === 'cep' ||
+                                    customField.type === 'date_br' ||
+                                    customField.type === 'date_br_short' ||
+                                    customField.type === 'date_iso' ||
+                                    customField.type === 'ncm' ||
+                                    customField.type === 'ean13' ||
+                                    customField.type === 'cest') && (
+                                        <input
+                                            type="text"
+                                            value={watch(`specs.${customField.key}`) || ''}
+                                            onChange={(e) => setValue(`specs.${customField.key}`, e.target.value)}
+                                            placeholder={customField.placeholder}
+                                            className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    )}
+
+                                {/* Number Input */}
+                                {customField.type === 'number' && (
+                                    <input
+                                        type="number"
+                                        value={watch(`specs.${customField.key}`) || ''}
+                                        onChange={(e) => setValue(`specs.${customField.key}`, e.target.value)}
+                                        placeholder={customField.placeholder}
+                                        className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                )}
+
+                                {/* Currency Input (BRL) */}
+                                {customField.type === 'brl' && (
                                     <input
                                         type="text"
                                         value={watch(`specs.${customField.key}`) || ''}
@@ -231,57 +262,35 @@ export function ProductSpecifications({
                                     />
                                 )}
 
-                            {/* Number Input */}
-                            {customField.type === 'number' && (
-                                <input
-                                    type="number"
-                                    value={watch(`specs.${customField.key}`) || ''}
-                                    onChange={(e) => setValue(`specs.${customField.key}`, e.target.value)}
-                                    placeholder={customField.placeholder}
-                                    className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            )}
+                                {/* Dropdown */}
+                                {customField.type === 'dropdown' && (
+                                    <select
+                                        value={watch(`specs.${customField.key}`) || ''}
+                                        onChange={(e) => setValue(`specs.${customField.key}`, e.target.value)}
+                                        className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    >
+                                        <option value="">Selecione</option>
+                                        {customField.options?.map((option) => (
+                                            <option key={option} value={option}>
+                                                {option}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
 
-                            {/* Currency Input (BRL) */}
-                            {customField.type === 'brl' && (
-                                <input
-                                    type="text"
-                                    value={watch(`specs.${customField.key}`) || ''}
-                                    onChange={(e) => setValue(`specs.${customField.key}`, e.target.value)}
-                                    placeholder={customField.placeholder}
-                                    className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            )}
-
-                            {/* Dropdown */}
-                            {customField.type === 'dropdown' && (
-                                <select
-                                    value={watch(`specs.${customField.key}`) || ''}
-                                    onChange={(e) => setValue(`specs.${customField.key}`, e.target.value)}
-                                    className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                >
-                                    <option value="">Selecione</option>
-                                    {customField.options?.map((option) => (
-                                        <option key={option} value={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
-
-                            {/* Textarea */}
-                            {customField.type === 'textarea' && (
-                                <textarea
-                                    value={watch(`specs.${customField.key}`) || ''}
-                                    onChange={(e) => setValue(`specs.${customField.key}`, e.target.value)}
-                                    placeholder={customField.placeholder}
-                                    rows={3}
-                                    className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                                />
-                            )}
-                        </div>
-                    );
-                })}
+                                {/* Textarea */}
+                                {customField.type === 'textarea' && (
+                                    <textarea
+                                        value={watch(`specs.${customField.key}`) || ''}
+                                        onChange={(e) => setValue(`specs.${customField.key}`, e.target.value)}
+                                        placeholder={customField.placeholder}
+                                        rows={3}
+                                        className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                    />
+                                )}
+                            </div>
+                        );
+                    }))}
             </div>
         </div>
     );

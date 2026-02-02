@@ -18,20 +18,21 @@ interface CustomFieldModalProps {
     onClose: () => void;
     onCreate: (formData: CustomFieldFormData) => void;
     formatOptions: { value: FieldFormat; label: string; color: string }[];
+    editingField?: any; // Optional field being edited
 }
 
 /**
  * CustomFieldModal
  * Modal for creating custom fields with full configuration
  */
-export function CustomFieldModal({ isOpen, onClose, onCreate, formatOptions }: CustomFieldModalProps) {
+export function CustomFieldModal({ isOpen, onClose, onCreate, formatOptions, editingField }: CustomFieldModalProps) {
     const [formData, setFormData] = useState<CustomFieldFormData>({
-        key: '',
-        label: '',
-        placeholder: '',
-        format: 'none',
+        key: editingField?.key || '',
+        label: editingField?.label || '',
+        placeholder: editingField?.placeholder || '',
+        format: editingField?.field_type || 'text',
         required: false,
-        description: '',
+        description: editingField?.help_text || '',
         minLength: undefined,
         maxLength: undefined
     });
@@ -58,7 +59,14 @@ export function CustomFieldModal({ isOpen, onClose, onCreate, formatOptions }: C
             <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-slate-800">Adicionar Campo Customizado</h2>
+                    <div>
+                        <h2 className="text-2xl font-bold text-slate-900">
+                            {editingField ? '✏️ Editar Campo Customizado' : '➕ Novo Campo Customizado'}
+                        </h2>
+                        <p className="text-sm text-slate-600 mt-1">
+                            {editingField ? 'Atualize as informações do campo' : 'Configure um novo campo para seus produtos'}
+                        </p>
+                    </div>
                     <button
                         onClick={onClose}
                         className="text-slate-400 hover:text-slate-600 transition-colors"

@@ -23,6 +23,10 @@ import { VersionsPage } from '../pages/admin/settings/VersionsPage';
 import { BatteryHealthsPage } from '../pages/admin/settings/BatteryHealthsPage';
 import { FieldConfigPage } from '../pages/admin/settings/FieldConfigPage';
 import { PaymentFeesPage } from '../pages/admin/settings/PaymentFeesPage';
+import { CustomFieldsLibraryPage } from '../pages/admin/settings/CustomFieldsLibraryPage';
+import CustomerListPage from '../pages/customers/CustomerListPage';
+import CustomerFormPage from '../pages/customers/CustomerFormPage';
+import CustomerDetailsPage from '../pages/customers/CustomerDetailsPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => (
@@ -207,6 +211,47 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><PaymentFeesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  // Customer Routes
+  {
+    path: "/admin/customers",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><CustomerListPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/customers/new",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><CustomerFormPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/customers/:id",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><CustomerDetailsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/customers/:id/edit",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><CustomerFormPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/custom-fields",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><CustomFieldsLibraryPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
