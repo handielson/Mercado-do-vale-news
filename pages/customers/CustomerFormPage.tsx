@@ -121,20 +121,21 @@ export default function CustomerFormPage() {
             const data = await response.json();
 
             if (!data.erro) {
-                setFormData({
-                    ...formData,
+                setFormData(prev => ({
+                    ...prev,
                     address: {
-                        ...formData.address,
+                        ...prev.address,
                         street: data.logradouro || '',
                         neighborhood: data.bairro || '',
                         city: data.localidade || '',
                         state: data.uf || '',
                         zipCode: cleaned
                     }
-                });
+                }));
             }
         } catch (err) {
             console.error('Error searching CEP:', err);
+            toast.error('Erro ao buscar CEP');
         }
     };
 
