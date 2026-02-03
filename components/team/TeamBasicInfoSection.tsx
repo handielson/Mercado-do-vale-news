@@ -169,14 +169,17 @@ export default function TeamBasicInfoSection({
                             type="text"
                             value={formData.cpf_cnpj}
                             onChange={(e) => {
-                                // Permitir apenas números, pontos, barras e hífens
-                                const value = e.target.value.replace(/[^\d./-]/g, '');
-                                onFieldUpdate('cpf_cnpj', value);
+                                // Permitir apenas números
+                                const value = e.target.value.replace(/\D/g, '');
+                                // Limitar ao tamanho correto (11 para CPF, 14 para CNPJ)
+                                const maxLength = documentType === 'CPF' ? 11 : 14;
+                                const limitedValue = value.slice(0, maxLength);
+                                onFieldUpdate('cpf_cnpj', limitedValue);
                             }}
                             onBlur={(e) => handleCpfCnpjBlur(e.target.value)}
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder={documentType === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00'}
-                            maxLength={documentType === 'CPF' ? 14 : 18}
+                            maxLength={documentType === 'CPF' ? 11 : 14}
                             required
                         />
                     </div>

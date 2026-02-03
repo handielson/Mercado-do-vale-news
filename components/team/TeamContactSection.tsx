@@ -69,6 +69,19 @@ export default function TeamContactSection({
                         )}
                     </div>
                 </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Instagram
+                    </label>
+                    <input
+                        type="text"
+                        value={formData.instagram || ''}
+                        onChange={(e) => onFieldUpdate('instagram', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="@usuario"
+                    />
+                </div>
             </div>
         </div>
     );

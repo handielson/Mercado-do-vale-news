@@ -46,21 +46,44 @@ export default function TeamRemunerationSection({
                     </div>
                 )}
 
+
                 {showHourlyRate && (
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Valor por Hora (R$)
-                        </label>
-                        <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={formData.hourly_rate || ''}
-                            onChange={(e) => onFieldUpdate('hourly_rate', e.target.value ? parseFloat(e.target.value) : null)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="0.00"
-                        />
-                    </div>
+                    <>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Horas Semanais
+                            </label>
+                            <input
+                                type="number"
+                                step="1"
+                                min="0"
+                                value={formData.weekly_hours || 40}
+                                onChange={(e) => onFieldUpdate('weekly_hours', e.target.value ? parseInt(e.target.value) : 40)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="40"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                                Horas trabalhadas por semana (padrão: 40h)
+                            </p>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Valor Mensal (R$)
+                            </label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={formData.monthly_salary || ''}
+                                onChange={(e) => onFieldUpdate('monthly_salary', e.target.value ? parseFloat(e.target.value) : null)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="0.00"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                                Baseado em {formData.weekly_hours || 40}h semanais (~{((formData.weekly_hours || 40) * 4).toFixed(0)}h mensais)
+                            </p>
+                        </div>
+                    </>
                 )}
 
                 {showCommissionRate && (
