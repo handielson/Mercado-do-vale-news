@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer } from '../../types/customer';
+import CustomerPrintableView from '../../components/customers/CustomerPrintableView';
 
 /**
  * Customer Details Page
@@ -54,6 +55,11 @@ export default function CustomerDetailsPage() {
             console.error('Error deleting customer:', err);
             toast.error('Erro ao deletar cliente');
         }
+    };
+
+    // Print handler
+    const handlePrint = () => {
+        window.print();
     };
 
     // Format CPF/CNPJ
@@ -119,16 +125,23 @@ export default function CustomerDetailsPage() {
                 </div>
 
                 <div className="flex gap-2">
+                    <button
+                        onClick={handlePrint}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors no-print"
+                    >
+                        <Printer className="w-4 h-4" />
+                        Imprimir Ficha
+                    </button>
                     <Link
                         to={`/admin/customers/${customer.id}/edit`}
-                        className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors no-print"
                     >
                         <Edit className="w-4 h-4" />
                         Editar
                     </Link>
                     <button
                         onClick={() => setDeleteConfirm(true)}
-                        className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors no-print"
                     >
                         <Trash2 className="w-4 h-4" />
                         Deletar
@@ -298,6 +311,9 @@ export default function CustomerDetailsPage() {
                     </div>
                 </div>
             )}
+
+            {/* Print View - Hidden, only shown when printing */}
+            <CustomerPrintableView customer={customer} showAdminNotes={true} />
         </div>
     );
 }

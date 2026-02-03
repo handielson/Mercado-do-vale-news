@@ -1,3 +1,80 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Print Styles for Customer Card */
+@media print {
+
+    /* Hide ALL content by default */
+    body * {
+        visibility: hidden;
+    }
+
+    /* Show only print-only elements and their children */
+    .print-only,
+    .print-only * {
+        visibility: visible;
+    }
+
+    /* Position print-only at top of page */
+    .print-only {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+
+    /* Page setup */
+    @page {
+        size: A4;
+        margin: 1.5cm;
+    }
+
+    /* Body styles */
+    body {
+        background: white !important;
+        color: black !important;
+        overflow: hidden !important;
+    }
+
+    /* Print container */
+    .print-container {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    /* Prevent page breaks inside sections */
+    .print-section {
+        page-break-inside: avoid;
+    }
+
+    /* Print header */
+    .print-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    /* Print footer */
+    .print-footer {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid #ccc;
+        text-align: center;
+        font-size: 0.875rem;
+        color: #666;
+    }
+}
+
+/* Hide print-only elements by default */
+.print-only {
+    display: none;
+}
+
+@media print {
+    .print-only {
+        display: block;
+    }
+}
