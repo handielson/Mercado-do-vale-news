@@ -28,6 +28,7 @@ import CustomerListPage from '../pages/customers/CustomerListPage';
 import CustomerFormPage from '../pages/customers/CustomerFormPage';
 import CustomerDetailsPage from '../pages/customers/CustomerDetailsPage';
 import TeamFormPage from '../pages/team/TeamFormPage';
+import TeamListPage from '../pages/team/TeamListPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => (
@@ -276,7 +277,7 @@ export const router = createBrowserRouter([
     path: "/admin/team",
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
-        <AdminLayout><div className="p-6"><h1 className="text-2xl font-bold">Equipe</h1><p className="text-slate-500 mt-2">Lista de membros da equipe (em desenvolvimento)</p></div></AdminLayout>
+        <AdminLayout><TeamListPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
