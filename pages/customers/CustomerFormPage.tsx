@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText, ExternalLink, MessageCircle, Instagram, Facebook } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { customFieldsService } from '../../services/custom-fields';
 import { Customer, CustomerInput, CustomerAddress } from '../../types/customer';
 import { CustomField } from '../../types';
-import { validateCpfCnpj, formatCpfCnpj, formatPhone, validateEmail } from '../../utils/cpfCnpjValidation';
+import { formatCep } from '../../utils/cpfCnpjValidation';
+import CustomerBasicInfoSection from '../../components/customers/CustomerBasicInfoSection';
+import CustomerContactSection from '../../components/customers/CustomerContactSection';
+import CustomerAddressSection from '../../components/customers/CustomerAddressSection';
+import CustomerNotesSection from '../../components/customers/CustomerNotesSection';
 
 /**
  * Customer Form Page
@@ -15,7 +19,7 @@ import { validateCpfCnpj, formatCpfCnpj, formatPhone, validateEmail } from '../.
  * - Database-First Architecture
  * - Custom fields integration
  * - Form validation
- * - < 500 lines
+ * - < 500 lines (refactored into components)
  */
 export default function CustomerFormPage() {
     const navigate = useNavigate();
@@ -63,9 +67,14 @@ export default function CustomerFormPage() {
                 setFormData({
                     name: customer.name,
                     cpf_cnpj: customer.cpf_cnpj,
+                    customer_type: customer.customer_type,
                     email: customer.email,
                     phone: customer.phone,
+                    birth_date: customer.birth_date,
+                    instagram: customer.instagram,
+                    facebook: customer.facebook,
                     address: customer.address,
+                    admin_notes: customer.admin_notes,
                     custom_data: customer.custom_data,
                     is_active: customer.is_active
                 });
@@ -88,172 +97,29 @@ export default function CustomerFormPage() {
         }
     };
 
-    // Capitalize name (first letter of each word)
-    const capitalizeName = (name: string): string => {
-        return name
-            .toLowerCase()
-            .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
-    };
-
-    // Validate CPF/CNPJ on blur
-    const handleCpfCnpjBlur = (value: string) => {
-        if (!value) return;
-
-        const formatted = formatCpfCnpj(value);
-        updateField('cpf_cnpj', formatted);
-
-        // Validate based on selected type
-        const cleaned = value.replace(/\D/g, '');
-        if (documentType === 'CPF' && cleaned.length > 0 && cleaned.length !== 11) {
-            toast.error('CPF deve ter 11 dígitos');
-            return;
-        }
-        if (documentType === 'CNPJ' && cleaned.length > 0 && cleaned.length !== 14) {
-            toast.error('CNPJ deve ter 14 dígitos');
-            return;
-        }
-
-        if (!validateCpfCnpj(value)) {
-            toast.error(`${documentType} inválido`);
-        }
-    };
-
     // Search CEP
     const searchCep = async (cep: string) => {
-        const cleaned = cep.replace(/\D/g, '');
-        if (cleaned.length !== 8) return;
+        const cleanCep = cep.replace(/\D/g, '');
+        if (cleanCep.length !== 8) return;
 
         try {
-            const response = await fetch(`https://viacep.com.br/ws/${cleaned}/json/`);
+            const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
             const data = await response.json();
 
             if (!data.erro) {
-                setFormData(prev => ({
-                    ...prev,
-                    address: {
-                        ...prev.address,
-                        street: data.logradouro || '',
-                        neighborhood: data.bairro || '',
-                        city: data.localidade || '',
-                        state: data.uf || '',
-                        zipCode: cleaned
-                    }
-                }));
+                updateAddress('street', data.logradouro || '');
+                updateAddress('neighborhood', data.bairro || '');
+                updateAddress('city', data.localidade || '');
+                updateAddress('state', data.uf || '');
+                updateAddress('zipCode', formatCep(cleanCep));
+                toast.success('CEP encontrado!');
+            } else {
+                toast.error('CEP não encontrado');
             }
         } catch (err) {
             console.error('Error searching CEP:', err);
             toast.error('Erro ao buscar CEP');
         }
-    };
-
-    // Build full address for Google Maps
-    const getFullAddress = () => {
-        const addr = formData.address;
-        if (!addr?.street || !addr?.number || !addr?.city || !addr?.state) {
-            return null;
-        }
-
-        const parts = [
-            addr.street,
-            addr.number,
-            addr.complement,
-            addr.neighborhood,
-            addr.city,
-            addr.state,
-            'Brasil'
-        ].filter(Boolean);
-
-        return parts.join(', ');
-    };
-
-    // Get Google Maps URL
-    const getGoogleMapsUrl = () => {
-        const fullAddress = getFullAddress();
-        if (!fullAddress) return null;
-
-        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
-    };
-
-    // Get WhatsApp URL
-    const getWhatsAppUrl = () => {
-        if (!formData.phone) return null;
-
-        // Remove all non-numeric characters
-        const cleaned = formData.phone.replace(/\D/g, '');
-        if (cleaned.length < 10) return null;
-
-        // TODO: In the future, fetch welcome message from settings/database
-        // For now, use a default message
-        const welcomeMessage = `Olá ${formData.name || 'cliente'}! Seja bem-vindo(a)!`;
-
-        // WhatsApp link format: https://wa.me/5511999999999?text=message
-        // Add country code 55 for Brazil if not present
-        const phoneWithCountry = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
-
-        return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(welcomeMessage)}`;
-    };
-
-    // Calculate age from birth date
-    const calculateAge = (birthDate: string): number | null => {
-        if (!birthDate) return null;
-
-        const today = new Date();
-        const birth = new Date(birthDate);
-        let age = today.getFullYear() - birth.getFullYear();
-        const monthDiff = today.getMonth() - birth.getMonth();
-
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-            age--;
-        }
-
-        return age;
-    };
-
-    // Calculate days until next birthday
-    const daysUntilBirthday = (birthDate: string): number | null => {
-        if (!birthDate) return null;
-
-        const today = new Date();
-        const birth = new Date(birthDate);
-        const nextBirthday = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
-
-        // If birthday already passed this year, calculate for next year
-        if (nextBirthday < today) {
-            nextBirthday.setFullYear(today.getFullYear() + 1);
-        }
-
-        const diffTime = nextBirthday.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        return diffDays;
-    };
-
-    // Get Instagram URL
-    const getInstagramUrl = () => {
-        if (!formData.instagram) return null;
-
-        // Remove @ if present and any spaces
-        const username = formData.instagram.replace(/[@\s]/g, '');
-        if (!username) return null;
-
-        return `https://instagram.com/${username}`;
-    };
-
-    // Get Facebook URL
-    const getFacebookUrl = () => {
-        if (!formData.facebook) return null;
-
-        // Remove spaces
-        const username = formData.facebook.trim();
-        if (!username) return null;
-
-        // If it's already a full URL, return it
-        if (username.startsWith('http')) return username;
-
-        // Otherwise, create URL from username
-        return `https://facebook.com/${username}`;
     };
 
     // Handle submit
@@ -266,23 +132,12 @@ export default function CustomerFormPage() {
             return;
         }
 
-        if (formData.cpf_cnpj) {
-            const cleaned = formData.cpf_cnpj.replace(/\D/g, '');
-            if (documentType === 'CPF' && cleaned.length !== 11) {
-                toast.error('CPF deve ter 11 dígitos');
-                return;
-            }
-            if (documentType === 'CNPJ' && cleaned.length !== 14) {
-                toast.error('CNPJ deve ter 14 dígitos');
-                return;
-            }
-            if (!validateCpfCnpj(formData.cpf_cnpj)) {
-                toast.error(`${documentType} inválido`);
-                return;
-            }
+        if (!formData.cpf_cnpj) {
+            toast.error('CPF/CNPJ é obrigatório');
+            return;
         }
 
-        if (formData.email && !validateEmail(formData.email)) {
+        if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
             toast.error('Email inválido');
             return;
         }
@@ -295,7 +150,7 @@ export default function CustomerFormPage() {
                 toast.success('Cliente atualizado com sucesso!');
             } else {
                 await customerService.create(formData);
-                toast.success('Cliente criado com sucesso!');
+                toast.success('Cliente cadastrado com sucesso!');
             }
 
             navigate('/admin/customers');
@@ -303,12 +158,10 @@ export default function CustomerFormPage() {
             console.error('Error saving customer:', err);
 
             // Check for duplicate CPF/CNPJ error
-            if (err.message?.includes('unique_customer_per_company') ||
-                err.message?.includes('duplicate key') ||
-                err.code === '23505') {
-                toast.error(`Este ${documentType} já está cadastrado para esta empresa`);
+            if (err.message && err.message.includes('duplicate key')) {
+                toast.error('Este CPF/CNPJ já está cadastrado');
             } else {
-                toast.error(err.message || 'Erro ao salvar cliente');
+                toast.error('Erro ao salvar cliente');
             }
         } finally {
             setSaving(false);
@@ -317,36 +170,28 @@ export default function CustomerFormPage() {
 
     // Update field
     const updateField = (field: string, value: any) => {
-        setFormData({ ...formData, [field]: value });
+        setFormData(prev => ({
+            ...prev,
+            [field]: value
+        }));
     };
 
-    // Update address field
-    const updateAddress = (field: keyof CustomerAddress, value: string) => {
-        setFormData({
-            ...formData,
+    // Update address
+    const updateAddress = (field: string, value: string) => {
+        setFormData(prev => ({
+            ...prev,
             address: {
-                ...formData.address,
+                ...prev.address,
                 [field]: value
             }
-        });
-    };
-
-    // Update custom field
-    const updateCustomField = (key: string, value: any) => {
-        setFormData({
-            ...formData,
-            custom_data: {
-                ...formData.custom_data,
-                [key]: value
-            }
-        });
+        }));
     };
 
     if (loading) {
         return (
-            <div className="p-6 flex items-center justify-center">
+            <div className="flex items-center justify-center min-h-screen">
                 <div className="text-center">
-                    <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                     <p className="mt-4 text-slate-600">Carregando...</p>
                 </div>
             </div>
@@ -354,447 +199,71 @@ export default function CustomerFormPage() {
     }
 
     return (
-        <div className="p-6 max-w-4xl mx-auto">
-            {/* Header */}
-            <div className="flex items-center gap-4 mb-6">
-                <button
-                    onClick={() => navigate('/admin/customers')}
-                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                    <ArrowLeft className="w-5 h-5" />
-                </button>
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">
+        <div className="min-h-screen bg-slate-50 p-6">
+            <div className="max-w-4xl mx-auto">
+                {/* Header */}
+                <div className="mb-6">
+                    <button
+                        onClick={() => navigate('/admin/customers')}
+                        className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        Voltar
+                    </button>
+                    <h1 className="text-3xl font-bold text-slate-900">
                         {isEditing ? 'Editar Cliente' : 'Novo Cliente'}
                     </h1>
-                    <p className="text-sm text-slate-600">
-                        {isEditing ? 'Atualize as informações do cliente' : 'Preencha os dados do novo cliente'}
-                    </p>
                 </div>
+
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Basic Info */}
+                    <CustomerBasicInfoSection
+                        formData={formData}
+                        documentType={documentType}
+                        onFieldUpdate={updateField}
+                        onDocumentTypeChange={setDocumentType}
+                    />
+
+                    {/* Contact */}
+                    <CustomerContactSection
+                        formData={formData}
+                        onFieldUpdate={updateField}
+                    />
+
+                    {/* Address */}
+                    <CustomerAddressSection
+                        address={formData.address || {}}
+                        onAddressUpdate={updateAddress}
+                        onCepSearch={searchCep}
+                    />
+
+                    {/* Admin Notes */}
+                    <CustomerNotesSection
+                        notes={formData.admin_notes || ''}
+                        onNotesUpdate={(notes) => updateField('admin_notes', notes)}
+                    />
+
+                    {/* Actions */}
+                    <div className="flex gap-3 justify-end">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/admin/customers')}
+                            className="px-6 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <Save className="w-4 h-4" />
+                            {saving ? 'Salvando...' : 'Salvar Cliente'}
+                        </button>
+                    </div>
+                </form>
             </div>
-
-
-
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Basic Info */}
-                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <User className="w-5 h-5 text-slate-600" />
-                        <h2 className="text-lg font-semibold text-slate-900">Informações Básicas</h2>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Nome / Razão Social *
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.name}
-                                onChange={(e) => updateField('name', capitalizeName(e.target.value))}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Digite o nome do cliente"
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Data de Nascimento
-                            </label>
-                            <input
-                                type="date"
-                                value={formData.birth_date || ''}
-                                onChange={(e) => updateField('birth_date', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                            {formData.birth_date && (
-                                <div className="mt-2 flex gap-4 text-sm">
-                                    <span className="text-blue-600 font-medium">
-                                        🎂 {calculateAge(formData.birth_date)} anos
-                                    </span>
-                                    {daysUntilBirthday(formData.birth_date) === 0 ? (
-                                        <span className="text-green-600 font-medium">
-                                            🎉 Aniversário hoje!
-                                        </span>
-                                    ) : (
-                                        <span className="text-slate-600">
-                                            📅 Faltam {daysUntilBirthday(formData.birth_date)} dias para o aniversário
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Tipo de Cliente
-                            </label>
-                            <select
-                                value={formData.customer_type || ''}
-                                onChange={(e) => updateField('customer_type', e.target.value as 'wholesale' | 'resale' | 'retail')}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="">Selecione...</option>
-                                <option value="retail">Varejo</option>
-                                <option value="resale">Revenda</option>
-                                <option value="wholesale">Atacado</option>
-                            </select>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Tipo de Documento
-                                </label>
-                                <select
-                                    value={documentType}
-                                    onChange={(e) => {
-                                        setDocumentType(e.target.value as 'CPF' | 'CNPJ');
-                                        updateField('cpf_cnpj', '');
-                                    }}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="CPF">CPF</option>
-                                    <option value="CNPJ">CNPJ</option>
-                                </select>
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    {documentType} *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formData.cpf_cnpj}
-                                    onChange={(e) => updateField('cpf_cnpj', e.target.value)}
-                                    onBlur={(e) => handleCpfCnpjBlur(e.target.value)}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder={documentType === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00'}
-                                    maxLength={documentType === 'CPF' ? 14 : 18}
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Status
-                            </label>
-                            <select
-                                value={formData.is_active ? 'active' : 'inactive'}
-                                onChange={(e) => updateField('is_active', e.target.value === 'active')}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="active">Ativo</option>
-                                <option value="inactive">Inativo</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Contact Info */}
-                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Mail className="w-5 h-5 text-slate-600" />
-                        <h2 className="text-lg font-semibold text-slate-900">Contato</h2>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Email
-                            </label>
-                            <input
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => updateField('email', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="email@exemplo.com"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Telefone
-                            </label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="tel"
-                                    value={formData.phone}
-                                    onChange={(e) => updateField('phone', e.target.value)}
-                                    onBlur={(e) => updateField('phone', formatPhone(e.target.value))}
-                                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="(00) 00000-0000"
-                                />
-                                {getWhatsAppUrl() && (
-                                    <a
-                                        href={getWhatsAppUrl()!}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center justify-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                                        title="Abrir WhatsApp"
-                                    >
-                                        <MessageCircle className="w-5 h-5" />
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Instagram
-                            </label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={formData.instagram || ''}
-                                    onChange={(e) => updateField('instagram', e.target.value)}
-                                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="@usuario ou usuario"
-                                />
-                                {getInstagramUrl() && (
-                                    <a
-                                        href={getInstagramUrl()!}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center justify-center px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors"
-                                        title="Abrir Instagram"
-                                    >
-                                        <Instagram className="w-5 h-5" />
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Facebook
-                            </label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={formData.facebook || ''}
-                                    onChange={(e) => updateField('facebook', e.target.value)}
-                                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="usuario ou URL completa"
-                                />
-                                {getFacebookUrl() && (
-                                    <a
-                                        href={getFacebookUrl()!}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                        title="Abrir Facebook"
-                                    >
-                                        <Facebook className="w-5 h-5" />
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Address */}
-                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <MapPin className="w-5 h-5 text-slate-600" />
-                        <h2 className="text-lg font-semibold text-slate-900">Endereço</h2>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                CEP
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.address?.zipCode || ''}
-                                onChange={(e) => updateAddress('zipCode', e.target.value)}
-                                onBlur={(e) => searchCep(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="00000-000"
-                                maxLength={9}
-                            />
-                        </div>
-
-                        <div className="col-span-3">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Rua
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.address?.street || ''}
-                                onChange={(e) => updateAddress('street', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Nome da rua"
-                            />
-                        </div>
-
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Número
-                            </label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={formData.address?.number || ''}
-                                    onChange={(e) => updateAddress('number', e.target.value)}
-                                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="123"
-                                />
-                                {getGoogleMapsUrl() && (
-                                    <a
-                                        href={getGoogleMapsUrl()!}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                        title="Abrir no Google Maps"
-                                    >
-                                        <ExternalLink className="w-5 h-5" />
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Complemento
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.address?.complement || ''}
-                                onChange={(e) => updateAddress('complement', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Apto, Bloco, etc"
-                            />
-                        </div>
-
-                        <div className="col-span-2">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Bairro
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.address?.neighborhood || ''}
-                                onChange={(e) => updateAddress('neighborhood', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Nome do bairro"
-                            />
-                        </div>
-
-                        <div className="col-span-2">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Cidade
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.address?.city || ''}
-                                onChange={(e) => updateAddress('city', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Nome da cidade"
-                            />
-                        </div>
-
-                        <div className="col-span-4">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Estado
-                            </label>
-                            <select
-                                value={formData.address?.state || ''}
-                                onChange={(e) => updateAddress('state', e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="">Selecione...</option>
-                                <option value="AC">Acre</option>
-                                <option value="AL">Alagoas</option>
-                                <option value="AP">Amapá</option>
-                                <option value="AM">Amazonas</option>
-                                <option value="BA">Bahia</option>
-                                <option value="CE">Ceará</option>
-                                <option value="DF">Distrito Federal</option>
-                                <option value="ES">Espírito Santo</option>
-                                <option value="GO">Goiás</option>
-                                <option value="MA">Maranhão</option>
-                                <option value="MT">Mato Grosso</option>
-                                <option value="MS">Mato Grosso do Sul</option>
-                                <option value="MG">Minas Gerais</option>
-                                <option value="PA">Pará</option>
-                                <option value="PB">Paraíba</option>
-                                <option value="PR">Paraná</option>
-                                <option value="PE">Pernambuco</option>
-                                <option value="PI">Piauí</option>
-                                <option value="RJ">Rio de Janeiro</option>
-                                <option value="RN">Rio Grande do Norte</option>
-                                <option value="RS">Rio Grande do Sul</option>
-                                <option value="RO">Rondônia</option>
-                                <option value="RR">Roraima</option>
-                                <option value="SC">Santa Catarina</option>
-                                <option value="SP">São Paulo</option>
-                                <option value="SE">Sergipe</option>
-                                <option value="TO">Tocantins</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Admin Notes */}
-                <div className="bg-amber-50 rounded-lg shadow-sm border border-amber-200 p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <FileText className="w-5 h-5 text-amber-600" />
-                        <h2 className="text-lg font-semibold text-slate-900">Observações Internas</h2>
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
-                            Apenas Admin
-                        </span>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Notas e Observações
-                        </label>
-                        <textarea
-                            value={formData.admin_notes || ''}
-                            onChange={(e) => updateField('admin_notes', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
-                            placeholder="Adicione observações internas sobre este cliente (visível apenas para administradores)..."
-                            rows={4}
-                        />
-                        <p className="mt-1 text-xs text-slate-500">
-                            💡 Estas informações são privadas e não serão compartilhadas com o cliente
-                        </p>
-                    </div>
-                </div>
-
-
-
-                {/* Actions */}
-                <div className="flex gap-3 justify-end">
-                    <button
-                        type="button"
-                        onClick={() => navigate('/admin/customers')}
-                        className="px-6 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={saving}
-                        className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {saving ? (
-                            <>
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                Salvando...
-                            </>
-                        ) : (
-                            <>
-                                <Save className="w-5 h-5" />
-                                {isEditing ? 'Atualizar' : 'Salvar'}
-                            </>
-                        )}
-                    </button>
-                </div>
-            </form>
         </div>
     );
 }
