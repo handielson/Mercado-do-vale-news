@@ -63,7 +63,7 @@ export default function CustomerBasicInfoSection({
                 {days !== null && days === 0 && (
                     <span className="ml-2 text-blue-600 font-medium">🎂 Aniversário hoje!</span>
                 )}
-                {days !== null && days > 0 && days <= 30 && (
+                {days !== null && days > 0 && (
                     <span className="ml-2 text-slate-500">
                         (aniversário em {days} {days === 1 ? 'dia' : 'dias'})
                     </span>
