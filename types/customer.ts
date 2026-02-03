@@ -13,9 +13,14 @@ export interface Customer {
     company_id: string;
     name: string;
     cpf_cnpj?: string;
+    customer_type?: 'wholesale' | 'resale' | 'retail';
     email?: string;
     phone?: string;
+    birth_date?: string;
+    instagram?: string;
+    facebook?: string;
     address?: CustomerAddress;
+    admin_notes?: string;
     custom_data?: Record<string, any>;
     is_active: boolean;
     created_at: string;
@@ -25,9 +30,14 @@ export interface Customer {
 export interface CustomerInput {
     name: string;
     cpf_cnpj?: string;
+    customer_type?: 'wholesale' | 'resale' | 'retail';
     email?: string;
     phone?: string;
+    birth_date?: string;
+    instagram?: string;
+    facebook?: string;
     address?: Partial<CustomerAddress>;
+    admin_notes?: string;
     custom_data?: Record<string, any>;
     is_active?: boolean;
 }

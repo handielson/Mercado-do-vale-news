@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText, ExternalLink, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText, ExternalLink, MessageCircle, Instagram, Facebook } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { customFieldsService } from '../../services/custom-fields';
@@ -195,6 +195,67 @@ export default function CustomerFormPage() {
         return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(welcomeMessage)}`;
     };
 
+    // Calculate age from birth date
+    const calculateAge = (birthDate: string): number | null => {
+        if (!birthDate) return null;
+
+        const today = new Date();
+        const birth = new Date(birthDate);
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+
+        return age;
+    };
+
+    // Calculate days until next birthday
+    const daysUntilBirthday = (birthDate: string): number | null => {
+        if (!birthDate) return null;
+
+        const today = new Date();
+        const birth = new Date(birthDate);
+        const nextBirthday = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+
+        // If birthday already passed this year, calculate for next year
+        if (nextBirthday < today) {
+            nextBirthday.setFullYear(today.getFullYear() + 1);
+        }
+
+        const diffTime = nextBirthday.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        return diffDays;
+    };
+
+    // Get Instagram URL
+    const getInstagramUrl = () => {
+        if (!formData.instagram) return null;
+
+        // Remove @ if present and any spaces
+        const username = formData.instagram.replace(/[@\s]/g, '');
+        if (!username) return null;
+
+        return `https://instagram.com/${username}`;
+    };
+
+    // Get Facebook URL
+    const getFacebookUrl = () => {
+        if (!formData.facebook) return null;
+
+        // Remove spaces
+        const username = formData.facebook.trim();
+        if (!username) return null;
+
+        // If it's already a full URL, return it
+        if (username.startsWith('http')) return username;
+
+        // Otherwise, create URL from username
+        return `https://facebook.com/${username}`;
+    };
+
     // Handle submit
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -338,6 +399,50 @@ export default function CustomerFormPage() {
                             />
                         </div>
 
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Data de Nascimento
+                            </label>
+                            <input
+                                type="date"
+                                value={formData.birth_date || ''}
+                                onChange={(e) => updateField('birth_date', e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            {formData.birth_date && (
+                                <div className="mt-2 flex gap-4 text-sm">
+                                    <span className="text-blue-600 font-medium">
+                                        🎂 {calculateAge(formData.birth_date)} anos
+                                    </span>
+                                    {daysUntilBirthday(formData.birth_date) === 0 ? (
+                                        <span className="text-green-600 font-medium">
+                                            🎉 Aniversário hoje!
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-600">
+                                            📅 Faltam {daysUntilBirthday(formData.birth_date)} dias para o aniversário
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Tipo de Cliente
+                            </label>
+                            <select
+                                value={formData.customer_type || ''}
+                                onChange={(e) => updateField('customer_type', e.target.value as 'wholesale' | 'resale' | 'retail')}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Selecione...</option>
+                                <option value="retail">Varejo</option>
+                                <option value="resale">Revenda</option>
+                                <option value="wholesale">Atacado</option>
+                            </select>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -431,6 +536,58 @@ export default function CustomerFormPage() {
                                         title="Abrir WhatsApp"
                                     >
                                         <MessageCircle className="w-5 h-5" />
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Instagram
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={formData.instagram || ''}
+                                    onChange={(e) => updateField('instagram', e.target.value)}
+                                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="@usuario ou usuario"
+                                />
+                                {getInstagramUrl() && (
+                                    <a
+                                        href={getInstagramUrl()!}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors"
+                                        title="Abrir Instagram"
+                                    >
+                                        <Instagram className="w-5 h-5" />
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Facebook
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={formData.facebook || ''}
+                                    onChange={(e) => updateField('facebook', e.target.value)}
+                                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    placeholder="usuario ou URL completa"
+                                />
+                                {getFacebookUrl() && (
+                                    <a
+                                        href={getFacebookUrl()!}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                        title="Abrir Facebook"
+                                    >
+                                        <Facebook className="w-5 h-5" />
                                     </a>
                                 )}
                             </div>
@@ -578,6 +735,33 @@ export default function CustomerFormPage() {
                                 <option value="TO">Tocantins</option>
                             </select>
                         </div>
+                    </div>
+                </div>
+
+                {/* Admin Notes */}
+                <div className="bg-amber-50 rounded-lg shadow-sm border border-amber-200 p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <FileText className="w-5 h-5 text-amber-600" />
+                        <h2 className="text-lg font-semibold text-slate-900">Observações Internas</h2>
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
+                            Apenas Admin
+                        </span>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Notas e Observações
+                        </label>
+                        <textarea
+                            value={formData.admin_notes || ''}
+                            onChange={(e) => updateField('admin_notes', e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                            placeholder="Adicione observações internas sobre este cliente (visível apenas para administradores)..."
+                            rows={4}
+                        />
+                        <p className="mt-1 text-xs text-slate-500">
+                            💡 Estas informações são privadas e não serão compartilhadas com o cliente
+                        </p>
                     </div>
                 </div>
 
