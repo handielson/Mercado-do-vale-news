@@ -87,8 +87,7 @@ export default function CustomerBasicInfoSection({
                     <input
                         type="text"
                         value={formData.name}
-                        onChange={(e) => onFieldUpdate('name', e.target.value)}
-                        onBlur={(e) => handleNameBlur(e.target.value)}
+                        onChange={(e) => onFieldUpdate('name', capitalizeName(e.target.value))}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder={documentType === 'CPF' ? 'João da Silva' : 'Empresa LTDA'}
                         required
@@ -103,6 +102,7 @@ export default function CustomerBasicInfoSection({
                         type="date"
                         value={formData.birth_date || ''}
                         onChange={(e) => onFieldUpdate('birth_date', e.target.value)}
+                        max="9999-12-31"
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     {getAgeDisplay()}
@@ -148,7 +148,11 @@ export default function CustomerBasicInfoSection({
                         <input
                             type="text"
                             value={formData.cpf_cnpj}
-                            onChange={(e) => onFieldUpdate('cpf_cnpj', e.target.value)}
+                            onChange={(e) => {
+                                // Permitir apenas números, pontos, barras e hífens
+                                const value = e.target.value.replace(/[^\d./-]/g, '');
+                                onFieldUpdate('cpf_cnpj', value);
+                            }}
                             onBlur={(e) => handleCpfCnpjBlur(e.target.value)}
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder={documentType === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00'}
