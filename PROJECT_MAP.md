@@ -253,4 +253,62 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({ categoryId }
 - **2026-02-01:** ProductForm Refactoring (1093→440 lines, -60%): Extracted 4 section components (ProductBasicInfo, ProductSpecifications, ProductPricing, ProductImages) and 1 custom hook (useEANAutofill). Follows Antigravity Protocol 300-500 line limit.
 - **2026-02-01:** ANTIGRAVITY PROTOCOL v4.25 added to PROJECT_MAP.md as mandatory first-check documentation.
 - **2026-02-01:** Category Management Modular Refactoring (722→9 files): Removed CategoryEditModal (722 lines), created modular architecture with 5 section components (BasicInfo, FieldConfig, CustomFields, EANAutofill, AutoNaming), 1 container (CategoryEditPage), and 3 routing pages (index, new, [id]/edit). Total: ~1,140 lines in 9 files (avg 127 lines/file). Established "Complex Configuration Pages" pattern in ANTIGRAVITY PROTOCOL.
+- **2026-02-02:** Customer Management System: Refactored CustomerFormPage (887→475 lines) following ANTIGRAVITY PROTOCOL. Extracted 3 section components (CustomerBasicInfoSection, CustomerContactSection, CustomerAddressSection). Added customer type field, birth date with age/birthday calculation, social media fields (Instagram, Facebook), internal notes, Google Maps integration, WhatsApp link, and print functionality.
+- **2026-02-02:** Team Management System: Complete CRUD implementation following Clone-and-Adapt pattern from Customer module. Created TeamFormPage (451 lines), TeamListPage (342 lines), and 3 section components (TeamBasicInfoSection 205 lines, TeamContactSection 88 lines, TeamRemunerationSection 144 lines). Features: role-based fields (seller, delivery, manager, admin, stock), employment types (CLT, Freelancer, PJ), conditional remuneration (salary, monthly_salary, commission_rate, delivery_fee), weekly hours tracking with automatic hourly rate calculation, CPF/CNPJ validation (11/14 digits), Instagram field, birthday countdown (unlimited days). Total: 5 components, ~1,230 lines. Routes: /admin/team, /admin/team/new, /admin/team/:id/edit.
 
+## 📦 Implemented Modules
+
+### 👥 Team Management System
+**Status:** ✅ Complete (Form + List)  
+**Pattern:** Clone-and-Adapt from Customer module  
+**Compliance:** ✅ ANTIGRAVITY PROTOCOL (all files < 500 lines)
+
+#### Files Structure
+```
+pages/team/
+├── TeamFormPage.tsx (451 lines) - Main form container
+└── TeamListPage.tsx (342 lines) - List view with filters
+
+components/team/
+├── TeamBasicInfoSection.tsx (205 lines) - Name, CPF/CNPJ, birth date, role, employment type
+├── TeamContactSection.tsx (88 lines) - Email, phone, Instagram
+└── TeamRemunerationSection.tsx (144 lines) - Conditional salary fields
+
+types/
+└── team.ts (105 lines) - TeamMember, TeamMemberInput, TeamMemberFilters
+
+services/
+└── teamService.ts - CRUD operations (to be implemented)
+```
+
+#### Key Features
+- **Roles:** seller, delivery, manager, admin, stock
+- **Employment Types:** CLT, Freelancer, PJ
+- **Conditional Remuneration:**
+  - CLT: Monthly salary
+  - Freelancer/PJ: Monthly salary + weekly hours (default 40h) + automatic hourly rate calculation
+  - Seller: Commission rate (%)
+  - Delivery (Freelancer/PJ): Delivery fee per order
+- **Validations:**
+  - CPF: exactly 11 digits (numbers only)
+  - CNPJ: exactly 14 digits (numbers only)
+  - Birth date: HTML5 date input with max="9999-12-31"
+- **Birthday Tracking:** Shows days until next birthday (unlimited range, no 30-day limit)
+- **Contact:** Email, phone with WhatsApp link, Instagram
+- **Status:** Active/Inactive toggle
+
+#### Routes
+- `/admin/team` - List all team members
+- `/admin/team/new` - Create new member
+- `/admin/team/:id/edit` - Edit existing member
+
+#### Database Schema
+Migration: `supabase/migrations/20260202_create_team_members.sql`
+- Fields: name, cpf_cnpj, birth_date, role, employment_type, email, phone, instagram
+- Remuneration: salary, monthly_salary, weekly_hours, commission_rate, delivery_fee
+- Metadata: is_active, hire_date, admin_notes, created_at, updated_at
+
+#### Navigation
+Added "Equipe" link in AdminLayout sidebar (after "Clientes")
+
+---
