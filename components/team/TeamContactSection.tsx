@@ -70,5 +70,6 @@ export default function TeamContactSection({
                     </div>
                 </div>
             </div>
-            );
+        </div>
+    );
 }
