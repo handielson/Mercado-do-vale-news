@@ -255,6 +255,9 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({ categoryId }
 - **2026-02-01:** Category Management Modular Refactoring (722→9 files): Removed CategoryEditModal (722 lines), created modular architecture with 5 section components (BasicInfo, FieldConfig, CustomFields, EANAutofill, AutoNaming), 1 container (CategoryEditPage), and 3 routing pages (index, new, [id]/edit). Total: ~1,140 lines in 9 files (avg 127 lines/file). Established "Complex Configuration Pages" pattern in ANTIGRAVITY PROTOCOL.
 - **2026-02-02:** Customer Management System: Refactored CustomerFormPage (887→475 lines) following ANTIGRAVITY PROTOCOL. Extracted 3 section components (CustomerBasicInfoSection, CustomerContactSection, CustomerAddressSection). Added customer type field, birth date with age/birthday calculation, social media fields (Instagram, Facebook), internal notes, Google Maps integration, WhatsApp link, and print functionality.
 - **2026-02-02:** Team Management System: Complete CRUD implementation following Clone-and-Adapt pattern from Customer module. Created TeamFormPage (451 lines), TeamListPage (342 lines), and 3 section components (TeamBasicInfoSection 205 lines, TeamContactSection 88 lines, TeamRemunerationSection 144 lines). Features: role-based fields (seller, delivery, manager, admin, stock), employment types (CLT, Freelancer, PJ), conditional remuneration (salary, monthly_salary, commission_rate, delivery_fee), weekly hours tracking with automatic hourly rate calculation, CPF/CNPJ validation (11/14 digits), Instagram field, birthday countdown (unlimited days). Total: 5 components, ~1,230 lines. Routes: /admin/team, /admin/team/new, /admin/team/:id/edit.
+- **2026-02-03:** Gift Products System: Added is_gift field to products table for items given as gifts (100% discount, cost tracked for profit). Migration 20260202_add_gift_field.sql, checkbox in ProductPricing.tsx with visual feedback.
+- **2026-02-03:** PDV (Point of Sale) System - MVP: Complete sales interface with 6 modular components (ProductSearchSection 217 lines, CartSection 175 lines, CustomerSection 168 lines, PaymentSection 228 lines, SalesSummarySection 172 lines, PDVPage 218 lines). Features: product search (name/SKU/EAN/IMEI1/IMEI2), mandatory customer selection, multiple payment methods (money/credit/debit/PIX), automatic gift discount, real profit calculation. Database: sales and sale_items tables (migration 20260203_create_sales_tables.sql). Types (sale.ts 120 lines) and utils (saleCalculations.ts 160 lines). Total: ~1,458 lines in 9 files. Route: /admin/pdv. Pending: saleService.ts integration, real search queries, stock updates.
+
 
 ## 📦 Implemented Modules
 
@@ -310,5 +313,87 @@ Migration: `supabase/migrations/20260202_create_team_members.sql`
 
 #### Navigation
 Added "Equipe" link in AdminLayout sidebar (after "Clientes")
+
+---
+
+### 🛒 PDV (Point of Sale) System
+**Status:** ✅ MVP Complete (Interface + Database)  
+**Pattern:** Modular Components + Service Layer (pending)  
+**Compliance:** ✅ ANTIGRAVITY PROTOCOL (all files < 250 lines)
+
+#### Files Structure
+```
+pages/pdv/
+└── PDVPage.tsx (218 lines) - Main container with 2-column layout
+
+components/pdv/
+├── ProductSearchSection.tsx (217 lines) - Search by name, SKU, EAN, IMEI1, IMEI2
+├── CartSection.tsx (175 lines) - Cart management with item controls
+├── CustomerSection.tsx (168 lines) - MANDATORY customer selection
+├── PaymentSection.tsx (228 lines) - Multiple payment methods
+└── SalesSummarySection.tsx (172 lines) - Summary and finalization
+
+types/
+└── sale.ts (120 lines) - Sale, SaleItem, PaymentMethod types
+
+utils/
+└── saleCalculations.ts (160 lines) - All calculation functions
+
+services/
+└── saleService.ts - CRUD operations (TO BE IMPLEMENTED)
+```
+
+#### Key Features
+- **Product Search:** name, SKU, EAN, IMEI1, IMEI2 (UI ready, integration pending)
+- **Cart Management:** Add, remove, adjust quantities, clear cart
+- **Customer Selection:** MANDATORY - search by name or CPF/CNPJ (UI ready, integration pending)
+- **Payment Methods:**
+  - 💵 Money (with change calculation)
+  - 💳 Credit Card
+  - 💳 Debit Card
+  - 📱 PIX
+  - Multiple payments per sale
+- **Gift Products:** Automatic 100% discount, cost tracked for profit calculation
+- **Calculations:**
+  - Subtotal, discount, total
+  - Real profit (total - cost_total)
+  - Profit margin percentage
+  - Change and remaining amount
+- **Validations:**
+  - Non-empty cart
+  - Customer selected
+  - Payment complete
+  - Stock availability (if tracked)
+
+#### Database Schema
+Migration: `supabase/migrations/20260203_create_sales_tables.sql`
+
+**Table: sales**
+- id, customer_id (NOT NULL), seller_id
+- subtotal, discount_total, total, cost_total, profit (all in cents)
+- payment_methods (JSONB array)
+- notes, status (completed/cancelled/refunded)
+- created_at, updated_at
+
+**Table: sale_items**
+- id, sale_id, product_id
+- product_name, product_sku (snapshot)
+- quantity, unit_price, unit_cost, discount, subtotal, total (all in cents)
+- is_gift (boolean)
+- created_at
+
+#### Routes
+- `/admin/pdv` - Point of Sale interface
+
+#### Navigation
+Added "PDV" link in AdminLayout sidebar (after "Equipe") with ShoppingCart icon
+
+#### Pending Implementation
+- [ ] `saleService.ts` - Create, read, update, cancel sales
+- [ ] Real product search integration with Supabase
+- [ ] Real customer search integration with Supabase
+- [ ] Stock update after sale completion
+- [ ] Sales history page
+- [ ] Receipt/invoice printing
 
 ---
