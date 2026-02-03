@@ -66,6 +66,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             label="Clientes"
             active={location.pathname.startsWith('/admin/customers')}
           />
+          <NavItem
+            to="/admin/team"
+            icon={<Users size={18} />}
+            label="Equipe"
+            active={location.pathname.startsWith('/admin/team')}
+          />
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Configuração</div>
           <NavItem
             to="/admin/settings/categories"

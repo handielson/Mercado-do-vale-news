@@ -27,6 +27,7 @@ import { CustomFieldsLibraryPage } from '../pages/admin/settings/CustomFieldsLib
 import CustomerListPage from '../pages/customers/CustomerListPage';
 import CustomerFormPage from '../pages/customers/CustomerFormPage';
 import CustomerDetailsPage from '../pages/customers/CustomerDetailsPage';
+import TeamFormPage from '../pages/team/TeamFormPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => (
@@ -268,6 +269,30 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><DevDiaryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/team",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><div className="p-6"><h1 className="text-2xl font-bold">Equipe</h1><p className="text-slate-500 mt-2">Lista de membros da equipe (em desenvolvimento)</p></div></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/team/new",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><TeamFormPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/team/:id/edit",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><TeamFormPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
