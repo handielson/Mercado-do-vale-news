@@ -75,6 +75,9 @@ export interface Product {
     track_inventory: boolean;      // If true, monitors stock quantity
     stock_quantity?: number;       // Quantity in stock (null if track_inventory = false)
 
+    // Gift Product (Brinde)
+    is_gift?: boolean;             // If true, applies automatic full discount in POS
+
     // Timestamps
     created: string;
     updated: string;
@@ -105,4 +108,5 @@ export interface ProductInput {
     status: ProductStatus;
     track_inventory: boolean;
     stock_quantity?: number;
+    is_gift?: boolean;
 }

@@ -38,6 +38,29 @@ export function ProductPricing({ watch, setValue }: ProductPricingProps) {
                 </div>
             </div>
 
+            {/* Checkbox: Produto Brinde */}
+            <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <input
+                    type="checkbox"
+                    id="is_gift"
+                    checked={watch('is_gift') || false}
+                    onChange={(e) => setValue('is_gift', e.target.checked)}
+                    className="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500 mt-0.5"
+                />
+                <div className="flex-1">
+                    <label htmlFor="is_gift" className="block text-sm font-semibold text-green-800 cursor-pointer">
+                        🎁 Produto Brinde
+                    </label>
+                    <p className="text-xs text-green-700 mt-1">
+                        Produtos brindes recebem <strong>desconto integral automático</strong> no PDV.
+                        O cliente não paga, mas o custo é contabilizado no relatório de lucro.
+                    </p>
+                    <p className="text-xs text-green-600 mt-1 italic">
+                        Exemplo: Custo R$ 10,00 | Preço R$ 20,00 → Cliente paga R$ 0,00 | Impacto no lucro: -R$ 10,00
+                    </p>
+                </div>
+            </div>
+
             {/* Calculadora de Margem Unificada com Abas */}
             <div className="mt-4 p-4 bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg border border-slate-200">
                 <div className="flex items-center justify-between mb-3">
