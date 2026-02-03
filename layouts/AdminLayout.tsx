@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -71,6 +71,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<Users size={18} />}
             label="Equipe"
             active={location.pathname.startsWith('/admin/team')}
+          />
+          <NavItem
+            to="/admin/pdv"
+            icon={<ShoppingCart size={18} />}
+            label="PDV"
+            active={location.pathname.startsWith('/admin/pdv')}
           />
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Configuração</div>
           <NavItem

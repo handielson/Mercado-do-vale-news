@@ -29,6 +29,7 @@ import CustomerFormPage from '../pages/customers/CustomerFormPage';
 import CustomerDetailsPage from '../pages/customers/CustomerDetailsPage';
 import TeamFormPage from '../pages/team/TeamFormPage';
 import TeamListPage from '../pages/team/TeamListPage';
+import PDVPage from '../pages/pdv/PDVPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => (
@@ -294,6 +295,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><TeamFormPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/pdv",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <PDVPage />
       </ProtectedRoute>
     )
   },
