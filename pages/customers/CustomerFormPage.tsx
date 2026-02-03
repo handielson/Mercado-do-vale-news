@@ -7,6 +7,16 @@ import { customFieldsService } from '../../services/custom-fields';
 import { Customer, CustomerInput, CustomerAddress } from '../../types/customer';
 import { CustomField } from '../../types';
 import { validateCpfCnpj, formatCpfCnpj, formatPhone, validateEmail } from '../../utils/cpfCnpjValidation';
+import {
+    capitalizeName,
+    calculateAge,
+    daysUntilBirthday,
+    formatCep,
+    searchCep as searchCepUtil,
+    getFullAddress as getFullAddressUtil,
+    getGoogleMapsUrl as getGoogleMapsUrlUtil,
+    getWhatsAppUrl as getWhatsAppUrlUtil
+} from '../../utils/customerFormUtils';
 
 /**
  * Customer Form Page
@@ -88,14 +98,7 @@ export default function CustomerFormPage() {
         }
     };
 
-    // Capitalize name (first letter of each word)
-    const capitalizeName = (name: string): string => {
-        return name
-            .toLowerCase()
-            .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
-    };
+    // capitalizeName moved to utils/customerFormUtils.ts
 
     // Validate CPF/CNPJ on blur
     const handleCpfCnpjBlur = (value: string) => {
@@ -120,115 +123,34 @@ export default function CustomerFormPage() {
         }
     };
 
-    // Search CEP
+    // Search CEP using utility function
     const searchCep = async (cep: string) => {
-        const cleaned = cep.replace(/\D/g, '');
-        if (cleaned.length !== 8) return;
-
-        try {
-            const response = await fetch(`https://viacep.com.br/ws/${cleaned}/json/`);
-            const data = await response.json();
-
-            if (!data.erro) {
-                setFormData(prev => ({
-                    ...prev,
-                    address: {
-                        ...prev.address,
-                        street: data.logradouro || '',
-                        neighborhood: data.bairro || '',
-                        city: data.localidade || '',
-                        state: data.uf || '',
-                        zipCode: cleaned
-                    }
-                }));
-            }
-        } catch (err) {
-            console.error('Error searching CEP:', err);
+        const result = await searchCepUtil(cep);
+        if (result) {
+            setFormData(prev => ({
+                ...prev,
+                address: {
+                    ...prev.address,
+                    ...result
+                }
+            }));
+        } else if (cep.replace(/\D/g, '').length === 8) {
             toast.error('Erro ao buscar CEP');
         }
     };
 
-    // Build full address for Google Maps
-    const getFullAddress = () => {
-        const addr = formData.address;
-        if (!addr?.street || !addr?.number || !addr?.city || !addr?.state) {
-            return null;
-        }
+    // getFullAddress moved to utils/customerFormUtils.ts
+    const getFullAddress = () => getFullAddressUtil(formData.address || {});
 
-        const parts = [
-            addr.street,
-            addr.number,
-            addr.complement,
-            addr.neighborhood,
-            addr.city,
-            addr.state,
-            'Brasil'
-        ].filter(Boolean);
+    // getGoogleMapsUrl moved to utils/customerFormUtils.ts
+    const getGoogleMapsUrl = () => getGoogleMapsUrlUtil(formData.address || {});
 
-        return parts.join(', ');
-    };
+    // getWhatsAppUrl moved to utils/customerFormUtils.ts
+    const getWhatsAppUrl = () => getWhatsAppUrlUtil(formData.phone || '', formData.name);
 
-    // Get Google Maps URL
-    const getGoogleMapsUrl = () => {
-        const fullAddress = getFullAddress();
-        if (!fullAddress) return null;
+    // calculateAge moved to utils/customerFormUtils.ts
 
-        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
-    };
-
-    // Get WhatsApp URL
-    const getWhatsAppUrl = () => {
-        if (!formData.phone) return null;
-
-        // Remove all non-numeric characters
-        const cleaned = formData.phone.replace(/\D/g, '');
-        if (cleaned.length < 10) return null;
-
-        // TODO: In the future, fetch welcome message from settings/database
-        // For now, use a default message
-        const welcomeMessage = `Olá ${formData.name || 'cliente'}! Seja bem-vindo(a)!`;
-
-        // WhatsApp link format: https://wa.me/5511999999999?text=message
-        // Add country code 55 for Brazil if not present
-        const phoneWithCountry = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
-
-        return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(welcomeMessage)}`;
-    };
-
-    // Calculate age from birth date
-    const calculateAge = (birthDate: string): number | null => {
-        if (!birthDate) return null;
-
-        const today = new Date();
-        const birth = new Date(birthDate);
-        let age = today.getFullYear() - birth.getFullYear();
-        const monthDiff = today.getMonth() - birth.getMonth();
-
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-            age--;
-        }
-
-        return age;
-    };
-
-    // Calculate days until next birthday
-    const daysUntilBirthday = (birthDate: string): number | null => {
-        if (!birthDate) return null;
-
-        const today = new Date();
-        const birth = new Date(birthDate);
-        const nextBirthday = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
-
-        // If birthday already passed this year, calculate for next year
-        if (nextBirthday < today) {
-            nextBirthday.setFullYear(today.getFullYear() + 1);
-        }
-
-        const diffTime = nextBirthday.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        return diffDays;
-    };
+    // daysUntilBirthday moved to utils/customerFormUtils.ts
 
     // Get Instagram URL
     const getInstagramUrl = () => {
