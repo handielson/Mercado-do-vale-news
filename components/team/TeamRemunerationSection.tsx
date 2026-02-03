@@ -65,7 +65,7 @@ export default function TeamRemunerationSection({
                             <p className="text-xs text-slate-500 mt-1">
                                 Horas trabalhadas por semana (padrão: 40h)
                             </p>
-                            {formData.monthly_salary && formData.weekly_hours && (
+                            {formData.monthly_salary && (
                                 <p className="text-xs text-blue-600 font-medium mt-1">
                                     Valor/hora: R$ {(formData.monthly_salary / ((formData.weekly_hours || 40) * 4)).toFixed(2)}
                                 </p>
