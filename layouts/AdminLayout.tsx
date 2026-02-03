@@ -140,6 +140,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             active={location.pathname.startsWith('/admin/settings/payment-fees')}
           />
           <NavItem
+            to="/admin/settings/company"
+            icon={<Settings size={18} />}
+            label="Dados da Empresa"
+            active={location.pathname.startsWith('/admin/settings/company')}
+          />
+          <NavItem
             to="/admin/governance"
             icon={<Shield size={18} />}
             label="Governança"

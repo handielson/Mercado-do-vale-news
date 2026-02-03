@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Building2, MapPin, DollarSign, Globe, Save, Loader2,
     Info, Smartphone, Mail, FileText, Instagram, Facebook,
-    Youtube, Star, Clock, AlertCircle
+    Youtube, Star, Clock, AlertCircle, Share2
 } from 'lucide-react';
 import { Company, defaultCompany } from '../../../types/company';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
@@ -20,6 +20,7 @@ import { DocumentUploader } from '../../../components/DocumentUploader';
 import { DocumentList } from '../../../components/DocumentList';
 import { getDocuments } from '../../../services/documentService';
 import type { CompanyDocument } from '../../../types/document';
+import { SharePaymentDataModal } from '../../../components/SharePaymentDataModal';
 import { toast } from 'sonner';
 
 export const CompanyDataPage: React.FC = () => {
@@ -29,6 +30,7 @@ export const CompanyDataPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [documents, setDocuments] = useState<CompanyDocument[]>([]);
     const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
     // Load company data on mount
     useEffect(() => {
@@ -810,6 +812,126 @@ export const CompanyDataPage: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* Seção de Dados Financeiros / PIX */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-green-100 p-2 rounded-lg">
+                            <DollarSign className="text-green-600" size={24} />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-semibold text-gray-900">Dados Financeiros</h2>
+                            <p className="text-sm text-gray-500">Informações de pagamento PIX e bancárias</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setIsShareModalOpen(true)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                    >
+                        <Share2 size={18} />
+                        Compartilhar Dados
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Chave PIX */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Chave PIX
+                        </label>
+                        <input
+                            type="text"
+                            value={form.pixKey || ''}
+                            onChange={(e) => setForm({ ...form, pixKey: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Digite a chave PIX"
+                        />
+                    </div>
+
+                    {/* Tipo de Chave PIX */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Tipo de Chave
+                        </label>
+                        <select
+                            value={form.pixKeyType || ''}
+                            onChange={(e) => setForm({ ...form, pixKeyType: e.target.value as any })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                            <option value="">Selecione o tipo</option>
+                            <option value="CPF">CPF</option>
+                            <option value="CNPJ">CNPJ</option>
+                            <option value="EMAIL">E-mail</option>
+                            <option value="PHONE">Telefone</option>
+                            <option value="RANDOM">Chave Aleatória</option>
+                        </select>
+                    </div>
+
+                    {/* Nome do Beneficiário PIX */}
+                    <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nome do Beneficiário PIX
+                        </label>
+                        <input
+                            type="text"
+                            value={form.pixBeneficiaryName || ''}
+                            onChange={(e) => setForm({ ...form, pixBeneficiaryName: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Nome completo do titular da chave PIX"
+                        />
+                    </div>
+
+                    {/* Banco */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Banco
+                        </label>
+                        <input
+                            type="text"
+                            value={form.bankName || ''}
+                            onChange={(e) => setForm({ ...form, bankName: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Nome do banco"
+                        />
+                    </div>
+
+                    {/* Agência */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Agência
+                        </label>
+                        <input
+                            type="text"
+                            value={form.bankAgency || ''}
+                            onChange={(e) => setForm({ ...form, bankAgency: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Número da agência"
+                        />
+                    </div>
+
+                    {/* Conta */}
+                    <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Conta
+                        </label>
+                        <input
+                            type="text"
+                            value={form.bankAccount || ''}
+                            onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Número da conta com dígito"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Modal de Compartilhamento */}
+            <SharePaymentDataModal
+                isOpen={isShareModalOpen}
+                onClose={() => setIsShareModalOpen(false)}
+                companyData={form}
+            />
 
             {/* Botão de salvar fixo no final */}
             <div className="flex justify-end">

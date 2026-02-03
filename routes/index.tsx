@@ -30,6 +30,7 @@ import CustomerDetailsPage from '../pages/customers/CustomerDetailsPage';
 import TeamFormPage from '../pages/team/TeamFormPage';
 import TeamListPage from '../pages/team/TeamListPage';
 import PDVPage from '../pages/pdv/PDVPage';
+import { CompanyDataPage } from '../pages/admin/settings/CompanyDataPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => (
@@ -214,6 +215,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><PaymentFeesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/company",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><CompanyDataPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
