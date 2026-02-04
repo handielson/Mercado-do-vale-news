@@ -65,6 +65,7 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     phone: row.phone || '',
     email: row.email || '',
     logo: row.logo,
+    logoUrl: row.receipt_logo_url || '',
     favicon: row.favicon,
     address: {
         zipCode: row.address_zip_code || '',
@@ -111,6 +112,7 @@ const companyToRow = (company: Company, userId: string): Partial<CompanySettings
     phone: company.phone || null,
     email: company.email || null,
     logo: company.logo,
+    receipt_logo_url: company.logoUrl || null, // URL do logo para recibos e garantias
     favicon: company.favicon || null,
     address_zip_code: company.address.zipCode || null,
     address_street: company.address.street || null,

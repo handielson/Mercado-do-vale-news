@@ -243,6 +243,23 @@ export const CompanyDataPage: React.FC = () => {
                     />
                 </div>
 
+                {/* URL do Logo (alternativa) */}
+                <div className="mb-6">
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        URL do Logo (Opcional)
+                    </label>
+                    <input
+                        type="url"
+                        value={form.logoUrl || ''}
+                        onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="https://exemplo.com/logo.png"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                        Alternativa ao upload: cole a URL de uma imagem hospedada online (usado em recibos e termos de garantia)
+                    </p>
+                </div>
+
                 {/* Dados básicos */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div>

@@ -143,41 +143,55 @@ export default function ReceiptPreview({
 
     return (
         <div className="bg-white rounded-xl border-2 border-slate-200 shadow-lg sticky top-6">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-xl">
-                <div className="flex items-center gap-3 mb-2">
-                    <Receipt size={28} />
-                    <div className="flex-1">
-                        <h2 className="text-xl font-bold">
-                            {companySettings?.company_name || 'MERCADO DO VALE'}
+            {/* Header - Padronizado com Termo de Garantia */}
+            <div className="bg-white p-6 rounded-t-xl border-b-2 border-slate-300">
+                <div className="flex items-start gap-4">
+                    {/* Logo */}
+                    {companySettings?.receipt_logo_url && (
+                        <div className="flex-shrink-0">
+                            <img
+                                src={companySettings.receipt_logo_url}
+                                alt="Logo"
+                                className="max-w-[150px] max-h-[80px] object-contain"
+                                onError={(e) => {
+                                    // Hide image if fails to load
+                                    e.currentTarget.style.display = 'none';
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Company Info */}
+                    <div className="flex-1 text-right">
+                        <h2 className="text-lg font-bold text-slate-800 uppercase mb-1">
+                            Comprovante de Venda
                         </h2>
-                        <p className="text-sm text-blue-100">Comprovante de Venda</p>
+                        <p className="font-bold text-slate-700">
+                            {companySettings?.company_name || 'MERCADO DO VALE'}
+                        </p>
+                        {companySettings?.show_company_info && (
+                            <div className="text-xs text-slate-600 mt-1 space-y-0.5">
+                                {companySettings?.cnpj && <p>CNPJ: {companySettings.cnpj}</p>}
+                                {companySettings?.address && <p>{companySettings.address}</p>}
+                                {companySettings?.phone && <p>Tel: {companySettings.phone}</p>}
+                                {companySettings?.email && <p>{companySettings.email}</p>}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* Company Info */}
-                {companySettings?.show_company_info && (
-                    <div className="text-xs text-blue-100 mt-3 space-y-0.5">
-                        {companySettings?.address && <p>{companySettings.address}</p>}
-                        <div className="flex gap-3">
-                            {companySettings?.phone && <p>Tel: {companySettings.phone}</p>}
-                            {companySettings?.cnpj && <p>CNPJ: {companySettings.cnpj}</p>}
-                        </div>
-                    </div>
-                )}
-
                 {/* Custom Header Text */}
                 {companySettings?.header_text && (
-                    <div className="mt-3 pt-3 border-t border-blue-500/30 text-sm text-blue-50 text-center italic">
+                    <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-600 text-center italic">
                         {companySettings.header_text}
                     </div>
                 )}
 
                 {/* Order Number */}
                 {companySettings?.show_order_number && orderNumber && (
-                    <div className="mt-3 pt-3 border-t border-blue-500/30 text-center">
-                        <p className="text-xs text-blue-200">Pedido</p>
-                        <p className="text-2xl font-bold tracking-wider">
+                    <div className="mt-3 pt-3 border-t border-slate-200 text-center">
+                        <p className="text-xs text-slate-500">Pedido</p>
+                        <p className="text-2xl font-bold text-blue-600 tracking-wider">
                             #{orderNumber.toString().padStart(7, '0')}
                         </p>
                     </div>
@@ -185,7 +199,7 @@ export default function ReceiptPreview({
 
                 {/* Timestamp */}
                 {companySettings?.show_timestamp && (
-                    <div className="text-xs text-blue-100 mt-2 text-center">
+                    <div className="text-xs text-slate-500 mt-2 text-center">
                         {new Date().toLocaleString('pt-BR')}
                     </div>
                 )}

@@ -35,6 +35,7 @@ export interface Company {
     phone: string;
     email: string;
     logo: string | null;
+    logoUrl?: string; // URL do logo (alternativa ao base64)
     favicon?: string | null;
 
     // Address

@@ -10,7 +10,12 @@ import PaymentSection from '../../components/pdv/PaymentSection';
 import DeliverySection from '../../components/pdv/DeliverySection';
 import ReceiptPreview from '../../components/pdv/ReceiptPreview';
 import InstallmentCalculator from '../../components/pdv/InstallmentCalculator';
+import { WarrantyTermModal } from '../../components/warranty/WarrantyTermModal';
 import { createSale } from '../../services/saleService';
+import { warrantyDocumentService } from '../../services/warrantyDocumentService';
+import { companySettingsService } from '../../services/companySettingsService';
+import { replaceWarrantyTags, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
+import { WarrantyTagData, DeliveryTypeWarranty } from '../../types/warrantyDocument';
 import { toast } from 'sonner';
 
 interface Customer {
@@ -41,6 +46,13 @@ export default function PDVPage() {
 
     // Estado do desconto promocional
     const [promotionalDiscount, setPromotionalDiscount] = useState(0);
+
+    // Estado do termo de garantia
+    const [showWarrantyModal, setShowWarrantyModal] = useState(false);
+    const [lastSaleId, setLastSaleId] = useState<string>('');
+    const [lastSaleData, setLastSaleData] = useState<any>(null);
+    const [warrantyContent, setWarrantyContent] = useState('');
+    const [warrantyDeliveryType, setWarrantyDeliveryType] = useState<DeliveryTypeWarranty>('store_pickup');
 
     // Mock de entregadores (TODO: buscar do Supabase)
     const deliveryPersons = [
@@ -243,7 +255,18 @@ export default function PDVPage() {
                 description: `Venda #${sale.id.slice(0, 8)} criada`
             });
 
-            // Limpar tudo
+            // Salvar dados para geração do termo
+            setLastSaleId(sale.id);
+            setLastSaleData({
+                sale,
+                customer: selectedCustomer,
+                items: cartItems
+            });
+
+            // Gerar termo de garantia
+            await generateWarrantyTerm(sale, selectedCustomer, cartItems);
+
+            // Limpar carrinho
             setCartItems([]);
             setSelectedCustomer(undefined);
             setPayments([]);
@@ -251,12 +274,137 @@ export default function PDVPage() {
             setDeliveryPersonId(undefined);
             setDeliveryCostStore(0);
             setDeliveryCostCustomer(0);
-
-            // TODO: Navegar para página de detalhes da venda
-            // navigate(`/ admin / sales / ${ sale.id } `);
         } catch (error) {
             console.error('Erro ao finalizar venda:', error);
             toast.error('Erro ao finalizar venda. Verifique os dados e tente novamente.');
+        }
+    };
+
+    // Gerar termo de garantia
+    const generateWarrantyTerm = async (sale: any, customer: Customer, items: SaleItem[]) => {
+        try {
+            // Buscar configurações da empresa
+            const settings = await companySettingsService.get();
+
+            if (!settings || !settings.warranty_template) {
+                console.warn('Template de garantia não configurado');
+                return;
+            }
+
+            // Pegar primeiro produto (ou concatenar se múltiplos)
+            const firstItem = items[0];
+
+            // Preparar dados para substituição de tags
+            const tagData: WarrantyTagData = {
+                // Empresa
+                nome_loja: settings.company_name || '',
+                endereco: settings.address || '',
+                telefone: formatWarrantyPhone(settings.phone || ''),
+                email: settings.email || '',
+                cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
+                logo: settings.receipt_logo_url || '',
+
+                // Cliente
+                nome_cliente: customer.name,
+                cpf_cliente: formatWarrantyCpfCnpj(customer.cpf_cnpj || ''),
+                telefone_cliente: formatWarrantyPhone(customer.phone || ''),
+                email_cliente: customer.email || '',
+
+                // Venda
+                numero_venda: sale.id.slice(0, 8),
+                data_compra: formatWarrantyDate(new Date()),
+
+                // Produto (primeiro item)
+                produto: firstItem.product_name,
+                marca: '', // TODO: buscar do produto
+                modelo: '',
+                cor: '',
+                ram: '',
+                memoria: '',
+                imei1: '',
+                imei2: '',
+
+                // Garantia
+                dias_garantia: '90', // TODO: calcular baseado no produto
+                tipo_garantia: 'Garantia Legal',
+
+                // Declaração (será atualizada quando usuário selecionar tipo)
+                declaracao_recebimento: getWarrantyDeclaration(
+                    deliveryType === 'delivery' ? 'delivery' : 'store_pickup'
+                )
+            };
+
+            // Substituir tags no template
+            const content = replaceWarrantyTags(settings.warranty_template, tagData);
+
+            setWarrantyContent(content);
+            setWarrantyDeliveryType(deliveryType === 'delivery' ? 'delivery' : 'store_pickup');
+            setShowWarrantyModal(true);
+        } catch (error) {
+            console.error('Erro ao gerar termo de garantia:', error);
+            toast.error('Erro ao gerar termo de garantia');
+        }
+    };
+
+    // Atualizar tipo de entrega do termo
+    const handleWarrantyDeliveryTypeChange = async (type: DeliveryTypeWarranty) => {
+        setWarrantyDeliveryType(type);
+
+        // Regenerar termo com nova declaração
+        if (lastSaleData) {
+            const settings = await companySettingsService.get();
+            if (!settings || !settings.warranty_template) return;
+
+            const firstItem = lastSaleData.items[0];
+            const tagData: WarrantyTagData = {
+                nome_loja: settings.company_name || '',
+                endereco: settings.address || '',
+                telefone: formatWarrantyPhone(settings.phone || ''),
+                email: settings.email || '',
+                cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
+                logo: settings.receipt_logo_url || '',
+                nome_cliente: lastSaleData.customer.name,
+                cpf_cliente: formatWarrantyCpfCnpj(lastSaleData.customer.cpf_cnpj || ''),
+                telefone_cliente: formatWarrantyPhone(lastSaleData.customer.phone || ''),
+                email_cliente: lastSaleData.customer.email || '',
+                numero_venda: lastSaleData.sale.id.slice(0, 8),
+                data_compra: formatWarrantyDate(new Date()),
+                produto: firstItem.product_name,
+                marca: '',
+                modelo: '',
+                cor: '',
+                ram: '',
+                memoria: '',
+                imei1: '',
+                imei2: '',
+                dias_garantia: '90',
+                tipo_garantia: 'Garantia Legal',
+                declaracao_recebimento: getWarrantyDeclaration(type)
+            };
+
+            const content = replaceWarrantyTags(settings.warranty_template, tagData);
+            setWarrantyContent(content);
+        }
+    };
+
+    // Salvar termo de garantia
+    const handleGenerateWarranty = async (signature: string) => {
+        if (!lastSaleData) return;
+
+        try {
+            await warrantyDocumentService.create({
+                sale_id: lastSaleId,
+                customer_id: lastSaleData.customer.id,
+                delivery_type: warrantyDeliveryType,
+                customer_signature: signature,
+                warranty_content: warrantyContent
+            });
+
+            toast.success('Termo de garantia gerado com sucesso!');
+            setShowWarrantyModal(false);
+        } catch (error) {
+            console.error('Erro ao salvar termo de garantia:', error);
+            toast.error('Erro ao salvar termo de garantia');
         }
     };
 
@@ -333,6 +481,16 @@ export default function PDVPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Warranty Term Modal */}
+            <WarrantyTermModal
+                isOpen={showWarrantyModal}
+                onClose={() => setShowWarrantyModal(false)}
+                warrantyContent={warrantyContent}
+                deliveryType={warrantyDeliveryType}
+                onDeliveryTypeChange={handleWarrantyDeliveryTypeChange}
+                onGenerate={handleGenerateWarranty}
+            />
         </div>
     );
 }

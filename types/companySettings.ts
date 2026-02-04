@@ -16,6 +16,13 @@ export interface CompanySettings {
     show_order_number: boolean;
     show_timestamp: boolean;
     show_seller_info: boolean;
+    warranty_template?: string;
+    warranty_show_logo: boolean;
+    warranty_show_company_name: boolean;
+    warranty_show_cnpj: boolean;
+    warranty_show_phone: boolean;
+    warranty_show_email: boolean;
+    warranty_show_address: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -35,4 +42,11 @@ export interface CompanySettingsInput {
     show_order_number?: boolean;
     show_timestamp?: boolean;
     show_seller_info?: boolean;
+    warranty_template?: string;
+    warranty_show_logo?: boolean;
+    warranty_show_company_name?: boolean;
+    warranty_show_cnpj?: boolean;
+    warranty_show_phone?: boolean;
+    warranty_show_email?: boolean;
+    warranty_show_address?: boolean;
 }
