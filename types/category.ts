@@ -114,6 +114,7 @@ export interface Category {
     name: string;
     slug: string;
     config: CategoryConfig;  // Field requirements configuration
+    warranty_days: number;   // Default warranty period in days
     created: string;
     updated: string;
 }
@@ -126,4 +127,5 @@ export interface CategoryInput {
     name: string;
     slug?: string;
     config: CategoryConfig;
+    warranty_days?: number;
 }

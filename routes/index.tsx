@@ -31,6 +31,8 @@ import TeamFormPage from '../pages/team/TeamFormPage';
 import TeamListPage from '../pages/team/TeamListPage';
 import PDVPage from '../pages/pdv/PDVPage';
 import { CompanyDataPage } from '../pages/admin/settings/CompanyDataPage';
+import DocumentSettingsPage from '../pages/admin/settings/DocumentSettingsPage';
+import WarrantyTemplatesPage from '../pages/admin/settings/WarrantyTemplatesPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
 
 // Temporary components (will be moved to separate files in next phase)
@@ -224,6 +226,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><CompanyDataPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/documents",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><DocumentSettingsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/warranty-templates",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><WarrantyTemplatesPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

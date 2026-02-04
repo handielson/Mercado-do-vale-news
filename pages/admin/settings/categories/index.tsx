@@ -81,6 +81,7 @@ export default function CategorySettingsPage() {
                         <tr>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">Nome</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">Slug</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">Garantia</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">Configuração</th>
                             <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Ações</th>
                         </tr>
@@ -88,13 +89,13 @@ export default function CategorySettingsPage() {
                     <tbody className="divide-y divide-slate-200">
                         {isLoading ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                                <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
                                     Carregando categorias...
                                 </td>
                             </tr>
                         ) : categories.length === 0 ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                                <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
                                     Nenhuma categoria cadastrada
                                 </td>
                             </tr>
@@ -108,6 +109,11 @@ export default function CategorySettingsPage() {
                                         <code className="text-sm text-slate-600 bg-slate-100 px-2 py-1 rounded">
                                             {category.slug}
                                         </code>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            {category.warranty_days || 90} dias
+                                        </span>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="text-sm text-slate-600">

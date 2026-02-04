@@ -28,6 +28,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
     const [isLoading, setIsLoading] = useState(!!categoryId);
     const [isSaving, setIsSaving] = useState(false);
     const [name, setName] = useState('');
+    const [warrantyDays, setWarrantyDays] = useState(90);
     const [config, setConfig] = useState<CategoryConfig>({
         imei1: 'optional',
         imei2: 'optional',
@@ -54,6 +55,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
             const category = await categoryService.getById(id);
             if (category) {
                 setName(category.name);
+                setWarrantyDays(category.warranty_days || 90);
 
                 console.log('[CategoryEditPage] Loading category:', category.name);
                 console.log('[CategoryEditPage] Config:', category.config);
@@ -116,7 +118,8 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
 
             const categoryData: CategoryInput = {
                 name: name.trim(),
-                config
+                config,
+                warranty_days: warrantyDays
             };
 
             if (categoryId) {
@@ -178,6 +181,8 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                     <BasicInfoSection
                         name={name}
                         onChange={setName}
+                        warrantyDays={warrantyDays}
+                        onWarrantyDaysChange={setWarrantyDays}
                         isEditing={!!categoryId}
                     />
 

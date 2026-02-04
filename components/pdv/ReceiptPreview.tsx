@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Receipt, User, Package, Truck, CreditCard, DollarSign, Smartphone } from 'lucide-react';
 import { SaleItem, PaymentMethod, DeliveryType } from '../../types/sale';
 import { calculateSaleTotals } from '../../utils/saleCalculations';
+import { companySettingsService } from '../../services/companySettingsService';
+import { CompanySettings } from '../../types/companySettings';
 
 
 interface Customer {
@@ -20,6 +22,7 @@ interface ReceiptPreviewProps {
     deliveryCostCustomer: number;
     payments: PaymentMethod[];
     promotionalDiscount?: number;
+    orderNumber?: number;
     onFinalizeSale: () => void;
 }
 
@@ -31,8 +34,33 @@ export default function ReceiptPreview({
     deliveryCostCustomer,
     payments,
     promotionalDiscount,
+    orderNumber,
     onFinalizeSale
 }: ReceiptPreviewProps) {
+    const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+
+    // Load company settings
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const settings = await companySettingsService.get();
+                if (settings) {
+                    setCompanySettings(settings);
+                } else {
+                    // Use defaults if no settings found
+                    const defaults = companySettingsService.getDefaults();
+                    setCompanySettings(defaults as CompanySettings);
+                }
+            } catch (error) {
+                console.error('Error loading company settings:', error);
+                // Use defaults on error
+                const defaults = companySettingsService.getDefaults();
+                setCompanySettings(defaults as CompanySettings);
+            }
+        };
+        loadSettings();
+    }, []);
+
     const { subtotal, discount_total, total: itemsTotal } = calculateSaleTotals(items);
 
     // Calcular desconto de brindes (valor integral dos produtos marcados como brinde)
@@ -119,14 +147,48 @@ export default function ReceiptPreview({
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-xl">
                 <div className="flex items-center gap-3 mb-2">
                     <Receipt size={28} />
-                    <div>
-                        <h2 className="text-xl font-bold">MERCADO DO VALE</h2>
+                    <div className="flex-1">
+                        <h2 className="text-xl font-bold">
+                            {companySettings?.company_name || 'MERCADO DO VALE'}
+                        </h2>
                         <p className="text-sm text-blue-100">Comprovante de Venda</p>
                     </div>
                 </div>
-                <div className="text-xs text-blue-100 mt-2">
-                    {new Date().toLocaleString('pt-BR')}
-                </div>
+
+                {/* Company Info */}
+                {companySettings?.show_company_info && (
+                    <div className="text-xs text-blue-100 mt-3 space-y-0.5">
+                        {companySettings?.address && <p>{companySettings.address}</p>}
+                        <div className="flex gap-3">
+                            {companySettings?.phone && <p>Tel: {companySettings.phone}</p>}
+                            {companySettings?.cnpj && <p>CNPJ: {companySettings.cnpj}</p>}
+                        </div>
+                    </div>
+                )}
+
+                {/* Custom Header Text */}
+                {companySettings?.header_text && (
+                    <div className="mt-3 pt-3 border-t border-blue-500/30 text-sm text-blue-50 text-center italic">
+                        {companySettings.header_text}
+                    </div>
+                )}
+
+                {/* Order Number */}
+                {companySettings?.show_order_number && orderNumber && (
+                    <div className="mt-3 pt-3 border-t border-blue-500/30 text-center">
+                        <p className="text-xs text-blue-200">Pedido</p>
+                        <p className="text-2xl font-bold tracking-wider">
+                            #{orderNumber.toString().padStart(7, '0')}
+                        </p>
+                    </div>
+                )}
+
+                {/* Timestamp */}
+                {companySettings?.show_timestamp && (
+                    <div className="text-xs text-blue-100 mt-2 text-center">
+                        {new Date().toLocaleString('pt-BR')}
+                    </div>
+                )}
             </div>
 
             {/* Content */}
@@ -330,6 +392,31 @@ export default function ReceiptPreview({
 
             {/* Footer com botão */}
             < div className="p-6 bg-slate-50 border-t border-slate-200 rounded-b-xl" >
+                {/* Custom Footer Text */}
+                {companySettings?.footer_text && (
+                    <div className="mb-4 text-center text-sm text-slate-600 italic border-t border-slate-300 pt-4">
+                        {companySettings.footer_text}
+                    </div>
+                )}
+
+                {/* Warranty Terms */}
+                {companySettings?.warranty_terms && (
+                    <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                            <h3 className="text-sm font-bold text-amber-900 uppercase">
+                                Termos de Garantia
+                            </h3>
+                        </div>
+                        <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                            {companySettings.warranty_terms}
+                        </p>
+                        <p className="text-xs text-amber-700 font-semibold mt-2 italic">
+                            * Este recibo é parte integrante do termo de garantia
+                        </p>
+                    </div>
+                )}
+
                 <button
                     onClick={onFinalizeSale}
                     disabled={!isComplete}

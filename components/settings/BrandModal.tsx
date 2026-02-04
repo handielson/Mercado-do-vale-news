@@ -23,6 +23,7 @@ interface BrandModalProps {
 export const BrandModal: React.FC<BrandModalProps> = ({ isOpen, onClose, onSave, brand }) => {
     const [name, setName] = useState('');
     const [active, setActive] = useState(true);
+    const [warrantyDays, setWarrantyDays] = useState(90);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
@@ -30,9 +31,11 @@ export const BrandModal: React.FC<BrandModalProps> = ({ isOpen, onClose, onSave,
         if (brand) {
             setName(brand.name);
             setActive(brand.active);
+            setWarrantyDays(brand.warranty_days || 90);
         } else {
             setName('');
             setActive(true);
+            setWarrantyDays(90);
         }
         setError('');
     }, [brand, isOpen]);
@@ -55,7 +58,8 @@ export const BrandModal: React.FC<BrandModalProps> = ({ isOpen, onClose, onSave,
         try {
             const input: BrandInput = {
                 name: name.trim(),
-                active
+                active,
+                warranty_days: warrantyDays
             };
 
             if (brand) {
@@ -106,6 +110,24 @@ export const BrandModal: React.FC<BrandModalProps> = ({ isOpen, onClose, onSave,
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoFocus
                         />
+                    </div>
+
+                    {/* Warranty Days Input */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Garantia Padrão (dias)
+                        </label>
+                        <input
+                            type="number"
+                            min="0"
+                            value={warrantyDays}
+                            onChange={(e) => setWarrantyDays(parseInt(e.target.value) || 0)}
+                            placeholder="Ex: 90, 365..."
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                            Período de garantia padrão para produtos desta marca
+                        </p>
                     </div>
 
                     {/* Active Checkbox */}

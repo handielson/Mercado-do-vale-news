@@ -15,6 +15,7 @@ export interface Brand {
     slug: string;
     active: boolean;
     logo_url?: string;
+    warranty_days: number;
     created: string;
     updated: string;
 }
@@ -23,4 +24,5 @@ export interface BrandInput {
     name: string;
     active?: boolean;
     logo_url?: string;
+    warranty_days?: number;
 }

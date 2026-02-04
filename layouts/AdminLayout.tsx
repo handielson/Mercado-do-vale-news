@@ -150,6 +150,18 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             active={location.pathname.startsWith('/admin/settings/company')}
           />
           <NavItem
+            to="/admin/settings/documents"
+            icon={<FileText size={18} />}
+            label="Documentos"
+            active={location.pathname.startsWith('/admin/settings/documents')}
+          />
+          <NavItem
+            to="/admin/settings/warranty-templates"
+            icon={<Shield size={18} />}
+            label="Garantias"
+            active={location.pathname.startsWith('/admin/settings/warranty-templates')}
+          />
+          <NavItem
             to="/admin/governance"
             icon={<Shield size={18} />}
             label="Governança"

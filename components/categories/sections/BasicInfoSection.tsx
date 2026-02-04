@@ -3,6 +3,8 @@ import React from 'react';
 interface BasicInfoSectionProps {
     name: string;
     onChange: (name: string) => void;
+    warrantyDays: number;
+    onWarrantyDaysChange: (days: number) => void;
     isEditing?: boolean;
 }
 
@@ -18,6 +20,8 @@ interface BasicInfoSectionProps {
 export const BasicInfoSection: React.FC<BasicInfoSectionProps> = ({
     name,
     onChange,
+    warrantyDays,
+    onWarrantyDaysChange,
     isEditing = false
 }) => {
     // Generate slug from name
@@ -67,6 +71,24 @@ export const BasicInfoSection: React.FC<BasicInfoSectionProps> = ({
                     />
                     <p className="text-xs text-slate-500 mt-1">
                         Gerado automaticamente a partir do nome (usado internamente)
+                    </p>
+                </div>
+
+                {/* Warranty Days */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Garantia Padrão (dias)
+                    </label>
+                    <input
+                        type="number"
+                        min="0"
+                        value={warrantyDays}
+                        onChange={(e) => onWarrantyDaysChange(parseInt(e.target.value) || 0)}
+                        placeholder="Ex: 90, 365..."
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                        Período de garantia padrão para produtos desta categoria
                     </p>
                 </div>
             </div>

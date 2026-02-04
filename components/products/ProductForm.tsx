@@ -24,6 +24,7 @@ import { ProductSpecifications } from './sections/ProductSpecifications';
 import { ProductPricing } from './sections/ProductPricing';
 import { ProductImages } from './sections/ProductImages';
 import { ProductBasicInfo } from './sections/ProductBasicInfo';
+import { ProductWarranty } from './sections/ProductWarranty';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -68,6 +69,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             price_retail: 0,
             price_reseller: 0,
             price_wholesale: 0,
+            warranty_type: 'brand', // Default to brand warranty
+            warranty_template_id: '',
             ...initialData // Spread initialData AFTER defaults to override with actual values
         }
     });
@@ -94,11 +97,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
     const selectedBrand = watch('brand');
     const [selectedBrandId, setSelectedBrandId] = useState<string>('');
 
-    // Load brand ID when brand name changes
+    // Warranty states
+    const [brandWarrantyDays, setBrandWarrantyDays] = useState<number | null>(null);
+    const [categoryWarrantyDays, setCategoryWarrantyDays] = useState<number | null>(null);
+
+    // Load brand ID and warranty days when brand name changes
     useEffect(() => {
-        const loadBrandId = async () => {
+        const loadBrandData = async () => {
             if (!selectedBrand) {
                 setSelectedBrandId('');
+                setBrandWarrantyDays(null);
                 return;
             }
             try {
@@ -106,17 +114,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 const brands = await brandService.list();
                 const brand = brands.find(b => b.name === selectedBrand);
                 setSelectedBrandId(brand?.id || '');
+                setBrandWarrantyDays(brand?.warranty_days || 90);
             } catch (error) {
-                console.error('Error loading brand ID:', error);
+                console.error('Error loading brand data:', error);
             }
         };
-        loadBrandId();
+        loadBrandData();
     }, [selectedBrand]);
 
     // 1. Função para carregar as regras da categoria
     const loadCategoryConfig = async () => {
         if (!selectedCategoryId) {
             setCategoryConfig(null);
+            setCategoryWarrantyDays(null);
             return;
         }
         try {
@@ -124,6 +134,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             if (category) {
                 console.log("Config carregada:", category.config); // Debug
                 setCategoryConfig(category.config);
+                setCategoryWarrantyDays(category.warranty_days || 90);
             }
         } catch (error) {
             console.error("Erro ao carregar config da categoria:", error);
@@ -339,7 +350,17 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 removeImage={removeImage}
             />
 
-            {/* 5. FISCAL & AUTOMAÇÃO */}
+            {/* 5. GARANTIA */}
+            <ProductWarranty
+                warrantyType={watch('warranty_type') || 'brand'}
+                warrantyTemplateId={watch('warranty_template_id') || ''}
+                brandWarrantyDays={brandWarrantyDays}
+                categoryWarrantyDays={categoryWarrantyDays}
+                onWarrantyTypeChange={(type) => setValue('warranty_type', type)}
+                onTemplateChange={(templateId) => setValue('warranty_template_id', templateId)}
+            />
+
+            {/* 6. FISCAL & AUTOMAÇÃO */}
             < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <FileText size={18} className="text-slate-500" />
@@ -382,7 +403,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 </div>
             </div >
 
-            {/* 6. LOGÍSTICA */}
+            {/* 7. LOGÍSTICA */}
             < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <Package size={18} className="text-slate-500" />
@@ -440,7 +461,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 </div>
             </div >
 
-            {/* 7. CONTROLE DE ESTOQUE */}
+            {/* 8. CONTROLE DE ESTOQUE */}
             < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <Package size={18} className="text-blue-600" />
@@ -491,7 +512,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 }
             </div >
 
-            {/* 8. STATUS */}
+            {/* 9. STATUS */}
             < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm" >
                 <label className="block text-sm font-medium text-slate-700 mb-1">Status do Produto</label>
                 <select

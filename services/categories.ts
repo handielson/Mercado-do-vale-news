@@ -44,6 +44,7 @@ async function list(): Promise<Category[]> {
         name: row.name,
         slug: row.slug,
         config: row.config,
+        warranty_days: row.warranty_days || 90,
         created: row.created_at,
         updated: row.updated_at
     }));
@@ -68,7 +69,8 @@ async function create(input: CategoryInput): Promise<Category> {
             company_id: companyId,
             name: input.name,
             slug,
-            config: input.config
+            config: input.config,
+            warranty_days: input.warranty_days || 90
         })
         .select()
         .single();
@@ -80,6 +82,7 @@ async function create(input: CategoryInput): Promise<Category> {
         name: data.name,
         slug: data.slug,
         config: data.config,
+        warranty_days: data.warranty_days || 90,
         created: data.created_at,
         updated: data.updated_at
     };
@@ -108,6 +111,7 @@ async function getById(id: string): Promise<Category | null> {
         name: data.name,
         slug: data.slug,
         config: data.config,
+        warranty_days: data.warranty_days || 90,
         created: data.created_at,
         updated: data.updated_at
     };
@@ -135,7 +139,8 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
         .update({
             name: input.name,
             slug,
-            config: input.config
+            config: input.config,
+            warranty_days: input.warranty_days || 90
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -152,6 +157,7 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
         name: data.name,
         slug: data.slug,
         config: data.config,
+        warranty_days: data.warranty_days || 90,
         created: data.created_at,
         updated: data.updated_at
     };

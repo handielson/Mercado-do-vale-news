@@ -18,6 +18,12 @@ export enum ProductOrigin {
 }
 
 /**
+ * Warranty Type
+ * Defines how warranty is determined for a product
+ */
+export type WarrantyType = 'brand' | 'category' | 'custom';
+
+/**
  * Product Dimensions (Logistics)
  */
 export interface ProductDimensions {
@@ -78,6 +84,10 @@ export interface Product {
     // Gift Product (Brinde)
     is_gift?: boolean;             // If true, applies automatic full discount in POS
 
+    // Warranty Configuration
+    warranty_type: WarrantyType;   // Type of warranty: brand, category, or custom
+    warranty_template_id?: string; // Warranty template ID (only used when warranty_type = 'custom')
+
     // Timestamps
     created: string;
     updated: string;
@@ -109,4 +119,6 @@ export interface ProductInput {
     track_inventory: boolean;
     stock_quantity?: number;
     is_gift?: boolean;
+    warranty_type?: WarrantyType;
+    warranty_template_id?: string;
 }

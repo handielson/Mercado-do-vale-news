@@ -105,6 +105,9 @@ export function BrandsPage() {
                                 Slug
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                                Garantia
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                                 Status
                             </th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -115,7 +118,7 @@ export function BrandsPage() {
                     <tbody className="divide-y divide-slate-100">
                         {brands.length === 0 ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
                                     Nenhuma marca cadastrada
                                 </td>
                             </tr>
@@ -129,6 +132,11 @@ export function BrandsPage() {
                                         <code className="px-2 py-1 bg-slate-100 rounded text-xs">
                                             {brand.slug}
                                         </code>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-slate-600">
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            {brand.warranty_days || 90} dias
+                                        </span>
                                     </td>
                                     <td className="px-6 py-4 text-sm">
                                         {brand.active ? (
