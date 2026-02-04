@@ -114,7 +114,8 @@ async function create(input: ProductInput): Promise<Product> {
             dimensions: input.dimensions || null,
             stock_quantity: input.stock_quantity || 0,
             status: input.status,
-            track_inventory: input.track_inventory
+            track_inventory: input.track_inventory,
+            is_gift: input.is_gift || false
         })
         .select()
         .single();
@@ -154,7 +155,8 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             dimensions: input.dimensions || null,
             stock_quantity: input.stock_quantity || 0,
             status: input.status,
-            track_inventory: input.track_inventory
+            track_inventory: input.track_inventory,
+            is_gift: input.is_gift || false
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -247,6 +249,7 @@ function transformFromDB(row: any): Product {
         images: row.images || [],
         status: row.status || ProductStatus.ACTIVE,
         track_inventory: row.track_inventory !== false,
+        is_gift: row.is_gift || false,
         created: row.created_at,
         updated: row.updated_at
     };

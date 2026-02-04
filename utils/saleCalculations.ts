@@ -1,9 +1,10 @@
 /**
  * Sale Calculations
- * Utility functions for calculating sale totals, discounts, and profit
+ * Utility functions for calculating sale totals, discounts, profit, and payment fees
  */
 
-import { SaleItem, PaymentMethod } from '../types/sale';
+import { SaleItem, PaymentMethod, PaymentMethodType, DeliveryType } from '../types/sale';
+import { PaymentFee } from '../types/payment-fees';
 
 /**
  * Calculate total for a single item
@@ -76,10 +77,100 @@ export const calculateSaleTotals = (items: SaleItem[]) => {
 };
 
 /**
- * Calculate total paid from payment methods
+ * Calculate payment fee based on method, installments, and payment fees table
+ */
+export const calculatePaymentFee = (
+    amount: number, // em centavos
+    method: PaymentMethodType,
+    installments: number = 1,
+    paymentFees: PaymentFee[]
+): { fee_percentage: number; fee_amount: number; total_with_fee: number } => {
+    // Pagamentos à vista não têm taxa
+    if (method === 'money' || method === 'pix' || method === 'debit') {
+        return {
+            fee_percentage: 0,
+            fee_amount: 0,
+            total_with_fee: amount
+        };
+    }
+
+    // Crédito à vista (1x) também não tem taxa
+    if (method === 'credit' && installments === 1) {
+        return {
+            fee_percentage: 0,
+            fee_amount: 0,
+            total_with_fee: amount
+        };
+    }
+
+    // Buscar taxa na tabela
+    const feeConfig = paymentFees.find(
+        f => f.payment_method === method && f.installments === installments
+    );
+
+    if (!feeConfig) {
+        console.warn(`Taxa não configurada para ${method} ${installments}x`);
+        return {
+            fee_percentage: 0,
+            fee_amount: 0,
+            total_with_fee: amount
+        };
+    }
+
+    const fee_percentage = feeConfig.applied_fee;
+    const fee_amount = Math.round(amount * (fee_percentage / 100));
+    const total_with_fee = amount + fee_amount;
+
+    return { fee_percentage, fee_amount, total_with_fee };
+};
+
+/**
+ * Calculate total paid from payment methods (including fees)
  */
 export const calculateTotalPaid = (payments: PaymentMethod[]): number => {
-    return payments.reduce((sum, payment) => sum + payment.amount, 0);
+    return payments.reduce((sum, payment) => {
+        // Usar total_with_fee se existir, senão usar amount
+        const paymentValue = payment.total_with_fee ?? payment.amount ?? 0;
+        return sum + paymentValue;
+    }, 0);
+};
+
+/**
+ * Calculate delivery discount based on delivery type
+ */
+export const calculateDeliveryDiscount = (
+    deliveryType: DeliveryType | undefined,
+    deliveryCostStore: number
+): number => {
+    if (!deliveryType || deliveryType === 'store_pickup') {
+        return 0;
+    }
+
+    // Entrega pela loja: desconto integral (R$ 30)
+    if (deliveryType === 'store_delivery') {
+        return deliveryCostStore;
+    }
+
+    // Entrega híbrida: desconto parcial (parte da loja)
+    if (deliveryType === 'hybrid_delivery') {
+        return deliveryCostStore;
+    }
+
+    return 0;
+};
+
+/**
+ * Calculate total delivery cost (for customer)
+ */
+export const calculateDeliveryTotal = (
+    deliveryType: DeliveryType | undefined,
+    deliveryCostCustomer: number
+): number => {
+    if (!deliveryType || deliveryType === 'store_pickup') {
+        return 0;
+    }
+
+    return deliveryCostCustomer;
 };
 
 /**
@@ -128,14 +219,21 @@ export const formatCurrency = (centavos: number): string => {
 /**
  * Get payment method label in Portuguese
  */
-export const getPaymentMethodLabel = (method: string): string => {
+export const getPaymentMethodLabel = (method: string, installments?: number): string => {
     const labels: Record<string, string> = {
         money: 'Dinheiro',
         credit: 'Cartão de Crédito',
         debit: 'Cartão de Débito',
         pix: 'PIX'
     };
-    return labels[method] || method;
+
+    const baseLabel = labels[method] || method;
+
+    if (method === 'credit' && installments && installments > 1) {
+        return `${baseLabel} ${installments}x`;
+    }
+
+    return baseLabel;
 };
 
 /**
@@ -149,4 +247,19 @@ export const getPaymentMethodIcon = (method: string): string => {
         pix: '📱'
     };
     return icons[method] || '💰';
+};
+
+/**
+ * Get delivery type label in Portuguese
+ */
+export const getDeliveryTypeLabel = (deliveryType: DeliveryType | undefined): string => {
+    if (!deliveryType) return 'Não definido';
+
+    const labels: Record<DeliveryType, string> = {
+        store_pickup: 'Retirada na Loja',
+        store_delivery: 'Entrega pela Loja',
+        hybrid_delivery: 'Entrega Híbrida'
+    };
+
+    return labels[deliveryType];
 };

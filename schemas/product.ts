@@ -36,6 +36,9 @@ export const productSchema = z.object({
         errorMap: () => ({ message: 'Status inválido' })
     }),
 
+    // Gift Product Flag
+    is_gift: z.boolean().optional().default(false),
+
     // Fiscal Fields - Accept null, empty strings, and undefined
     ncm: z.string().max(8).nullable().optional()
         .transform(val => !val || val === '' ? undefined : val),

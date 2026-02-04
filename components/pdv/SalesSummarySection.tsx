@@ -5,8 +5,12 @@ import {
     calculateSaleTotals,
     calculateProfitMargin,
     isPaymentComplete,
-    formatCurrency
+    formatCurrency,
+    getPaymentMethodLabel,
+    getPaymentMethodIcon
 } from '../../utils/saleCalculations';
+
+import { DeliveryType } from '../../types/sale';
 
 interface Customer {
     id: string;
@@ -17,6 +21,9 @@ interface SalesSummarySectionProps {
     items: SaleItem[];
     customer?: Customer;
     payments: PaymentMethod[];
+    deliveryType?: DeliveryType;
+    deliveryCostStore?: number; // em centavos
+    deliveryCostCustomer?: number; // em centavos
     onFinalizeSale: () => Promise<void>;
 }
 
@@ -24,10 +31,14 @@ export default function SalesSummarySection({
     items,
     customer,
     payments,
+    deliveryType,
+    deliveryCostStore = 0,
+    deliveryCostCustomer = 0,
     onFinalizeSale
 }: SalesSummarySectionProps) {
     const { subtotal, discount_total, total, cost_total, profit } = calculateSaleTotals(items);
     const profitMargin = calculateProfitMargin(profit, total);
+    const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
     const paymentComplete = isPaymentComplete(total, payments);
 
     const canFinalize = items.length > 0 && customer && paymentComplete;
@@ -83,15 +94,55 @@ export default function SalesSummarySection({
                 {discount_total > 0 && (
                     <div className="flex justify-between text-sm">
                         <span className="text-slate-600">Desconto:</span>
-                        <span className="font-medium text-green-600">-{formatCurrency(discount_total)}</span>
+                        <span className="font-medium text-red-600">-{formatCurrency(discount_total)}</span>
+                    </div>
+                )}
+
+                {/* Custo integral da entrega (quando há entrega) */}
+                {(deliveryCostStore > 0 || deliveryCostCustomer > 0) && (
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Entrega:</span>
+                        <span className="font-medium">+{formatCurrency(deliveryCostStore + deliveryCostCustomer)}</span>
+                    </div>
+                )}
+
+                {/* Desconto da entrega (loja paga) */}
+                {deliveryCostStore > 0 && (
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Desconto Entrega (Loja):</span>
+                        <span className="font-medium text-red-600">-{formatCurrency(deliveryCostStore)}</span>
                     </div>
                 )}
 
                 <div className="flex justify-between text-lg font-bold border-t border-slate-200 pt-2">
                     <span className="text-slate-800">Total:</span>
-                    <span className="text-blue-700">{formatCurrency(total)}</span>
+                    <span className="text-blue-700">{formatCurrency(total + deliveryCostCustomer)}</span>
                 </div>
             </div>
+
+            {/* Detalhamento de Pagamentos */}
+            {payments.length > 0 && (
+                <div className="border-t border-slate-200 pt-4 mb-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Pagamentos Recebidos:</h4>
+                    <div className="space-y-2">
+                        {payments.map((payment, index) => (
+                            <div key={index} className="flex justify-between text-sm">
+                                <span className="text-slate-600 flex items-center gap-1">
+                                    <span className="text-base">{getPaymentMethodIcon(payment.method)}</span>
+                                    {getPaymentMethodLabel(payment.method)}:
+                                </span>
+                                <span className="font-medium text-slate-800">
+                                    {formatCurrency(payment.amount)}
+                                </span>
+                            </div>
+                        ))}
+                        <div className="flex justify-between text-sm font-bold border-t border-slate-200 pt-2 mt-2">
+                            <span className="text-slate-700">Total Pago:</span>
+                            <span className="text-green-600">{formatCurrency(totalPaid)}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Lucro */}
             <div className="p-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg mb-4">
@@ -143,8 +194,8 @@ export default function SalesSummarySection({
                 onClick={handleFinalize}
                 disabled={!canFinalize || isProcessing}
                 className={`w-full py-3 rounded-lg font-semibold text-white transition-all flex items-center justify-center gap-2 ${canFinalize && !isProcessing
-                        ? 'bg-green-600 hover:bg-green-700 shadow-lg hover:shadow-xl'
-                        : 'bg-slate-300 cursor-not-allowed'
+                    ? 'bg-green-600 hover:bg-green-700 shadow-lg hover:shadow-xl'
+                    : 'bg-slate-300 cursor-not-allowed'
                     }`}
             >
                 {isProcessing ? (

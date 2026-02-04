@@ -5,12 +5,16 @@ import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, P
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, clientType, logout } = useAuth();
   const { settings } = useTheme();
   const location = useLocation();
   const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
+
+  // Atualizar título da página automaticamente baseado na rota
+  usePageTitle();
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
@@ -156,6 +160,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<BookOpen size={18} />}
             label="Diário de Dev"
             active={location.pathname === '/admin/dev-diary'}
+          />
+          <NavItem
+            to="/test-tabs"
+            icon={<Tags size={18} />}
+            label="🧪 Teste de Abas"
+            active={location.pathname === '/test-tabs'}
           />
           <NavItem
             to="/admin/settings"

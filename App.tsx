@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { router } from './routes/index';
+import { useFavicon } from './hooks/useFavicon';
 
 /**
  * App Root
@@ -13,6 +14,9 @@ import { router } from './routes/index';
  * All logic is delegated to specialized contexts and the router.
  */
 const App: React.FC = () => {
+  // Aplicar favicon e título da empresa dinamicamente
+  useFavicon();
+
   return (
     <HelmetProvider>
       <AuthProvider>

@@ -10,8 +10,17 @@ export type PaymentMethodType = 'money' | 'credit' | 'debit' | 'pix';
 
 export interface PaymentMethod {
     method: PaymentMethodType;
-    amount: number; // em centavos
+    amount: number; // Valor BASE em centavos (sem taxa)
+    installments?: number; // Número de parcelas (apenas para credit)
+    fee_percentage?: number; // Taxa aplicada (%)
+    fee_amount?: number; // Valor da taxa em centavos
+    total_with_fee: number; // Valor total (amount + fee_amount)
 }
+
+/**
+ * Delivery Types
+ */
+export type DeliveryType = 'store_pickup' | 'store_delivery' | 'hybrid_delivery';
 
 /**
  * Sale Item (Carrinho)
@@ -28,6 +37,9 @@ export interface SaleItem {
     subtotal: number; // unit_price * quantity
     total: number; // subtotal - (discount * quantity)
     is_gift: boolean;
+    // Controle de estoque
+    track_inventory: boolean; // Se o produto controla estoque
+    stock_quantity?: number; // Quantidade em estoque
 }
 
 /**
@@ -45,6 +57,17 @@ export interface Sale {
     payment_methods: PaymentMethod[];
     notes?: string;
     status: 'completed' | 'cancelled' | 'refunded';
+
+    // Delivery fields
+    delivery_type?: DeliveryType;
+    delivery_person_id?: string;
+    delivery_cost_store?: number; // em centavos
+    delivery_cost_customer?: number; // em centavos
+    delivery_total?: number; // em centavos
+
+    // Discount fields
+    promotional_discount?: number; // em centavos
+
     created_at: string;
     updated_at: string;
 }
@@ -58,6 +81,16 @@ export interface SaleInput {
     items: SaleItem[];
     payment_methods: PaymentMethod[];
     notes?: string;
+
+    // Delivery fields
+    delivery_type?: DeliveryType;
+    delivery_person_id?: string;
+    delivery_cost_store?: number; // em centavos
+    delivery_cost_customer?: number; // em centavos
+    delivery_total?: number; // em centavos
+
+    // Discount fields
+    promotional_discount?: number; // em centavos
 }
 
 /**
@@ -99,4 +132,31 @@ export interface SaleSummary {
     total_cost: number; // em centavos
     average_ticket: number; // em centavos
     profit_margin: number; // percentual (0-100)
+}
+
+/**
+ * Delivery Credit (créditos de entregador)
+ */
+export interface DeliveryCredit {
+    id: string;
+    delivery_person_id: string;
+    sale_id: string;
+    amount: number; // em centavos
+    delivery_type: DeliveryType;
+    status: 'pending' | 'paid' | 'cancelled';
+    paid_at?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+/**
+ * Delivery Person Earnings (resumo de ganhos)
+ */
+export interface DeliveryPersonEarnings {
+    delivery_person_id: string;
+    delivery_person_name: string;
+    total_deliveries: number;
+    total_earnings: number; // em centavos
+    pending_earnings: number; // em centavos
+    paid_earnings: number; // em centavos
 }

@@ -31,6 +31,7 @@ import TeamFormPage from '../pages/team/TeamFormPage';
 import TeamListPage from '../pages/team/TeamListPage';
 import PDVPage from '../pages/pdv/PDVPage';
 import { CompanyDataPage } from '../pages/admin/settings/CompanyDataPage';
+import { TabsTestPage } from '../pages/test/TabsTestPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => (
@@ -312,6 +313,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <PDVPage />
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/test-tabs",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><TabsTestPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

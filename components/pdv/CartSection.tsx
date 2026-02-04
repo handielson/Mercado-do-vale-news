@@ -88,16 +88,20 @@ export default function CartSection({
                                                 <input
                                                     type="number"
                                                     min="1"
+                                                    max={item.track_inventory ? item.stock_quantity : undefined}
                                                     value={item.quantity}
                                                     onChange={(e) => {
                                                         const qty = parseInt(e.target.value) || 1;
-                                                        onUpdateQuantity(item.id, qty);
+                                                        const maxQty = item.track_inventory ? (item.stock_quantity || 0) : Infinity;
+                                                        onUpdateQuantity(item.id, Math.min(qty, maxQty));
                                                     }}
                                                     className="w-14 px-2 py-1 border border-slate-300 rounded text-center"
                                                 />
                                                 <button
                                                     onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                                                    className="w-7 h-7 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100"
+                                                    disabled={item.track_inventory && item.stock_quantity !== undefined && item.quantity >= item.stock_quantity}
+                                                    className="w-7 h-7 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    title={item.track_inventory && item.quantity >= (item.stock_quantity || 0) ? `Estoque máximo: ${item.stock_quantity}` : ''}
                                                 >
                                                     +
                                                 </button>

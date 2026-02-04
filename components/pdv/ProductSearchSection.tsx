@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Plus, Package } from 'lucide-react';
 import { Product } from '../../types/product';
 import { toast } from 'sonner';
@@ -13,28 +13,51 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     const [isSearching, setIsSearching] = useState(false);
     const [quantities, setQuantities] = useState<Record<string, number>>({});
 
+    // Busca automática com debounce
+    useEffect(() => {
+        // Não buscar se o termo for muito curto
+        if (searchTerm.trim().length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        // Debounce: esperar 500ms após parar de digitar
+        const timeoutId = setTimeout(() => {
+            handleSearch();
+        }, 500);
+
+        // Limpar timeout se o usuário continuar digitando
+        return () => clearTimeout(timeoutId);
+    }, [searchTerm]);
+
     // Buscar produtos
     const handleSearch = async () => {
-        if (!searchTerm.trim()) {
-            toast.error('Digite algo para buscar');
+        const term = searchTerm.trim();
+
+        if (term.length < 2) {
+            setSearchResults([]);
             return;
         }
 
         setIsSearching(true);
         try {
-            // TODO: Implementar busca real com Supabase
-            // Buscar por: name, sku, eans (array), imei1, imei2
+            // Importar dynamicamente para evitar circular dependency
+            const { searchProducts } = await import('../../services/productService');
 
-            // Simulação temporária
-            await new Promise(resolve => setTimeout(resolve, 500));
+            const results = await searchProducts(term);
 
-            // Mock de resultados
-            const mockResults: Product[] = [];
-            setSearchResults(mockResults);
+            // Filtrar produtos sem estoque (apenas se track_inventory = true)
+            const availableProducts = results.filter(product => {
+                // Se não controla estoque, sempre disponível
+                if (!product.track_inventory) return true;
 
-            if (mockResults.length === 0) {
-                toast.info('Nenhum produto encontrado');
-            }
+                // Se controla estoque, verificar se tem quantidade > 0
+                return product.stock_quantity !== undefined && product.stock_quantity > 0;
+            });
+
+            setSearchResults(availableProducts);
+
+            // Não mostrar toast em busca automática, apenas em Enter
         } catch (error) {
             console.error('Erro ao buscar produtos:', error);
             toast.error('Erro ao buscar produtos');
@@ -83,29 +106,29 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             </h3>
 
             {/* Campo de Busca */}
-            <div className="flex gap-2 mb-4">
-                <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Nome, SKU, Código de Barras, IMEI..."
-                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    autoFocus
-                />
-                <button
-                    onClick={handleSearch}
-                    disabled={isSearching}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                >
-                    <Search size={18} />
-                    {isSearching ? 'Buscando...' : 'Buscar'}
-                </button>
+            <div className="mb-4">
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder="Digite para buscar: Nome, SKU, Código de Barras, IMEI..."
+                        className="w-full px-4 py-2 pl-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        autoFocus
+                    />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+                    {isSearching && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Dica de Busca */}
             <p className="text-xs text-slate-500 mb-4">
-                💡 Busque por nome, SKU, código de barras (EAN), IMEI1 ou IMEI2
+                💡 Digite pelo menos 2 caracteres para buscar automaticamente
             </p>
 
             {/* Resultados */}
@@ -169,7 +192,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                             )}
                                         </p>
                                         {product.track_inventory && (
-                                            <p className="text-sm text-slate-500">
+                                            <p className={`text-sm ${product.stock_quantity === 0 ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
                                                 Estoque: {product.stock_quantity || 0} un.
                                             </p>
                                         )}
@@ -181,16 +204,23 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                     <input
                                         type="number"
                                         min="1"
+                                        max={product.track_inventory ? product.stock_quantity : undefined}
                                         value={quantity}
-                                        onChange={(e) => updateQuantity(product.id, parseInt(e.target.value) || 1)}
+                                        onChange={(e) => {
+                                            const newQty = parseInt(e.target.value) || 1;
+                                            const maxQty = product.track_inventory ? (product.stock_quantity || 0) : Infinity;
+                                            updateQuantity(product.id, Math.min(newQty, maxQty));
+                                        }}
                                         className="w-16 px-2 py-1 border border-slate-300 rounded text-center"
+                                        disabled={product.track_inventory && product.stock_quantity === 0}
                                     />
                                     <button
                                         onClick={() => handleAddToCart(product)}
-                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                                        disabled={product.track_inventory && product.stock_quantity === 0}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
                                     >
                                         <Plus size={18} />
-                                        Adicionar
+                                        {product.track_inventory && product.stock_quantity === 0 ? 'Sem Estoque' : 'Adicionar'}
                                     </button>
                                 </div>
                             </div>

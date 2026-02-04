@@ -10,22 +10,34 @@ import {
     getPaymentMethodIcon
 } from '../../utils/saleCalculations';
 import { toast } from 'sonner';
+import InstallmentCalculator from './InstallmentCalculator';
 
 interface PaymentSectionProps {
     total: number; // em centavos
     payments: PaymentMethod[];
     onAddPayment: (payment: PaymentMethod) => void;
     onRemovePayment: (index: number) => void;
+    // Props opcionais para calculadora de parcelamento
+    paymentFees?: any[];
+    onSelectInstallment?: (installments: number, amount: number) => void;
+    // Props opcionais para desconto promocional
+    promotionalDiscount?: number;
+    onPromotionalDiscountChange?: (discount: number) => void;
 }
 
 export default function PaymentSection({
     total,
     payments,
     onAddPayment,
-    onRemovePayment
+    onRemovePayment,
+    paymentFees,
+    onSelectInstallment,
+    promotionalDiscount,
+    onPromotionalDiscountChange
 }: PaymentSectionProps) {
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('money');
     const [paymentAmount, setPaymentAmount] = useState('');
+    const [discountInput, setDiscountInput] = useState('');
 
     const totalPaid = calculateTotalPaid(payments);
     const remaining = calculateRemaining(total, payments);
@@ -48,7 +60,8 @@ export default function PaymentSection({
 
         const payment: PaymentMethod = {
             method: selectedMethod,
-            amount: Math.round(amount)
+            amount: Math.round(amount),
+            total_with_fee: Math.round(amount) // Sem taxa por enquanto
         };
 
         onAddPayment(payment);
@@ -75,6 +88,57 @@ export default function PaymentSection({
                 <CreditCard size={20} />
                 Pagamento
             </h3>
+
+            {/* Desconto Promocional - logo após o título Pagamento */}
+            {!isComplete && onPromotionalDiscountChange && (
+                <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                        <span className="text-lg">💰</span>
+                        Desconto Promocional
+                    </h4>
+                    <div className="flex gap-2">
+                        <div className="flex-1">
+                            <input
+                                type="text"
+                                value={discountInput}
+                                onChange={(e) => {
+                                    const rawValue = e.target.value.replace(/[^\d,.]/g, '');
+                                    setDiscountInput(rawValue);
+                                }}
+                                onBlur={() => {
+                                    const cleanValue = discountInput.replace(',', '.');
+                                    const value = parseFloat(cleanValue) * 100;
+                                    onPromotionalDiscountChange(isNaN(value) || value < 0 ? 0 : Math.round(value));
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        const cleanValue = discountInput.replace(',', '.');
+                                        const value = parseFloat(cleanValue) * 100;
+                                        onPromotionalDiscountChange(isNaN(value) || value < 0 ? 0 : Math.round(value));
+                                        e.currentTarget.blur(); // Remove o foco do input
+                                    }
+                                }}
+                                placeholder="0,00"
+                                className="w-full px-4 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                            />
+                        </div>
+                        <button
+                            onClick={() => {
+                                setDiscountInput('');
+                                onPromotionalDiscountChange(0);
+                            }}
+                            className="px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-colors text-sm font-medium"
+                        >
+                            Limpar
+                        </button>
+                    </div>
+                    {promotionalDiscount > 0 && (
+                        <p className="text-xs text-amber-700 mt-2">
+                            Desconto aplicado: {formatCurrency(promotionalDiscount)}
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* Total a Pagar */}
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
@@ -137,80 +201,83 @@ export default function PaymentSection({
                 )}
             </div>
 
-            {/* Adicionar Novo Pagamento */}
+            {/* Adicionar Novo Pagamento - PIX | Dinheiro | Débito */}
             {!isComplete && (
-                <div className="space-y-3">
-                    <h4 className="text-sm font-medium text-slate-700">Adicionar Pagamento:</h4>
+                <div className="space-y-3 mb-4">
+                    <h4 className="text-sm font-medium text-slate-700">Formas de Pagamento:</h4>
 
-                    {/* Método de Pagamento */}
-                    <div className="grid grid-cols-4 gap-2">
+                    {/* PIX | Dinheiro | Débito */}
+                    <div className="grid grid-cols-3 gap-2">
+                        <button
+                            onClick={() => setSelectedMethod('pix')}
+                            className={`p-3 border-2 rounded-lg transition-all ${selectedMethod === 'pix'
+                                ? 'border-cyan-600 bg-cyan-50'
+                                : 'border-slate-200 hover:border-slate-300'
+                                }`}
+                        >
+                            <Smartphone size={24} className="mx-auto mb-1" />
+                            <p className="text-xs font-medium">PIX</p>
+                        </button>
                         <button
                             onClick={() => setSelectedMethod('money')}
                             className={`p-3 border-2 rounded-lg transition-all ${selectedMethod === 'money'
-                                    ? 'border-green-600 bg-green-50'
-                                    : 'border-slate-200 hover:border-slate-300'
+                                ? 'border-green-600 bg-green-50'
+                                : 'border-slate-200 hover:border-slate-300'
                                 }`}
                         >
                             <DollarSign size={24} className="mx-auto mb-1" />
                             <p className="text-xs font-medium">Dinheiro</p>
                         </button>
                         <button
-                            onClick={() => setSelectedMethod('credit')}
-                            className={`p-3 border-2 rounded-lg transition-all ${selectedMethod === 'credit'
-                                    ? 'border-blue-600 bg-blue-50'
-                                    : 'border-slate-200 hover:border-slate-300'
-                                }`}
-                        >
-                            <CreditCard size={24} className="mx-auto mb-1" />
-                            <p className="text-xs font-medium">Crédito</p>
-                        </button>
-                        <button
                             onClick={() => setSelectedMethod('debit')}
                             className={`p-3 border-2 rounded-lg transition-all ${selectedMethod === 'debit'
-                                    ? 'border-purple-600 bg-purple-50'
-                                    : 'border-slate-200 hover:border-slate-300'
+                                ? 'border-purple-600 bg-purple-50'
+                                : 'border-slate-200 hover:border-slate-300'
                                 }`}
                         >
                             <CreditCard size={24} className="mx-auto mb-1" />
                             <p className="text-xs font-medium">Débito</p>
                         </button>
-                        <button
-                            onClick={() => setSelectedMethod('pix')}
-                            className={`p-3 border-2 rounded-lg transition-all ${selectedMethod === 'pix'
-                                    ? 'border-cyan-600 bg-cyan-50'
-                                    : 'border-slate-200 hover:border-slate-300'
-                                }`}
-                        >
-                            <Smartphone size={24} className="mx-auto mb-1" />
-                            <p className="text-xs font-medium">PIX</p>
-                        </button>
                     </div>
 
-                    {/* Valor */}
-                    <div className="flex gap-2">
-                        <div className="flex-1">
-                            <input
-                                type="text"
-                                value={paymentAmount}
-                                onChange={(e) => setPaymentAmount(e.target.value)}
-                                onKeyPress={handleKeyPress}
-                                placeholder="0,00"
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
+                    {/* Valor - Mostrar para PIX, Dinheiro ou Débito */}
+                    {(selectedMethod === 'money' || selectedMethod === 'pix' || selectedMethod === 'debit') && (
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <input
+                                    type="text"
+                                    value={paymentAmount}
+                                    onChange={(e) => setPaymentAmount(e.target.value)}
+                                    onKeyPress={handleKeyPress}
+                                    placeholder="0,00"
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                            <button
+                                onClick={fillRemaining}
+                                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm"
+                            >
+                                Restante
+                            </button>
+                            <button
+                                onClick={handleAddPayment}
+                                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                            >
+                                Adicionar
+                            </button>
                         </div>
-                        <button
-                            onClick={fillRemaining}
-                            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm"
-                        >
-                            Restante
-                        </button>
-                        <button
-                            onClick={handleAddPayment}
-                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                        >
-                            Adicionar
-                        </button>
-                    </div>
+                    )}
+                </div>
+            )}
+
+            {/* Calculadora de Parcelamento - aparece quando há saldo restante */}
+            {remaining > 0 && paymentFees && onSelectInstallment && (
+                <div className="mb-4">
+                    <InstallmentCalculator
+                        remainingBalance={remaining}
+                        paymentFees={paymentFees}
+                        onSelectInstallment={onSelectInstallment}
+                    />
                 </div>
             )}
         </div>
