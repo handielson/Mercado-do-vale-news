@@ -34,6 +34,8 @@ import { CompanyDataPage } from '../pages/admin/settings/CompanyDataPage';
 import DocumentSettingsPage from '../pages/admin/settings/DocumentSettingsPage';
 import WarrantyTemplatesPage from '../pages/admin/settings/WarrantyTemplatesPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
+import CatalogPage from '../pages/catalog/index';
+
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => (
@@ -341,6 +343,10 @@ export const router = createBrowserRouter([
         <AdminLayout><TabsTestPage /></AdminLayout>
       </ProtectedRoute>
     )
+  },
+  {
+    path: "/catalog",
+    element: <CatalogPage />
   },
   {
     path: "/store",
