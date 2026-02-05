@@ -33,6 +33,8 @@ import PDVPage from '../pages/pdv/PDVPage';
 import { CompanyDataPage } from '../pages/admin/settings/CompanyDataPage';
 import DocumentSettingsPage from '../pages/admin/settings/DocumentSettingsPage';
 import WarrantyTemplatesPage from '../pages/admin/settings/WarrantyTemplatesPage';
+import BannerManagementPage from '../pages/admin/settings/BannerManagementPage';
+import CatalogSettingsPage from '../pages/admin/settings/CatalogSettingsPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
 
@@ -325,6 +327,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><TeamFormPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/banners",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><BannerManagementPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/catalog",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><CatalogSettingsPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

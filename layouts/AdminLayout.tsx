@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -82,6 +82,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             label="PDV"
             active={location.pathname.startsWith('/admin/pdv')}
           />
+          <NavItem
+            to="/catalog"
+            icon={<BookOpen size={18} />}
+            label="Catálogo"
+            active={location.pathname.startsWith('/catalog')}
+          />
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Configuração</div>
           <NavItem
             to="/admin/settings/categories"
@@ -160,6 +166,18 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<Shield size={18} />}
             label="Garantias"
             active={location.pathname.startsWith('/admin/settings/warranty-templates')}
+          />
+          <NavItem
+            to="/admin/settings/banners"
+            icon={<Image size={18} />}
+            label="Banners"
+            active={location.pathname.startsWith('/admin/settings/banners')}
+          />
+          <NavItem
+            to="/admin/settings/catalog"
+            icon={<Settings size={18} />}
+            label="Catálogo"
+            active={location.pathname.startsWith('/admin/settings/catalog')}
           />
           <NavItem
             to="/admin/governance"
