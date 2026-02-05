@@ -4,6 +4,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import { RouterProvider } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider } from './contexts/AuthContext';
+import { SupabaseAuthProvider } from './contexts/SupabaseAuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { router } from './routes/index';
 import { useFavicon } from './hooks/useFavicon';
@@ -19,17 +20,19 @@ const App: React.FC = () => {
 
   return (
     <HelmetProvider>
-      <AuthProvider>
-        <ThemeProvider>
-          <RouterProvider router={router} />
-          <Toaster
-            position="top-right"
-            richColors
-            closeButton
-            duration={3000}
-          />
-        </ThemeProvider>
-      </AuthProvider>
+      <SupabaseAuthProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            <RouterProvider router={router} />
+            <Toaster
+              position="top-right"
+              richColors
+              closeButton
+              duration={3000}
+            />
+          </ThemeProvider>
+        </AuthProvider>
+      </SupabaseAuthProvider>
     </HelmetProvider>
   );
 };

@@ -10,6 +10,7 @@ export interface CustomerAddress {
 
 export interface Customer {
     id: string;
+    user_id?: string | null;  // Link to auth.users - null if account not activated
     company_id: string;
     name: string;
     cpf_cnpj?: string;
@@ -23,6 +24,7 @@ export interface Customer {
     admin_notes?: string;
     custom_data?: Record<string, any>;
     is_active: boolean;
+    account_status?: 'pending' | 'active';  // Account activation status
     created_at: string;
     updated_at: string;
 }

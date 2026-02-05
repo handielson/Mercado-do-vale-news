@@ -2,6 +2,12 @@
 import React from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from '../pages/auth/LoginPage';
+import { ClienteLoginPage } from '../pages/auth/ClienteLoginPage';
+import { CadastroPage } from '../pages/auth/CadastroPage';
+import { AuthCallbackPage } from '../pages/auth/AuthCallbackPage';
+import { CompletarCadastroPage } from '../pages/auth/CompletarCadastroPage';
+import { RecuperarSenhaPage } from '../pages/auth/RecuperarSenhaPage';
+import { RedefinirSenhaPage } from '../pages/auth/RedefinirSenhaPage';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { ClientTypes } from '../utils/field-standards';
 import { ProductListPage } from '../pages/admin/products/ProductListPage';
@@ -35,8 +41,11 @@ import DocumentSettingsPage from '../pages/admin/settings/DocumentSettingsPage';
 import WarrantyTemplatesPage from '../pages/admin/settings/WarrantyTemplatesPage';
 import BannerManagementPage from '../pages/admin/settings/BannerManagementPage';
 import CatalogSettingsPage from '../pages/admin/settings/CatalogSettingsPage';
+import PermissionsManagementPage from '../pages/admin/settings/PermissionsManagementPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
+import LegacyMigrationPage from '../pages/LegacyMigration';
+import FieldMappingPage from '../pages/FieldMappingPage';
 
 
 // Temporary components (will be moved to separate files in next phase)
@@ -77,9 +86,35 @@ const StorePage = () => (
 import { AdminLayout } from '../layouts/AdminLayout';
 
 export const router = createBrowserRouter([
+  // Admin Authentication (PocketBase)
   {
     path: "/login",
     element: <LoginPage />
+  },
+  // Customer Authentication (Supabase)
+  {
+    path: "/cliente/login",
+    element: <ClienteLoginPage />
+  },
+  {
+    path: "/cliente/cadastro",
+    element: <CadastroPage />
+  },
+  {
+    path: "/auth/callback",
+    element: <AuthCallbackPage />
+  },
+  {
+    path: "/completar-cadastro",
+    element: <CompletarCadastroPage />
+  },
+  {
+    path: "/recuperar-senha",
+    element: <RecuperarSenhaPage />
+  },
+  {
+    path: "/redefinir-senha",
+    element: <RedefinirSenhaPage />
   },
   {
     path: "/admin",
@@ -347,6 +382,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/admin/settings/permissions",
+    element: (
+      <ProtectedRoute requiredRole={ClientTypes.ADMIN}>
+        <AdminLayout><PermissionsManagementPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
     path: "/admin/pdv",
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
@@ -359,6 +402,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
         <AdminLayout><TabsTestPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/migration",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><LegacyMigrationPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/field-mapping",
+    element: (
+      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+        <AdminLayout><FieldMappingPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
