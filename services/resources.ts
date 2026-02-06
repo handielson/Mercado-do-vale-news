@@ -2,7 +2,7 @@
 /**
  * RESOURCE SERVICES
  * Centralized service for managing auxiliary resources (brands, models, colors)
- * Hybrid pattern: Mock data in DEV, PocketBase in PROD
+ * Hybrid pattern: Mock data in DEV, Supabase in PROD
  */
 
 const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
@@ -38,7 +38,7 @@ export const brandService = {
             await delay();
             return [...mockBrands];
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return mockBrands;
     },
 
@@ -51,7 +51,7 @@ export const brandService = {
             }
             return name;
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return name;
     }
 };
@@ -66,7 +66,7 @@ export const modelService = {
             await delay();
             return [...mockModels];
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return mockModels;
     },
 
@@ -79,7 +79,7 @@ export const modelService = {
             }
             return name;
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return name;
     }
 };
@@ -94,7 +94,7 @@ export const colorService = {
             await delay();
             return [...mockColors];
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return mockColors;
     },
 
@@ -107,7 +107,7 @@ export const colorService = {
             }
             return name;
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return name;
     },
 
@@ -130,7 +130,7 @@ export const capacityService = {
             await delay();
             return [...mockCapacities];
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return mockCapacities;
     },
 
@@ -143,7 +143,7 @@ export const capacityService = {
             }
             return name;
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return name;
     }
 };
@@ -158,7 +158,7 @@ export const versionService = {
             await delay();
             return [...mockVersions];
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return mockVersions;
     },
 
@@ -171,7 +171,7 @@ export const versionService = {
             }
             return name;
         }
-        // TODO: PocketBase integration
+        // TODO: Supabase integration
         return name;
     }
 };
