@@ -56,6 +56,12 @@ export function useCatalog(options: UseCatalogOptions = {}) {
 
             setHasMore(response.hasMore);
         } catch (err: any) {
+            // Ignore abort errors - they're expected when requests are cancelled
+            if (err.name === 'AbortError') {
+                console.log('[useCatalog] Request was aborted (expected behavior)');
+                return;
+            }
+
             console.error('Erro ao carregar produtos:', err);
             setError(err.message || 'Erro ao carregar produtos');
         } finally {

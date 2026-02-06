@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, Link as LinkIcon } from 'lucide-react';
 import type { CatalogBanner } from '@/types/catalog';
+import { uploadService } from '@/services/uploadService';
 
 interface BannerFormProps {
     banner?: CatalogBanner;
@@ -30,27 +31,34 @@ export const BannerForm: React.FC<BannerFormProps> = ({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleImageUpload = async (file: File) => {
-        if (!file.type.startsWith('image/')) {
-            alert('Por favor, selecione uma imagem válida');
+        // Validar arquivo antes de fazer upload
+        const validation = uploadService.validateImageFile(file);
+        if (!validation.valid) {
+            alert(validation.error);
             return;
         }
 
         setIsUploading(true);
         try {
-            // Create preview
+            // Create preview local primeiro para feedback imediato
             const reader = new FileReader();
             reader.onloadend = () => {
                 setImagePreview(reader.result as string);
             };
             reader.readAsDataURL(file);
 
-            // TODO: Upload to Supabase Storage
-            // For now, use base64 or placeholder
-            const imageUrl = URL.createObjectURL(file);
+            // Fazer upload real para Supabase Storage
+            const imageUrl = await uploadService.uploadBannerImage(file);
+
+            // Atualizar com a URL pública do Supabase
             setFormData(prev => ({ ...prev, image_url: imageUrl }));
-        } catch (error) {
+            setImagePreview(imageUrl);
+        } catch (error: any) {
             console.error('Erro ao fazer upload:', error);
-            alert('Erro ao fazer upload da imagem');
+            alert(error.message || 'Erro ao fazer upload da imagem');
+            // Limpar preview em caso de erro
+            setImagePreview('');
+            setFormData(prev => ({ ...prev, image_url: '' }));
         } finally {
             setIsUploading(false);
         }
@@ -124,7 +132,13 @@ export const BannerForm: React.FC<BannerFormProps> = ({
                             className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors cursor-pointer"
                             onClick={() => fileInputRef.current?.click()}
                         >
-                            {imagePreview ? (
+                            {isUploading ? (
+                                <div className="space-y-3">
+                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                                    <p className="text-blue-600 font-medium">Fazendo upload...</p>
+                                    <p className="text-xs text-gray-500">Aguarde enquanto enviamos sua imagem</p>
+                                </div>
+                            ) : imagePreview ? (
                                 <div className="space-y-4">
                                     <img
                                         src={imagePreview}
