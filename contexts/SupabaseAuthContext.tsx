@@ -74,13 +74,17 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
                 if (session?.user) {
                     // Load customer data in background, don't block
-                    await loadCustomerData(session.user.id).catch(err => {
+                    loadCustomerData(session.user.id).catch(err => {
                         if (!isMounted) return;
                         console.error('[SupabaseAuth] Failed to load customer on auth change:', err)
                     })
                 } else {
                     setCustomer(null)
                 }
+
+                // CRITICAL: Always set loading to false after auth state change
+                // This was missing and causing infinite loading
+                setIsLoading(false)
             }
         )
 
