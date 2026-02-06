@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Link as LinkIcon, QrCode, Eye, EyeOff, Palette, Settings as SettingsIcon } from 'lucide-react';
+import { useRouter } from 'next/router';
+import { Save, Link as LinkIcon, QrCode, Eye, EyeOff, Palette, Settings as SettingsIcon, Edit } from 'lucide-react';
 
 interface CatalogSettings {
     catalog_name: string;
@@ -17,6 +18,7 @@ interface CatalogSettings {
 }
 
 export const CatalogSettingsPage: React.FC = () => {
+    const router = useRouter();
     const [settings, setSettings] = useState<CatalogSettings>({
         catalog_name: 'Catálogo de Produtos',
         catalog_description: 'Confira nossos produtos disponíveis',
@@ -64,14 +66,23 @@ export const CatalogSettingsPage: React.FC = () => {
                     <h1 className="text-3xl font-bold text-gray-900">Configurações do Catálogo</h1>
                     <p className="text-gray-600 mt-1">Personalize a aparência e comportamento do seu catálogo</p>
                 </div>
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                    <Save className="w-5 h-5" />
-                    {saving ? 'Salvando...' : 'Salvar Alterações'}
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => router.push('/admin/catalog-editor')}
+                        className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                        <Edit className="w-5 h-5" />
+                        Editar Catálogo
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                        <Save className="w-5 h-5" />
+                        {saving ? 'Salvando...' : 'Salvar Alterações'}
+                    </button>
+                </div>
             </div>
 
             {/* Informações Gerais */}
