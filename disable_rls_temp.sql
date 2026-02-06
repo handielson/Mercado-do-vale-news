@@ -1,13 +1,7 @@
--- ============================================
--- TEMPORARY: Disable RLS for Testing
--- Run this in Supabase SQL Editor
--- ============================================
+-- Temporary: Disable RLS on customers table for testing
+-- This will allow us to test if RLS is causing the infinite loop
 
--- Disable RLS on all tables temporarily
-ALTER TABLE categories DISABLE ROW LEVEL SECURITY;
-ALTER TABLE brands DISABLE ROW LEVEL SECURITY;
-ALTER TABLE models DISABLE ROW LEVEL SECURITY;
-ALTER TABLE products DISABLE ROW LEVEL SECURITY;
-ALTER TABLE units DISABLE ROW LEVEL SECURITY;
+ALTER TABLE customers DISABLE ROW LEVEL SECURITY;
 
--- Note: We'll re-enable RLS after implementing proper authentication
+-- To re-enable later, run:
+-- ALTER TABLE customers ENABLE ROW LEVEL SECURITY;

@@ -24,9 +24,15 @@ export const ClienteLoginPage: React.FC = () => {
 
         setLoading(true);
         try {
-            await signInWithEmail(email, password);
+            const { customer } = await signInWithEmail(email, password);
             toast.success('Login realizado com sucesso!');
-            navigate('/catalog');
+
+            // Redirect based on customer type
+            if (customer?.customer_type === 'ADMIN') {
+                navigate('/admin/dashboard');
+            } else {
+                navigate('/catalog');
+            }
         } catch (error: any) {
             toast.error(error.message || 'Erro ao fazer login');
         } finally {

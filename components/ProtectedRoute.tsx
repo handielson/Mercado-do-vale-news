@@ -1,33 +1,40 @@
-
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { ClientTypes } from '../utils/field-standards';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: ClientTypes | ClientTypes[];
+  requireAdmin?: boolean;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
-  const { user, clientType, isLoading } = useAuth();
+/**
+ * ProtectedRoute - Supabase Authentication
+ * 
+ * Protects routes requiring authentication
+ * Optionally requires ADMIN customer_type
+ */
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
+  const { user, customer, isLoading, isAdmin } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return null; // Wait for AuthContext to resolve
-
-  console.log('🔒 [ProtectedRoute] user:', user, 'isLoading:', isLoading);
-
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  // Wait for auth to load
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
-  if (requiredRole) {
-    const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-    if (!roles.includes(clientType)) {
-      // If unauthorized, redirect to their default home
-      const target = clientType === ClientTypes.VAREJO ? '/store' : '/admin';
-      return <Navigate to={target} replace />;
-    }
+  // Not logged in - redirect to appropriate login
+  if (!user || !customer) {
+    const loginPath = requireAdmin ? '/admin/login' : '/cliente/login';
+    return <Navigate to={loginPath} state={{ from: location }} replace />;
+  }
+
+  // Requires admin but user is not admin
+  if (requireAdmin && !isAdmin) {
+    return <Navigate to="/catalog" replace />;
   }
 
   return <>{children}</>;

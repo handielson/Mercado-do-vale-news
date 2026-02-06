@@ -7,6 +7,8 @@ import type {
     ActivateAccountData,
     CreateAccountData
 } from '../types/auth'
+import type { TypeUpgradeRequest, RequestedCustomerType } from '../types/typeUpgradeRequest'
+import { createUpgradeRequest, getCustomerUpgradeRequest } from '../services/typeUpgradeRequests'
 import { toast } from 'sonner'
 
 const SupabaseAuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -255,7 +257,8 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     cpf_cnpj: data.cpf_cnpj,
                     email: data.email,
                     phone: data.phone || null,
-                    customer_type: 'retail',
+                    birth_date: data.birth_date || null,
+                    customer_type: data.customer_type || 'retail',
                     is_active: true,
                     account_status: 'active',
                     address: data.address || null
@@ -316,6 +319,32 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             console.error('Sign out error:', error)
             toast.error('Erro ao fazer logout')
             throw error
+        }
+    }
+
+    // Request type upgrade
+    const requestTypeUpgrade = async (requestedType: RequestedCustomerType): Promise<TypeUpgradeRequest> => {
+        if (!customer) throw new Error('No customer logged in')
+
+        try {
+            const request = await createUpgradeRequest(customer.id, requestedType)
+            toast.success('Solicitação enviada com sucesso!')
+            return request
+        } catch (error: any) {
+            toast.error(error.message || 'Erro ao enviar solicitação')
+            throw error
+        }
+    }
+
+    // Get upgrade request status
+    const getUpgradeRequestStatus = async (): Promise<TypeUpgradeRequest | null> => {
+        if (!customer) return null
+
+        try {
+            return await getCustomerUpgradeRequest(customer.id)
+        } catch (error) {
+            console.error('Error getting upgrade request:', error)
+            return null
         }
     }
 
@@ -384,7 +413,9 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             resetPassword,
             updatePassword,
             signOut,
-            updateProfile
+            updateProfile,
+            requestTypeUpgrade,
+            getUpgradeRequestStatus
         }}>
             {children}
         </SupabaseAuthContext.Provider>

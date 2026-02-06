@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { pb } from '../services/pb';
+import { supabase } from '../services/supabase';
 
 interface ThemeSettings {
   company_name: string;
@@ -20,30 +20,23 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<ThemeSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
 
   useEffect(() => {
     async function fetchSettings() {
-      // In dev mode, skip PocketBase and use defaults immediately
-      if (DEV_MODE) {
-        console.log('🔧 DEV MODE: Using default theme settings');
-        setSettings({
-          company_name: 'Mercado do Vale',
-          theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
-        });
-        setIsLoading(false);
-        return;
-      }
-
       try {
-        // Fetch first settings record
-        const record = await pb.collection('settings').getFirstListItem('');
+        // Fetch company settings from Supabase
+        const { data, error } = await supabase
+          .from('company_settings')
+          .select('*')
+          .single();
+
+        if (error) throw error;
 
         const themeSettings: ThemeSettings = {
-          company_name: record.company_name,
-          theme_colors: record.theme_colors || {},
-          logo_main: record.logo_main ? pb.files.getUrl(record, record.logo_main) : undefined,
-          logo_dark: record.logo_dark ? pb.files.getUrl(record, record.logo_dark) : undefined,
+          company_name: data.company_name || 'Mercado do Vale',
+          theme_colors: data.theme_colors || { primary: '#3b82f6', secondary: '#1e293b' },
+          logo_main: data.logo_main,
+          logo_dark: data.logo_dark,
         };
 
         setSettings(themeSettings);
@@ -55,7 +48,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           });
         }
       } catch (error) {
-        console.warn('Failed to load theme settings from PocketBase. Using defaults.');
+        console.warn('Failed to load theme settings from Supabase. Using defaults.', error);
         // Default fallbacks
         setSettings({
           company_name: 'Mercado do Vale',

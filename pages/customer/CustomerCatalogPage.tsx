@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut } from 'lucide-react';
 import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
@@ -6,6 +6,13 @@ import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
 export const CustomerCatalogPage: React.FC = () => {
     const { user, customer, signOut } = useAuth();
     const navigate = useNavigate();
+
+    // Redirect admins to admin dashboard
+    useEffect(() => {
+        if (customer?.customer_type === 'ADMIN') {
+            navigate('/admin/dashboard', { replace: true });
+        }
+    }, [customer, navigate]);
 
     const handleLogout = async () => {
         await signOut();
@@ -29,6 +36,13 @@ export const CustomerCatalogPage: React.FC = () => {
                             </p>
                             <p className="text-xs text-slate-500">{user?.email}</p>
                         </div>
+                        <button
+                            onClick={() => navigate('/perfil')}
+                            className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors border border-blue-200"
+                        >
+                            <User size={18} />
+                            Meu Perfil
+                        </button>
                         <button
                             onClick={handleLogout}
                             className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"

@@ -30,6 +30,10 @@ export interface AuthContextType {
     // Other
     signOut: () => Promise<void>
     updateProfile: (data: Partial<Customer>) => Promise<void>
+
+    // Type upgrade requests
+    requestTypeUpgrade: (requestedType: 'wholesale' | 'resale') => Promise<any>
+    getUpgradeRequestStatus: () => Promise<any>
 }
 
 // Data for activating existing customer account
@@ -47,6 +51,8 @@ export interface CreateAccountData {
     email: string
     phone?: string
     password: string
+    birth_date?: string
+    customer_type?: 'retail' | 'wholesale' | 'resale'
     address?: {
         street?: string
         number?: string

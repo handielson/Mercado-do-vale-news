@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -81,6 +81,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<ShoppingCart size={18} />}
             label="PDV"
             active={location.pathname.startsWith('/admin/pdv')}
+          />
+          <NavItem
+            to="/admin/migration"
+            icon={<Database size={18} />}
+            label="Migração"
+            active={location.pathname.startsWith('/admin/migration')}
           />
           <NavItem
             to="/catalog"
@@ -179,6 +185,14 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             label="Catálogo"
             active={location.pathname.startsWith('/admin/settings/catalog')}
           />
+          {clientType === 'admin' && (
+            <NavItem
+              to="/admin/settings/permissions"
+              icon={<Shield size={18} />}
+              label="Permissões"
+              active={location.pathname.startsWith('/admin/settings/permissions')}
+            />
+          )}
           <NavItem
             to="/admin/governance"
             icon={<Shield size={18} />}

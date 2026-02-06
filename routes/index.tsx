@@ -2,14 +2,19 @@
 import React from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { LoginPage } from '../pages/auth/LoginPage';
+import { AdminLoginPage } from '../pages/auth/AdminLoginPage';
 import { ClienteLoginPage } from '../pages/auth/ClienteLoginPage';
+import { ClienteRegisterPage } from '../pages/auth/ClienteRegisterPage';
 import { CadastroPage } from '../pages/auth/CadastroPage';
 import { AuthCallbackPage } from '../pages/auth/AuthCallbackPage';
 import { CompletarCadastroPage } from '../pages/auth/CompletarCadastroPage';
 import { RecuperarSenhaPage } from '../pages/auth/RecuperarSenhaPage';
 import { RedefinirSenhaPage } from '../pages/auth/RedefinirSenhaPage';
 import { CustomerCatalogPage } from '../pages/customer/CustomerCatalogPage';
+import { CustomerProfilePage } from '../pages/customer/CustomerProfilePage';
+import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage';
 import { ProtectedRoute } from '../components/ProtectedRoute';
+import { SupabaseProtectedRoute } from '../components/SupabaseProtectedRoute';
 import { ClientTypes } from '../utils/field-standards';
 import { ProductListPage } from '../pages/admin/products/ProductListPage';
 import { ProductFormPage } from '../pages/admin/products/ProductFormPage';
@@ -87,10 +92,10 @@ const StorePage = () => (
 import { AdminLayout } from '../layouts/AdminLayout';
 
 export const router = createBrowserRouter([
-  // Admin Authentication (PocketBase)
+  // Admin Authentication (Supabase)
   {
-    path: "/login",
-    element: <LoginPage />
+    path: "/admin/login",
+    element: <AdminLoginPage />
   },
   // Customer Authentication (Supabase)
   {
@@ -99,7 +104,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/cliente/cadastro",
-    element: <CadastroPage />
+    element: <ClienteRegisterPage />
   },
   {
     path: "/auth/callback",
@@ -122,10 +127,24 @@ export const router = createBrowserRouter([
     path: "/catalog",
     element: <CustomerCatalogPage />
   },
+  // Customer Profile
+  {
+    path: "/perfil",
+    element: <CustomerProfilePage />
+  },
+  // Admin Dashboard (Supabase Auth)
+  {
+    path: "/admin/dashboard",
+    element: (
+      <SupabaseProtectedRoute requireAdmin={true}>
+        <AdminDashboardPage />
+      </SupabaseProtectedRoute>
+    )
+  },
   {
     path: "/admin",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><DashboardPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -133,7 +152,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/products",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductListPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -141,7 +160,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/products/new",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductFormPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -149,7 +168,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/products/:id",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductDetailPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -157,7 +176,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/products/bulk",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><BulkRegistrationPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -165,7 +184,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/inventory",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><InventoryPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -173,7 +192,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/categories",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CategorySettingsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -181,7 +200,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/categories/new",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><NewCategoryPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -189,7 +208,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/categories/:id/edit",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><EditCategoryPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -197,7 +216,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/brands",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><BrandsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -205,7 +224,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/models",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ModelsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -213,7 +232,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/colors",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ColorsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -221,7 +240,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/storages",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><StoragesPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -229,7 +248,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/rams",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><RamsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -237,7 +256,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/versions",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><VersionsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -245,7 +264,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/battery-healths",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><BatteryHealthsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -253,7 +272,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/fields",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><FieldConfigPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -261,7 +280,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/payment-fees",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><PaymentFeesPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -269,7 +288,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/company",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CompanyDataPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -277,7 +296,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/documents",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><DocumentSettingsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -285,7 +304,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/warranty-templates",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><WarrantyTemplatesPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -294,7 +313,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/customers",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CustomerListPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -302,7 +321,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/customers/new",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CustomerFormPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -310,7 +329,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/customers/:id",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CustomerDetailsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -318,7 +337,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/customers/:id/edit",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CustomerFormPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -326,7 +345,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/custom-fields",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CustomFieldsLibraryPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -334,7 +353,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/governance",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><GovernancePage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -342,7 +361,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/dev-diary",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><DevDiaryPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -350,7 +369,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/team",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><TeamListPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -358,7 +377,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/team/new",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><TeamFormPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -366,7 +385,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/team/:id/edit",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><TeamFormPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -374,7 +393,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/banners",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><BannerManagementPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -382,7 +401,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/catalog",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CatalogSettingsPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -398,7 +417,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/pdv",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <PDVPage />
       </ProtectedRoute>
     )
@@ -406,7 +425,7 @@ export const router = createBrowserRouter([
   {
     path: "/test-tabs",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><TabsTestPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -414,7 +433,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/migration",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><LegacyMigrationPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -422,7 +441,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/field-mapping",
     element: (
-      <ProtectedRoute requiredRole={[ClientTypes.ATACADO, ClientTypes.REVENDA]}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><FieldMappingPage /></AdminLayout>
       </ProtectedRoute>
     )
@@ -455,3 +474,4 @@ export const router = createBrowserRouter([
     element: <div className="p-20 text-center font-medium text-slate-500">404 - Página não encontrada</div>
   }
 ]);
+

@@ -9,6 +9,7 @@ export enum ClientTypes {
   VAREJO = 'varejo',
   REVENDA = 'revenda',
   ATACADO = 'atacado',
+  ADMIN = 'admin',
 }
 
 export enum ProductStatus {

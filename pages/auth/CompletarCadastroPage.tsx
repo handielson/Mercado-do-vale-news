@@ -14,15 +14,25 @@ export const CompletarCadastroPage: React.FC = () => {
 
     const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         let value = e.target.value.replace(/\D/g, '');
-        if (value.length > 11) value = value.slice(0, 11);
-        // Mask: 000.000.000-00
-        if (value.length > 9) {
-            value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-        } else if (value.length > 6) {
-            value = value.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
-        } else if (value.length > 3) {
-            value = value.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+
+        // Limit to 14 digits (CNPJ)
+        if (value.length > 14) value = value.slice(0, 14);
+
+        // Format based on length
+        if (value.length <= 11) {
+            // CPF: 000.000.000-00
+            if (value.length > 9) {
+                value = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+            } else if (value.length > 6) {
+                value = value.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+            } else if (value.length > 3) {
+                value = value.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+            }
+        } else {
+            // CNPJ: 00.000.000/0000-00
+            value = value.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
         }
+
         setCpf(value);
     };
 
@@ -46,8 +56,8 @@ export const CompletarCadastroPage: React.FC = () => {
         const cleanCpf = cpf.replace(/\D/g, '');
         const cleanPhone = phone.replace(/\D/g, '');
 
-        if (cleanCpf.length !== 11) {
-            toast.error('CPF inválido');
+        if (cleanCpf.length !== 11 && cleanCpf.length !== 14) {
+            toast.error('CPF/CNPJ inválido. Digite 11 dígitos para CPF ou 14 para CNPJ.');
             return;
         }
 
@@ -110,10 +120,10 @@ export const CompletarCadastroPage: React.FC = () => {
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* CPF */}
+                    {/* CPF/CNPJ */}
                     <div className="space-y-2">
                         <label className="text-sm font-semibold text-slate-700">
-                            CPF
+                            CPF/CNPJ
                         </label>
                         <div className="relative">
                             <User className="absolute left-3 top-3 text-slate-400" size={18} />
@@ -121,7 +131,7 @@ export const CompletarCadastroPage: React.FC = () => {
                                 type="text"
                                 value={cpf}
                                 onChange={handleCpfChange}
-                                placeholder="000.000.000-00"
+                                placeholder="000.000.000-00 ou 00.000.000/0000-00"
                                 className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                                 required
                             />
