@@ -7,4 +7,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+console.log('[DEBUG] Creating Supabase client with URL:', supabaseUrl);
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+    },
+    global: {
+        headers: {
+            'X-Client-Info': 'mercado-do-vale-web'
+        }
+    }
+});
