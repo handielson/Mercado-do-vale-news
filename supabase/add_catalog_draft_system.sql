@@ -61,7 +61,7 @@ USING (
     EXISTS (
         SELECT 1 FROM users
         WHERE users.id = auth.uid()
-        AND users.user_type = 'ADMIN'
+        AND users.client_type = 'ADMIN'
     )
 );
 
@@ -82,7 +82,7 @@ USING (
     EXISTS (
         SELECT 1 FROM users
         WHERE users.id = auth.uid()
-        AND users.user_type = 'ADMIN'
+        AND users.client_type = 'ADMIN'
     )
 );
 
