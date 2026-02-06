@@ -97,7 +97,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-slate-900">
         <div className="animate-pulse text-blue-400 font-bold text-xl uppercase tracking-tighter">
-          Carregando Identidade...
+          Atualizando Catálogo...
         </div>
       </div>
     );
