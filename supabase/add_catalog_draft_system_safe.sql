@@ -117,7 +117,7 @@ CREATE POLICY "Public can view published banners"
 ON catalog_banners
 FOR SELECT
 TO public
-USING (is_draft = false AND active = true);
+USING (is_draft = false AND is_active = true);
 
 -- 9. Criar política para admins verem todos os banners (incluindo drafts)
 CREATE POLICY "Admins can view all banners including drafts"
