@@ -8,6 +8,7 @@ import { AuthCallbackPage } from '../pages/auth/AuthCallbackPage';
 import { CompletarCadastroPage } from '../pages/auth/CompletarCadastroPage';
 import { RecuperarSenhaPage } from '../pages/auth/RecuperarSenhaPage';
 import { RedefinirSenhaPage } from '../pages/auth/RedefinirSenhaPage';
+import { CustomerCatalogPage } from '../pages/customer/CustomerCatalogPage';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { ClientTypes } from '../utils/field-standards';
 import { ProductListPage } from '../pages/admin/products/ProductListPage';
@@ -115,6 +116,11 @@ export const router = createBrowserRouter([
   {
     path: "/redefinir-senha",
     element: <RedefinirSenhaPage />
+  },
+  // Customer Catalog
+  {
+    path: "/catalog",
+    element: <CustomerCatalogPage />
   },
   {
     path: "/admin",
