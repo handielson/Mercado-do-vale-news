@@ -21,12 +21,17 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
+        let isMounted = true;
+
         // Check current session
         supabase.auth.getSession()
             .then(({ data: { session } }) => {
+                if (!isMounted) return;
+
                 setUser(session?.user ?? null)
                 if (session?.user) {
                     loadCustomerData(session.user.id).catch(err => {
+                        if (!isMounted) return;
                         console.error('[SupabaseAuth] Failed to load customer data:', err)
                         // Don't block - user can still use the app
                     })
@@ -34,6 +39,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 setIsLoading(false)
             })
             .catch(err => {
+                if (!isMounted) return;
                 console.error('[SupabaseAuth] Session error:', err)
                 setIsLoading(false) // Critical: always set loading to false
             })
@@ -41,11 +47,14 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
+                if (!isMounted) return;
+
                 console.log('Auth state changed:', event)
                 setUser(session?.user ?? null)
 
                 if (session?.user) {
                     await loadCustomerData(session.user.id).catch(err => {
+                        if (!isMounted) return;
                         console.error('[SupabaseAuth] Failed to load customer on auth change:', err)
                     })
                 } else {
@@ -54,7 +63,10 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             }
         )
 
-        return () => subscription.unsubscribe()
+        return () => {
+            isMounted = false;
+            subscription.unsubscribe();
+        }
     }, [])
 
     // Load customer data linked to auth user

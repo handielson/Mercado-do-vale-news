@@ -72,6 +72,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     // Recarregar quando filtros ou busca mudarem
     useEffect(() => {
         loadProducts(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchQuery, filters]);
 
     // Carregar mais produtos
