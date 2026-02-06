@@ -35,7 +35,14 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             setLoading(true);
             setError(null);
 
-            const currentPage = reset ? 1 : page;
+            // Use functional update to get current page without dependency
+            let currentPage = 1;
+            if (!reset) {
+                setPage((prev) => {
+                    currentPage = prev;
+                    return prev;
+                });
+            }
 
             const response = await catalogService.getProducts({
                 search: searchQuery || undefined,
@@ -67,7 +74,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         } finally {
             setLoading(false);
         }
-    }, [searchQuery, filters, page, pageSize]);
+    }, [searchQuery, filters, pageSize]); // Removed 'page' from dependencies
 
     // Recarregar quando filtros ou busca mudarem
     useEffect(() => {
@@ -79,7 +86,8 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     const loadMore = useCallback(() => {
         if (!loading && hasMore) {
             setPage((prev) => prev + 1);
-            loadProducts(false);
+            // Wait for next render to call loadProducts with updated page
+            setTimeout(() => loadProducts(false), 0);
         }
     }, [loading, hasMore, loadProducts]);
 
