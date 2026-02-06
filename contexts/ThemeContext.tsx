@@ -24,13 +24,27 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     async function fetchSettings() {
       try {
+        console.log('[ThemeContext] Fetching company settings...');
         // Fetch company settings from Supabase
         const { data, error } = await supabase
           .from('company_settings')
           .select('*')
-          .single();
+          .maybeSingle(); // Use maybeSingle to handle missing records gracefully
 
-        if (error) throw error;
+        if (error) {
+          console.warn('[ThemeContext] Error fetching settings:', error);
+          throw error;
+        }
+
+        if (!data) {
+          console.warn('[ThemeContext] No company_settings found, using defaults');
+          // No settings found, use defaults
+          setSettings({
+            company_name: 'Mercado do Vale',
+            theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
+          });
+          return;
+        }
 
         const themeSettings: ThemeSettings = {
           company_name: data.company_name || 'Mercado do Vale',
@@ -47,14 +61,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             document.documentElement.style.setProperty(`--${key}`, value);
           });
         }
+
+        console.log('[ThemeContext] Settings loaded successfully');
       } catch (error) {
-        console.warn('Failed to load theme settings from Supabase. Using defaults.', error);
+        console.warn('[ThemeContext] Failed to load theme settings. Using defaults.', error);
         // Default fallbacks
         setSettings({
           company_name: 'Mercado do Vale',
           theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
         });
       } finally {
+        // CRITICAL: Always set loading to false, even if there's an error
+        console.log('[ThemeContext] Setting isLoading to false');
         setIsLoading(false);
       }
     }
