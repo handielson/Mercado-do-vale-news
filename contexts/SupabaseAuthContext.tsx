@@ -20,13 +20,21 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     useEffect(() => {
         // Check current session
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null)
-            if (session?.user) {
-                loadCustomerData(session.user.id)
-            }
-            setIsLoading(false)
-        })
+        supabase.auth.getSession()
+            .then(({ data: { session } }) => {
+                setUser(session?.user ?? null)
+                if (session?.user) {
+                    loadCustomerData(session.user.id).catch(err => {
+                        console.error('[SupabaseAuth] Failed to load customer data:', err)
+                        // Don't block - user can still use the app
+                    })
+                }
+                setIsLoading(false)
+            })
+            .catch(err => {
+                console.error('[SupabaseAuth] Session error:', err)
+                setIsLoading(false) // Critical: always set loading to false
+            })
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -35,7 +43,9 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 setUser(session?.user ?? null)
 
                 if (session?.user) {
-                    await loadCustomerData(session.user.id)
+                    await loadCustomerData(session.user.id).catch(err => {
+                        console.error('[SupabaseAuth] Failed to load customer on auth change:', err)
+                    })
                 } else {
                     setCustomer(null)
                 }
@@ -52,16 +62,57 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 .from('customers')
                 .select('*')
                 .eq('user_id', userId)
-                .single()
+                .maybeSingle() // Use maybeSingle instead of single to avoid error when no record exists
 
             if (error) {
-                console.error('Error loading customer:', error)
+                console.error('[SupabaseAuth] Error loading customer:', error)
                 return
             }
 
-            setCustomer(data)
+            // If customer exists, set it
+            if (data) {
+                console.log('[SupabaseAuth] Customer loaded:', data.name)
+                setCustomer(data)
+                return
+            }
+
+            // Customer doesn't exist - create it automatically with Google profile data
+            console.log('[SupabaseAuth] No customer found, creating from auth user...')
+
+            const { data: { user: authUser } } = await supabase.auth.getUser()
+            if (!authUser) {
+                console.error('[SupabaseAuth] No auth user found')
+                return
+            }
+
+            const newCustomer = {
+                user_id: userId,
+                company_id: COMPANY_ID,
+                name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Usuário',
+                email: authUser.email || '',
+                account_status: 'pending' as const, // Pending until they complete CPF/phone
+                customer_type: 'retail' as const,
+                is_active: true
+            }
+
+            console.log('[SupabaseAuth] Creating customer:', newCustomer)
+
+            const { data: createdCustomer, error: createError } = await supabase
+                .from('customers')
+                .insert(newCustomer)
+                .select()
+                .single()
+
+            if (createError) {
+                console.error('[SupabaseAuth] Error creating customer:', createError)
+                toast.error('Erro ao criar registro de cliente')
+                return
+            }
+
+            console.log('[SupabaseAuth] Customer created successfully')
+            setCustomer(createdCustomer)
         } catch (error) {
-            console.error('Error loading customer:', error)
+            console.error('[SupabaseAuth] Error in loadCustomerData:', error)
         }
     }
 
