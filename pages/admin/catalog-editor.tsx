@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Save, Eye, Trash2, Upload, X } from 'lucide-react';
 import { catalogEditorService, type CatalogEditorState } from '@/services/catalogEditorService';
@@ -20,14 +20,18 @@ export default function CatalogEditorPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const hasRedirected = useRef(false);
 
     // Verificar permissão de ADMIN
     useEffect(() => {
-        if (!authLoading && (!customer || customer.client_type !== 'ADMIN')) {
-            alert('Acesso negado. Apenas administradores podem acessar o editor de catálogo.');
-            navigate('/admin');
+        if (!authLoading && !hasRedirected.current) {
+            if (!customer || customer.client_type !== 'ADMIN') {
+                hasRedirected.current = true;
+                alert('Acesso negado. Apenas administradores podem acessar o editor de catálogo.');
+                navigate('/admin');
+            }
         }
-    }, [customer, authLoading, navigate]);
+    }, [customer, authLoading]);
 
     // Carregar estado inicial
     useEffect(() => {
