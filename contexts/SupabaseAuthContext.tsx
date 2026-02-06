@@ -35,8 +35,14 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 }
 
                 setUser(session?.user ?? null)
+
+                // CRITICAL: Set loading to false IMMEDIATELY after getting session
+                // Don't wait for loadCustomerData to complete
+                setIsLoading(false)
+
                 if (session?.user) {
                     console.log('[DEBUG] Loading customer data for user:', session.user.id);
+                    // Load customer data in background, don't block UI
                     loadCustomerData(session.user.id).catch(err => {
                         if (!isMounted) return;
                         console.error('[SupabaseAuth] Failed to load customer data:', err)
@@ -45,7 +51,6 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 } else {
                     console.log('[DEBUG] No session found');
                 }
-                setIsLoading(false)
             })
             .catch(err => {
                 console.error('[DEBUG] getSession error, isMounted:', isMounted);
@@ -68,6 +73,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 setUser(session?.user ?? null)
 
                 if (session?.user) {
+                    // Load customer data in background, don't block
                     await loadCustomerData(session.user.id).catch(err => {
                         if (!isMounted) return;
                         console.error('[SupabaseAuth] Failed to load customer on auth change:', err)
