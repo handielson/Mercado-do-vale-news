@@ -3,24 +3,37 @@ import { useRouter } from 'next/router';
 import { Save, Eye, Trash2, Upload, X } from 'lucide-react';
 import { catalogEditorService, type CatalogEditorState } from '@/services/catalogEditorService';
 import { BannerCarousel } from '@/components/catalog/BannerCarousel';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import type { CatalogBanner } from '@/types/catalog';
 
 /**
  * Editor de Catálogo com Preview em Tempo Real
  * Permite editar banners e configurações com visualização ao vivo
+ * ACESSO: Apenas usuários ADMIN
  */
 export default function CatalogEditorPage() {
     const router = useRouter();
+    const { customer, isLoading: authLoading } = useSupabaseAuth();
     const [editorState, setEditorState] = useState<CatalogEditorState | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isPublishing, setIsPublishing] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+    // Verificar permissão de ADMIN
+    useEffect(() => {
+        if (!authLoading && (!customer || customer.client_type !== 'ADMIN')) {
+            alert('Acesso negado. Apenas administradores podem acessar o editor de catálogo.');
+            router.push('/admin');
+        }
+    }, [customer, authLoading, router]);
+
     // Carregar estado inicial
     useEffect(() => {
-        loadEditor();
-    }, []);
+        if (customer?.client_type === 'ADMIN') {
+            loadEditor();
+        }
+    }, [customer]);
 
     const loadEditor = async () => {
         try {
@@ -102,15 +115,22 @@ export default function CatalogEditorPage() {
         setHasUnsavedChanges(true);
     };
 
-    if (isLoading) {
+    if (authLoading || isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Carregando editor...</p>
+                    <p className="text-gray-600">
+                        {authLoading ? 'Verificando permissões...' : 'Carregando editor...'}
+                    </p>
                 </div>
             </div>
         );
+    }
+
+    // Se não for ADMIN, não renderizar nada (será redirecionado)
+    if (!customer || customer.client_type !== 'ADMIN') {
+        return null;
     }
 
     return (
