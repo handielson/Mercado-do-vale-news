@@ -25,11 +25,24 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     async function fetchSettings() {
       try {
         console.log('[ThemeContext] Fetching company settings...');
+
+        // Set a timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+          console.error('[ThemeContext] Query timeout! Using defaults.');
+          setSettings({
+            company_name: 'Mercado do Vale',
+            theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
+          });
+          setIsLoading(false);
+        }, 5000); // 5 second timeout
+
         // Fetch company settings from Supabase
         const { data, error } = await supabase
           .from('company_settings')
           .select('*')
           .maybeSingle(); // Use maybeSingle to handle missing records gracefully
+
+        clearTimeout(timeoutId); // Clear timeout if query completes
 
         if (error) {
           console.warn('[ThemeContext] Error fetching settings:', error);
@@ -43,6 +56,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             company_name: 'Mercado do Vale',
             theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
           });
+          setIsLoading(false);
           return;
         }
 
@@ -63,6 +77,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         console.log('[ThemeContext] Settings loaded successfully');
+        setIsLoading(false);
       } catch (error) {
         console.warn('[ThemeContext] Failed to load theme settings. Using defaults.', error);
         // Default fallbacks
@@ -70,9 +85,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           company_name: 'Mercado do Vale',
           theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
         });
-      } finally {
-        // CRITICAL: Always set loading to false, even if there's an error
-        console.log('[ThemeContext] Setting isLoading to false');
         setIsLoading(false);
       }
     }
