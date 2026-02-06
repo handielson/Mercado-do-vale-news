@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
+import { useNavigate } from 'react-router-dom';
 import { Save, Eye, Trash2, Upload, X } from 'lucide-react';
 import { catalogEditorService, type CatalogEditorState } from '@/services/catalogEditorService';
 import { BannerCarousel } from '@/components/catalog/BannerCarousel';
@@ -13,7 +13,7 @@ import type { CatalogBanner } from '@/types/catalog';
  * ACESSO: Apenas usuários ADMIN
  */
 export default function CatalogEditorPage() {
-    const router = useRouter();
+    const navigate = useNavigate();
     const { customer, isLoading: authLoading } = useSupabaseAuth();
     const [editorState, setEditorState] = useState<CatalogEditorState | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -25,9 +25,9 @@ export default function CatalogEditorPage() {
     useEffect(() => {
         if (!authLoading && (!customer || customer.client_type !== 'ADMIN')) {
             alert('Acesso negado. Apenas administradores podem acessar o editor de catálogo.');
-            router.push('/admin');
+            navigate('/admin');
         }
-    }, [customer, authLoading, router]);
+    }, [customer, authLoading, navigate]);
 
     // Carregar estado inicial
     useEffect(() => {
@@ -84,7 +84,7 @@ export default function CatalogEditorPage() {
             await catalogEditorService.publish();
             setHasUnsavedChanges(false);
             alert('Catálogo publicado com sucesso!');
-            router.push('/admin');
+            navigate('/admin');
         } catch (error) {
             console.error('Erro ao publicar catálogo:', error);
             alert('Erro ao publicar catálogo');
@@ -101,7 +101,7 @@ export default function CatalogEditorPage() {
         try {
             await catalogEditorService.discardDraft();
             setHasUnsavedChanges(false);
-            router.push('/admin');
+            navigate('/admin');
         } catch (error) {
             console.error('Erro ao descartar rascunho:', error);
             alert('Erro ao descartar rascunho');
@@ -179,7 +179,7 @@ export default function CatalogEditorPage() {
                             </button>
 
                             <button
-                                onClick={() => router.push('/admin')}
+                                onClick={() => navigate('/admin')}
                                 className="p-2 text-gray-600 hover:text-gray-900 transition-colors"
                             >
                                 <X className="w-6 h-6" />

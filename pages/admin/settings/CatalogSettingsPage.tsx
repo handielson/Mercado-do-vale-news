@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
+import { useNavigate } from 'react-router-dom';
 import { Save, Link as LinkIcon, QrCode, Eye, EyeOff, Palette, Settings as SettingsIcon, Edit } from 'lucide-react';
 
 interface CatalogSettings {
@@ -18,7 +18,7 @@ interface CatalogSettings {
 }
 
 export const CatalogSettingsPage: React.FC = () => {
-    const router = useRouter();
+    const navigate = useNavigate();
     const [settings, setSettings] = useState<CatalogSettings>({
         catalog_name: 'Catálogo de Produtos',
         catalog_description: 'Confira nossos produtos disponíveis',
@@ -68,7 +68,7 @@ export const CatalogSettingsPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => router.push('/admin/catalog-editor')}
+                        onClick={() => navigate('/admin/catalog-editor')}
                         className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                     >
                         <Edit className="w-5 h-5" />
