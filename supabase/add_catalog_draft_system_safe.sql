@@ -1,5 +1,5 @@
--- Script IDEMPOTENTE para adicionar sistema de drafts ao catálogo
--- Pode ser executado múltiplas vezes sem erros
+-- Script ULTRA-SEGURO para adicionar sistema de drafts ao catálogo
+-- Adapta-se à estrutura existente do banco
 
 -- 1. Adicionar campos is_draft e published_at em catalog_banners (se não existirem)
 DO $$ 
@@ -19,16 +19,37 @@ BEGIN
     END IF;
 END $$;
 
--- 2. Criar tabela catalog_settings (se não existir)
-CREATE TABLE IF NOT EXISTS catalog_settings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    setting_key TEXT UNIQUE NOT NULL,
-    setting_value JSONB,
-    is_draft BOOLEAN DEFAULT false,
-    published_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- 2. Verificar se catalog_settings existe e criar/adaptar conforme necessário
+DO $$ 
+BEGIN
+    -- Se a tabela não existe, criar do zero
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'catalog_settings') THEN
+        CREATE TABLE catalog_settings (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            setting_key TEXT UNIQUE NOT NULL,
+            setting_value JSONB,
+            is_draft BOOLEAN DEFAULT false,
+            published_at TIMESTAMP WITH TIME ZONE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+    ELSE
+        -- Tabela existe, adicionar colunas que faltam
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'catalog_settings' AND column_name = 'is_draft'
+        ) THEN
+            ALTER TABLE catalog_settings ADD COLUMN is_draft BOOLEAN DEFAULT false;
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'catalog_settings' AND column_name = 'published_at'
+        ) THEN
+            ALTER TABLE catalog_settings ADD COLUMN published_at TIMESTAMP WITH TIME ZONE;
+        END IF;
+    END IF;
+END $$;
 
 -- 3. Criar índices (se não existirem)
 DO $$ 
@@ -47,11 +68,17 @@ BEGIN
         CREATE INDEX idx_catalog_settings_is_draft ON catalog_settings(is_draft);
     END IF;
 
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_indexes 
-        WHERE indexname = 'idx_catalog_settings_key'
+    -- Só criar índice em setting_key se a coluna existir
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'catalog_settings' AND column_name = 'setting_key'
     ) THEN
-        CREATE INDEX idx_catalog_settings_key ON catalog_settings(setting_key);
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_indexes 
+            WHERE indexname = 'idx_catalog_settings_key'
+        ) THEN
+            CREATE INDEX idx_catalog_settings_key ON catalog_settings(setting_key);
+        END IF;
     END IF;
 END $$;
 
@@ -120,8 +147,8 @@ USING (
 
 -- 11. Marcar banners existentes como publicados (apenas se ainda não tiverem is_draft definido)
 UPDATE catalog_banners 
-SET is_draft = false, published_at = NOW()
-WHERE is_draft IS NULL OR published_at IS NULL;
+SET is_draft = false, published_at = COALESCE(published_at, NOW())
+WHERE is_draft IS NULL OR (is_draft = false AND published_at IS NULL);
 
 -- Verificação final
 SELECT 
@@ -137,3 +164,13 @@ SELECT
     COUNT(*) FILTER (WHERE is_draft = false) as published,
     COUNT(*) FILTER (WHERE is_draft = true) as drafts
 FROM catalog_settings;
+
+-- Mostrar estrutura da tabela catalog_settings para debug
+SELECT 
+    column_name,
+    data_type,
+    is_nullable,
+    column_default
+FROM information_schema.columns
+WHERE table_name = 'catalog_settings'
+ORDER BY ordinal_position;
