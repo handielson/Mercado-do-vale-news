@@ -470,14 +470,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/",
-    loader: () => {
-      // In dev mode, always go to admin. In production, this would check auth.
-      return new Response(null, {
-        status: 302,
-        headers: { Location: "/admin" }
-      });
-    },
-    element: <div>Redirecionando...</div>
+    element: <CatalogPage />
   },
   {
     path: "*",

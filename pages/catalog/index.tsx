@@ -6,6 +6,7 @@ import {
     ProductFilters,
     SearchBar
 } from '@/components/catalog';
+import { PublicHeader } from '@/components/PublicHeader';
 import { useCatalog } from '@/hooks/useCatalog';
 import { catalogShareService } from '@/services/catalogShareService';
 import type { CatalogProduct } from '@/types/catalog';
@@ -45,10 +46,13 @@ export default function CatalogPage() {
 
     if (error) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-                <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6 max-w-md">
-                    <h2 className="text-red-800 font-bold text-lg mb-2">❌ Erro ao carregar catálogo</h2>
-                    <p className="text-red-600">{error}</p>
+            <div className="min-h-screen bg-slate-50">
+                <PublicHeader />
+                <div className="flex items-center justify-center p-4 min-h-[calc(100vh-64px)]">
+                    <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6 max-w-md">
+                        <h2 className="text-red-800 font-bold text-lg mb-2">❌ Erro ao carregar catálogo</h2>
+                        <p className="text-red-600">{error}</p>
+                    </div>
                 </div>
             </div>
         );
@@ -56,6 +60,8 @@ export default function CatalogPage() {
 
     return (
         <div className="min-h-screen bg-slate-50">
+            {/* Public Header */}
+            <PublicHeader />
             {/* Banner Carousel */}
             <div className="bg-white border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -90,8 +96,8 @@ export default function CatalogPage() {
                                 <button
                                     onClick={() => setViewMode('grid')}
                                     className={`p-2 rounded transition-colors ${viewMode === 'grid'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-slate-600 hover:bg-slate-100'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'text-slate-600 hover:bg-slate-100'
                                         }`}
                                     title="Visualização em grade"
                                 >
@@ -100,8 +106,8 @@ export default function CatalogPage() {
                                 <button
                                     onClick={() => setViewMode('list')}
                                     className={`p-2 rounded transition-colors ${viewMode === 'list'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-slate-600 hover:bg-slate-100'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'text-slate-600 hover:bg-slate-100'
                                         }`}
                                     title="Visualização em lista"
                                 >
