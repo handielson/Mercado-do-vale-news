@@ -91,6 +91,17 @@ const StorePage = () => (
 import { AdminLayout } from '../layouts/AdminLayout';
 
 export const router = createBrowserRouter([
+  // Redirect old login to new admin login (backward compatibility)
+  {
+    path: "/login",
+    loader: () => {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "/admin/login" }
+      });
+    },
+    element: <div>Redirecionando...</div>
+  },
   // Admin Authentication (Supabase)
   {
     path: "/admin/login",
