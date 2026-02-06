@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { Save, Eye, Trash2, Upload, X } from 'lucide-react';
 import { catalogEditorService, type CatalogEditorState } from '@/services/catalogEditorService';
 import { BannerCarousel } from '@/components/catalog/BannerCarousel';
+import { BannerEditor } from '@/components/admin/BannerEditor';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import type { CatalogBanner } from '@/types/catalog';
 
@@ -203,17 +204,13 @@ export default function CatalogEditorPage() {
                             </p>
                         </div>
 
-                        {/* Banner Editor - Placeholder for now */}
+                        {/* Banner Editor */}
                         <div className="space-y-4">
-                            <h3 className="font-medium text-gray-900">Banners</h3>
-                            <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                                <p className="text-gray-600">
-                                    Editor de banners será implementado aqui
-                                </p>
-                                <p className="text-sm text-gray-500 mt-2">
-                                    {editorState?.banners?.length || 0} banners carregados
-                                </p>
-                            </div>
+                            <h3 className="font-medium text-gray-900">Banners do Catálogo</h3>
+                            <BannerEditor
+                                banners={editorState?.banners || []}
+                                onChange={handleBannerChange}
+                            />
                         </div>
                     </div>
                 </div>
