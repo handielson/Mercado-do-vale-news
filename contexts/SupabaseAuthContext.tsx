@@ -21,33 +21,48 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
+        console.log('[DEBUG] SupabaseAuthContext MOUNTED');
         let isMounted = true;
 
         // Check current session
+        console.log('[DEBUG] Starting getSession...');
         supabase.auth.getSession()
             .then(({ data: { session } }) => {
-                if (!isMounted) return;
+                console.log('[DEBUG] getSession resolved, isMounted:', isMounted);
+                if (!isMounted) {
+                    console.warn('[DEBUG] Component unmounted before getSession resolved!');
+                    return;
+                }
 
                 setUser(session?.user ?? null)
                 if (session?.user) {
+                    console.log('[DEBUG] Loading customer data for user:', session.user.id);
                     loadCustomerData(session.user.id).catch(err => {
                         if (!isMounted) return;
                         console.error('[SupabaseAuth] Failed to load customer data:', err)
                         // Don't block - user can still use the app
                     })
+                } else {
+                    console.log('[DEBUG] No session found');
                 }
                 setIsLoading(false)
             })
             .catch(err => {
+                console.error('[DEBUG] getSession error, isMounted:', isMounted);
                 if (!isMounted) return;
                 console.error('[SupabaseAuth] Session error:', err)
                 setIsLoading(false) // Critical: always set loading to false
             })
 
         // Listen for auth changes
+        console.log('[DEBUG] Setting up auth state listener...');
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
-                if (!isMounted) return;
+                console.log('[DEBUG] Auth state changed:', event, 'isMounted:', isMounted);
+                if (!isMounted) {
+                    console.warn('[DEBUG] Component unmounted before auth state change!');
+                    return;
+                }
 
                 console.log('Auth state changed:', event)
                 setUser(session?.user ?? null)
@@ -64,6 +79,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         )
 
         return () => {
+            console.log('[DEBUG] SupabaseAuthContext UNMOUNTING');
             isMounted = false;
             subscription.unsubscribe();
         }
