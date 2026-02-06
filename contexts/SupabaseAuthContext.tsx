@@ -9,11 +9,11 @@ import type {
 } from '../types/auth'
 import { toast } from 'sonner'
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const SupabaseAuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const COMPANY_ID = import.meta.env.VITE_COMPANY_ID || 'default-company-id'
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null)
     const [customer, setCustomer] = useState<Customer | null>(null)
     const [isLoading, setIsLoading] = useState(true)
@@ -294,7 +294,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return (
-        <AuthContext.Provider value={{
+        <SupabaseAuthContext.Provider value={{
             user,
             customer,
             isLoading,
@@ -310,14 +310,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             updateProfile
         }}>
             {children}
-        </AuthContext.Provider>
+        </SupabaseAuthContext.Provider>
     )
 }
 
-export const useAuth = () => {
-    const context = useContext(AuthContext)
+export const useSupabaseAuth = () => {
+    const context = useContext(SupabaseAuthContext)
     if (!context) {
-        throw new Error('useAuth must be used within AuthProvider')
+        throw new Error('useSupabaseAuth must be used within SupabaseAuthProvider')
     }
     return context
 }
