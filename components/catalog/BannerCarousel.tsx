@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Banner } from '@/types/catalog';
 import { bannerService } from '@/services/bannerService';
+import { ImageZoomModal } from './ImageZoomModal';
 
 interface BannerCarouselProps {
     autoPlayInterval?: number;
@@ -18,6 +19,7 @@ export function BannerCarousel({
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isHovered, setIsHovered] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [zoomedBanner, setZoomedBanner] = useState<Banner | null>(null);
 
     // Carregar banners
     useEffect(() => {
@@ -63,17 +65,25 @@ export function BannerCarousel({
         setCurrentIndex((prev) => (prev + 1) % banners.length);
     }, [banners.length]);
 
-    const handleBannerClick = async (banner: Banner) => {
+    const handleBannerClick = async (banner: Banner, event: React.MouseEvent) => {
+        // Prevenir navegação se clicar nas setas ou dots
+        if ((event.target as HTMLElement).closest('button')) {
+            return;
+        }
+
         // Registrar clique
         await bannerService.trackBannerClick(banner.id);
 
-        // Navegar
+        // Se tem link configurado, navegar
         if (banner.link_type === 'product' && banner.link_value) {
             window.location.href = `/catalog?product=${banner.link_value}`;
         } else if (banner.link_type === 'category' && banner.link_value) {
             window.location.href = `/catalog?category=${banner.link_value}`;
         } else if (banner.link_type === 'url' && banner.link_value) {
             window.open(banner.link_value, '_blank');
+        } else {
+            // Se não tem link, abrir zoom
+            setZoomedBanner(banner);
         }
     };
 
@@ -99,14 +109,14 @@ export function BannerCarousel({
                     <div
                         key={banner.id}
                         className={`absolute inset-0 transition-all duration-700 ease-in-out ${index === currentIndex
-                                ? 'opacity-100 scale-100'
-                                : 'opacity-0 scale-105'
+                            ? 'opacity-100 scale-100'
+                            : 'opacity-0 scale-105'
                             }`}
                         style={{ pointerEvents: index === currentIndex ? 'auto' : 'none' }}
                     >
                         <div
                             className="w-full h-full cursor-pointer"
-                            onClick={() => handleBannerClick(banner)}
+                            onClick={(e) => handleBannerClick(banner, e)}
                         >
                             <img
                                 src={banner.image_url}
@@ -160,8 +170,8 @@ export function BannerCarousel({
                             key={index}
                             onClick={() => goToSlide(index)}
                             className={`transition-all ${index === currentIndex
-                                    ? 'w-8 h-2 bg-white'
-                                    : 'w-2 h-2 bg-white/50 hover:bg-white/75'
+                                ? 'w-8 h-2 bg-white'
+                                : 'w-2 h-2 bg-white/50 hover:bg-white/75'
                                 } rounded-full`}
                             aria-label={`Ir para banner ${index + 1}`}
                         />
@@ -173,6 +183,15 @@ export function BannerCarousel({
             <div className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-md text-white text-sm font-semibold">
                 {currentIndex + 1} / {banners.length}
             </div>
+
+            {/* Modal de Zoom */}
+            {zoomedBanner && (
+                <ImageZoomModal
+                    imageUrl={zoomedBanner.image_url}
+                    title={zoomedBanner.title}
+                    onClose={() => setZoomedBanner(null)}
+                />
+            )}
         </div>
     );
 }
