@@ -271,8 +271,36 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // Update customer profile
     const updateProfile = async (data: Partial<Customer>) => {
         try {
-            if (!customer) throw new Error('No customer logged in')
+            if (!user) throw new Error('No user logged in')
 
+            // If customer doesn't exist, create it (for OAuth users)
+            if (!customer) {
+                console.log('[SupabaseAuth] Creating new customer for OAuth user')
+
+                const { error: createError } = await supabase
+                    .from('customers')
+                    .insert({
+                        user_id: user.id,
+                        company_id: COMPANY_ID,
+                        name: data.name || user.user_metadata?.full_name || user.email || 'Usuário',
+                        email: data.email || user.email || '',
+                        cpf_cnpj: data.cpf_cnpj || '',
+                        phone: data.phone || '',
+                        customer_type: 'retail',
+                        is_active: true,
+                        account_status: 'active'
+                    })
+
+                if (createError) throw createError
+
+                // Reload customer data
+                await loadCustomerData(user.id)
+
+                toast.success('Perfil criado com sucesso!')
+                return
+            }
+
+            // Update existing customer
             const { error } = await supabase
                 .from('customers')
                 .update(data)
@@ -281,9 +309,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             if (error) throw error
 
             // Reload customer data
-            if (user) {
-                await loadCustomerData(user.id)
-            }
+            await loadCustomerData(user.id)
 
             toast.success('Perfil atualizado com sucesso!')
         } catch (error: any) {

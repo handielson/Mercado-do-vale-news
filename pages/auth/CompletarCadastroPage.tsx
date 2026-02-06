@@ -58,14 +58,19 @@ export const CompletarCadastroPage: React.FC = () => {
 
         setLoading(true);
         try {
+            console.log('[CompletarCadastro] Updating profile with:', { cpf: cleanCpf, phone: cleanPhone });
+
             await updateProfile({
                 cpf_cnpj: cleanCpf,
-                phone: cleanPhone
+                phone: cleanPhone,
+                name: user?.user_metadata?.full_name || user?.email || 'Usuário',
+                email: user?.email || ''
             });
 
             toast.success('Cadastro completado com sucesso!');
             navigate('/catalog');
         } catch (error: any) {
+            console.error('[CompletarCadastro] Error:', error);
             toast.error(error.message || 'Erro ao completar cadastro');
         } finally {
             setLoading(false);

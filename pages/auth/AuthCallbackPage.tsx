@@ -10,6 +10,8 @@ export const AuthCallbackPage: React.FC = () => {
 
     useEffect(() => {
         const handleCallback = async () => {
+            console.log('[AuthCallback] State:', { loading, user: !!user, customer: !!customer });
+
             // Aguardar contexto carregar
             if (loading) {
                 setStatus('Carregando dados...');
@@ -18,24 +20,36 @@ export const AuthCallbackPage: React.FC = () => {
 
             // Verificar se usuário está autenticado
             if (!user) {
+                console.log('[AuthCallback] No user, redirecting to login');
                 setStatus('Redirecionando para login...');
                 setTimeout(() => navigate('/cliente/login'), 1000);
                 return;
             }
 
+            console.log('[AuthCallback] User authenticated:', user.email);
+
             // Verificar se precisa completar cadastro
             if (!customer) {
-                setStatus('Carregando perfil...');
+                console.log('[AuthCallback] No customer record, redirecting to complete registration');
+                setStatus('Redirecionando para completar cadastro...');
+                setTimeout(() => navigate('/completar-cadastro'), 500);
                 return;
             }
+
+            console.log('[AuthCallback] Customer found:', {
+                phone: customer.phone,
+                cpf: customer.cpf_cnpj
+            });
 
             // Verificar se dados estão completos
             const needsCompletion = !customer.phone || !customer.cpf_cnpj;
 
             if (needsCompletion) {
+                console.log('[AuthCallback] Customer needs completion');
                 setStatus('Redirecionando para completar cadastro...');
                 setTimeout(() => navigate('/completar-cadastro'), 1000);
             } else {
+                console.log('[AuthCallback] Customer complete, redirecting to catalog');
                 setStatus('Login realizado! Redirecionando...');
                 setTimeout(() => navigate('/catalog'), 1000);
             }
