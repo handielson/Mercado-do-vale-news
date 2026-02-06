@@ -231,12 +231,15 @@ export default function CatalogEditorPage() {
                         {/* Preview do Carousel */}
                         {editorState?.banners && editorState.banners.length > 0 ? (
                             <div className="bg-white rounded-lg shadow-sm p-4">
-                                <BannerCarousel />
+                                <BannerCarousel banners={editorState.banners} />
                             </div>
                         ) : (
                             <div className="bg-white rounded-lg shadow-sm p-12 text-center">
                                 <p className="text-gray-500">
                                     Nenhum banner para visualizar
+                                </p>
+                                <p className="text-sm text-gray-400 mt-2">
+                                    Adicione banners no editor para ver o preview
                                 </p>
                             </div>
                         )}

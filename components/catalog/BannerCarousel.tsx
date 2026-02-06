@@ -5,26 +5,38 @@ import { bannerService } from '@/services/bannerService';
 import { ImageZoomModal } from './ImageZoomModal';
 
 interface BannerCarouselProps {
+    banners?: Banner[]; // Optional: for preview mode
     autoPlayInterval?: number;
     showDots?: boolean;
     showArrows?: boolean;
 }
 
 export function BannerCarousel({
+    banners: externalBanners,
     autoPlayInterval = 5000,
     showDots = true,
     showArrows = true
 }: BannerCarouselProps) {
-    const [banners, setBanners] = useState<Banner[]>([]);
+    const [banners, setBanners] = useState<Banner[]>(externalBanners || []);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isHovered, setIsHovered] = useState(false);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!externalBanners);
     const [zoomedBanner, setZoomedBanner] = useState<Banner | null>(null);
 
-    // Carregar banners
+    // Atualizar banners quando prop externa mudar (preview mode)
     useEffect(() => {
-        loadBanners();
-    }, []);
+        if (externalBanners) {
+            setBanners(externalBanners);
+            setLoading(false);
+        }
+    }, [externalBanners]);
+
+    // Carregar banners apenas se não foram fornecidos externamente
+    useEffect(() => {
+        if (!externalBanners) {
+            loadBanners();
+        }
+    }, [externalBanners]);
 
     const loadBanners = async () => {
         try {
