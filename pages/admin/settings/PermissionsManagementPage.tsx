@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Save, Check, X, Info } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
-import { useAuth } from '../../../contexts/AuthContext';
+import { useSupabaseAuth } from '../../../contexts/SupabaseAuthContext';
 import { ClientTypes } from '../../../utils/field-standards';
 
 interface Permission {
@@ -34,8 +34,9 @@ const USER_TYPES = [
 ];
 
 export const PermissionsManagementPage: React.FC = () => {
-    const { clientType } = useAuth();
+    const { customer } = useSupabaseAuth();
     const [permissions, setPermissions] = useState<Permission[]>([]);
+
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -135,7 +136,7 @@ export const PermissionsManagementPage: React.FC = () => {
 
     const isAdmin = (userType: string) => userType === 'admin';
 
-    if (clientType !== ClientTypes.ADMIN) {
+    if (customer?.customer_type !== 'ADMIN') {
         return (
             <div className="p-6">
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
