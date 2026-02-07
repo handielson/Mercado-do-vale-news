@@ -27,6 +27,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         console.log('[ThemeContext] Fetching company settings...');
 
         // Set a timeout to prevent infinite loading
+        // Increased to 15s to account for Supabase cold starts and network latency
         const timeoutId = setTimeout(() => {
           console.error('[ThemeContext] Query timeout! Using defaults.');
           setSettings({
@@ -34,7 +35,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
           });
           setIsLoading(false);
-        }, 5000); // 5 second timeout
+        }, 15000); // 15 second timeout (increased from 5s)
 
         // Fetch company settings from Supabase
         const { data, error } = await supabase
