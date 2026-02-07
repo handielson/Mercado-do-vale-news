@@ -26,28 +26,21 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         console.log('[ThemeContext] Fetching company settings...');
 
-        // Set a timeout to prevent infinite loading
-        // Increased to 15s to account for Supabase cold starts and network latency
-        const timeoutId = setTimeout(() => {
-          console.error('[ThemeContext] Query timeout! Using defaults.');
-          setSettings({
-            company_name: 'Mercado do Vale',
-            theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
-          });
-          setIsLoading(false);
-        }, 15000); // 15 second timeout (increased from 5s)
-
-        // Fetch company settings from Supabase
+        // Fetch company settings from Supabase (no timeout)
         const { data, error } = await supabase
           .from('company_settings')
           .select('*')
           .maybeSingle(); // Use maybeSingle to handle missing records gracefully
 
-        clearTimeout(timeoutId); // Clear timeout if query completes
-
         if (error) {
           console.warn('[ThemeContext] Error fetching settings:', error);
-          throw error;
+          // Use defaults on error instead of throwing
+          setSettings({
+            company_name: 'Mercado do Vale',
+            theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
+          });
+          setIsLoading(false);
+          return;
         }
 
         if (!data) {
