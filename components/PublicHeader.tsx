@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut, ChevronDown, Shield } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 
 /**
  * PublicHeader - Header for public pages (catalog)
@@ -14,13 +14,13 @@ import { useAuth } from '../contexts/AuthContext';
  * - Customer type badge
  */
 export const PublicHeader: React.FC = () => {
-    const { user, customer, isAdmin, logout } = useAuth();
+    const { user, customer, signOut } = useSupabaseAuth();
     const navigate = useNavigate();
     const [showLoginDropdown, setShowLoginDropdown] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
 
     const handleLogout = async () => {
-        await logout();
+        await signOut();
         navigate('/');
     };
 
@@ -79,7 +79,7 @@ export const PublicHeader: React.FC = () => {
                                             <p className="text-xs text-slate-500">{user.email}</p>
                                         </div>
 
-                                        {isAdmin && (
+                                        {customer?.customer_type === 'ADMIN' && (
                                             <Link
                                                 to="/admin"
                                                 className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"

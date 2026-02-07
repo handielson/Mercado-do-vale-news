@@ -2,13 +2,13 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, clientType, logout } = useAuth();
+  const { user, customer, signOut } = useSupabaseAuth();
   const { settings } = useTheme();
   const location = useLocation();
   const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
@@ -34,7 +34,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <div className="flex items-center gap-1.5 mt-1">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
-              Painel: {clientType}
+              Painel: {customer?.customer_type || 'ADMIN'}
             </p>
           </div>
         </div>
@@ -185,7 +185,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             label="Catálogo"
             active={location.pathname.startsWith('/admin/settings/catalog')}
           />
-          {clientType === 'admin' && (
+          {customer?.customer_type === 'ADMIN' && (
             <NavItem
               to="/admin/settings/permissions"
               icon={<Shield size={18} />}
@@ -223,15 +223,15 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <div className="pt-4 border-t border-slate-800">
             <div className="flex items-center gap-3 mb-4 px-2">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xs font-bold shadow-lg">
-                {user.name?.charAt(0) || 'U'}
+                {customer?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
               </div>
               <div className="flex-1 overflow-hidden">
-                <p className="text-sm font-bold truncate leading-none">{user.name || 'Usuário'}</p>
-                <p className="text-[10px] text-slate-500 truncate mt-1">{user.email}</p>
+                <p className="text-sm font-bold truncate leading-none">{customer?.name || user?.email || 'Usuário'}</p>
+                <p className="text-[10px] text-slate-500 truncate mt-1">{user?.email}</p>
               </div>
             </div>
             <button
-              onClick={logout}
+              onClick={signOut}
               className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-all"
             >
               <LogOut size={16} /> Sair com Segurança

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -14,7 +14,7 @@ interface ProtectedRouteProps {
  * Optionally requires ADMIN customer_type
  */
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
-  const { user, customer, isLoading, isAdmin } = useAuth();
+  const { user, customer, isLoading } = useSupabaseAuth();
   const location = useLocation();
 
   // Wait for auth to load
@@ -33,7 +33,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
   }
 
   // Requires admin but user is not admin
-  if (requireAdmin && !isAdmin) {
+  if (requireAdmin && customer.customer_type !== 'ADMIN') {
     return <Navigate to="/catalog" replace />;
   }
 
