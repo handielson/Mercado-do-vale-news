@@ -1,13 +1,14 @@
 import React from 'react';
 import { UseFormWatch, UseFormSetValue, FieldErrors } from 'react-hook-form';
 import { ProductInput } from '../../../types/product';
-import { CategoryConfig } from '../../../types/category';
+import { CategoryConfig, FieldRequirement } from '../../../types/category';
 import { IMEIInput } from '../../ui/IMEIInput';
 import { ColorSelect } from '../selectors/ColorSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
 import { VersionSelect } from '../selectors/VersionSelect';
 import { Package, RefreshCw } from 'lucide-react';
 import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
+import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -37,6 +38,78 @@ export function ProductSpecifications({
             {label} {required && <span className="text-red-500">*</span>}
         </label>
     );
+
+    /**
+     * Render a generic field based on metadata
+     * Used for fields that don't require special components
+     */
+    const renderGenericField = (key: string, requirement: FieldRequirement) => {
+        const metadata = FIELD_METADATA[key];
+        if (!metadata) return null;
+
+        const isRequired = requirement === 'required';
+        const fieldKey = `specs.${key}` as any;
+
+        // Text input
+        if (metadata.type === 'text' || metadata.type === 'number') {
+            return (
+                <div key={key} className="space-y-1">
+                    <FieldLabel label={metadata.label} required={isRequired} />
+                    <input
+                        id={`field-${key}`}
+                        type={metadata.type}
+                        value={watch(fieldKey) || ''}
+                        onChange={(e) => setValue(fieldKey, e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const form = e.currentTarget.form;
+                                if (form) {
+                                    const inputs = Array.from(form.querySelectorAll('input, select, textarea'));
+                                    const currentIndex = inputs.indexOf(e.currentTarget);
+                                    const nextInput = inputs[currentIndex + 1] as HTMLElement;
+                                    if (nextInput) nextInput.focus();
+                                }
+                            }
+                        }}
+                        className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${errors?.specs?.[key] ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
+                            }`}
+                        placeholder={metadata.placeholder}
+                    />
+                    {errors?.specs?.[key] && (
+                        <p className="text-xs text-red-600 mt-1">{errors.specs[key].message}</p>
+                    )}
+                </div>
+            );
+        }
+
+        // Select input
+        if (metadata.type === 'select' && metadata.options) {
+            return (
+                <div key={key} className="space-y-1">
+                    <FieldLabel label={metadata.label} required={isRequired} />
+                    <select
+                        value={watch(fieldKey) || ''}
+                        onChange={(e) => setValue(fieldKey, e.target.value)}
+                        className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white ${errors?.specs?.[key] ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
+                            }`}
+                    >
+                        <option value="">Selecione</option>
+                        {metadata.options.map((option) => (
+                            <option key={option} value={option}>
+                                {option}
+                            </option>
+                        ))}
+                    </select>
+                    {errors?.specs?.[key] && (
+                        <p className="text-xs text-red-600 mt-1">{errors.specs[key].message}</p>
+                    )}
+                </div>
+            );
+        }
+
+        return null;
+    };
 
     return (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 animate-in fade-in slide-in-from-top-4">
@@ -70,6 +143,16 @@ export function ProductSpecifications({
                             onChange={(val) => setValue('specs.imei1', val)}
                             required={categoryConfig.imei1 === 'required'}
                             placeholder="Digite 15 dígitos"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    // Focus next field (IMEI2 or Serial)
+                                    const nextField = document.getElementById('field-imei2') || document.getElementById('field-serial');
+                                    if (nextField) {
+                                        (nextField as HTMLInputElement).focus();
+                                    }
+                                }
+                            }}
                         />
                         {categoryConfig.imei1 === 'required' && errors?.specs?.imei1?.message && (
                             <p className="text-xs text-red-600 mt-1">{errors.specs.imei1.message}</p>
@@ -81,11 +164,22 @@ export function ProductSpecifications({
                 {categoryConfig.imei2 !== 'off' && (
                     <div className="space-y-1">
                         <IMEIInput
+                            id="field-imei2"
                             label="IMEI 2"
                             value={watch('specs.imei2') || ''}
                             onChange={(val) => setValue('specs.imei2', val)}
                             required={categoryConfig.imei2 === 'required'}
                             placeholder="Digite 15 dígitos"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    // Focus Serial field
+                                    const serialField = document.getElementById('field-serial');
+                                    if (serialField) {
+                                        (serialField as HTMLInputElement).focus();
+                                    }
+                                }
+                            }}
                         />
                         {categoryConfig.imei2 === 'required' && errors?.specs?.imei2?.message && (
                             <p className="text-xs text-red-600 mt-1">{errors.specs.imei2.message}</p>
@@ -93,23 +187,8 @@ export function ProductSpecifications({
                     </div>
                 )}
 
-                {/* SERIAL */}
-                {categoryConfig.serial !== 'off' && (
-                    <div className="space-y-1">
-                        <FieldLabel label="Serial" required={categoryConfig.serial === 'required'} />
-                        <input
-                            type="text"
-                            value={watch('specs.serial') || ''}
-                            onChange={(e) => setValue('specs.serial', e.target.value.toUpperCase().trim())}
-                            className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase ${errors?.specs?.serial ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
-                                }`}
-                            placeholder="Ex: SN123456789"
-                        />
-                        {errors?.specs?.serial && (
-                            <p className="text-xs text-red-600 mt-1">{errors.specs.serial.message}</p>
-                        )}
-                    </div>
-                )}
+                {/* SERIAL - Rendered here to ensure it's 3rd field */}
+                {categoryConfig.serial !== 'off' && renderGenericField('serial', categoryConfig.serial)}
 
                 {/* COR */}
                 {categoryConfig.color !== 'off' && (
@@ -196,6 +275,36 @@ export function ProductSpecifications({
                         )}
                     </div>
                 )}
+
+                {/* DYNAMIC FIELDS - Render all other configured fields */}
+                {Object.entries(categoryConfig)
+                    .filter(([key, value]) => {
+                        if (typeof value !== 'string') return false;
+
+                        // Skip if field is off
+                        if (value === 'off') return false;
+
+                        // Skip special fields (already rendered above)
+                        if (isSpecialField(key)) return false;
+
+                        // Skip custom_fields array
+                        if (key === 'custom_fields') return false;
+
+                        // Skip config fields
+                        if (key.includes('ean_autofill') || key.includes('auto_name')) return false;
+
+
+                        return true;
+                    })
+                    .sort(([keyA], [keyB]) => {
+                        // Serial comes first (after IMEI1/IMEI2)
+                        if (keyA === 'serial') return -1;
+                        if (keyB === 'serial') return 1;
+                        // Rest alphabetically
+                        return keyA.localeCompare(keyB);
+                    })
+                    .map(([key, value]) => renderGenericField(key, value as any))
+                }
 
                 {/* CUSTOM FIELDS - Dynamic rendering */}
                 {fieldsLoading ? (

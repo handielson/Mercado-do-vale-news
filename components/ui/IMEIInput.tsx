@@ -10,6 +10,8 @@ interface IMEIInputProps {
   className?: string;
   required?: boolean;
   error?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  id?: string;
 }
 
 /**
@@ -27,7 +29,9 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
   placeholder = "Digite 15 dígitos",
   className,
   required = false,
-  error
+  error,
+  onKeyDown,
+  id
 }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -53,10 +57,12 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
         </label>
       )}
       <input
+        id={id}
         type="text"
         inputMode="numeric"
         value={value}
         onChange={handleChange}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         maxLength={15}
         className={cn(
