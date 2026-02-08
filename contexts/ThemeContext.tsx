@@ -11,46 +11,38 @@ interface ThemeSettings {
 }
 
 interface ThemeContextType {
-  settings: ThemeSettings | null;
+  settings: ThemeSettings; // Always available (never null)
   isLoading: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<ThemeSettings | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Start with default settings immediately (no loading state blocking render)
+  const [settings, setSettings] = useState<ThemeSettings>({
+    company_name: 'Mercado do Vale',
+    theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
+  });
+  const [isLoading, setIsLoading] = useState(false); // Changed to false - no blocking
 
   useEffect(() => {
     async function fetchSettings() {
       try {
-        console.log('[ThemeContext] Fetching company settings...');
+        console.log('[ThemeContext] Fetching company settings in background...');
 
-        // Fetch company settings from Supabase (no timeout)
+        // Fetch company settings from Supabase (background load)
         const { data, error } = await supabase
           .from('company_settings')
           .select('*')
-          .maybeSingle(); // Use maybeSingle to handle missing records gracefully
+          .maybeSingle();
 
         if (error) {
-          console.warn('[ThemeContext] Error fetching settings:', error);
-          // Use defaults on error instead of throwing
-          setSettings({
-            company_name: 'Mercado do Vale',
-            theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
-          });
-          setIsLoading(false);
+          console.warn('[ThemeContext] Error fetching settings, keeping defaults:', error);
           return;
         }
 
         if (!data) {
-          console.warn('[ThemeContext] No company_settings found, using defaults');
-          // No settings found, use defaults
-          setSettings({
-            company_name: 'Mercado do Vale',
-            theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
-          });
-          setIsLoading(false);
+          console.warn('[ThemeContext] No company_settings found, keeping defaults');
           return;
         }
 
@@ -61,6 +53,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           logo_dark: data.logo_dark,
         };
 
+        // Update settings (will cause seamless re-render)
         setSettings(themeSettings);
 
         // Inject dynamic CSS variables into :root
@@ -70,38 +63,20 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           });
         }
 
-        console.log('[ThemeContext] Settings loaded successfully');
-        setIsLoading(false);
+        console.log('[ThemeContext] Settings loaded and applied successfully');
       } catch (error) {
-        console.warn('[ThemeContext] Failed to load theme settings. Using defaults.', error);
-        // Default fallbacks
-        setSettings({
-          company_name: 'Mercado do Vale',
-          theme_colors: { primary: '#3b82f6', secondary: '#1e293b' }
-        });
-        setIsLoading(false);
+        console.warn('[ThemeContext] Failed to load theme settings. Keeping defaults.', error);
       }
     }
 
     fetchSettings();
   }, []);
 
-  // Pre-load skeleton or empty state to avoid "unstyled flash"
-  if (isLoading) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-slate-900">
-        <div className="animate-pulse text-blue-400 font-bold text-xl uppercase tracking-tighter">
-          Atualizando Catálogo...
-        </div>
-      </div>
-    );
-  }
-
   return (
     <ThemeContext.Provider value={{ settings, isLoading }}>
       <Helmet>
-        <title>{settings?.company_name || 'Carregando...'}</title>
-        {settings?.logo_main && <link rel="icon" href={settings.logo_main} />}
+        <title>{settings.company_name}</title>
+        {settings.logo_main && <link rel="icon" href={settings.logo_main} />}
       </Helmet>
       {children}
     </ThemeContext.Provider>

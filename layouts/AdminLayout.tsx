@@ -29,7 +29,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       )}>
         <div className="px-2">
           <h1 className="text-xl font-bold tracking-tighter text-blue-400">
-            {settings?.company_name || 'Mercado do Vale'}
+            {settings.company_name}
           </h1>
           <div className="flex items-center gap-1.5 mt-1">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
