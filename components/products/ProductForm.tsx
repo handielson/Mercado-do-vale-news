@@ -25,6 +25,7 @@ import { ProductPricing } from './sections/ProductPricing';
 import { ProductImages } from './sections/ProductImages';
 import { ProductBasicInfo } from './sections/ProductBasicInfo';
 import { ProductWarranty } from './sections/ProductWarranty';
+import { ProductSEO } from './sections/ProductSEO';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -339,7 +340,28 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 onRefresh={loadCategoryConfig}
             />
 
-            {/* 3. PRECIFICAÇÃO */}
+            {/* 3. SEO E DESCRIÇÃO */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <FileText size={18} className="text-purple-600" />
+                    SEO e Descrição
+                </h3>
+                <ProductSEO
+                    watch={watch}
+                    setValue={setValue}
+                    errors={errors}
+                    productName={watch('name') || ''}
+                    productData={{
+                        name: watch('name'),
+                        brand: watch('brand'),
+                        model: watch('model'),
+                        category: selectedCategoryId,
+                        specs: watch('specs')
+                    }}
+                />
+            </div>
+
+            {/* 4. PRECIFICAÇÃO */}
             <ProductPricing watch={watch} setValue={setValue} />
 
             {/* 4. IMAGENS */}

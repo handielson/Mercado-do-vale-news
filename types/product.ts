@@ -88,6 +88,13 @@ export interface Product {
     warranty_type: WarrantyType;   // Type of warranty: brand, category, or custom
     warranty_template_id?: string; // Warranty template ID (only used when warranty_type = 'custom')
 
+    // SEO Fields (AI-Generated)
+    description?: string;          // Detailed product description (HTML/Rich Text) for SEO
+    slug?: string;                 // URL-friendly slug (e.g., iphone-15-pro-max-256gb-preto)
+    meta_title?: string;           // SEO meta title (max 60 characters)
+    meta_description?: string;     // SEO meta description (max 160 characters)
+    keywords?: string[];           // Keywords/tags for search and SEO
+
     // Timestamps
     created: string;
     updated: string;
@@ -121,4 +128,10 @@ export interface ProductInput {
     is_gift?: boolean;
     warranty_type?: WarrantyType;
     warranty_template_id?: string;
+    // SEO Fields (AI-Generated)
+    description?: string;
+    slug?: string;
+    meta_title?: string;
+    meta_description?: string;
+    keywords?: string[];
 }
