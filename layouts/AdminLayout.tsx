@@ -180,11 +180,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             active={location.pathname.startsWith('/admin/settings/banners')}
           />
           <NavItem
-            to="/admin/settings/catalog"
+            to="/admin/catalog-config"
             icon={<Settings size={18} />}
-            label="Catálogo"
-            active={location.pathname.startsWith('/admin/settings/catalog')}
+            label="Config. Catálogo"
+            active={location.pathname.startsWith('/admin/catalog-config')}
           />
+
           {customer?.customer_type === 'ADMIN' && (
             <NavItem
               to="/admin/settings/permissions"

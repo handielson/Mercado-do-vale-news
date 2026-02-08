@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Grid, List } from 'lucide-react';
 import {
     BannerCarousel,
@@ -8,12 +8,17 @@ import {
     CategoryNav
 } from '@/components/catalog';
 import { PublicHeader } from '@/components/PublicHeader';
+import { CatalogSectionComponent } from '@/components/catalog/CatalogSection';
 import { useCatalog } from '@/hooks/useCatalog';
 import { catalogShareService } from '@/services/catalogShareService';
+import { catalogSectionsService } from '@/services/catalogSectionsService';
 import type { CatalogProduct } from '@/types/catalog';
+import type { CatalogSection } from '@/types/catalogSections';
 
 export default function CatalogPage() {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [sections, setSections] = useState<CatalogSection[]>([]);
+    const [sectionsLoading, setSectionsLoading] = useState(true);
 
     const {
         products,
@@ -31,6 +36,23 @@ export default function CatalogPage() {
     } = useCatalog({
         pageSize: 12
     });
+
+    // Carregar seções ativas
+    useEffect(() => {
+        loadSections();
+    }, []);
+
+    const loadSections = async () => {
+        try {
+            setSectionsLoading(true);
+            const data = await catalogSectionsService.getActiveSections();
+            setSections(data);
+        } catch (error) {
+            console.error('Erro ao carregar seções:', error);
+        } finally {
+            setSectionsLoading(false);
+        }
+    };
 
     const handleShare = async (product: CatalogProduct) => {
         try {
@@ -79,7 +101,8 @@ export default function CatalogPage() {
                         categories: categoryId ? [categoryId] : []
                     });
                 }}
-                categories={filterStats.categories.map(cat => ({
+                categories={(filterStats?.categories || []).map(cat => ({
+                    id: cat.id,
                     name: cat.name,
                     count: cat.count
                 }))}
@@ -131,6 +154,22 @@ export default function CatalogPage() {
                         placeholder="Buscar por nome, marca ou modelo..."
                     />
                 </div>
+
+                {/* Seções do Catálogo */}
+                {!sectionsLoading && Array.isArray(sections) && sections.length > 0 && (
+                    <div className="mb-12 space-y-12">
+                        {sections.map((section) => (
+                            <CatalogSectionComponent key={section.id} section={section} />
+                        ))}
+                    </div>
+                )}
+
+                {/* Divisor */}
+                {sections.length > 0 && (
+                    <div className="mb-8">
+                        <div className="border-t border-slate-200"></div>
+                    </div>
+                )}
 
                 {/* Grid de produtos - Largura total */}
                 <ProductGrid

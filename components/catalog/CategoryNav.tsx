@@ -11,7 +11,7 @@ interface Category {
 interface CategoryNavProps {
     activeCategory: string | null;
     onCategoryChange: (categoryId: string | null) => void;
-    categories: Array<{ name: string; count: number }>;
+    categories: Array<{ id?: string; name: string; count: number }>;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -28,15 +28,16 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
     categories
 }) => {
     // Criar lista de categorias com "TODOS" no início
+    const safeCategories = Array.isArray(categories) ? categories : [];
     const allCategories: Category[] = [
         {
             id: null,
             name: 'TODOS',
             icon: CATEGORY_ICONS['TODOS'],
-            count: categories.reduce((sum, cat) => sum + cat.count, 0)
+            count: safeCategories.reduce((sum, cat) => sum + cat.count, 0)
         },
-        ...categories.map(cat => ({
-            id: cat.name,
+        ...safeCategories.map(cat => ({
+            id: cat.id || cat.name,
             name: cat.name.toUpperCase(),
             icon: CATEGORY_ICONS[cat.name.toUpperCase()] || CATEGORY_ICONS['OUTROS'],
             count: cat.count

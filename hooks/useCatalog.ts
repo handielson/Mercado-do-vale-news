@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { catalogService } from '@/services/catalogService';
+import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogProduct } from '@/types/catalog';
 import type { FilterState } from '@/components/catalog';
+import type { CatalogSettings } from '@/types/catalogSettings';
+import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
+
 
 interface UseCatalogOptions {
     initialFilters?: Partial<FilterState>;
@@ -18,6 +22,8 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
+    const [catalogSettings, setCatalogSettings] = useState<CatalogSettings>(DEFAULT_CATALOG_SETTINGS as CatalogSettings);
+    const [settingsLoading, setSettingsLoading] = useState(true);
 
     const [filters, setFilters] = useState<FilterState>({
         categories: [],
@@ -28,6 +34,30 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         newOnly: false,
         ...initialFilters
     });
+
+    // Carregar configurações do catálogo
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                setSettingsLoading(true);
+                const settings = await catalogConfigService.getSettings();
+                setCatalogSettings(settings);
+            } catch (err) {
+                console.error('Erro ao carregar configurações do catálogo:', err);
+                // Usar configurações padrão em caso de erro
+                setCatalogSettings(DEFAULT_CATALOG_SETTINGS as CatalogSettings);
+            } finally {
+                setSettingsLoading(false);
+            }
+        };
+
+        loadSettings();
+    }, []);
+
+    // Aplicar regras de visibilidade aos produtos
+    const applyVisibilityRules = useCallback((rawProducts: CatalogProduct[]) => {
+        return catalogConfigService.applyVisibilityRules(rawProducts, catalogSettings);
+    }, [catalogSettings]);
 
     // Carregar produtos
     const loadProducts = useCallback(async (reset = false) => {
@@ -54,11 +84,14 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 newOnly: filters.newOnly
             }, currentPage, pageSize);
 
+            // Aplicar regras de visibilidade
+            const filteredProducts = applyVisibilityRules(response.products);
+
             if (reset) {
-                setProducts(response.products);
+                setProducts(filteredProducts);
                 setPage(1);
             } else {
-                setProducts((prev) => [...prev, ...response.products]);
+                setProducts((prev) => [...prev, ...filteredProducts]);
             }
 
             setHasMore(response.hasMore);
@@ -74,13 +107,15 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         } finally {
             setLoading(false);
         }
-    }, [searchQuery, filters, pageSize]); // Removed 'page' from dependencies
+    }, [searchQuery, filters, pageSize, applyVisibilityRules]); // Removed 'page' from dependencies
 
-    // Recarregar quando filtros ou busca mudarem
+    // Recarregar quando filtros, busca ou configurações mudarem
     useEffect(() => {
-        loadProducts(true);
+        if (!settingsLoading) {
+            loadProducts(true);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchQuery, filters]);
+    }, [searchQuery, filters, catalogSettings, settingsLoading]);
 
     // Carregar mais produtos
     const loadMore = useCallback(() => {
@@ -127,7 +162,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         brands: []
     });
 
-    // Carregar categorias e marcas reais
+    // Carregar categorias e marcas reais com regras de visibilidade
     useEffect(() => {
         const loadMetadata = async () => {
             try {
@@ -137,18 +172,26 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                     catalogMetadataService.getAllBrands()
                 ]);
 
-                setFilterStats({ categories, brands });
+                // Aplicar regras de visibilidade às categorias
+                const filteredCategories = await catalogConfigService.applyCategoryVisibilityRules(
+                    categories,
+                    catalogSettings
+                );
+
+                setFilterStats({ categories: filteredCategories, brands });
             } catch (error) {
                 console.error('Erro ao carregar metadados:', error);
             }
         };
 
-        loadMetadata();
-    }, []);
+        if (!settingsLoading) {
+            loadMetadata();
+        }
+    }, [catalogSettings, settingsLoading]);
 
     return {
         products,
-        loading,
+        loading: loading || settingsLoading,
         error,
         searchQuery,
         setSearchQuery,
@@ -158,6 +201,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         toggleFavorite,
         loadMore,
         hasMore,
-        filterStats
+        filterStats,
+        catalogSettings, // Expor configurações para uso nos componentes
     };
 }

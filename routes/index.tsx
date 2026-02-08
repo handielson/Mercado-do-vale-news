@@ -46,6 +46,7 @@ import DocumentSettingsPage from '../pages/admin/settings/DocumentSettingsPage';
 import WarrantyTemplatesPage from '../pages/admin/settings/WarrantyTemplatesPage';
 import BannerManagementPage from '../pages/admin/settings/BannerManagementPage';
 import CatalogSettingsPage from '../pages/admin/settings/CatalogSettingsPage';
+import CatalogConfigPage from '../pages/admin/CatalogConfigPage';
 import PermissionsManagementPage from '../pages/admin/settings/PermissionsManagementPage';
 import CatalogEditorPage from '../pages/admin/catalog-editor';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
@@ -422,6 +423,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <CatalogEditorPage />
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/catalog-config",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <CatalogConfigPage />
       </ProtectedRoute>
     )
   },

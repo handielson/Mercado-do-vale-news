@@ -44,6 +44,8 @@ export const catalogService = {
             query = query.or(`name.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`);
         }
 
+        // IMPORTANTE: Só aplicar filtro de categoria se houver categorias selecionadas
+        // Se o array estiver vazio, não aplicar o filtro (mostrar todos os produtos)
         if (filters?.categories && filters.categories.length > 0) {
             query = query.in('category_id', filters.categories);
         }
@@ -80,6 +82,15 @@ export const catalogService = {
         query = query.order('created_at', { ascending: false });
 
         const { data, error, count } = await query;
+
+        console.log('[catalogService] Supabase Response:', {
+            data,
+            error,
+            count,
+            filters,
+            hasData: !!data,
+            dataLength: data?.length
+        });
 
         if (error) throw error;
 
