@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Edit, Package } from 'lucide-react';
+import { Edit, Package, Trash2 } from 'lucide-react';
 import { Product } from '../../types/product';
 import { ProductStatus } from '../../utils/field-standards';
 import { cn } from '../../utils/cn';
@@ -8,13 +8,14 @@ import { cn } from '../../utils/cn';
 interface ProductCardProps {
     product: Product;
     onEdit?: (product: Product) => void;
+    onDelete?: (product: Product) => void;
 }
 
 /**
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
     // Format price from centavos to BRL
     const formatPrice = (centavos: number): string => {
         return new Intl.NumberFormat('pt-BR', {
@@ -93,13 +94,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit }) => 
                         <h3 className="font-semibold text-slate-900 truncate">{product.name}</h3>
                         <p className="font-mono text-xs text-slate-500 mt-0.5">{product.sku}</p>
                     </div>
-                    <button
-                        onClick={() => onEdit?.(product)}
-                        className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-                        title="Editar produto"
-                    >
-                        <Edit className="w-4 h-4 text-slate-600" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => onEdit?.(product)}
+                            className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Editar produto"
+                        >
+                            <Edit className="w-4 h-4 text-slate-600" />
+                        </button>
+                        <button
+                            onClick={() => onDelete?.(product)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
+                            title="Excluir produto"
+                        >
+                            <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Status Badge */}

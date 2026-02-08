@@ -8,6 +8,7 @@ interface ProductListProps {
     products: Product[];
     isLoading: boolean;
     onEditProduct?: (product: Product) => void;
+    onDeleteProduct?: (product: Product) => void;
 }
 
 /**
@@ -17,7 +18,8 @@ interface ProductListProps {
 export const ProductList: React.FC<ProductListProps> = ({
     products,
     isLoading,
-    onEditProduct
+    onEditProduct,
+    onDeleteProduct
 }) => {
     // Loading State: Show skeleton cards
     if (isLoading) {
@@ -72,6 +74,7 @@ export const ProductList: React.FC<ProductListProps> = ({
                     key={product.id}
                     product={product}
                     onEdit={onEditProduct}
+                    onDelete={onDeleteProduct}
                 />
             ))}
         </div>

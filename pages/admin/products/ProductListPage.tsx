@@ -17,7 +17,8 @@ export const ProductListPage: React.FC = () => {
         products,
         isLoading,
         error,
-        handleFilterChange
+        handleFilterChange,
+        deleteProduct
     } = useProducts();
 
     const handleNewProduct = () => {
@@ -30,6 +31,17 @@ export const ProductListPage: React.FC = () => {
 
     const handleEditProduct = (product: Product) => {
         navigate(`/admin/products/${product.id}`);
+    };
+
+    const handleDeleteProduct = async (product: Product) => {
+        const confirmed = window.confirm(
+            `Tem certeza que deseja excluir o produto "${product.name}"?\n\nEsta ação não pode ser desfeita.`
+        );
+
+        if (confirmed) {
+            await deleteProduct(product.id);
+            // Note: refetch is automatic in the hook
+        }
     };
 
     return (
@@ -77,6 +89,7 @@ export const ProductListPage: React.FC = () => {
                 products={products}
                 isLoading={isLoading}
                 onEditProduct={handleEditProduct}
+                onDeleteProduct={handleDeleteProduct}
             />
 
             {/* Results Count */}
