@@ -1,21 +1,22 @@
 
 import { Color, ColorInput } from '../types/color';
+import { supabase } from './supabase';
 
 /**
- * COLOR SERVICE
- * Complete CRUD operations with localStorage persistence
+ * COLOR SERVICE - Supabase Implementation
+ * Multi-tenant service with Row Level Security
  * 
  * ANTIGRAVITY PROTOCOL:
- * - localStorage key: antigravity_colors_v1
- * - Auto-generate slugs from names
- * - Timestamp tracking (created, updated)
+ * - Online storage via Supabase (not localStorage)
+ * - Multi-tenant with company_id isolation
  * - Follows same pattern as brandService
  * - Includes hex_code mapping for visual preview
  */
 
-const STORAGE_KEY = 'antigravity_colors_v1';
+// TEMPORARY: Hardcoded company_id until we implement auth
+const TEMP_COMPANY_ID = 'mercado-do-vale';
 
-// Color mapping for visual preview
+// Color mapping for visual preview (fallback if hex_code not in DB)
 export const COLOR_MAP: Record<string, string> = {
     'Preto': '#000000',
     'Branco': '#FFFFFF',
@@ -31,99 +32,19 @@ export const COLOR_MAP: Record<string, string> = {
     'Laranja': '#F97316'
 };
 
-// Default colors for initial setup
-const defaultColors: Color[] = [
-    {
-        id: 'color-1',
-        name: 'Preto',
-        slug: 'preto',
-        hex_code: '#000000',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-2',
-        name: 'Branco',
-        slug: 'branco',
-        hex_code: '#FFFFFF',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-3',
-        name: 'Azul',
-        slug: 'azul',
-        hex_code: '#3B82F6',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-4',
-        name: 'Verde',
-        slug: 'verde',
-        hex_code: '#10B981',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-5',
-        name: 'Vermelho',
-        slug: 'vermelho',
-        hex_code: '#EF4444',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-6',
-        name: 'Rosa',
-        slug: 'rosa',
-        hex_code: '#EC4899',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-7',
-        name: 'Dourado',
-        slug: 'dourado',
-        hex_code: '#F59E0B',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-8',
-        name: 'Prata',
-        slug: 'prata',
-        hex_code: '#9CA3AF',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-9',
-        name: 'Cinza',
-        slug: 'cinza',
-        hex_code: '#6B7280',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    },
-    {
-        id: 'color-10',
-        name: 'Roxo',
-        slug: 'roxo',
-        hex_code: '#8B5CF6',
-        active: true,
-        created: new Date('2024-01-01').toISOString(),
-        updated: new Date('2024-01-01').toISOString()
-    }
-];
+/**
+ * Get company_id from companies table by slug
+ */
+async function getCompanyId(): Promise<string> {
+    const { data, error } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('slug', TEMP_COMPANY_ID)
+        .single();
+
+    if (error) throw new Error(`Failed to get company: ${error.message}`);
+    return data.id;
+}
 
 /**
  * Generate URL-friendly slug from color name
@@ -138,131 +59,183 @@ function generateSlug(name: string): string {
 }
 
 /**
- * Generate unique ID
+ * List all colors
  */
-function generateId(): string {
-    return `color-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+async function list(): Promise<Color[]> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('colors')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('name');
+
+    if (error) throw new Error(`Failed to fetch colors: ${error.message}`);
+
+    return (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        hex_code: row.hex_code,
+        active: row.active ?? true,
+        created: row.created_at,
+        updated: row.updated_at
+    }));
 }
 
 /**
- * Load colors from localStorage
+ * Get color by ID
  */
-function loadFromStorage(): Color[] {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            return JSON.parse(stored);
-        }
-    } catch (error) {
-        console.error('Error loading colors from localStorage:', error);
+async function getById(id: string): Promise<Color | null> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('colors')
+        .select('*')
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .single();
+
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch color: ${error.message}`);
     }
-    return defaultColors;
+
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        hex_code: data.hex_code,
+        active: data.active ?? true,
+        created: data.created_at,
+        updated: data.updated_at
+    };
 }
 
 /**
- * Save colors to localStorage
+ * Create new color
  */
-function saveToStorage(colors: Color[]): void {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(colors));
-    } catch (error) {
-        console.error('Error saving colors to localStorage:', error);
-    }
-}
+async function create(input: ColorInput): Promise<Color> {
+    const companyId = await getCompanyId();
+    const slug = generateSlug(input.name);
 
-// Initialize colors from storage
-let colors: Color[] = loadFromStorage();
+    // Auto-detect hex_code from COLOR_MAP if not provided
+    const hex_code = input.hex_code || COLOR_MAP[input.name] || '#000000';
 
-/**
- * Color Service
- */
-export const colorService = {
-    /**
-     * List all colors
-     */
-    async list(): Promise<Color[]> {
-        return Promise.resolve([...colors]);
-    },
-
-    /**
-     * Get color by ID
-     */
-    async getById(id: string): Promise<Color | null> {
-        const color = colors.find(c => c.id === id);
-        return Promise.resolve(color || null);
-    },
-
-    /**
-     * Create new color
-     */
-    async create(input: ColorInput): Promise<Color> {
-        const now = new Date().toISOString();
-
-        // Auto-detect hex_code from COLOR_MAP if not provided
-        const hex_code = input.hex_code || COLOR_MAP[input.name];
-
-        const newColor: Color = {
-            id: generateId(),
+    const { data, error } = await supabase
+        .from('colors')
+        .insert({
+            company_id: companyId,
             name: input.name,
-            slug: generateSlug(input.name),
+            slug,
             hex_code,
-            active: input.active !== undefined ? input.active : true,
-            created: now,
-            updated: now
-        };
+            active: input.active !== undefined ? input.active : true
+        })
+        .select()
+        .single();
 
-        colors.push(newColor);
-        saveToStorage(colors);
+    if (error) throw new Error(`Failed to create color: ${error.message}`);
 
-        return Promise.resolve(newColor);
-    },
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        hex_code: data.hex_code,
+        active: data.active,
+        created: data.created_at,
+        updated: data.updated_at
+    };
+}
 
-    /**
-     * Update existing color
-     */
-    async update(id: string, input: ColorInput): Promise<Color> {
-        const index = colors.findIndex(c => c.id === id);
+/**
+ * Update existing color
+ */
+async function update(id: string, input: ColorInput): Promise<Color> {
+    const companyId = await getCompanyId();
+    const slug = generateSlug(input.name);
 
-        if (index === -1) {
-            throw new Error(`Color with id ${id} not found`);
-        }
-
-        const updated: Color = {
-            ...colors[index],
+    const { data, error } = await supabase
+        .from('colors')
+        .update({
             name: input.name,
-            slug: generateSlug(input.name),
-            hex_code: input.hex_code !== undefined ? input.hex_code : colors[index].hex_code,
-            active: input.active !== undefined ? input.active : colors[index].active,
-            updated: new Date().toISOString()
-        };
+            slug,
+            hex_code: input.hex_code !== undefined ? input.hex_code : undefined,
+            active: input.active !== undefined ? input.active : undefined
+        })
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .select()
+        .single();
 
-        colors[index] = updated;
-        saveToStorage(colors);
+    if (error) throw new Error(`Failed to update color: ${error.message}`);
 
-        return Promise.resolve(updated);
-    },
+    return {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        hex_code: data.hex_code,
+        active: data.active,
+        created: data.created_at,
+        updated: data.updated_at
+    };
+}
 
-    /**
-     * Delete color
-     */
-    async delete(id: string): Promise<void> {
-        colors = colors.filter(c => c.id !== id);
-        saveToStorage(colors);
-        return Promise.resolve();
-    },
+/**
+ * Delete color
+ */
+async function deleteColor(id: string): Promise<void> {
+    const companyId = await getCompanyId();
 
-    /**
-     * Get only active colors
-     */
-    async listActive(): Promise<Color[]> {
-        return Promise.resolve(colors.filter(c => c.active));
-    },
+    const { error } = await supabase
+        .from('colors')
+        .delete()
+        .eq('id', id)
+        .eq('company_id', companyId);
 
-    /**
-     * Get color hex code (from entity or COLOR_MAP)
-     */
-    getColorHex(colorName: string): string | undefined {
-        const color = colors.find(c => c.name === colorName);
-        return color?.hex_code || COLOR_MAP[colorName];
-    }
+    if (error) throw new Error(`Failed to delete color: ${error.message}`);
+}
+
+/**
+ * Get only active colors
+ */
+async function listActive(): Promise<Color[]> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('colors')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('active', true)
+        .order('name');
+
+    if (error) throw new Error(`Failed to fetch active colors: ${error.message}`);
+
+    return (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        hex_code: row.hex_code,
+        active: row.active,
+        created: row.created_at,
+        updated: row.updated_at
+    }));
+}
+
+/**
+ * Get color hex code (from entity or COLOR_MAP)
+ */
+function getColorHex(colorName: string): string | undefined {
+    // This is a synchronous helper, so we can't query DB
+    // It's used for preview only, fallback to COLOR_MAP
+    return COLOR_MAP[colorName];
+}
+
+export const colorService = {
+    list,
+    getById,
+    create,
+    update,
+    delete: deleteColor,
+    listActive,
+    getColorHex
 };

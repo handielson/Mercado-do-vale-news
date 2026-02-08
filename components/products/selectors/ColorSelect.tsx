@@ -15,10 +15,10 @@ interface ColorSelectProps {
  * Select with redirect to color management page
  * 
  * ANTIGRAVITY PROTOCOL:
- * - Uses localStorage-based colorService
+ * - Uses Supabase-based colorService (online, multi-tenant)
  * - Shows only active colors
  * - Redirect to /admin/settings/colors for creation
- * - Refresh button to reload colors after creation
+ * - Refresh button reloads colors from Supabase
  */
 export const ColorSelect: React.FC<ColorSelectProps> = ({
     value,
@@ -35,7 +35,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
     const loadColors = async () => {
         try {
             setIsLoading(true);
-            const data = await colorService.listActive(); // Only active colors
+            const data = await colorService.listActive(); // Fetches fresh data from Supabase
             setColors(data);
         } catch (error) {
             console.error('Error loading colors:', error);
