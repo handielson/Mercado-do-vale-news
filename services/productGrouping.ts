@@ -1,4 +1,4 @@
-import type { CatalogProduct } from '@/types/catalog';
+import type { CatalogProduct, ProductVariant, ProductGroup } from '@/types/catalog';
 import { ProductStatus } from '@/utils/field-standards';
 import { COLOR_MAP } from './colors';
 
@@ -8,21 +8,6 @@ import { COLOR_MAP } from './colors';
 export interface ColorOption {
     name: string;
     hex?: string;
-}
-
-/**
- * Product group by variant combination
- */
-export interface ProductGroup {
-    groupKey: string;
-    brand: string;
-    model: string;
-    ram: string;
-    storage: string;
-    colors: ColorOption[];
-    products: CatalogProduct[];
-    priceRange: { min: number; max: number };
-    representativeProduct: CatalogProduct; // Product to display in card
 }
 
 /**
@@ -79,77 +64,132 @@ function normalizeRAMAndStorage(ram?: string, storage?: string): { ram: string; 
 }
 
 /**
- * Generate group key from product specs
+ * Generate group key from product specs (Brand + Model only)
  */
 function generateGroupKey(product: CatalogProduct): string {
     const brand = product.brand || 'unknown';
     const model = product.model || 'unknown';
-    const normalized = normalizeRAMAndStorage(product.specs?.ram, product.specs?.storage);
 
-    return `${brand}_${model}_${normalized.ram}_${normalized.storage}`.toLowerCase().replace(/\s+/g, '-');
+    return `${brand}_${model}`.toLowerCase().replace(/\s+/g, '-');
 }
 
 /**
- * Group products by Brand + Model + RAM + Storage
+ * Generate variant key for RAM + Storage combination
+ */
+function generateVariantKey(ram?: string, storage?: string): string {
+    const normalized = normalizeRAMAndStorage(ram, storage);
+    return `${normalized.ram}_${normalized.storage}`.toLowerCase();
+}
+
+/**
+ * Group products by Brand + Model, with variants for each RAM/Storage combination
  * Each group contains all colors for that variant combination
  */
 export function groupProductsByVariants(products: CatalogProduct[]): ProductGroup[] {
     // First, filter only available products
     const availableProducts = filterAvailableProducts(products);
 
-    // Group by variant key
-    const grouped = new Map<string, CatalogProduct[]>();
+    // Group by model (Brand + Model)
+    const modelGroups = new Map<string, CatalogProduct[]>();
 
     for (const product of availableProducts) {
-        const key = generateGroupKey(product);
-        const existing = grouped.get(key) || [];
+        const modelKey = generateGroupKey(product);
+        const existing = modelGroups.get(modelKey) || [];
         existing.push(product);
-        grouped.set(key, existing);
+        modelGroups.set(modelKey, existing);
     }
 
-    // Convert to ProductGroup array
+    // Convert to ProductGroup array with variants
     const groups: ProductGroup[] = [];
 
-    for (const [key, groupProducts] of grouped.entries()) {
-        // Extract unique colors
-        const colorsMap = new Map<string, ColorOption>();
-        let minPrice = Infinity;
-        let maxPrice = -Infinity;
+    for (const [modelKey, modelProducts] of modelGroups.entries()) {
+        // Group products by RAM + Storage within this model
+        const variantMap = new Map<string, CatalogProduct[]>();
 
-        for (const product of groupProducts) {
-            // Extract color
-            if (product.specs?.color) {
-                const colorName = product.specs.color;
-                if (!colorsMap.has(colorName)) {
-                    colorsMap.set(colorName, {
+        for (const product of modelProducts) {
+            const variantKey = generateVariantKey(product.specs?.ram, product.specs?.storage);
+            const existing = variantMap.get(variantKey) || [];
+            existing.push(product);
+            variantMap.set(variantKey, existing);
+        }
+
+        // Build variants array
+        const variants: ProductVariant[] = [];
+        const allColorsMap = new Map<string, ColorOption>();
+        let globalMinPrice = Infinity;
+        let globalMaxPrice = -Infinity;
+
+        for (const [variantKey, variantProducts] of variantMap.entries()) {
+            // Extract unique colors for this variant
+            const colorsMap = new Map<string, ColorOption>();
+            let minPrice = Infinity;
+            let maxPrice = -Infinity;
+
+            for (const product of variantProducts) {
+                // Extract color
+                if (product.specs?.color) {
+                    const colorName = product.specs.color;
+                    const colorOption: ColorOption = {
                         name: colorName,
                         hex: product.specs.color_hex || COLOR_MAP[colorName] || '#9CA3AF'
-                    });
+                    };
+
+                    colorsMap.set(colorName, colorOption);
+                    allColorsMap.set(colorName, colorOption); // Add to global colors
+                }
+
+                // Track price range
+                const price = product.price_retail || 0;
+                if (price > 0) {
+                    minPrice = Math.min(minPrice, price);
+                    maxPrice = Math.max(maxPrice, price);
+                    globalMinPrice = Math.min(globalMinPrice, price);
+                    globalMaxPrice = Math.max(globalMaxPrice, price);
                 }
             }
 
-            // Track price range
-            const price = product.price_retail || 0;
-            if (price > 0) {
-                minPrice = Math.min(minPrice, price);
-                maxPrice = Math.max(maxPrice, price);
-            }
+            // Get RAM and Storage from first product
+            const firstProduct = variantProducts[0];
+            const normalized = normalizeRAMAndStorage(
+                firstProduct.specs?.ram,
+                firstProduct.specs?.storage
+            );
+
+            variants.push({
+                ram: normalized.ram,
+                storage: normalized.storage,
+                colors: Array.from(colorsMap.values()),
+                products: variantProducts,
+                priceRange: {
+                    min: minPrice === Infinity ? 0 : minPrice,
+                    max: maxPrice === -Infinity ? 0 : maxPrice
+                }
+            });
         }
 
+        // Sort variants by RAM (ascending) then Storage (ascending)
+        variants.sort((a, b) => {
+            const ramA = extractGB(a.ram);
+            const ramB = extractGB(b.ram);
+            if (ramA !== ramB) return ramA - ramB;
+
+            const storageA = extractGB(a.storage);
+            const storageB = extractGB(b.storage);
+            return storageA - storageB;
+        });
+
         // Use first product as representative
-        const representative = groupProducts[0];
+        const representative = modelProducts[0];
 
         groups.push({
-            groupKey: key,
+            groupKey: modelKey,
             brand: representative.brand || '',
             model: representative.model || '',
-            ram: representative.specs?.ram || '',
-            storage: representative.specs?.storage || '',
-            colors: Array.from(colorsMap.values()),
-            products: groupProducts,
-            priceRange: {
-                min: minPrice === Infinity ? 0 : minPrice,
-                max: maxPrice === -Infinity ? 0 : maxPrice
+            variants,
+            allColors: Array.from(allColorsMap.values()),
+            globalPriceRange: {
+                min: globalMinPrice === Infinity ? 0 : globalMinPrice,
+                max: globalMaxPrice === -Infinity ? 0 : globalMaxPrice
             },
             representativeProduct: representative
         });
@@ -159,13 +199,27 @@ export function groupProductsByVariants(products: CatalogProduct[]): ProductGrou
 }
 
 /**
- * Find a specific product within a group by color
+ * Find a specific product within a group by RAM, Storage and Color
  */
-export function findProductByColor(
+export function findProductByVariant(
     group: ProductGroup,
+    ram: string,
+    storage: string,
     colorName: string
 ): CatalogProduct | null {
-    return group.products.find(
+    // Find the variant
+    const variant = group.variants.find(v => v.ram === ram && v.storage === storage);
+    if (!variant) return null;
+
+    // Find the product with the specified color
+    return variant.products.find(
         product => product.specs?.color === colorName
     ) || null;
+}
+
+/**
+ * Get the first available product from a variant (useful for default selection)
+ */
+export function getDefaultProductFromVariant(variant: ProductVariant): CatalogProduct | null {
+    return variant.products[0] || null;
 }

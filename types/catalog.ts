@@ -109,16 +109,23 @@ export interface ProductVariants {
     priceRange: { min: number; max: number };
 }
 
-// Product Group - Aggregated products by Brand + Model + RAM + Storage
-export interface ProductGroup {
-    groupKey: string;
-    brand: string;
-    model: string;
+// Product Variant - Single RAM/Storage combination with its colors
+export interface ProductVariant {
     ram: string;
     storage: string;
     colors: Array<{ name: string; hex?: string }>;
     products: CatalogProduct[];
     priceRange: { min: number; max: number };
+}
+
+// Product Group - Aggregated products by Brand + Model (with multiple variants)
+export interface ProductGroup {
+    groupKey: string;
+    brand: string;
+    model: string;
+    variants: ProductVariant[];
+    allColors: Array<{ name: string; hex?: string }>; // All colors across all variants
+    globalPriceRange: { min: number; max: number }; // Price range across all variants
     representativeProduct: CatalogProduct;
 }
 

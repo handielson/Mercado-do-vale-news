@@ -32,29 +32,56 @@ export function ModernProductCard({
     const [installment10x, setInstallment10x] = useState<string>('');
     const [currentColorIndex, setCurrentColorIndex] = useState(0);
 
+    // NEW: Selected variant state (defaults to first variant)
+    const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
+
+    // NEW: Store installment values for each variant
+    const [variantInstallments, setVariantInstallments] = useState<Map<number, string>>(new Map());
+
     // Extract variants from productGroup or related products (using useMemo to prevent infinite loop)
     const variants = useMemo<ProductVariants | null>(() => {
-        if (productGroup) {
-            // Use pre-computed variants from group
+        if (productGroup && productGroup.variants && productGroup.variants.length > 0) {
+            // Use the selected variant from the group
+            const selectedVariant = productGroup.variants[selectedVariantIndex] || productGroup.variants[0];
             return {
-                rams: [productGroup.ram],
-                storages: [productGroup.storage],
-                colors: productGroup.colors,
-                priceRange: productGroup.priceRange
+                rams: [selectedVariant.ram],
+                storages: [selectedVariant.storage],
+                colors: selectedVariant.colors,
+                priceRange: selectedVariant.priceRange
             };
         } else {
             // Fallback to extracting from related products
             const allProducts = [product, ...relatedProducts];
             return extractVariants(allProducts);
         }
-    }, [product, productGroup, relatedProducts]);
+    }, [product, productGroup, relatedProducts, selectedVariantIndex]);
 
-    // Calculate 10x installment
+    // Get the currently selected variant
+    const selectedVariant = productGroup?.variants?.[selectedVariantIndex];
+
+    // Get the current product based on selected variant and color
+    const currentProduct = useMemo(() => {
+        if (selectedVariant && selectedVariant.products.length > 0) {
+            // Try to find product with current color
+            const colorName = selectedVariant.colors[currentColorIndex]?.name;
+            if (colorName) {
+                const productWithColor = selectedVariant.products.find(
+                    p => p.specs?.color === colorName
+                );
+                if (productWithColor) return productWithColor;
+            }
+            // Fallback to first product in variant
+            return selectedVariant.products[0];
+        }
+        return product;
+    }, [selectedVariant, currentColorIndex, product]);
+
+    // Calculate 10x installment based on current product
     useEffect(() => {
-        if (!product.price_retail) return;
+        if (!currentProduct.price_retail) return;
 
         const loadInstallment = async () => {
-            const plans = await calculateInstallments(product.price_retail!, 12);
+            const plans = await calculateInstallments(currentProduct.price_retail!, 12);
             const plan10x = plans.find(p => p.installments === 10);
             if (plan10x) {
                 setInstallment10x(formatPrice(plan10x.value));
@@ -62,7 +89,33 @@ export function ModernProductCard({
         };
 
         loadInstallment();
-    }, [product.price_retail]);
+    }, [currentProduct.price_retail]);
+
+    // Calculate installments for all variants
+    useEffect(() => {
+        if (!productGroup?.variants) return;
+
+        const loadVariantInstallments = async () => {
+            const newInstallments = new Map<number, string>();
+
+            for (let i = 0; i < productGroup.variants.length; i++) {
+                const variant = productGroup.variants[i];
+                const price = variant.priceRange.min;
+
+                if (price > 0) {
+                    const plans = await calculateInstallments(price, 12);
+                    const plan10x = plans.find(p => p.installments === 10);
+                    if (plan10x) {
+                        newInstallments.set(i, formatPrice(plan10x.value));
+                    }
+                }
+            }
+
+            setVariantInstallments(newInstallments);
+        };
+
+        loadVariantInstallments();
+    }, [productGroup]);
 
     // Get primary image
     const getImageUrl = () => {
@@ -106,17 +159,17 @@ export function ModernProductCard({
 
     // Carousel: Get images for each color
     const colorImages = useMemo(() => {
-        if (!productGroup || !variants) return [imageUrl];
+        if (!selectedVariant || !variants) return [imageUrl];
 
         return variants.colors.map(color => {
-            // Find product with this color
-            const colorProduct = productGroup.products.find(p => p.specs?.color === color.name);
+            // Find product with this color in the selected variant
+            const colorProduct = selectedVariant.products.find(p => p.specs?.color === color.name);
             if (colorProduct && Array.isArray(colorProduct.images) && colorProduct.images.length > 0) {
                 return colorProduct.images[0];
             }
             return imageUrl; // Fallback to default image
         });
-    }, [productGroup, variants, imageUrl]);
+    }, [selectedVariant, variants, imageUrl]);
 
     const handlePrevImage = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -243,44 +296,72 @@ export function ModernProductCard({
                     {/* Title & Brand */}
                     <div>
                         <h3 className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                            {product.model || product.name}
+                            {currentProduct.model || currentProduct.name}
                         </h3>
-                        {product.brand && (
-                            <p className="text-sm text-slate-600 mt-1">{product.brand}</p>
+                        {currentProduct.brand && (
+                            <p className="text-sm text-slate-600 mt-1">{currentProduct.brand}</p>
                         )}
                     </div>
 
-                    {/* Colors */}
-                    {variants && variants.colors.length > 0 && (
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-600">Cores:</span>
-                            <div className="flex gap-1.5">
-                                {variants.colors.slice(0, 5).map((color) => (
-                                    <div
-                                        key={color.name}
-                                        className="w-5 h-5 rounded-full border-2 border-slate-300 shadow-sm"
-                                        style={{ backgroundColor: color.hex || '#9CA3AF' }}
-                                        title={color.name}
-                                    />
-                                ))}
-                                {variants.colors.length > 5 && (
-                                    <span className="text-xs text-slate-500">+{variants.colors.length - 5}</span>
-                                )}
+
+
+                    {/* Variant Selector (RAM/Storage) - NOVO */}
+                    {productGroup && productGroup.variants && productGroup.variants.length > 1 && (
+                        <div className="space-y-2">
+                            <span className="text-xs text-slate-600 font-medium">Configurações:</span>
+                            <div className="space-y-1.5">
+                                {productGroup.variants.map((variant, idx) => {
+                                    const installment = variantInstallments.get(idx);
+                                    return (
+                                        <button
+                                            key={idx}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedVariantIndex(idx);
+                                                setCurrentColorIndex(0); // Reset color selection
+                                            }}
+                                            className={`w-full p-2.5 rounded-lg border-2 transition-all text-left ${selectedVariantIndex === idx
+                                                ? 'border-blue-600 bg-blue-50'
+                                                : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                                                }`}
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="font-semibold text-sm">
+                                                    {variant.ram}/{variant.storage}
+                                                </span>
+                                                <div className="text-right">
+                                                    <div className="text-base font-bold text-blue-600">
+                                                        {formatPrice(variant.priceRange.min)}
+                                                    </div>
+                                                    {installment && (
+                                                        <div className="text-xs text-slate-600">
+                                                            10x de {installment}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {/* Mini color indicators */}
+                                            <div className="flex gap-1 mt-1.5">
+                                                {variant.colors.slice(0, 4).map((color) => (
+                                                    <div
+                                                        key={color.name}
+                                                        className="w-3 h-3 rounded-full border border-slate-300"
+                                                        style={{ backgroundColor: color.hex }}
+                                                        title={color.name}
+                                                    />
+                                                ))}
+                                                {variant.colors.length > 4 && (
+                                                    <span className="text-xs text-slate-500">+{variant.colors.length - 4}</span>
+                                                )}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
 
-                    {/* Pricing */}
-                    <div>
-                        <p className="text-2xl font-bold text-blue-600">
-                            {formatPrice(product.price_retail || 0)}
-                        </p>
-                        {installment10x && (
-                            <p className="text-sm text-slate-600 mt-1">
-                                ou <span className="font-semibold">10x de {installment10x}</span>
-                            </p>
-                        )}
-                    </div>
+
 
                     {/* CTA Buttons */}
                     <div className="space-y-2">
@@ -304,13 +385,13 @@ export function ModernProductCard({
             {variants && (
                 <>
                     <ProductDetailsModal
-                        product={product}
+                        product={currentProduct}
                         isOpen={showDetailsModal}
                         onClose={() => setShowDetailsModal(false)}
                         onQuote={() => setShowQuoteModal(true)}
                     />
                     <QuoteModal
-                        product={product}
+                        product={currentProduct}
                         variants={variants}
                         isOpen={showQuoteModal}
                         onClose={() => setShowQuoteModal(false)}
