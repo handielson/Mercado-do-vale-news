@@ -17,10 +17,20 @@ export interface Model {
     active: boolean;
     created: string;
     updated: string;
+
+    // Template fields
+    category_id?: string;
+    description?: string;
+    template_values?: Record<string, any>;  // Dynamic default values
 }
 
 export interface ModelInput {
     name: string;
     brand_id: string;
     active?: boolean;
+
+    // Template fields
+    category_id?: string;
+    description?: string;
+    template_values?: Record<string, any>;
 }

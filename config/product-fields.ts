@@ -45,10 +45,10 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
 ];
 
 /**
- * Unique fields that should NOT be displayed in public catalog
+ * Unique fields that should NOT be auto-filled from model template
  * These are specific to individual product units
  */
-export const UNIQUE_FIELDS = ['imei1', 'imei2', 'serial'];
+export const UNIQUE_FIELDS = ['imei1', 'imei2', 'serial', 'color', 'ean', 'sku'];
 
 /**
  * Get fields by category

@@ -56,7 +56,11 @@ async function list(): Promise<Model[]> {
         brand_id: row.brand_id,
         active: true,
         created: row.created_at,
-        updated: row.updated_at
+        updated: row.updated_at,
+        // Template fields
+        category_id: row.category_id,
+        description: row.description,
+        template_values: row.template_values
     }));
 }
 
@@ -85,7 +89,11 @@ async function getById(id: string): Promise<Model | null> {
         brand_id: data.brand_id,
         active: true,
         created: data.created_at,
-        updated: data.updated_at
+        updated: data.updated_at,
+        // Template fields
+        category_id: data.category_id,
+        description: data.description,
+        template_values: data.template_values
     };
 }
 
@@ -111,7 +119,11 @@ async function listByBrand(brandId: string): Promise<Model[]> {
         brand_id: row.brand_id,
         active: true,
         created: row.created_at,
-        updated: row.updated_at
+        updated: row.updated_at,
+        // Template fields
+        category_id: row.category_id,
+        description: row.description,
+        template_values: row.template_values
     }));
 }
 
@@ -128,7 +140,11 @@ async function create(input: ModelInput): Promise<Model> {
             company_id: companyId,
             brand_id: input.brand_id,
             name: input.name,
-            slug
+            slug,
+            // Template fields
+            category_id: input.category_id,
+            description: input.description,
+            template_values: input.template_values || {}
         })
         .select()
         .single();
@@ -142,7 +158,11 @@ async function create(input: ModelInput): Promise<Model> {
         brand_id: data.brand_id,
         active: true,
         created: data.created_at,
-        updated: data.updated_at
+        updated: data.updated_at,
+        // Template fields
+        category_id: data.category_id,
+        description: data.description,
+        template_values: data.template_values
     };
 }
 
@@ -158,7 +178,11 @@ async function update(id: string, input: ModelInput): Promise<Model> {
         .update({
             name: input.name,
             slug,
-            brand_id: input.brand_id
+            brand_id: input.brand_id,
+            // Template fields
+            category_id: input.category_id,
+            description: input.description,
+            template_values: input.template_values
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -174,7 +198,11 @@ async function update(id: string, input: ModelInput): Promise<Model> {
         brand_id: data.brand_id,
         active: true,
         created: data.created_at,
-        updated: data.updated_at
+        updated: data.updated_at,
+        // Template fields
+        category_id: data.category_id,
+        description: data.description,
+        template_values: data.template_values
     };
 }
 

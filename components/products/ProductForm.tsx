@@ -20,12 +20,15 @@ import { compressImage } from '../../utils/image-compression';
 import { generateProductName } from '../../utils/product-name-generator';
 import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText } from 'lucide-react';
 import { useEANAutofill } from './hooks/useEANAutofill';
+import { useModelTemplate } from './hooks/useModelTemplate';
 import { ProductSpecifications } from './sections/ProductSpecifications';
 import { ProductPricing } from './sections/ProductPricing';
 import { ProductImages } from './sections/ProductImages';
 import { ProductBasicInfo } from './sections/ProductBasicInfo';
 import { ProductWarranty } from './sections/ProductWarranty';
 import { ProductSEO } from './sections/ProductSEO';
+import { Model } from '../../types/model';
+import { modelService } from '../../services/models';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -102,6 +105,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
     const [brandWarrantyDays, setBrandWarrantyDays] = useState<number | null>(null);
     const [categoryWarrantyDays, setCategoryWarrantyDays] = useState<number | null>(null);
 
+    // Model template state
+    const [selectedModel, setSelectedModel] = useState<Model | undefined>(undefined);
+    const selectedModelName = watch('model');
+
     // Load brand ID and warranty days when brand name changes
     useEffect(() => {
         const loadBrandData = async () => {
@@ -122,6 +129,28 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
         };
         loadBrandData();
     }, [selectedBrand]);
+
+    // Load model data and template when model changes
+    useEffect(() => {
+        const loadModelData = async () => {
+            if (!selectedModelName || !selectedBrandId) {
+                setSelectedModel(undefined);
+                return;
+            }
+            try {
+                const models = await modelService.listByBrand(selectedBrandId);
+                const model = models.find(m => m.name === selectedModelName);
+                setSelectedModel(model);
+                console.log('🎯 Model selected:', model);
+            } catch (error) {
+                console.error('Error loading model data:', error);
+            }
+        };
+        loadModelData();
+    }, [selectedModelName, selectedBrandId]);
+
+    // Apply model template when model is selected
+    useModelTemplate(selectedModel, setValue);
 
     // 1. Função para carregar as regras da categoria
     const loadCategoryConfig = async () => {
