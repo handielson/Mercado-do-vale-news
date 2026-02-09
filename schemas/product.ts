@@ -31,6 +31,13 @@ export const productSchema = z.object({
     // Specifications (flexible object)
     specs: z.record(z.any()).optional(),
 
+    // SEO Fields
+    description: z.string().optional(),
+    slug: z.string().optional(),
+    meta_title: z.string().max(60, 'Título SEO deve ter no máximo 60 caracteres').optional(),
+    meta_description: z.string().max(160, 'Meta descrição deve ter no máximo 160 caracteres').optional(),
+    keywords: z.array(z.string()).optional(),
+
     // Status
     status: z.nativeEnum(ProductStatus, {
         errorMap: () => ({ message: 'Status inválido' })
