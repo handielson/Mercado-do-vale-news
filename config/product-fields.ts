@@ -46,9 +46,31 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
 
 /**
  * Unique fields that should NOT be auto-filled from model template
- * These are specific to individual product units
+ * These are specific to individual product units or variations
+ * 
+ * VARIATION FIELDS (differ per product of same model):
+ * - ram: Different RAM options (4GB, 8GB, 16GB)
+ * - storage: Different storage options (64GB, 128GB, 256GB)
+ * - color: Different color options
+ * 
+ * UNIQUE IDENTIFIERS (unique per unit):
+ * - imei1, imei2: Device identifiers
+ * - serial: Serial number
+ * - ean: Barcode (can vary per variation)
+ * - sku: Stock keeping unit
  */
-export const UNIQUE_FIELDS = ['imei1', 'imei2', 'serial', 'color', 'ean', 'sku'];
+export const UNIQUE_FIELDS = [
+    // Variation fields
+    'ram',
+    'storage',
+    'color',
+    // Unique identifiers
+    'imei1',
+    'imei2',
+    'serial',
+    'ean',
+    'sku'
+];
 
 /**
  * Get fields by category
