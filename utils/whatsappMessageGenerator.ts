@@ -106,18 +106,31 @@ export async function generateWhatsAppLink(message: string): Promise<string> {
             .select('phone')
             .single();
 
-        if (error || !data?.phone) {
-            throw new Error('Número do WhatsApp não configurado');
+        if (error) {
+            console.error('Supabase error fetching phone:', error);
+            throw new Error(`Erro ao buscar configurações: ${error.message}`);
+        }
+
+        if (!data?.phone) {
+            throw new Error('Número do WhatsApp não está configurado nas configurações da empresa');
         }
 
         // Clean phone number (remove non-numeric characters)
         const cleanPhone = data.phone.replace(/\D/g, '');
 
+        if (!cleanPhone || cleanPhone.length < 10) {
+            throw new Error('Número do WhatsApp inválido nas configurações');
+        }
+
         // Encode message for URL
         const encodedMessage = encodeURIComponent(message);
 
         // Generate WhatsApp link
-        return `https://wa.me/55${cleanPhone}?text=${encodedMessage}`;
+        // Use api.whatsapp.com for better mobile compatibility
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const baseUrl = isMobile ? 'https://api.whatsapp.com/send' : 'https://web.whatsapp.com/send';
+
+        return `${baseUrl}?phone=55${cleanPhone}&text=${encodedMessage}`;
     } catch (error) {
         console.error('Error generating WhatsApp link:', error);
         throw error;

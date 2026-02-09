@@ -79,16 +79,18 @@ export function ProductDetailsModal({
                                     Especificações Técnicas
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {Object.entries(product.specs).map(([key, value]) => (
-                                        <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                                            <span className="text-sm font-medium text-slate-600 capitalize">
-                                                {key.replace(/_/g, ' ')}:
-                                            </span>
-                                            <span className="text-sm text-slate-900 font-semibold">
-                                                {String(value)}
-                                            </span>
-                                        </div>
-                                    ))}
+                                    {Object.entries(product.specs)
+                                        .filter(([key]) => !['imei1', 'imei2', 'serial'].includes(key.toLowerCase()))
+                                        .map(([key, value]) => (
+                                            <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                                                <span className="text-sm font-medium text-slate-600 capitalize">
+                                                    {key.replace(/_/g, ' ')}:
+                                                </span>
+                                                <span className="text-sm text-slate-900 font-semibold">
+                                                    {String(value)}
+                                                </span>
+                                            </div>
+                                        ))}
                                 </div>
                             </div>
                         )}
@@ -134,33 +136,15 @@ export function ProductDetailsModal({
 
                         {/* Pricing */}
                         <div className="border-t border-slate-200 pt-6">
-                            <h3 className="text-lg font-semibold text-slate-900 mb-3">Preços</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {product.price_retail && (
-                                    <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg">
-                                        <p className="text-xs text-slate-600 mb-1">Varejo</p>
-                                        <p className="text-2xl font-bold text-blue-700">
-                                            {formatPrice(product.price_retail)}
-                                        </p>
-                                    </div>
-                                )}
-                                {product.price_wholesale && (
-                                    <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg">
-                                        <p className="text-xs text-slate-600 mb-1">Atacado</p>
-                                        <p className="text-2xl font-bold text-green-700">
-                                            {formatPrice(product.price_wholesale)}
-                                        </p>
-                                    </div>
-                                )}
-                                {product.price_reseller && (
-                                    <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg">
-                                        <p className="text-xs text-slate-600 mb-1">Revenda</p>
-                                        <p className="text-2xl font-bold text-purple-700">
-                                            {formatPrice(product.price_reseller)}
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
+                            <h3 className="text-lg font-semibold text-slate-900 mb-3">Preço</h3>
+                            {product.price_retail && (
+                                <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg">
+                                    <p className="text-sm text-slate-600 mb-2">Preço à Vista</p>
+                                    <p className="text-3xl font-bold text-blue-700">
+                                        {formatPrice(product.price_retail)}
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Action Button */}

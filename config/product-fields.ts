@@ -45,6 +45,12 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
 ];
 
 /**
+ * Unique fields that should NOT be displayed in public catalog
+ * These are specific to individual product units
+ */
+export const UNIQUE_FIELDS = ['imei1', 'imei2', 'serial'];
+
+/**
  * Get fields by category
  */
 export function getFieldsByCategory(category: FieldDefinition['category']): FieldDefinition[] {

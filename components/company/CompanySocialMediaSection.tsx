@@ -29,33 +29,39 @@ export const CompanySocialMediaSection: React.FC<CompanySocialMediaSectionProps>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <SocialMediaInput
-                    icon={Instagram}
+                    icon={<Instagram size={16} />}
+                    iconColor="text-pink-600"
                     label="Instagram"
                     value={form.socialMedia?.instagram || ''}
                     onChange={(value) => onChange({
                         socialMedia: { ...form.socialMedia, instagram: value }
                     })}
                     placeholder="@usuario ou link completo"
+                    formatUrl={(value) => value.startsWith('http') ? value : `https://instagram.com/${value.replace('@', '')}`}
                 />
 
                 <SocialMediaInput
-                    icon={Facebook}
+                    icon={<Facebook size={16} />}
+                    iconColor="text-blue-600"
                     label="Facebook"
                     value={form.socialMedia?.facebook || ''}
                     onChange={(value) => onChange({
                         socialMedia: { ...form.socialMedia, facebook: value }
                     })}
                     placeholder="@pagina ou link completo"
+                    formatUrl={(value) => value.startsWith('http') ? value : `https://facebook.com/${value.replace('@', '')}`}
                 />
 
                 <SocialMediaInput
-                    icon={Youtube}
+                    icon={<Youtube size={16} />}
+                    iconColor="text-red-600"
                     label="YouTube"
                     value={form.socialMedia?.youtube || ''}
                     onChange={(value) => onChange({
                         socialMedia: { ...form.socialMedia, youtube: value }
                     })}
                     placeholder="@canal ou link completo"
+                    formatUrl={(value) => value.startsWith('http') ? value : `https://youtube.com/${value.replace('@', '')}`}
                 />
 
                 <div>

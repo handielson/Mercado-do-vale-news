@@ -54,7 +54,8 @@ export function QuoteModal({ product, variants, isOpen, onClose }: QuoteModalPro
             window.open(link, '_blank');
         } catch (error) {
             console.error('Error generating WhatsApp link:', error);
-            alert('Erro ao gerar link do WhatsApp. Tente novamente.');
+            const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+            alert(`Erro ao gerar link do WhatsApp: ${errorMessage}\n\nPor favor, tente novamente ou entre em contato conosco.`);
         } finally {
             setIsLoading(false);
         }

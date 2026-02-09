@@ -75,3 +75,39 @@ export function getPaymentLabel(
     if (method === 'debit') return 'Débito';
     return `${installments}x`;
 }
+
+/**
+ * Client types for pricing
+ */
+export type ClientType = 'RETAIL' | 'WHOLESALE' | 'RESELLER' | null;
+
+/**
+ * Get the appropriate price for a product based on client type
+ * For catalog display, always use retail price for non-logged users
+ * @param product - The catalog product
+ * @param clientType - The type of client (null for non-logged users)
+ * @returns The price to display
+ */
+export function getProductPriceByClientType(
+    product: { price_retail?: number; price_wholesale?: number; price_reseller?: number },
+    clientType: ClientType
+): number {
+    // Non-logged users or retail clients → retail price
+    if (!clientType || clientType === 'RETAIL') {
+        return product.price_retail || 0;
+    }
+
+    // Wholesale clients → wholesale price (fallback to retail)
+    if (clientType === 'WHOLESALE') {
+        return product.price_wholesale || product.price_retail || 0;
+    }
+
+    // Reseller clients → reseller price (fallback to retail)
+    if (clientType === 'RESELLER') {
+        return product.price_reseller || product.price_retail || 0;
+    }
+
+    // Default fallback
+    return product.price_retail || 0;
+}
+

@@ -11,7 +11,6 @@ import { Company, defaultCompany } from '../types/company';
  */
 interface CompanySettingsRow {
     id: string;
-    user_id: string;
     name: string;
     razao_social: string | null;
     cnpj: string | null;
@@ -40,6 +39,7 @@ interface CompanySettingsRow {
     google_reviews_link: string | null;
     pix_key: string | null;
     pix_key_type: string | null;
+    pix_beneficiary_name: string | null;
     bank_name: string | null;
     bank_agency: string | null;
     bank_account: string | null;
@@ -99,8 +99,7 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
 /**
  * Convert Company type to database row
  */
-const companyToRow = (company: Company, userId: string): Partial<CompanySettingsRow> => ({
-    user_id: userId,
+const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     name: company.name,
     razao_social: company.razaoSocial || null,
     cnpj: company.cnpj || null,
@@ -143,21 +142,11 @@ const companyToRow = (company: Company, userId: string): Partial<CompanySettings
  */
 export const getCompanyData = async (): Promise<Company> => {
     try {
-        // Get current user
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-        // Use mock user ID in development mode if no real user
-        const userId = user?.id || '00000000-0000-0000-0000-000000000000';
-
-        if (!user) {
-            console.warn('No authenticated user, using mock user ID for development');
-        }
-
-        // Fetch company settings
+        // Fetch company settings (single global record)
         const { data, error } = await supabase
             .from('company_settings')
             .select('*')
-            .eq('user_id', userId)
+            .limit(1)
             .single();
 
         if (error) {
@@ -183,34 +172,22 @@ export const getCompanyData = async (): Promise<Company> => {
  */
 export const saveCompanyData = async (data: Company): Promise<void> => {
     try {
-        // Get current user
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const row = companyToRow(data);
 
-        console.log('Save attempt - User:', user?.id, 'Error:', userError);
-
-        // Use mock user ID in development mode if no real user
-        const userId = user?.id || '00000000-0000-0000-0000-000000000000';
-
-        if (!user) {
-            console.warn('No authenticated user, using mock user ID for development');
-        }
-
-        const row = companyToRow(data, userId);
-
-        // Check if record exists
+        // Check if record exists (should be only one global record)
         const { data: existing } = await supabase
             .from('company_settings')
             .select('id')
-            .eq('user_id', userId)
+            .limit(1)
             .single();
 
         if (existing) {
             // Update existing record
-            console.log('Updating existing record for user:', userId);
+            console.log('Updating existing company settings record');
             const { error } = await supabase
                 .from('company_settings')
                 .update(row)
-                .eq('user_id', userId);
+                .eq('id', existing.id);
 
             if (error) {
                 console.error('Update error:', error);
@@ -241,17 +218,11 @@ export const saveCompanyData = async (data: Company): Promise<void> => {
  */
 export const clearCompanyData = async (): Promise<void> => {
     try {
-        // Get current user
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-            throw new Error('Usuário não autenticado');
-        }
-
+        // Delete all records (should be only one)
         const { error } = await supabase
             .from('company_settings')
             .delete()
-            .eq('user_id', user.id);
+            .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all real records
 
         if (error) throw error;
     } catch (error) {
