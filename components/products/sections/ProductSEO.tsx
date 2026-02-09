@@ -1,256 +1,188 @@
-import { useState } from 'react';
-import { AIProvider } from '../../../types/ai-provider';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
+import { ProductInput } from '../../types/product';
+import { ExternalLink } from 'lucide-react';
 
 interface ProductSEOProps {
-    watch: any;
-    setValue: any;
+    watch: UseFormWatch<ProductInput>;
+    setValue: UseFormSetValue<ProductInput>;
     errors: any;
-    productName: string;
-    productData: any;
 }
 
 export const ProductSEO: React.FC<ProductSEOProps> = ({
     watch,
     setValue,
-    errors,
-    productName,
-    productData
+    errors
 }) => {
-    const [selectedAI, setSelectedAI] = useState<AIProvider>('gemini');
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [customPrompt, setCustomPrompt] = useState(
-        'Gere conteúdo SEO otimizado para este produto. Inclua descrição detalhada (mínimo 300 palavras), título atrativo, meta descrição persuasiva e palavras-chave relevantes. Foque em benefícios e diferenciais do produto.'
-    );
-
-    const generateSlug = (name: string) => {
-        return name
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-    };
-
-    const handleAIGeneration = async () => {
-        if (!productName || !productData.brand || !productData.model) {
-            alert('⚠️ Preencha Nome, Marca e Modelo antes de gerar SEO');
-            return;
-        }
-
-        setIsGenerating(true);
-        try {
-            const response = await fetch('/api/ai/generate-seo', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    provider: selectedAI,
-                    prompt: customPrompt,
-                    productData
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Erro na resposta da API');
-            }
-
-            const data = await response.json();
-
-            // Preencher campos automaticamente
-            setValue('description', data.description);
-            setValue('slug', data.slug);
-            setValue('meta_title', data.meta_title);
-            setValue('meta_description', data.meta_description);
-            setValue('keywords', data.keywords);
-
-            alert('✅ Conteúdo SEO gerado com sucesso!');
-        } catch (error) {
-            console.error('Erro ao gerar SEO:', error);
-            alert('❌ Erro ao gerar conteúdo SEO. Verifique se a API está configurada corretamente.');
-        } finally {
-            setIsGenerating(false);
-        }
-    };
+    const description = watch('description') || '';
+    const metaTitle = watch('meta_title') || '';
+    const metaDescription = watch('meta_description') || '';
+    const slug = watch('slug') || '';
 
     return (
         <div className="space-y-6">
-            {/* Seletor de IA + Botão Gerar */}
-            <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                    <Sparkles className="text-purple-600" size={20} />
-                    <h3 className="font-semibold text-purple-900">Geração Automática por IA</h3>
+            {/* Seção de Ajuda com Links para IAs */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                    <ExternalLink size={18} />
+                    💡 Gerar Conteúdo SEO com IA
+                </h4>
+                <p className="text-sm text-blue-700 mb-3">
+                    Use uma das ferramentas abaixo para gerar conteúdo SEO otimizado. Copie e cole o conteúdo gerado nos campos.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                    <a
+                        href="https://gemini.google.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                    >
+                        <ExternalLink size={16} />
+                        Abrir Gemini
+                    </a>
+                    <a
+                        href="https://x.com/i/grok"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium text-sm"
+                    >
+                        <ExternalLink size={16} />
+                        Abrir Grok
+                    </a>
+                    <a
+                        href="https://chat.openai.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+                    >
+                        <ExternalLink size={16} />
+                        Abrir ChatGPT
+                    </a>
                 </div>
-
-                {/* Seletor de Provedor */}
-                <div className="mb-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Escolha a IA
-                    </label>
-                    <div className="flex gap-3">
-                        <button
-                            type="button"
-                            onClick={() => setSelectedAI('gemini')}
-                            className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${selectedAI === 'gemini'
-                                    ? 'border-purple-500 bg-purple-100 text-purple-900 font-semibold'
-                                    : 'border-gray-300 bg-white text-gray-700 hover:border-purple-300'
-                                }`}
-                        >
-                            Gemini
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setSelectedAI('grok')}
-                            className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${selectedAI === 'grok'
-                                    ? 'border-purple-500 bg-purple-100 text-purple-900 font-semibold'
-                                    : 'border-gray-300 bg-white text-gray-700 hover:border-purple-300'
-                                }`}
-                        >
-                            Grok
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setSelectedAI('chatgpt')}
-                            className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${selectedAI === 'chatgpt'
-                                    ? 'border-purple-500 bg-purple-100 text-purple-900 font-semibold'
-                                    : 'border-gray-300 bg-white text-gray-700 hover:border-purple-300'
-                                }`}
-                        >
-                            ChatGPT
-                        </button>
-                    </div>
-                </div>
-
-                {/* Prompt Editável */}
-                <div className="mb-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Prompt para IA (Editável)
-                    </label>
-                    <textarea
-                        value={customPrompt}
-                        onChange={(e) => setCustomPrompt(e.target.value)}
-                        rows={3}
-                        className="w-full rounded-md border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="Descreva como a IA deve gerar o conteúdo..."
-                    />
-                </div>
-
-                {/* Botão Gerar */}
-                <button
-                    type="button"
-                    onClick={handleAIGeneration}
-                    disabled={isGenerating || !productName}
-                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
-                >
-                    {isGenerating ? (
-                        <>
-                            <Loader2 className="animate-spin" size={20} />
-                            Gerando com {selectedAI}...
-                        </>
-                    ) : (
-                        <>
-                            <Sparkles size={20} />
-                            Gerar Conteúdo SEO com {selectedAI}
-                        </>
-                    )}
-                </button>
             </div>
 
-            {/* Campos SEO com Label (SEO) destacado */}
-
-            {/* Descrição */}
+            {/* Campo: Descrição do Produto */}
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     Descrição do Produto <span className="text-purple-600 font-bold">(SEO)</span> *
                 </label>
                 <textarea
-                    value={watch('description') || ''}
+                    value={description}
                     onChange={(e) => setValue('description', e.target.value)}
-                    rows={6}
-                    className="w-full rounded-md border border-purple-300 p-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                    placeholder="Descrição detalhada do produto para SEO e página de produto..."
+                    rows={8}
+                    className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                    placeholder="Descrição detalhada do produto para SEO (mínimo 300 palavras recomendado)"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                    Descrição completa que aparecerá na página do produto. Importante para SEO (mínimo 300 palavras).
-                </p>
+                <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-500">
+                        Mínimo recomendado: 300 palavras
+                    </span>
+                    <span className={`text-xs font-medium ${description.length >= 300 ? 'text-green-600' : 'text-gray-500'}`}>
+                        {description.split(/\s+/).filter(w => w.length > 0).length} palavras
+                    </span>
+                </div>
+                {errors.description && (
+                    <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
+                )}
             </div>
 
-            {/* URL Slug */}
+            {/* Campo: URL Amigável (Slug) */}
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     URL Amigável <span className="text-purple-600 font-bold">(SEO)</span>
                 </label>
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        value={watch('slug') || ''}
-                        onChange={(e) => setValue('slug', e.target.value)}
-                        className="flex-1 rounded-md border border-purple-300 p-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="iphone-15-pro-max-256gb-preto"
-                    />
-                    <button
-                        type="button"
-                        onClick={() => setValue('slug', generateSlug(productName))}
-                        className="px-4 py-2 bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 text-sm font-medium transition-colors"
-                    >
-                        Gerar
-                    </button>
-                </div>
-                <p className="text-xs text-purple-600 mt-1">
-                    URL: /produto/{watch('slug') || 'slug-do-produto'}
-                </p>
+                <input
+                    type="text"
+                    value={slug}
+                    onChange={(e) => setValue('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                    className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="produto-exemplo-slug"
+                />
+                {slug && (
+                    <p className="mt-1 text-xs text-gray-500">
+                        Preview: <span className="font-mono text-blue-600">mercadodovale.com.br/produto/{slug}</span>
+                    </p>
+                )}
+                {errors.slug && (
+                    <p className="mt-1 text-sm text-red-600">{errors.slug.message}</p>
+                )}
             </div>
 
-            {/* Meta Title */}
+            {/* Campo: Título SEO */}
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     Título SEO <span className="text-purple-600 font-bold">(SEO)</span>
                 </label>
                 <input
                     type="text"
-                    value={watch('meta_title') || ''}
+                    value={metaTitle}
                     onChange={(e) => setValue('meta_title', e.target.value)}
                     maxLength={60}
-                    className="w-full rounded-md border border-purple-300 p-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                    placeholder="iPhone 15 Pro Max 256GB Preto | Mercado do Vale"
+                    className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Título otimizado para motores de busca"
                 />
-                <p className="text-xs text-purple-600 mt-1 font-medium">
-                    {(watch('meta_title') || '').length}/60 caracteres
-                </p>
+                <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-500">
+                        Máximo: 60 caracteres
+                    </span>
+                    <span className={`text-xs font-medium ${metaTitle.length > 60 ? 'text-red-600' : metaTitle.length > 50 ? 'text-yellow-600' : 'text-gray-500'}`}>
+                        {metaTitle.length}/60
+                    </span>
+                </div>
+                {errors.meta_title && (
+                    <p className="mt-1 text-sm text-red-600">{errors.meta_title.message}</p>
+                )}
             </div>
 
-            {/* Meta Description */}
+            {/* Campo: Meta Descrição */}
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     Meta Descrição <span className="text-purple-600 font-bold">(SEO)</span>
                 </label>
                 <textarea
-                    value={watch('meta_description') || ''}
+                    value={metaDescription}
                     onChange={(e) => setValue('meta_description', e.target.value)}
                     maxLength={160}
                     rows={3}
-                    className="w-full rounded-md border border-purple-300 p-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                    placeholder="Compre iPhone 15 Pro Max 256GB Preto com melhor preço. Entrega rápida e garantia de 1 ano."
+                    className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                    placeholder="Descrição persuasiva que aparecerá nos resultados de busca"
                 />
-                <p className="text-xs text-purple-600 mt-1 font-medium">
-                    {(watch('meta_description') || '').length}/160 caracteres
-                </p>
+                <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-500">
+                        Máximo: 160 caracteres
+                    </span>
+                    <span className={`text-xs font-medium ${metaDescription.length > 160 ? 'text-red-600' : metaDescription.length > 150 ? 'text-yellow-600' : 'text-gray-500'}`}>
+                        {metaDescription.length}/160
+                    </span>
+                </div>
+                {errors.meta_description && (
+                    <p className="mt-1 text-sm text-red-600">{errors.meta_description.message}</p>
+                )}
             </div>
 
-            {/* Keywords */}
+            {/* Campo: Palavras-chave */}
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     Palavras-chave <span className="text-purple-600 font-bold">(SEO)</span>
                 </label>
                 <input
                     type="text"
-                    value={(watch('keywords') || []).join(', ')}
-                    onChange={(e) => setValue('keywords', e.target.value.split(',').map(k => k.trim()).filter(k => k))}
-                    className="w-full rounded-md border border-purple-300 p-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                    placeholder="iphone, apple, smartphone, 5g"
+                    value={watch('keywords')?.join(', ') || ''}
+                    onChange={(e) => {
+                        const keywords = e.target.value
+                            .split(',')
+                            .map(k => k.trim())
+                            .filter(k => k.length > 0);
+                        setValue('keywords', keywords);
+                    }}
+                    className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="palavra1, palavra2, palavra3, palavra4, palavra5"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                    Separe as palavras-chave com vírgulas
+                <p className="mt-1 text-xs text-gray-500">
+                    Separe as palavras-chave com vírgulas. Recomendado: 5-10 palavras-chave relevantes.
                 </p>
+                {errors.keywords && (
+                    <p className="mt-1 text-sm text-red-600">{errors.keywords.message}</p>
+                )}
             </div>
         </div>
     );
