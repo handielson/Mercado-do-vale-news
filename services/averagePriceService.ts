@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from './supabase';
 import { Product, ProductInput } from '../types/product';
 import { calculateAllAveragePrices } from '../utils/calculateAveragePrice';
 
