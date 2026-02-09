@@ -32,8 +32,8 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
     // Format date
     const date = new Date().toLocaleDateString('pt-BR');
 
-    // Product name with variant
-    const productName = `${product.name} ${variant.ram || ''}/${variant.storage || ''}`.trim();
+    // Product name (already includes specs, no need to duplicate)
+    const productName = product.name;
 
     // Price formatting
     const priceAtVista = new Intl.NumberFormat('pt-BR', {
