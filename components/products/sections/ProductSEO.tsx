@@ -79,8 +79,16 @@ const generateKeywords = (
     // Adiciona palavras do nome (> 3 caracteres)
     if (name) {
         name.split(/\s+/).forEach(word => {
-            const clean = word.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (clean.length > 3) keywords.add(clean);
+            // Se contém barra (RAM/Storage), separa
+            if (word.includes('/')) {
+                word.split('/').forEach(part => {
+                    const clean = part.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (clean.length > 2) keywords.add(clean);
+                });
+            } else {
+                const clean = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (clean.length > 3) keywords.add(clean);
+            }
         });
     }
 
