@@ -1,18 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Grid, List } from 'lucide-react';
 import {
     BannerCarousel,
-    ProductGrid,
     ProductFilters,
     SearchBar,
     CategoryNav
 } from '@/components/catalog';
+import { ProductGroupGrid } from '@/components/catalog/ProductGroupGrid';
 import { PublicHeader } from '@/components/PublicHeader';
 import { CatalogSectionComponent } from '@/components/catalog/CatalogSection';
 import { useCatalog } from '@/hooks/useCatalog';
 import { catalogShareService } from '@/services/catalogShareService';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
-import type { CatalogProduct } from '@/types/catalog';
+import { groupProductsByVariants } from '@/services/productGrouping';
+import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { CatalogSection } from '@/types/catalogSections';
 
 export default function CatalogPage() {
@@ -66,6 +67,11 @@ export default function CatalogPage() {
         }
     };
 
+    // Group products by variants (Brand + Model + RAM + Storage)
+    const productGroups = useMemo(() => {
+        return groupProductsByVariants(products);
+    }, [products]);
+
     if (error) {
         return (
             <div className="min-h-screen bg-slate-50">
@@ -118,7 +124,7 @@ export default function CatalogPage() {
                                 Catálogo de Produtos
                             </h1>
                             <p className="text-slate-600">
-                                {loading ? 'Carregando...' : `${products.length} produtos encontrados`}
+                                {loading ? 'Carregando...' : `${productGroups.length} ${productGroups.length === 1 ? 'variante encontrada' : 'variantes encontradas'}`}
                             </p>
                         </div>
 
@@ -172,13 +178,12 @@ export default function CatalogPage() {
                 )}
 
                 {/* Grid de produtos - Largura total */}
-                <ProductGrid
-                    products={products}
+                <ProductGroupGrid
+                    groups={productGroups}
                     loading={loading}
                     hasMore={hasMore}
                     onLoadMore={loadMore}
                     onFavorite={toggleFavorite}
-                    onShare={handleShare}
                     favorites={favorites}
                     variant={viewMode}
                     columns={{

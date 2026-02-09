@@ -95,6 +95,12 @@ export interface Product {
     meta_description?: string;     // SEO meta description (max 160 characters)
     keywords?: string[];           // Keywords/tags for search and SEO
 
+    // Shipping Fields
+    shipping_weight?: number;      // Peso em gramas
+    shipping_height?: number;      // Altura em cm
+    shipping_width?: number;       // Largura em cm
+    shipping_length?: number;      // Comprimento em cm
+
     // Timestamps
     created: string;
     updated: string;
@@ -134,4 +140,9 @@ export interface ProductInput {
     meta_title?: string;
     meta_description?: string;
     keywords?: string[];
+    // Shipping Fields
+    shipping_weight?: number;
+    shipping_height?: number;
+    shipping_width?: number;
+    shipping_length?: number;
 }

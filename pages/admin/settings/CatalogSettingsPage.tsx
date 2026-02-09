@@ -85,6 +85,58 @@ export const CatalogSettingsPage: React.FC = () => {
                 </div>
             </div>
 
+            {/* 🎯 ATALHO: Configuração de Badges */}
+            <div className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-2 border-purple-300 rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 bg-purple-600 rounded-lg">
+                                <SettingsIcon className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-purple-900">Configuração de Badges</h3>
+                                <p className="text-sm text-purple-600">Personalize os badges que aparecem nos produtos</p>
+                            </div>
+                        </div>
+                        <p className="text-purple-700 mb-4 leading-relaxed">
+                            Configure quais badges (📡 NFC, 📶 5G, 📱 Dual SIM, etc.) aparecem nos cards de produtos para cada categoria.
+                            Adicione, remova ou personalize cores e ícones facilmente.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                📡 NFC
+                            </span>
+                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                📶 5G
+                            </span>
+                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                📱 Dual SIM
+                            </span>
+                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                ⚡ Carregamento Sem Fio
+                            </span>
+                            <span className="text-purple-500">+ mais...</span>
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <button
+                            onClick={() => {
+                                const filePath = 'config/category-badges.ts';
+                                navigator.clipboard.writeText(filePath);
+                                alert('📋 Caminho copiado! Abra no VS Code: ' + filePath);
+                            }}
+                            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all font-semibold shadow-md hover:shadow-lg flex items-center gap-2 whitespace-nowrap"
+                        >
+                            <Edit className="w-5 h-5" />
+                            Editar Badges
+                        </button>
+                        <p className="text-xs text-purple-600 text-center">
+                            config/category-badges.ts
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             {/* Informações Gerais */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div className="flex items-center gap-2 mb-4">

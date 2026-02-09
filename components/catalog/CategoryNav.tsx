@@ -76,13 +76,6 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
                                     <span className={`text-xs font-bold uppercase tracking-wide ${isActive ? 'text-white' : 'text-slate-700'}`}>
                                         {category.name}
                                     </span>
-
-                                    {/* Contador (opcional) */}
-                                    {category.count !== undefined && (
-                                        <span className={`text-[10px] mt-1 ${isActive ? 'text-red-100' : 'text-slate-500'}`}>
-                                            {category.count} {category.count === 1 ? 'item' : 'itens'}
-                                        </span>
-                                    )}
                                 </button>
                             );
                         })}

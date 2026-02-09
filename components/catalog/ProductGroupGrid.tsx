@@ -1,14 +1,13 @@
 import { ModernProductCard } from './ModernProductCard';
-import type { CatalogProduct } from '@/types/catalog';
+import type { ProductGroup } from '@/types/catalog';
 
-interface ProductGridProps {
-    products: CatalogProduct[];
+interface ProductGroupGridProps {
+    groups: ProductGroup[];
     loading?: boolean;
     hasMore?: boolean;
     onLoadMore?: () => void;
     onFavorite?: (productId: string) => void;
-    onShare?: (product: CatalogProduct) => void;
-    onAddToCart?: (product: CatalogProduct) => void;
+    onShare?: (groupKey: string) => void;
     favorites?: Set<string>;
     variant?: 'grid' | 'list';
     columns?: {
@@ -34,14 +33,13 @@ function ProductCardSkeleton() {
     );
 }
 
-export function ProductGrid({
-    products,
+export function ProductGroupGrid({
+    groups,
     loading = false,
     hasMore = false,
     onLoadMore,
     onFavorite,
     onShare,
-    onAddToCart,
     favorites = new Set(),
     variant = 'grid',
     columns = {
@@ -50,7 +48,7 @@ export function ProductGrid({
         desktop: 3,
         wide: 4
     }
-}: ProductGridProps) {
+}: ProductGroupGridProps) {
     // Gerar classes de grid baseado nas colunas
     const gridClasses = `grid gap-4 md:gap-6 ${variant === 'grid'
         ? `grid-cols-${columns.mobile} sm:grid-cols-${columns.tablet} lg:grid-cols-${columns.desktop} xl:grid-cols-${columns.wide}`
@@ -58,7 +56,7 @@ export function ProductGrid({
         }`;
 
     // Estado vazio
-    if (!loading && products.length === 0) {
+    if (!loading && groups.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-16 px-4">
                 <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-4">
@@ -77,11 +75,11 @@ export function ProductGrid({
                     </svg>
                 </div>
                 <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                    Nenhum produto encontrado
+                    Nenhum produto disponível
                 </h3>
                 <p className="text-slate-600 text-center max-w-md">
-                    Não encontramos produtos que correspondam aos seus critérios de busca.
-                    Tente ajustar os filtros ou fazer uma nova busca.
+                    Não há produtos disponíveis para venda no momento.
+                    Volte em breve para conferir novidades!
                 </p>
             </div>
         );
@@ -91,13 +89,14 @@ export function ProductGrid({
         <div>
             {/* Grid de produtos */}
             <div className={gridClasses}>
-                {products.map((product) => (
+                {groups.map((group) => (
                     <ModernProductCard
-                        key={product.id}
-                        product={product}
+                        key={group.groupKey}
+                        product={group.representativeProduct}
+                        productGroup={group}
                         onFavorite={onFavorite}
-                        onShare={onShare}
-                        isFavorite={favorites.has(product.id)}
+                        onShare={() => onShare?.(group.groupKey)}
+                        isFavorite={favorites.has(group.representativeProduct.id)}
                     />
                 ))}
 
@@ -121,7 +120,7 @@ export function ProductGrid({
             )}
 
             {/* Loading indicator para infinite scroll */}
-            {loading && products.length > 0 && (
+            {loading && groups.length > 0 && (
                 <div className="mt-8 flex justify-center">
                     <div className="flex items-center gap-3 text-slate-600">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />

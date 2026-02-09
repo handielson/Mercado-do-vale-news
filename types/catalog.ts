@@ -1,4 +1,6 @@
 // Catalog System Types
+import type { Product } from './product';
+
 
 export interface Banner {
     id: string;
@@ -97,4 +99,67 @@ export interface CatalogProduct extends Product {
     seo_keywords?: string[];
     images?: ProductImage[];
     is_favorite?: boolean;
+}
+
+// Product Variants - For grouping products by model
+export interface ProductVariants {
+    rams: string[];
+    storages: string[];
+    colors: Array<{ name: string; hex?: string }>;
+    priceRange: { min: number; max: number };
+}
+
+// Product Group - Aggregated products by Brand + Model + RAM + Storage
+export interface ProductGroup {
+    groupKey: string;
+    brand: string;
+    model: string;
+    ram: string;
+    storage: string;
+    colors: Array<{ name: string; hex?: string }>;
+    products: CatalogProduct[];
+    priceRange: { min: number; max: number };
+    representativeProduct: CatalogProduct;
+}
+
+// Variant Specifications - Selected variant details
+export interface VariantSpecs {
+    ram: string;
+    storage: string;
+    color: string;
+}
+
+// Installment Plan - Payment options
+export interface InstallmentPlan {
+    installments: number;
+    value: number;      // Valor da parcela (centavos)
+    total: number;      // Total a pagar (centavos)
+    label: string;      // "À VISTA (PIX)", "10x", etc.
+    highlighted?: boolean;
+}
+
+// Address - Delivery address
+export interface Address {
+    cep: string;
+    street: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    number?: string;
+    complement?: string;
+}
+
+// Delivery Option - Pickup or delivery
+export interface DeliveryOption {
+    type: 'pickup' | 'delivery';
+    address?: Address;
+    notes?: string;
+}
+
+// Quote Request - Complete quote for WhatsApp
+export interface QuoteRequest {
+    product: CatalogProduct;
+    variant: VariantSpecs;
+    installmentPlan: InstallmentPlan;
+    delivery: DeliveryOption;
 }
