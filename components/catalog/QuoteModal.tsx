@@ -51,7 +51,8 @@ export function QuoteModal({ product, variants, isOpen, onClose }: QuoteModalPro
             });
 
             const link = await generateWhatsAppLink(message);
-            window.open(link, '_blank');
+            // Use window.location.href for better mobile compatibility
+            window.location.href = link;
         } catch (error) {
             console.error('Error generating WhatsApp link:', error);
             const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -102,7 +103,7 @@ export function QuoteModal({ product, variants, isOpen, onClose }: QuoteModalPro
                     <div className="p-6 space-y-6">
                         {/* Header */}
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-900">Fazer Orçamento</h2>
+                            <h2 className="text-2xl font-bold text-slate-900">Fazer Pedido</h2>
                             <p className="text-sm text-slate-600 mt-1">{product.name}</p>
                         </div>
 

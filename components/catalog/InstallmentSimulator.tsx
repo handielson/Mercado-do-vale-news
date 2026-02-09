@@ -19,7 +19,7 @@ export function InstallmentSimulator({
     // Show only highlighted plans when collapsed
     const visiblePlans = isExpanded
         ? plans
-        : plans.filter(p => p.highlighted || p.installments === selected.installments);
+        : plans.filter(p => p.highlighted || p.label === selected.label);
 
     return (
         <div className="space-y-3">
@@ -29,7 +29,7 @@ export function InstallmentSimulator({
 
             <div className="space-y-2">
                 {visiblePlans.map((plan) => {
-                    const isSelected = plan.installments === selected.installments;
+                    const isSelected = plan.label === selected.label;
                     const isPix = plan.label.includes('PIX');
 
                     return (
