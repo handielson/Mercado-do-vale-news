@@ -1,12 +1,94 @@
+import { useEffect } from 'react';
 import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
 import { ProductInput } from '../../types/product';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, RefreshCw } from 'lucide-react';
 
 interface ProductSEOProps {
     watch: UseFormWatch<ProductInput>;
     setValue: UseFormSetValue<ProductInput>;
     errors: any;
 }
+
+// Funções de geração automática
+const generateSlug = (name: string): string => {
+    if (!name) return '';
+    return name
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+        .replace(/[^a-z0-9\s-]/g, '') // Remove caracteres especiais
+        .replace(/\s+/g, '-') // Substitui espaços por hífens
+        .replace(/-+/g, '-') // Remove hífens duplicados
+        .replace(/^-|-$/g, ''); // Remove hífens no início/fim
+};
+
+const generateMetaTitle = (name: string): string => {
+    if (!name) return '';
+    const suffix = ' | Mercado do Vale';
+    const maxLength = 60;
+    const availableLength = maxLength - suffix.length;
+
+    if (name.length + suffix.length <= maxLength) {
+        return name + suffix;
+    }
+
+    return name.substring(0, availableLength - 3) + '...' + suffix;
+};
+
+const generateMetaDescription = (
+    name: string,
+    brand?: string,
+    model?: string
+): string => {
+    if (!name) return '';
+
+    const brandModel = [brand, model].filter(Boolean).join(' ');
+    const template = brandModel
+        ? `Compre ${name} na Mercado do Vale. ${brandModel} com garantia. Melhor preço e condições de pagamento.`
+        : `Compre ${name} na Mercado do Vale. Produto com garantia. Melhor preço e condições de pagamento.`;
+
+    if (template.length <= 160) {
+        return template;
+    }
+
+    // Versão curta se ultrapassar
+    const shortTemplate = brandModel
+        ? `${name} na Mercado do Vale. ${brandModel}. Melhor preço.`
+        : `${name} na Mercado do Vale. Melhor preço.`;
+
+    return shortTemplate.substring(0, 160);
+};
+
+const generateKeywords = (
+    name: string,
+    brand?: string,
+    model?: string,
+    category?: string
+): string[] => {
+    const keywords = new Set<string>();
+
+    // Adiciona marca
+    if (brand) keywords.add(brand.toLowerCase());
+
+    // Adiciona modelo
+    if (model) keywords.add(model.toLowerCase());
+
+    // Adiciona categoria
+    if (category) keywords.add(category.toLowerCase());
+
+    // Adiciona palavras do nome (> 3 caracteres)
+    if (name) {
+        name.split(/\s+/).forEach(word => {
+            const clean = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (clean.length > 3) keywords.add(clean);
+        });
+    }
+
+    // Adiciona loja
+    keywords.add('mercado do vale');
+
+    return Array.from(keywords).slice(0, 10); // Máximo 10 keywords
+};
 
 export const ProductSEO: React.FC<ProductSEOProps> = ({
     watch,
@@ -17,6 +99,48 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
     const metaTitle = watch('meta_title') || '';
     const metaDescription = watch('meta_description') || '';
     const slug = watch('slug') || '';
+
+    const name = watch('name') || '';
+    const brand = watch('brand') || '';
+    const model = watch('model') || '';
+    const category = watch('category') || '';
+
+    // Auto-preencher campos SEO quando dados do produto mudarem
+    useEffect(() => {
+        // Auto-preencher apenas se campo estiver vazio
+        if (name && !slug) {
+            setValue('slug', generateSlug(name));
+        }
+
+        if (name && !metaTitle) {
+            setValue('meta_title', generateMetaTitle(name));
+        }
+
+        if (name && !metaDescription) {
+            setValue('meta_description', generateMetaDescription(name, brand, model));
+        }
+
+        if (name && (!watch('keywords') || watch('keywords')?.length === 0)) {
+            setValue('keywords', generateKeywords(name, brand, model, category));
+        }
+    }, [name, brand, model, category]); // Roda quando esses campos mudarem
+
+    // Funções para regenerar manualmente
+    const handleRegenerateSlug = () => {
+        setValue('slug', generateSlug(name));
+    };
+
+    const handleRegenerateMetaTitle = () => {
+        setValue('meta_title', generateMetaTitle(name));
+    };
+
+    const handleRegenerateMetaDescription = () => {
+        setValue('meta_description', generateMetaDescription(name, brand, model));
+    };
+
+    const handleRegenerateKeywords = () => {
+        setValue('keywords', generateKeywords(name, brand, model, category));
+    };
 
     return (
         <div className="space-y-6">
@@ -87,9 +211,20 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
 
             {/* Campo: URL Amigável (Slug) */}
             <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    URL Amigável <span className="text-purple-600 font-bold">(SEO)</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                        URL Amigável <span className="text-purple-600 font-bold">(SEO)</span>
+                    </label>
+                    <button
+                        type="button"
+                        onClick={handleRegenerateSlug}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        title="Regenerar automaticamente"
+                    >
+                        <RefreshCw size={12} />
+                        Regenerar
+                    </button>
+                </div>
                 <input
                     type="text"
                     value={slug}
@@ -109,9 +244,20 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
 
             {/* Campo: Título SEO */}
             <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Título SEO <span className="text-purple-600 font-bold">(SEO)</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                        Título SEO <span className="text-purple-600 font-bold">(SEO)</span>
+                    </label>
+                    <button
+                        type="button"
+                        onClick={handleRegenerateMetaTitle}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        title="Regenerar automaticamente"
+                    >
+                        <RefreshCw size={12} />
+                        Regenerar
+                    </button>
+                </div>
                 <input
                     type="text"
                     value={metaTitle}
@@ -135,9 +281,20 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
 
             {/* Campo: Meta Descrição */}
             <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Meta Descrição <span className="text-purple-600 font-bold">(SEO)</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                        Meta Descrição <span className="text-purple-600 font-bold">(SEO)</span>
+                    </label>
+                    <button
+                        type="button"
+                        onClick={handleRegenerateMetaDescription}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        title="Regenerar automaticamente"
+                    >
+                        <RefreshCw size={12} />
+                        Regenerar
+                    </button>
+                </div>
                 <textarea
                     value={metaDescription}
                     onChange={(e) => setValue('meta_description', e.target.value)}
@@ -161,9 +318,20 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
 
             {/* Campo: Palavras-chave */}
             <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Palavras-chave <span className="text-purple-600 font-bold">(SEO)</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                        Palavras-chave <span className="text-purple-600 font-bold">(SEO)</span>
+                    </label>
+                    <button
+                        type="button"
+                        onClick={handleRegenerateKeywords}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                        title="Regenerar automaticamente"
+                    >
+                        <RefreshCw size={12} />
+                        Regenerar
+                    </button>
+                </div>
                 <input
                     type="text"
                     value={watch('keywords')?.join(', ') || ''}
