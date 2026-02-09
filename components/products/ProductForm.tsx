@@ -29,6 +29,7 @@ import { ProductWarranty } from './sections/ProductWarranty';
 import { ProductSEO } from './sections/ProductSEO';
 import { Model } from '../../types/model';
 import { modelService } from '../../services/models';
+import { averagePriceService } from '../../services/averagePriceService';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -314,9 +315,40 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
         }
     };
 
-    // Wrapper para onSubmit que mostra toast de erro
+    // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(
-        onSubmit,
+        async (data) => {
+            // 1. Salvar produto
+            await onSubmit(data);
+
+            // 2. Calcular preço médio se for novo produto com variação
+            if (!initialData && selectedBrandId && data.specs?.ram && data.specs?.storage) {
+                try {
+                    console.log('📊 Calculating average prices...');
+                    const result = await averagePriceService.updateAveragePrices({
+                        ...data,
+                        model_id: selectedBrandId // Usar brand_id como model_id temporariamente
+                    });
+
+                    if (result && result.previousStock > 0) {
+                        // Mostrar feedback de preços atualizados
+                        const costChange = result.averages.price_cost.priceChange;
+                        const retailChange = result.averages.price_retail.priceChange;
+
+                        toast.success(
+                            `📊 Preços médios atualizados!`,
+                            {
+                                duration: 5000,
+                                description: `Estoque: ${result.previousStock} → ${result.newStock} unidades\nCusto: ${costChange >= 0 ? '+' : ''}R$ ${costChange.toFixed(2)}\nVarejo: ${retailChange >= 0 ? '+' : ''}R$ ${retailChange.toFixed(2)}`
+                            }
+                        );
+                    }
+                } catch (error) {
+                    console.error('Error calculating average prices:', error);
+                    // Não bloqueia o salvamento, apenas loga o erro
+                }
+            }
+        },
         (errors) => {
             console.error('Validation errors:', errors);
 
