@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
 import { ProductInput } from '../../types/product';
 import { ExternalLink, RefreshCw } from 'lucide-react';
@@ -105,6 +105,41 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
     const model = watch('model') || '';
     const category = watch('category') || '';
 
+    // Template de prompt padrão
+    const defaultPrompt = `Gere conteúdo SEO otimizado para o seguinte produto:
+
+Nome: ${name || '[Nome do Produto]'}
+Marca: ${brand || '[Marca]'}
+Modelo: ${model || '[Modelo]'}
+Categoria: ${category || '[Categoria]'}
+
+Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicações):
+{
+    "description": "descrição detalhada do produto com mínimo 300 palavras, destacando benefícios, especificações técnicas e diferenciais",
+    "slug": "url-amigavel-sem-acentos-minusculas",
+    "meta_title": "título SEO com máximo 60 caracteres incluindo nome da loja",
+    "meta_description": "meta descrição persuasiva com máximo 160 caracteres destacando benefícios",
+    "keywords": ["palavra1", "palavra2", "palavra3", "palavra4", "palavra5"]
+}`;
+
+    const [aiPrompt, setAiPrompt] = React.useState(defaultPrompt);
+    const [promptCopied, setPromptCopied] = React.useState(false);
+
+    // Atualizar prompt quando dados do produto mudarem
+    React.useEffect(() => {
+        setAiPrompt(defaultPrompt);
+    }, [name, brand, model, category]);
+
+    const handleCopyPrompt = async () => {
+        try {
+            await navigator.clipboard.writeText(aiPrompt);
+            setPromptCopied(true);
+            setTimeout(() => setPromptCopied(false), 2000);
+        } catch (err) {
+            console.error('Erro ao copiar prompt:', err);
+        }
+    };
+
     // Auto-preencher campos SEO quando dados do produto mudarem
     useEffect(() => {
         // Auto-preencher apenas se campo estiver vazio
@@ -151,8 +186,36 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
                     💡 Gerar Conteúdo SEO com IA
                 </h4>
                 <p className="text-sm text-blue-700 mb-3">
-                    Use uma das ferramentas abaixo para gerar conteúdo SEO otimizado. Copie e cole o conteúdo gerado nos campos.
+                    Use uma das ferramentas abaixo para gerar conteúdo SEO otimizado. Copie o prompt e cole na IA escolhida.
                 </p>
+
+                {/* Campo de Prompt Editável */}
+                <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-medium text-blue-900">
+                            Prompt para IA (editável)
+                        </label>
+                        <button
+                            type="button"
+                            onClick={handleCopyPrompt}
+                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                        >
+                            {promptCopied ? '✓ Copiado!' : '📋 Copiar Prompt'}
+                        </button>
+                    </div>
+                    <textarea
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        rows={12}
+                        className="w-full px-3 py-2 text-xs font-mono border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white"
+                        placeholder="Edite o prompt conforme necessário..."
+                    />
+                    <p className="text-xs text-blue-600 mt-1">
+                        💡 Dica: Edite o prompt para personalizar a geração. O prompt é atualizado automaticamente quando você preenche os dados do produto.
+                    </p>
+                </div>
+
+                {/* Botões de Links para IAs */}
                 <div className="flex flex-wrap gap-2">
                     <a
                         href="https://gemini.google.com/"
@@ -162,6 +225,15 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
                     >
                         <ExternalLink size={16} />
                         Abrir Gemini
+                    </a>
+                    <a
+                        href="https://www.perplexity.ai/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium text-sm"
+                    >
+                        <ExternalLink size={16} />
+                        Abrir Perplexity
                     </a>
                     <a
                         href="https://x.com/i/grok"
