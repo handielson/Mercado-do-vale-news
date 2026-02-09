@@ -150,6 +150,19 @@ export const ClienteLoginPage: React.FC = () => {
                         </Link>
                     </p>
                 </div>
+
+                {/* Public Catalog Button */}
+                <div className="pt-4">
+                    <Link
+                        to="/"
+                        className="w-full block text-center bg-gradient-to-r from-green-600 to-green-700 text-white py-3 rounded-xl font-bold hover:from-green-700 hover:to-green-800 transition-all shadow-lg"
+                    >
+                        🛍️ Ver Catálogo
+                    </Link>
+                    <p className="text-xs text-slate-500 text-center mt-2">
+                        Navegue pelos produtos sem fazer login
+                    </p>
+                </div>
             </div>
         </AuthLayout>
     );
