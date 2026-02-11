@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, FileText, Settings } from 'lucide-react';
-import { Model, ModelInput } from '../../types/model';
-import { Brand } from '../../types/brand';
-import { Category } from '../../types/category';
+import { Model, type ModelInput } from '../../types/model';
+import { type Brand } from '../../types/brand';
+import { type Category } from '../../types/category';
 import { modelService } from '../../services/models';
 import { brandService } from '../../services/brands';
 import { categoryService } from '../../services/categories';
-import { customFieldsService, CustomField } from '../../services/custom-fields';
+import { customFieldsService, type CustomField } from '../../services/custom-fields';
 import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
 import { UNIQUE_FIELDS } from '../../config/product-fields';
 import { CurrencyInput } from '../ui/CurrencyInput';
+import { tableDataService, type TableOption } from '../../services/table-data';
+import { ColorImageManager } from './ColorImageManager';
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -18,7 +20,97 @@ interface ModelModalProps {
     model?: Model | null;
 }
 
-type TabType = 'basic' | 'template';
+type TabType = 'basic' | 'template' | 'photos';
+
+/**
+ * TemplateFieldInput Component
+ * Renders appropriate input based on field type
+ */
+interface TemplateFieldInputProps {
+    field: CustomField;
+    value: any;
+    onChange: (value: any) => void;
+}
+
+const TemplateFieldInput: React.FC<TemplateFieldInputProps> = ({ field, value, onChange }) => {
+    const [options, setOptions] = useState<TableOption[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    // Debug log
+    console.log(`🔍[TemplateFieldInput] Field: ${field.key}, Type: ${field.field_type}, Has table_config: ${!!field.table_config} `);
+
+    useEffect(() => {
+        if (field.field_type === 'table_relation' && field.table_config) {
+            loadTableOptions();
+        }
+    }, [field]);
+
+    const loadTableOptions = async () => {
+        if (!field.table_config) return;
+
+        setLoading(true);
+        try {
+            const data = await tableDataService.loadOptions(
+                field.table_config.table_name,
+                field.table_config.value_column,
+                field.table_config.label_column,
+                field.table_config.order_by
+            );
+            setOptions(data);
+        } catch (error) {
+            console.error(`Error loading options for ${field.key}: `, error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+                {field.label} <span className="text-slate-400 font-mono">({field.key})</span>
+            </label>
+            {field.field_type === 'table_relation' ? (
+                // Dropdown from database table
+                <select
+                    value={value || ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    disabled={loading}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                >
+                    <option value="">Selecione...</option>
+                    {options.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
+            ) : field.field_type === 'select' && field.options ? (
+                // Dropdown from manual options
+                <select
+                    value={value || ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                    <option value="">Selecione...</option>
+                    {field.options.map((opt) => (
+                        <option key={opt} value={opt}>
+                            {opt}
+                        </option>
+                    ))}
+                </select>
+            ) : (
+                // Text or number input
+                <input
+                    type={field.field_type === 'number' ? 'number' : 'text'}
+                    value={value || ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={field.placeholder || ''}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+            )}
+        </div>
+    );
+};
 
 /**
  * Model Modal Component with Template Support
@@ -59,6 +151,8 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
 
     useEffect(() => {
         if (model) {
+            console.log('🔍 [ModelModal] Loading model:', model.name);
+            console.log('📋 [ModelModal] Template values:', model.template_values);
             setName(model.name);
             setBrandId(model.brand_id);
             setActive(model.active);
@@ -127,6 +221,9 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
         setError('');
 
         try {
+            console.log('💾 [ModelModal] Saving template values:', templateValues);
+            console.log('📊 [ModelModal] Template values keys:', Object.keys(templateValues));
+
             const input: ModelInput = {
                 name: name.trim(),
                 brand_id: brandId,
@@ -135,6 +232,8 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                 description: description || undefined,
                 template_values: Object.keys(templateValues).length > 0 ? templateValues : undefined
             };
+
+            console.log('📤 [ModelModal] Final input:', JSON.stringify(input, null, 2));
 
             if (model) {
                 await modelService.update(model.id, input);
@@ -173,10 +272,10 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                 <div className="flex border-b border-slate-200">
                     <button
                         onClick={() => setActiveTab('basic')}
-                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'basic'
-                                ? 'text-blue-600 border-b-2 border-blue-600'
-                                : 'text-slate-600 hover:text-slate-800'
-                            }`}
+                        className={`flex - 1 px - 6 py - 3 font - medium transition - colors ${activeTab === 'basic'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-slate-600 hover:text-slate-800'
+                            } `}
                     >
                         <div className="flex items-center justify-center gap-2">
                             <Settings size={18} />
@@ -186,13 +285,26 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                     <button
                         onClick={() => setActiveTab('template')}
                         className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'template'
-                                ? 'text-blue-600 border-b-2 border-blue-600'
-                                : 'text-slate-600 hover:text-slate-800'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-slate-600 hover:text-slate-800'
                             }`}
                     >
                         <div className="flex items-center justify-center gap-2">
                             <FileText size={18} />
                             Template
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('photos')}
+                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'photos'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-slate-600 hover:text-slate-800'
+                            }`}
+                        disabled={!model}
+                        title={!model ? 'Salve o modelo primeiro para gerenciar fotos' : ''}
+                    >
+                        <div className="flex items-center justify-center gap-2">
+                            📸 Fotos por Cor
                         </div>
                     </button>
                 </div>
@@ -274,7 +386,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                         <>
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                                 <p className="text-sm text-blue-900">
-                                    📋 <strong>Template de Modelo:</strong> Configure valores padrão que serão preenchidos automaticamente ao cadastrar produtos deste modelo.
+                                    📋 <strong>Template de Modelo</strong> <span className="text-slate-500 font-mono text-xs">(models.template_values)</span>: Configure valores padrão que serão preenchidos automaticamente ao cadastrar produtos deste modelo.
                                 </p>
                                 <p className="text-xs text-blue-700 mt-1">
                                     Campos únicos (Cor, IMEI, Serial, EAN, SKU) não são preenchidos automaticamente.
@@ -318,67 +430,48 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                             <div className="border-t border-slate-200 pt-4">
                                 <h4 className="font-medium text-slate-800 mb-3">Valores Padrão</h4>
 
-                                {/* Price Fields */}
-                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Preço Custo
-                                        </label>
-                                        <CurrencyInput
-                                            value={templateValues.price_cost || 0}
-                                            onChange={(value) => handleTemplateValueChange('price_cost', value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Preço Varejo
-                                        </label>
-                                        <CurrencyInput
-                                            value={templateValues.price_retail || 0}
-                                            onChange={(value) => handleTemplateValueChange('price_retail', value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Preço Revenda
-                                        </label>
-                                        <CurrencyInput
-                                            value={templateValues.price_reseller || 0}
-                                            onChange={(value) => handleTemplateValueChange('price_reseller', value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Preço Atacado
-                                        </label>
-                                        <CurrencyInput
-                                            value={templateValues.price_wholesale || 0}
-                                            onChange={(value) => handleTemplateValueChange('price_wholesale', value)}
-                                        />
-                                    </div>
-                                </div>
-
                                 {/* Spec Fields */}
                                 <div className="grid grid-cols-2 gap-4">
                                     {customFields
                                         .filter(f => f.category === 'spec')
                                         .map((field) => (
-                                            <div key={field.id}>
-                                                <label className="block text-xs font-medium text-slate-600 mb-1">
-                                                    {field.label}
-                                                </label>
-                                                <input
-                                                    type={field.field_type === 'number' ? 'number' : 'text'}
-                                                    value={templateValues[field.key] || ''}
-                                                    onChange={(e) => handleTemplateValueChange(field.key, e.target.value)}
-                                                    placeholder={field.placeholder || ''}
-                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
-                                            </div>
+                                            <TemplateFieldInput
+                                                key={field.id}
+                                                field={field}
+                                                value={templateValues[field.key]}
+                                                onChange={(value) => handleTemplateValueChange(field.key, value)}
+                                            />
                                         ))}
                                 </div>
                             </div>
                         </>
+                    )}
+
+                    {/* Photos Tab */}
+                    {activeTab === 'photos' && model && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <p className="text-sm text-blue-900 font-medium">
+                                    📸 <strong>Fotos por Cor</strong>
+                                </p>
+                                <span className="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded font-mono">
+                                    {model.name}
+                                </span>
+                            </div>
+                            <p className="text-xs text-blue-700 mb-2">
+                                • Estas fotos serão usadas automaticamente em todos os produtos novos<br />
+                                • Produtos usados podem ter fotos customizadas
+                            </p>
+                            <div className="bg-green-50 border border-green-300 rounded p-2 mt-2">
+                                <p className="text-xs text-green-800">
+                                    ✅ <strong>As fotos são salvas automaticamente!</strong> Você pode cadastrar várias cores sem fechar este modal. Basta selecionar outra cor no dropdown e fazer upload.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'photos' && model && (
+                        <ColorImageManager modelId={model.id} />
                     )}
 
                     {/* Error Message */}

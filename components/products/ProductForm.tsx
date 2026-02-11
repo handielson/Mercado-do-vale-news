@@ -30,6 +30,7 @@ import { ProductSEO } from './sections/ProductSEO';
 import { Model } from '../../types/model';
 import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
+import { modelColorImagesService } from '../../services/model-color-images';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -152,6 +153,51 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
 
     // Apply model template when model is selected
     useModelTemplate(selectedModel, setValue);
+
+    // Auto-load default images when model + color are selected
+    const selectedColor = watch('specs.color');
+    const [useCustomImages, setUseCustomImages] = useState(!!initialData?.images?.length);
+
+    useEffect(() => {
+        const loadDefaultImages = async () => {
+            // Skip if:
+            // - No model or color selected
+            // - User wants custom images
+            // - Already has images (editing existing product)
+            if (!selectedModel?.id || !selectedColor || useCustomImages || initialData) {
+                return;
+            }
+
+            try {
+                console.log('📸 Loading default images for:', selectedModel.name, selectedColor);
+
+                // Get color ID from color name
+                const { colorService } = await import('../../services/colors');
+                const colors = await colorService.list();
+                const colorObj = colors.find(c => c.name === selectedColor);
+
+                if (!colorObj) {
+                    console.log('⚠️ Color not found:', selectedColor);
+                    return;
+                }
+
+                // Load default images
+                const defaultImages = await modelColorImagesService.get(selectedModel.id, colorObj.id);
+
+                if (defaultImages?.images && defaultImages.images.length > 0) {
+                    console.log('✅ Loaded', defaultImages.images.length, 'default images');
+                    setValue('images', defaultImages.images);
+                    setImagePreviews(defaultImages.images);
+                } else {
+                    console.log('ℹ️ No default images found for this variation');
+                }
+            } catch (error) {
+                console.error('Error loading default images:', error);
+            }
+        };
+
+        loadDefaultImages();
+    }, [selectedModel?.id, selectedColor, useCustomImages, initialData]);
 
     // 1. Função para carregar as regras da categoria
     const loadCategoryConfig = async () => {
@@ -431,6 +477,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 isCompressing={isCompressing}
                 handleImageUpload={handleImageUpload}
                 removeImage={removeImage}
+                useCustomImages={useCustomImages}
+                onToggleCustomImages={setUseCustomImages}
+                hasDefaultImages={!!selectedModel?.id && !!selectedColor}
             />
 
             {/* 5. GARANTIA */}

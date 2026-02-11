@@ -173,6 +173,10 @@ async function update(id: string, input: ModelInput): Promise<Model> {
     const companyId = await getCompanyId();
     const slug = generateSlug(input.name);
 
+    console.log('💾 [ModelService] Updating model:', id);
+    console.log('📝 [ModelService] Input template_values:', input.template_values);
+    console.log('📊 [ModelService] Template values type:', typeof input.template_values);
+
     const { data, error } = await supabase
         .from('models')
         .update({
@@ -190,6 +194,8 @@ async function update(id: string, input: ModelInput): Promise<Model> {
         .single();
 
     if (error) throw new Error(`Failed to update model: ${error.message}`);
+
+    console.log('✅ [ModelService] Saved template_values:', data.template_values);
 
     return {
         id: data.id,

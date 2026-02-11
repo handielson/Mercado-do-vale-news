@@ -237,12 +237,19 @@ export function FieldConfigPage() {
                             fields.map((field) => (
                                 <tr key={field.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-sm">
-                                        <code className="px-2 py-1 bg-slate-100 rounded text-xs font-mono text-slate-800">
-                                            {field.key}
-                                        </code>
+                                        <div className="flex flex-col gap-1">
+                                            <code className="px-2 py-1 bg-slate-100 rounded text-xs font-mono text-slate-800">
+                                                {field.key}
+                                            </code>
+                                            {field.field_type === 'table_relation' && field.table_config?.table_name && (
+                                                <span className="text-xs text-blue-600 font-medium">
+                                                    → {field.table_config.table_name}
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-800">
-                                        {field.label}
+                                    <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                                        {field.label} <span className="text-slate-400 font-mono text-xs">({field.key})</span>
                                     </td>
                                     <td className="px-6 py-4 text-sm">
                                         <span className={`px-2 py-1 rounded text-xs font-medium ${field.category === 'basic' ? 'bg-blue-100 text-blue-800' :

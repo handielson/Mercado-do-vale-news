@@ -90,6 +90,23 @@ export default function FieldsManagementPage() {
         return typeLabels[field.field_type] || field.field_type;
     };
 
+    const [searchTerm, setSearchTerm] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState<string>('all');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+    // Filter fields based on search and category
+    const filteredFields = fields
+        .filter(field => {
+            const matchesSearch = field.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                field.key.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesCategory = categoryFilter === 'all' || field.category === categoryFilter;
+            return matchesSearch && matchesCategory;
+        })
+        .sort((a, b) => {
+            const comparison = a.label.localeCompare(b.label, 'pt-BR');
+            return sortOrder === 'asc' ? comparison : -comparison;
+        });
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -100,14 +117,64 @@ export default function FieldsManagementPage() {
 
     return (
         <div className="p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Campos Personalizados</h1>
-                    <p className="text-sm text-slate-600 mt-1">
-                        Gerencie campos globais reutilizáveis em todas as categorias
-                    </p>
+            {/* Page Title */}
+            <div className="mb-6">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="p-3 bg-blue-100 text-blue-600 rounded-xl">
+                        <Database size={28} />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900">
+                            Biblioteca Global de Campos <span className="text-slate-500 font-mono text-2xl">(custom_fields)</span>
+                        </h1>
+                        <p className="text-sm text-slate-600 mt-1">
+                            Crie e gerencie campos globais reutilizáveis em todas as categorias
+                        </p>
+                    </div>
                 </div>
+            </div>
+
+            {/* Filters and Actions */}
+            <div className="flex items-center justify-between mb-6 gap-4">
+                <div className="flex items-center gap-3 flex-1">
+                    {/* Search */}
+                    <div className="relative flex-1 max-w-md">
+                        <input
+                            type="text"
+                            placeholder="Buscar por nome ou chave..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full px-4 py-2 pl-10 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <FileText className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                    </div>
+
+                    {/* Category Filter */}
+                    <select
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                        className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="all">Todas Categorias</option>
+                        <option value="basic">Básico</option>
+                        <option value="spec">Especificações</option>
+                        <option value="price">Preços</option>
+                        <option value="fiscal">Fiscal</option>
+                        <option value="logistics">Logística</option>
+                    </select>
+
+                    {/* Sort Order */}
+                    <button
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                        className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
+                        title={sortOrder === 'asc' ? 'Ordenar Z-A' : 'Ordenar A-Z'}
+                    >
+                        <span className="text-sm font-medium">
+                            {sortOrder === 'asc' ? 'A-Z ↓' : 'Z-A ↑'}
+                        </span>
+                    </button>
+                </div>
+
                 <button
                     onClick={handleCreate}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -140,21 +207,39 @@ export default function FieldsManagementPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                        {fields.length === 0 ? (
+                        {filteredFields.length === 0 ? (
                             <tr>
                                 <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                    Nenhum campo personalizado criado ainda.
-                                    <br />
-                                    <button
-                                        onClick={handleCreate}
-                                        className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
-                                    >
-                                        Criar primeiro campo
-                                    </button>
+                                    {searchTerm || categoryFilter !== 'all' ? (
+                                        <>
+                                            Nenhum campo encontrado com os filtros aplicados.
+                                            <br />
+                                            <button
+                                                onClick={() => {
+                                                    setSearchTerm('');
+                                                    setCategoryFilter('all');
+                                                }}
+                                                className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
+                                            >
+                                                Limpar filtros
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            Nenhum campo personalizado criado ainda.
+                                            <br />
+                                            <button
+                                                onClick={handleCreate}
+                                                className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
+                                            >
+                                                Criar primeiro campo
+                                            </button>
+                                        </>
+                                    )}
                                 </td>
                             </tr>
                         ) : (
-                            fields.map((field) => (
+                            filteredFields.map((field) => (
                                 <tr key={field.id} className="hover:bg-slate-50">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
@@ -166,9 +251,16 @@ export default function FieldsManagementPage() {
                                         {getFieldTypeLabel(field)}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <code className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">
-                                            {field.key}
-                                        </code>
+                                        <div className="flex flex-col gap-1">
+                                            <code className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">
+                                                {field.key}
+                                            </code>
+                                            {field.field_type === 'table_relation' && field.table_config?.table_name && (
+                                                <code className="text-xs text-blue-600 font-mono">
+                                                    table: {field.table_config.table_name}
+                                                </code>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-600">
                                         {field.category}

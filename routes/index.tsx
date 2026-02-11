@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useNavigate } from 'react-router-dom';
 import { AdminLoginPage } from '../pages/auth/AdminLoginPage';
 import { ClienteLoginPage } from '../pages/auth/ClienteLoginPage';
 import { ClienteRegisterPage } from '../pages/auth/ClienteRegisterPage';
@@ -58,26 +59,93 @@ import { EntradaPage } from '../pages/admin/EntradaPage';
 
 
 // Temporary components (will be moved to separate files in next phase)
-const DashboardPage = () => (
-  <div className="animate-in fade-in duration-500">
-    <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
-    <p className="text-slate-500">Gestão operacional do ecossistema.</p>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
-        <p className="text-xs font-semibold text-slate-500 uppercase">Total Operações</p>
-        <p className="text-2xl font-bold mt-1">R$ 0,00</p>
+const DashboardPage = () => {
+  const navigate = useNavigate();
+
+  return (
+    <div className="animate-in fade-in duration-500">
+      <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
+      <p className="text-slate-500">Gestão operacional do ecossistema.</p>
+
+      {/* Quick Access Cards */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold text-slate-700 mb-4">⚡ Acesso Rápido</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <button
+            onClick={() => navigate('/admin/settings/models')}
+            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group text-left"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                <span className="text-xl">📱</span>
+              </div>
+              <p className="font-semibold text-slate-800">Modelos</p>
+            </div>
+            <p className="text-xs text-slate-500">Gerenciar modelos e fotos por cor</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/admin/products')}
+            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer group text-left"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                <span className="text-xl">📦</span>
+              </div>
+              <p className="font-semibold text-slate-800">Produtos</p>
+            </div>
+            <p className="text-xs text-slate-500">Cadastrar e gerenciar produtos</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/admin/pdv')}
+            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-purple-400 hover:shadow-md transition-all cursor-pointer group text-left"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                <span className="text-xl">💰</span>
+              </div>
+              <p className="font-semibold text-slate-800">PDV</p>
+            </div>
+            <p className="text-xs text-slate-500">Ponto de venda</p>
+          </button>
+
+          <button
+            onClick={() => navigate('/admin/settings/catalog')}
+            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group text-left"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+                <span className="text-xl">🛍️</span>
+              </div>
+              <p className="font-semibold text-slate-800">Catálogo</p>
+            </div>
+            <p className="text-xs text-slate-500">Configurar catálogo público</p>
+          </button>
+        </div>
       </div>
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-red-500">
-        <p className="text-xs font-semibold text-slate-500 uppercase">Alertas de Estoque</p>
-        <p className="text-2xl font-bold mt-1">0 itens</p>
-      </div>
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500">
-        <p className="text-xs font-semibold text-slate-500 uppercase">Requisições Atacado</p>
-        <p className="text-2xl font-bold mt-1">0</p>
+
+      {/* Stats Cards */}
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold text-slate-700 mb-4">📊 Estatísticas</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
+            <p className="text-xs font-semibold text-slate-500 uppercase">Total Operações</p>
+            <p className="text-2xl font-bold mt-1">R$ 0,00</p>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-red-500">
+            <p className="text-xs font-semibold text-slate-500 uppercase">Alertas de Estoque</p>
+            <p className="text-2xl font-bold mt-1">0 itens</p>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500">
+            <p className="text-xs font-semibold text-slate-500 uppercase">Requisições Atacado</p>
+            <p className="text-2xl font-bold mt-1">0</p>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const StorePage = () => (
   <div className="p-8 animate-in slide-in-from-bottom-4 duration-500">

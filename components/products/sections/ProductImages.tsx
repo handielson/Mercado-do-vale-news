@@ -6,6 +6,9 @@ interface ProductImagesProps {
     isCompressing: boolean;
     handleImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
     removeImage: (index: number) => void;
+    useCustomImages?: boolean;
+    onToggleCustomImages?: (value: boolean) => void;
+    hasDefaultImages?: boolean;
 }
 
 const MAX_IMAGES = 5;
@@ -14,7 +17,10 @@ export function ProductImages({
     imagePreviews,
     isCompressing,
     handleImageUpload,
-    removeImage
+    removeImage,
+    useCustomImages = false,
+    onToggleCustomImages,
+    hasDefaultImages = false
 }: ProductImagesProps) {
     const canAddMore = imagePreviews.length < MAX_IMAGES;
     const remainingSlots = MAX_IMAGES - imagePreviews.length;
@@ -27,6 +33,30 @@ export function ProductImages({
                     {imagePreviews.length} / {MAX_IMAGES} imagens
                 </span>
             </div>
+
+            {/* Toggle for custom images (used products) */}
+            {hasDefaultImages && onToggleCustomImages && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={useCustomImages}
+                            onChange={(e) => onToggleCustomImages(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div>
+                            <span className="text-sm font-medium text-blue-900">
+                                📸 Produto usado - usar fotos customizadas
+                            </span>
+                            <p className="text-xs text-blue-700 mt-0.5">
+                                {useCustomImages
+                                    ? 'Você pode fazer upload de fotos específicas deste produto'
+                                    : 'Usando fotos padrão do modelo. Marque para produtos usados com fotos próprias.'}
+                            </p>
+                        </div>
+                    </label>
+                </div>
+            )}
 
             {!canAddMore && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">

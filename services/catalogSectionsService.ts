@@ -180,11 +180,11 @@ class CatalogSectionsService {
                 query = query.in('brand', section.filter_brands);
             }
 
-            if (section.filter_min_price !== undefined) {
+            if (section.filter_min_price !== undefined && section.filter_min_price !== null && typeof section.filter_min_price === 'number') {
                 query = query.gte('price_retail', section.filter_min_price);
             }
 
-            if (section.filter_max_price !== undefined) {
+            if (section.filter_max_price !== undefined && section.filter_max_price !== null && typeof section.filter_max_price === 'number') {
                 query = query.lte('price_retail', section.filter_max_price);
             }
 
@@ -209,16 +209,16 @@ class CatalogSectionsService {
     private applySectionTypeFilter(query: any, sectionType: SectionType) {
         switch (sectionType) {
             case 'recent':
-                // Produtos mais recentes
-                return query.order('created_at', { ascending: false });
+                // Produtos mais recentes (ordenação aplicada por applySorting)
+                return query;
 
             case 'featured':
                 // Produtos em destaque
                 return query.eq('is_featured', true);
 
             case 'bestsellers':
-                // Mais vendidos
-                return query.order('sales_count', { ascending: false });
+                // Mais vendidos (ordenação aplicada por applySorting)
+                return query;
 
             case 'promotions':
                 // Produtos com desconto

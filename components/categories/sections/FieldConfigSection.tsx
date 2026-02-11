@@ -96,7 +96,7 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
         <div className="bg-white rounded-xl border border-slate-200 p-6">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-slate-900">
-                    🚦 Configuração Completa de Campos
+                    🚦 Campos da Categoria <span className="text-slate-500 font-mono text-sm">(categories.config)</span>
                 </h3>
                 <button
                     type="button"
