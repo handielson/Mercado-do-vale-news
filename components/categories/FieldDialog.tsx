@@ -97,7 +97,10 @@ export function FieldDialog({ isOpen, editingField, allCustomFields, onClose, on
                                                     type: customField.type,
                                                     requirement: 'optional',
                                                     placeholder: customField.placeholder,
-                                                    options: customField.options || []
+                                                    options: customField.options || [],
+                                                    table_config: customField.table_config,  // ✅ ADICIONADO
+                                                    key: customField.key,                     // ✅ ADICIONADO
+                                                    id: customField.id                        // ✅ ADICIONADO
                                                 });
                                             }
                                         } else if (key && FIELD_DICTIONARY[key]) {
@@ -131,6 +134,7 @@ export function FieldDialog({ isOpen, editingField, allCustomFields, onClose, on
                                     {allCustomFields.length > 0 && (
                                         <optgroup label="✨ Campos Personalizados Existentes">
                                             {allCustomFields
+                                                .filter(field => field.name) // Filter out fields without names
                                                 .sort((a, b) => a.name.localeCompare(b.name))
                                                 .map(field => (
                                                     <option key={`custom-${field.key}`} value={`custom:${field.key}`}>
@@ -247,24 +251,138 @@ export function FieldDialog({ isOpen, editingField, allCustomFields, onClose, on
                                 </select>
                             </div>
 
+
                             {/* Dropdown Options */}
                             {newField.type === 'dropdown' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        Opções (separadas por vírgula)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={newField.options?.join(', ') || ''}
-                                        onChange={(e) => setNewField({
-                                            ...newField,
-                                            options: e.target.value.split(',').map(o => o.trim()).filter(Boolean)
-                                        })}
-                                        placeholder="Ex: Sim, Não"
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            Fonte de Dados
+                                        </label>
+                                        <select
+                                            value={newField.table_config ? 'table' : 'manual'}
+                                            onChange={(e) => {
+                                                if (e.target.value === 'table') {
+                                                    // Switch to table mode
+                                                    setNewField({
+                                                        ...newField,
+                                                        type: 'table_relation',
+                                                        table_config: {
+                                                            table_name: '',
+                                                            value_column: 'id',
+                                                            label_column: 'name'
+                                                        },
+                                                        options: undefined
+                                                    });
+                                                } else {
+                                                    // Switch to manual mode
+                                                    setNewField({
+                                                        ...newField,
+                                                        type: 'dropdown',
+                                                        table_config: undefined,
+                                                        options: []
+                                                    });
+                                                }
+                                            }}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="manual">📝 Lista Manual</option>
+                                            <option value="table">🗄️ Tabela do Sistema</option>
+                                        </select>
+                                    </div>
+
+                                    {!newField.table_config && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Opções (separadas por vírgula)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={newField.options?.join(', ') || ''}
+                                                onChange={(e) => setNewField({
+                                                    ...newField,
+                                                    options: e.target.value.split(',').map(o => o.trim()).filter(Boolean)
+                                                })}
+                                                placeholder="Ex: Sim, Não"
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Table Relation Configuration */}
+                            {newField.type === 'table_relation' && newField.table_config && (
+                                <div className="space-y-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <h4 className="text-sm font-semibold text-blue-900">🗄️ Configuração de Tabela</h4>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                                            Tabela *
+                                        </label>
+                                        <select
+                                            value={newField.table_config.table_name}
+                                            onChange={(e) => setNewField({
+                                                ...newField,
+                                                table_config: {
+                                                    ...newField.table_config!,
+                                                    table_name: e.target.value
+                                                }
+                                            })}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="">Selecione uma tabela...</option>
+                                            <option value="versions">📱 Versões (versions)</option>
+                                            <option value="rams">💾 Memória RAM (rams)</option>
+                                            <option value="storages">💿 Armazenamento (storages)</option>
+                                            <option value="colors">🎨 Cores (colors)</option>
+                                            <option value="battery_healths">🔋 Saúde da Bateria (battery_healths)</option>
+                                            <option value="brands">🏢 Marcas (brands)</option>
+                                            <option value="models">📦 Modelos (models)</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">
+                                                Coluna Valor
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={newField.table_config.value_column}
+                                                onChange={(e) => setNewField({
+                                                    ...newField,
+                                                    table_config: {
+                                                        ...newField.table_config!,
+                                                        value_column: e.target.value
+                                                    }
+                                                })}
+                                                placeholder="id"
+                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">
+                                                Coluna Label
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={newField.table_config.label_column}
+                                                onChange={(e) => setNewField({
+                                                    ...newField,
+                                                    table_config: {
+                                                        ...newField.table_config!,
+                                                        label_column: e.target.value
+                                                    }
+                                                })}
+                                                placeholder="name"
+                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             )}
+
 
                             {/* Placeholder */}
                             <div>

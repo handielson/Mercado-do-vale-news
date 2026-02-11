@@ -24,6 +24,16 @@ export function QuickRegisterForm() {
     const serialRef = useRef<HTMLInputElement>(null);
     const imei1Ref = useRef<HTMLInputElement>(null);
     const imei2Ref = useRef<HTMLInputElement>(null);
+    const timeoutRef1 = useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef2 = useRef<NodeJS.Timeout | null>(null);
+
+    // Cleanup timeouts on unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
+            if (timeoutRef2.current) clearTimeout(timeoutRef2.current);
+        };
+    }, []);
 
     // Auto-focus on EAN field when component mounts
     useEffect(() => {
@@ -41,7 +51,11 @@ export function QuickRegisterForm() {
     useEffect(() => {
         if (imei1.length === 15 && baseProduct) {
             // Move to IMEI2
-            setTimeout(() => imei2Ref.current?.focus(), 50);
+            if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
+            timeoutRef1.current = setTimeout(() => {
+                imei2Ref.current?.focus();
+                timeoutRef1.current = null;
+            }, 50);
         }
     }, [imei1]);
 
@@ -90,7 +104,11 @@ export function QuickRegisterForm() {
             }
 
             // Focus on first unique field (Serial)
-            setTimeout(() => serialRef.current?.focus(), 100);
+            if (timeoutRef2.current) clearTimeout(timeoutRef2.current);
+            timeoutRef2.current = setTimeout(() => {
+                serialRef.current?.focus();
+                timeoutRef2.current = null;
+            }, 100);
         } catch (error) {
             alert('Erro ao buscar produto');
             setBaseProduct(null);

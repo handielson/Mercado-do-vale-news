@@ -9,6 +9,7 @@ import { VersionSelect } from '../selectors/VersionSelect';
 import { Package, RefreshCw } from 'lucide-react';
 import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
 import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
+import { TableRelationField } from '../../fields/TableRelationField';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -395,6 +396,16 @@ export function ProductSpecifications({
                                         placeholder={customField.placeholder}
                                         rows={3}
                                         className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                    />
+                                )}
+
+                                {/* Table Relation */}
+                                {customField.type === 'table_relation' && customField.table_config && (
+                                    <TableRelationField
+                                        tableConfig={customField.table_config}
+                                        value={watch(`specs.${customField.key}`) || null}
+                                        onChange={(val) => setValue(`specs.${customField.key}`, val)}
+                                        className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                                     />
                                 )}
                             </div>

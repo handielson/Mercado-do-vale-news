@@ -47,6 +47,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             active={location.pathname === '/admin'}
           />
           <NavItem
+            to="/admin/entrada"
+            icon={<Package size={18} />}
+            label="Entrada (Teste)"
+            active={location.pathname === '/admin/entrada'}
+          />
+          <NavItem
             to="/admin/products"
             icon={<Package size={18} />}
             label="Produtos"
@@ -102,6 +108,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             active={location.pathname.startsWith('/admin/settings/categories')}
           />
           <NavItem
+            to="/admin/settings/fields"
+            icon={<FileText size={18} />}
+            label="Campos"
+            active={location.pathname.startsWith('/admin/settings/fields')}
+          />
+          <NavItem
             to="/admin/settings/brands"
             icon={<BadgeCheck size={18} />}
             label="Marcas"
@@ -142,12 +154,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<BatteryCharging size={18} />}
             label="Saúde Bateria"
             active={location.pathname.startsWith('/admin/settings/battery-healths')}
-          />
-          <NavItem
-            to="/admin/settings/fields"
-            icon={<FileText size={18} />}
-            label="Campos"
-            active={location.pathname.startsWith('/admin/settings/fields')}
           />
           <NavItem
             to="/admin/settings/payment-fees"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, Copy, QrCode, Share2, Check } from 'lucide-react';
 import { Company } from '../types/company';
@@ -16,6 +16,17 @@ export const SharePaymentDataModal: React.FC<SharePaymentDataModalProps> = ({
 }) => {
     const [copied, setCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<'text' | 'qrcode'>('text');
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+        };
+    }, []);
 
     if (!isOpen) return null;
 
@@ -58,7 +69,13 @@ export const SharePaymentDataModal: React.FC<SharePaymentDataModalProps> = ({
         try {
             await navigator.clipboard.writeText(formatPaymentData());
             setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+
+            // Clear previous timeout to prevent accumulation
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+                setCopied(false);
+                timeoutRef.current = null;
+            }, 2000);
         } catch (error) {
             console.error('Erro ao copiar:', error);
         }
@@ -107,8 +124,8 @@ export const SharePaymentDataModal: React.FC<SharePaymentDataModalProps> = ({
                     <button
                         onClick={() => setActiveTab('text')}
                         className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'text'
-                                ? 'text-blue-600 border-b-2 border-blue-600'
-                                : 'text-gray-600 hover:text-gray-900'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-gray-600 hover:text-gray-900'
                             }`}
                     >
                         <div className="flex items-center justify-center gap-2">
@@ -119,8 +136,8 @@ export const SharePaymentDataModal: React.FC<SharePaymentDataModalProps> = ({
                     <button
                         onClick={() => setActiveTab('qrcode')}
                         className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'qrcode'
-                                ? 'text-blue-600 border-b-2 border-blue-600'
-                                : 'text-gray-600 hover:text-gray-900'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-gray-600 hover:text-gray-900'
                             }`}
                         disabled={!companyData.pixKey}
                     >
@@ -204,7 +221,13 @@ export const SharePaymentDataModal: React.FC<SharePaymentDataModalProps> = ({
                                         onClick={async () => {
                                             await navigator.clipboard.writeText(companyData.pixKey || '');
                                             setCopied(true);
-                                            setTimeout(() => setCopied(false), 2000);
+
+                                            // Clear previous timeout to prevent accumulation
+                                            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+                                            timeoutRef.current = setTimeout(() => {
+                                                setCopied(false);
+                                                timeoutRef.current = null;
+                                            }, 2000);
                                         }}
                                         className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                                     >

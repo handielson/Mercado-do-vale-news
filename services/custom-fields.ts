@@ -1,16 +1,30 @@
 import { supabase } from './supabase';
 
+export interface TableConfig {
+    table_name: string;
+    value_column: string;
+    label_column: string;
+    order_by?: string;
+}
+
 export interface CustomField {
     id: string;
     company_id: string;
     key: string;
     label: string;
     category: 'basic' | 'spec' | 'price' | 'fiscal' | 'logistics';
-    field_type: 'text' | 'number' | 'select' | 'checkbox' | 'textarea';
+    field_type:
+    | 'text' | 'textarea' | 'capitalize' | 'uppercase' | 'lowercase' | 'titlecase' | 'sentence' | 'slug'
+    | 'number' | 'numeric' | 'alphanumeric' | 'phone' | 'cpf' | 'cnpj' | 'cep'
+    | 'date_br' | 'date_br_short' | 'date_iso'
+    | 'ncm' | 'ean13' | 'cest'
+    | 'brl' | 'select' | 'checkbox'
+    | 'table_relation';
     options?: string[];
     validation?: Record<string, any>;
     placeholder?: string;
     help_text?: string;
+    table_config?: TableConfig;
     is_system: boolean;
     display_order: number;
     created_at: string;
@@ -21,11 +35,18 @@ export interface CustomFieldInput {
     key: string;
     label: string;
     category: 'basic' | 'spec' | 'price' | 'fiscal' | 'logistics';
-    field_type?: 'text' | 'number' | 'select' | 'checkbox' | 'textarea';
+    field_type?:
+    | 'text' | 'textarea' | 'capitalize' | 'uppercase' | 'lowercase' | 'titlecase' | 'sentence' | 'slug'
+    | 'number' | 'numeric' | 'alphanumeric' | 'phone' | 'cpf' | 'cnpj' | 'cep'
+    | 'date_br' | 'date_br_short' | 'date_iso'
+    | 'ncm' | 'ean13' | 'cest'
+    | 'brl' | 'select' | 'checkbox'
+    | 'table_relation';
     options?: string[];
     validation?: Record<string, any>;
     placeholder?: string;
     help_text?: string;
+    table_config?: TableConfig;
     display_order?: number;
 }
 
@@ -200,6 +221,7 @@ class CustomFieldsService {
                 validation: input.validation || {},
                 placeholder: input.placeholder || null,
                 help_text: input.help_text || null,
+                table_config: input.table_config || null,
                 display_order: input.display_order || 999,
                 is_system: false
             })
@@ -237,6 +259,7 @@ class CustomFieldsService {
                 validation: input.validation,
                 placeholder: input.placeholder,
                 help_text: input.help_text,
+                table_config: input.table_config,
                 display_order: input.display_order,
                 updated_at: new Date().toISOString()
             })

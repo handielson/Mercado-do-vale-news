@@ -4,6 +4,7 @@ import { ArrowLeft, Save } from 'lucide-react';
 import { Category, CategoryConfig, CategoryInput, FieldRequirement, CustomField } from '../../types/category';
 import { categoryService } from '../../services/categories';
 import { BasicInfoSection } from './sections/BasicInfoSection';
+import { UniqueFieldsSection } from './sections/UniqueFieldsSection';
 import { FieldConfigSection } from './sections/FieldConfigSection';
 import { CustomFieldsSection } from './sections/CustomFieldsSection';
 
@@ -41,6 +42,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
         custom_fields: [],
         ean_autofill_config: { enabled: true, exclude_fields: [] }
     });
+    const [uniqueFields, setUniqueFields] = useState<string[]>([]);
 
     // Load category data if editing
     useEffect(() => {
@@ -67,6 +69,9 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                     custom_fields: category.config.custom_fields || [],
                     ean_autofill_config: category.config.ean_autofill_config || { enabled: true, exclude_fields: [] }
                 });
+
+                // Load unique fields if they exist
+                setUniqueFields(category.config.unique_fields || []);
             }
         } catch (error) {
             console.error('Error loading category:', error);
@@ -102,6 +107,12 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
             auto_name_fields: fields
         }));
     };
+
+    const updateUniqueFields = (fields: string[]) => {
+        setUniqueFields(fields);
+        setConfig(prev => ({ ...prev, unique_fields: fields }));
+    };
+
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -186,7 +197,13 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                         isEditing={!!categoryId}
                     />
 
-                    {/* Section 2: Field Configuration */}
+                    {/* Section 2: Unique Fields */}
+                    <UniqueFieldsSection
+                        config={config}
+                        onChange={updateFieldConfig}
+                    />
+
+                    {/* Section 3: Field Configuration */}
                     <FieldConfigSection
                         config={config}
                         onChange={updateFieldConfig}
@@ -196,7 +213,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                         onAutoNamingFieldsChange={updateAutoNamingFields}
                     />
 
-                    {/* Section 3: Custom Fields */}
+                    {/* Section 4: Custom Fields */}
                     <CustomFieldsSection
                         fields={config.custom_fields || []}
                         onChange={updateCustomFields}

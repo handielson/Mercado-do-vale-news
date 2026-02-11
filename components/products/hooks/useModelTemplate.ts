@@ -20,8 +20,17 @@ export function useModelTemplate(
     useEffect(() => {
         if (!selectedModel) return;
 
+        console.log('🔍 useModelTemplate - Model selected:', {
+            name: selectedModel.name,
+            hasTemplateValues: !!selectedModel.template_values,
+            templateValues: selectedModel.template_values,
+            category_id: selectedModel.category_id,
+            description: selectedModel.description
+        });
+
         // Skip if no template values
         if (!selectedModel.template_values || Object.keys(selectedModel.template_values).length === 0) {
+            console.log('⏭️ useModelTemplate - No template values, skipping');
             return;
         }
 

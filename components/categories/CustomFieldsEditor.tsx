@@ -129,7 +129,8 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
             let field: any;
 
             if (isLibraryField) {
-                // NEW FORMAT: Save reference to library field
+                // NEW FORMAT: Save ONLY reference to library field
+                // The actual field data (name, type, table_config, etc.) will be loaded from custom_fields table
                 field = {
                     id: `custom-${Date.now()}`,
                     field_id: newField.id, // Reference to library
@@ -228,6 +229,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                                     {field.type === 'date_br_short' && '📅 Data BR Curta'}
                                                     {field.type === 'date_iso' && '📅 Data ISO'}
 
+
                                                     {/* Fiscal */}
                                                     {field.type === 'ncm' && '📋 NCM'}
                                                     {field.type === 'ean13' && '📋 EAN-13'}
@@ -236,7 +238,9 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                                     {/* Specialized */}
                                                     {field.type === 'brl' && '💰 Moeda'}
                                                     {field.type === 'dropdown' && '📋 Dropdown'}
+                                                    {field.type === 'table_relation' && `🗄️ Tabela (${field.table_config?.table_name || 'não configurada'})`}
                                                 </div>
+
                                             </div>
                                         </div>
                                     </td>

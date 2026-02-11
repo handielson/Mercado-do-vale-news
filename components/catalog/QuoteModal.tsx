@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Send, Copy, Check } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import type { VariantSpecs, ProductVariants } from '@/services/productVariants';
@@ -23,6 +23,17 @@ export function QuoteModal({ product, variants, isOpen, onClose }: QuoteModalPro
     const [delivery, setDelivery] = useState<DeliveryOption>({ type: 'pickup' });
     const [isLoading, setIsLoading] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+        };
+    }, []);
 
     // Load installment plans when price changes
     useEffect(() => {
@@ -75,7 +86,13 @@ export function QuoteModal({ product, variants, isOpen, onClose }: QuoteModalPro
 
         navigator.clipboard.writeText(message);
         setIsCopied(true);
-        setTimeout(() => setIsCopied(false), 2000);
+
+        // Clear previous timeout to prevent accumulation
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => {
+            setIsCopied(false);
+            timeoutRef.current = null;
+        }, 2000);
     };
 
     if (!isOpen) return null;

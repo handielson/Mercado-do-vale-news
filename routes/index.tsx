@@ -23,6 +23,7 @@ import { InventoryPage } from '../pages/admin/inventory/InventoryPage';
 import CategorySettingsPage from '../pages/admin/settings/categories/index';
 import NewCategoryPage from '../pages/admin/settings/categories/new';
 import EditCategoryPage from '../pages/admin/settings/categories/[id]/edit';
+import FieldsManagementPage from '../pages/admin/settings/fields';
 import { GovernancePage } from '../pages/admin/GovernancePage';
 import { DevDiaryPage } from '../pages/admin/DevDiaryPage';
 import { BrandsPage } from '../pages/admin/settings/BrandsPage';
@@ -53,6 +54,7 @@ import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
 import LegacyMigrationPage from '../pages/LegacyMigration';
 import FieldMappingPage from '../pages/FieldMappingPage';
+import { EntradaPage } from '../pages/admin/EntradaPage';
 
 
 // Temporary components (will be moved to separate files in next phase)
@@ -162,6 +164,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/admin/entrada",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><EntradaPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
     path: "/admin/products",
     element: (
       <ProtectedRoute requireAdmin={true}>
@@ -222,6 +232,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><EditCategoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/fields",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><FieldsManagementPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

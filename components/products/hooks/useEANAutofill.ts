@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { UseFormSetValue, UseFormWatch } from 'react-hook-form';
 import { Product, ProductInput } from '../../../types/product';
 
@@ -19,6 +19,9 @@ interface UseEANAutofillReturn {
 /**
  * Hook for EAN-based product search and autofill
  * Handles duplicate detection and automatic field population based on category config
+ * 
+ * PERFORMANCE FIX:
+ * - Added cleanup for setTimeout to prevent memory leaks
  */
 export function useEANAutofill({
     watch,
@@ -29,6 +32,20 @@ export function useEANAutofill({
     const [eanSearchMessage, setEANSearchMessage] = useState('');
     const [isDuplicateEAN, setIsDuplicateEAN] = useState(false);
     const [existingProduct, setExistingProduct] = useState<Product | null>(null);
+
+    // Refs to track timeouts for cleanup
+    const timeoutRef1 = useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef2 = useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef3 = useRef<NodeJS.Timeout | null>(null);
+
+    // Cleanup timeouts on unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
+            if (timeoutRef2.current) clearTimeout(timeoutRef2.current);
+            if (timeoutRef3.current) clearTimeout(timeoutRef3.current);
+        };
+    }, []);
 
     const searchByEAN = async () => {
         const eans = watch('eans');
@@ -126,7 +143,13 @@ export function useEANAutofill({
                     }
 
                     setEANSearchMessage('✨ Campos preenchidos automaticamente (respeitando exclusões)');
-                    setTimeout(() => setEANSearchMessage('⚠️ Código de barras já cadastrado!'), 2000);
+
+                    // Clear previous timeout to prevent accumulation
+                    if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
+                    timeoutRef1.current = setTimeout(() => {
+                        setEANSearchMessage('⚠️ Código de barras já cadastrado!');
+                        timeoutRef1.current = null;
+                    }, 2000);
                 } else {
                     console.log('❌ [EAN Autofill] Autofill DISABLED');
                 }
@@ -135,12 +158,24 @@ export function useEANAutofill({
                 setIsDuplicateEAN(false);
                 setExistingProduct(null);
                 setEANSearchMessage('ℹ️ Produto novo - preencha os dados');
-                setTimeout(() => setEANSearchMessage(''), 3000);
+
+                // Clear previous timeout to prevent accumulation
+                if (timeoutRef2.current) clearTimeout(timeoutRef2.current);
+                timeoutRef2.current = setTimeout(() => {
+                    setEANSearchMessage('');
+                    timeoutRef2.current = null;
+                }, 3000);
             }
         } catch (error) {
             console.error('Error searching by EAN:', error);
             setEANSearchMessage('⚠️ Erro ao buscar produto');
-            setTimeout(() => setEANSearchMessage(''), 3000);
+
+            // Clear previous timeout to prevent accumulation
+            if (timeoutRef3.current) clearTimeout(timeoutRef3.current);
+            timeoutRef3.current = setTimeout(() => {
+                setEANSearchMessage('');
+                timeoutRef3.current = null;
+            }, 3000);
         } finally {
             setIsSearchingEAN(false);
         }

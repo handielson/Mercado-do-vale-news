@@ -41,7 +41,20 @@ export type CustomFieldType =
     | 'ean13'
     | 'cest'
     // Currency
-    | 'brl';
+    | 'brl'
+    // Table relation
+    | 'table_relation';
+
+/**
+ * Table Configuration for table_relation fields
+ * Defines how to load options from a database table
+ */
+export interface TableConfig {
+    table_name: string;      // Name of the table to query
+    value_column: string;    // Column to use as the value
+    label_column: string;    // Column to use as the display label
+    order_by?: string;       // Optional ordering (e.g., "name ASC")
+}
 
 /**
  * Custom Field Definition
@@ -55,6 +68,7 @@ export interface CustomField {
     requirement: FieldRequirement; // Traffic light status
     options?: string[];            // For dropdown type
     placeholder?: string;          // Placeholder text
+    table_config?: TableConfig;    // For table_relation type
 }
 
 /**
@@ -99,6 +113,10 @@ export interface CategoryConfig {
     // DEPRECATED (kept for backward compatibility)
     auto_name_fields?: string[];       // Fields to compose the name (ex: ['model', 'ram', 'storage', 'color'])
     auto_name_separator?: string;      // Separator between fields (default: ' ', can be '/', '-', etc.)
+
+    // Unique Fields Configuration
+    unique_fields?: string[];          // Fields that must have unique values per product (ex: ['imei1', 'imei2', 'serial', 'color'])
+
 
     // Index signature for dynamic fields from database
     // Allows any field loaded from custom_fields table

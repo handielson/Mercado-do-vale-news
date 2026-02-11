@@ -132,6 +132,17 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
     const [aiPrompt, setAiPrompt] = React.useState(defaultPrompt);
     const [promptCopied, setPromptCopied] = React.useState(false);
+    const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    // Cleanup timeout on unmount
+    React.useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+        };
+    }, []);
 
     // Atualizar prompt quando dados do produto mudarem
     React.useEffect(() => {
@@ -142,7 +153,13 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         try {
             await navigator.clipboard.writeText(aiPrompt);
             setPromptCopied(true);
-            setTimeout(() => setPromptCopied(false), 2000);
+
+            // Clear previous timeout to prevent accumulation
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+                setPromptCopied(false);
+                timeoutRef.current = null;
+            }, 2000);
         } catch (err) {
             console.error('Erro ao copiar prompt:', err);
         }
