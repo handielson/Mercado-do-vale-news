@@ -332,6 +332,9 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
                                                     data-row={rowIndex}
                                                     data-field={fieldIndex}
                                                     placeholder={getFieldLabel(field)}
+                                                    // Technical: Limit IMEI fields to 15 digits
+                                                    maxLength={field === 'imei1' || field === 'imei2' ? 15 : undefined}
+                                                    inputMode={field === 'imei1' || field === 'imei2' ? 'numeric' : undefined}
                                                     className={`
                                                         w-full px-2 py-1 border rounded
                                                         focus:outline-none focus:ring-2 focus:ring-blue-500
