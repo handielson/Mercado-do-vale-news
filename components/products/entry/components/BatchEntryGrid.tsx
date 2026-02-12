@@ -61,6 +61,32 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
         });
 
         onChange(updatedRows);
+
+        // Technical: Auto-focus to next field when IMEI reaches 15 digits
+        if ((field === 'imei1' || field === 'imei2') && value.length === 15) {
+            setTimeout(() => {
+                const rowIndex = rows.findIndex(r => r.id === rowId);
+                const fieldIndex = uniqueFields.indexOf(field);
+
+                // Focus next field in the same row
+                const nextFieldIndex = fieldIndex + 1;
+                if (nextFieldIndex < uniqueFields.length) {
+                    const nextInput = gridRef.current?.querySelector(
+                        `input[data-row="${rowIndex}"][data-field="${nextFieldIndex}"], select[data-row="${rowIndex}"][data-field="${nextFieldIndex}"]`
+                    ) as HTMLInputElement | HTMLSelectElement;
+                    nextInput?.focus();
+                } else {
+                    // Last field - add new row and focus first field
+                    addRow();
+                    setTimeout(() => {
+                        const firstInput = gridRef.current?.querySelector(
+                            `input[data-row="${rows.length}"][data-field="0"], select[data-row="${rows.length}"][data-field="0"]`
+                        ) as HTMLInputElement | HTMLSelectElement;
+                        firstInput?.focus();
+                    }, 100);
+                }
+            }, 50);
+        }
     };
 
     // Technical: validateRow - Check if row has all required fields
