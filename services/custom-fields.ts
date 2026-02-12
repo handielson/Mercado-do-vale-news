@@ -241,14 +241,43 @@ class CustomFieldsService {
 
     /**
      * Update an existing custom field
+     * System fields can only update: label, placeholder, help_text, options, display_order
+     * System fields CANNOT update: key, field_type, category, table_config
      */
     async update(id: string, input: Partial<CustomFieldInput>): Promise<CustomField> {
         // Check if field is system field
         const field = await this.getById(id);
+
         if (field?.is_system) {
-            throw new Error('Cannot update system fields');
+            // System fields: only allow updating non-structural fields
+            console.log('⚠️ [CustomFieldsService] Updating system field (limited):', field.key);
+
+            const { data, error } = await supabase
+                .from('custom_fields')
+                .update({
+                    label: input.label,
+                    placeholder: input.placeholder,
+                    help_text: input.help_text,
+                    options: input.options,
+                    display_order: input.display_order,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) {
+                console.error('Error updating system field:', error);
+                throw error;
+            }
+
+            // Clear cache
+            this.clearCache();
+
+            return data;
         }
 
+        // Non-system fields: allow full update
         const { data, error } = await supabase
             .from('custom_fields')
             .update({

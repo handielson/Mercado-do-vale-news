@@ -105,9 +105,16 @@ export default function FieldModal({ field, onSave, onClose }: FieldModalProps) 
             <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-slate-200">
-                    <h2 className="text-xl font-bold text-slate-900">
-                        {field ? 'Editar Campo' : 'Novo Campo'}
-                    </h2>
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-xl font-bold text-slate-900">
+                            {field ? 'Editar Campo' : 'Novo Campo'}
+                        </h2>
+                        {field?.is_system && (
+                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                                🔒 Campo de Sistema
+                            </span>
+                        )}
+                    </div>
                     <button
                         onClick={onClose}
                         className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
@@ -131,6 +138,11 @@ export default function FieldModal({ field, onSave, onClose }: FieldModalProps) 
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             required
                         />
+                        {field?.is_system && (
+                            <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                ⚠️ Campos de sistema permitem editar apenas: nome, placeholder, texto de ajuda e opções
+                            </p>
+                        )}
                     </div>
 
                     {/* Key */}
@@ -160,7 +172,9 @@ export default function FieldModal({ field, onSave, onClose }: FieldModalProps) 
                         <select
                             value={formData.field_type}
                             onChange={(e) => setFormData(prev => ({ ...prev, field_type: e.target.value as any }))}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                            disabled={field?.is_system}
+                            title={field?.is_system ? 'Tipo de campo não pode ser alterado em campos de sistema' : ''}
                         >
                             <optgroup label="📝 Formatos de Texto">
                                 <option value="text">Texto Curto</option>
@@ -336,7 +350,9 @@ export default function FieldModal({ field, onSave, onClose }: FieldModalProps) 
                         <select
                             value={formData.category}
                             onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as any }))}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                            disabled={field?.is_system}
+                            title={field?.is_system ? 'Categoria não pode ser alterada em campos de sistema' : ''}
                         >
                             <option value="basic">Básico</option>
                             <option value="spec">Especificação</option>

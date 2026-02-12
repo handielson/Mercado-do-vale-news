@@ -132,18 +132,27 @@ export function CustomFieldsLibraryPage() {
                                     <>
                                         {/* Edit Mode */}
                                         <td className="px-4 py-3">
-                                            <input
-                                                type="text"
-                                                value={editForm.label || ''}
-                                                onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
-                                                className="w-full px-2 py-1 border border-slate-300 rounded"
-                                            />
+                                            <div className="space-y-1">
+                                                <input
+                                                    type="text"
+                                                    value={editForm.label || ''}
+                                                    onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
+                                                    className="w-full px-2 py-1 border border-slate-300 rounded"
+                                                />
+                                                {field.is_system && (
+                                                    <div className="text-xs text-amber-600 flex items-center gap-1">
+                                                        🔒 Campo de Sistema (edição limitada)
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3">
                                             <select
                                                 value={editForm.field_type || 'text'}
                                                 onChange={(e) => setEditForm({ ...editForm, field_type: e.target.value })}
                                                 className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+                                                disabled={field.is_system}
+                                                title={field.is_system ? 'Tipo de campo não pode ser alterado em campos de sistema' : ''}
                                             >
                                                 <option value="text">Texto</option>
                                                 <option value="number">Número</option>
@@ -157,6 +166,8 @@ export function CustomFieldsLibraryPage() {
                                                 value={editForm.category || 'basic'}
                                                 onChange={(e) => setEditForm({ ...editForm, category: e.target.value as any })}
                                                 className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+                                                disabled={field.is_system}
+                                                title={field.is_system ? 'Categoria não pode ser alterada em campos de sistema' : ''}
                                             >
                                                 <option value="basic">Básico</option>
                                                 <option value="spec">Especificações</option>
@@ -203,7 +214,14 @@ export function CustomFieldsLibraryPage() {
                                         {/* View Mode */}
                                         <td className="px-4 py-3">
                                             <div>
-                                                <div className="font-medium text-slate-900">{field.label}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="font-medium text-slate-900">{field.label}</div>
+                                                    {field.is_system && (
+                                                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                                                            Sistema
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-xs text-slate-500">{field.key}</div>
                                             </div>
                                         </td>
