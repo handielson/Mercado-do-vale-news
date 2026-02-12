@@ -78,23 +78,37 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
     ): Record<string, string> => {
         const errors: Record<string, string> = {};
 
-        // Check for duplicate IMEI1
+        // Technical: Validate IMEI1 format (15 digits)
         if (row.imei1) {
-            const duplicates = allRows.filter(r =>
-                r.id !== row.id && r.imei1 === row.imei1
-            );
-            if (duplicates.length > 0) {
-                errors.imei1 = 'IMEI duplicado';
+            // Check if IMEI1 has exactly 15 numeric digits
+            const imei1Regex = /^\d{15}$/;
+            if (!imei1Regex.test(row.imei1)) {
+                errors.imei1 = 'IMEI deve ter 15 dígitos';
+            } else {
+                // Check for duplicate IMEI1 only if format is valid
+                const duplicates = allRows.filter(r =>
+                    r.id !== row.id && r.imei1 === row.imei1
+                );
+                if (duplicates.length > 0) {
+                    errors.imei1 = 'IMEI duplicado';
+                }
             }
         }
 
-        // Check for duplicate IMEI2
+        // Technical: Validate IMEI2 format (15 digits)
         if (row.imei2) {
-            const duplicates = allRows.filter(r =>
-                r.id !== row.id && r.imei2 === row.imei2
-            );
-            if (duplicates.length > 0) {
-                errors.imei2 = 'IMEI duplicado';
+            // Check if IMEI2 has exactly 15 numeric digits
+            const imei2Regex = /^\d{15}$/;
+            if (!imei2Regex.test(row.imei2)) {
+                errors.imei2 = 'IMEI deve ter 15 dígitos';
+            } else {
+                // Check for duplicate IMEI2 only if format is valid
+                const duplicates = allRows.filter(r =>
+                    r.id !== row.id && r.imei2 === row.imei2
+                );
+                if (duplicates.length > 0) {
+                    errors.imei2 = 'IMEI duplicado';
+                }
             }
         }
 
