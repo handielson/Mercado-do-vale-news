@@ -22,6 +22,9 @@ export interface Model {
     category_id?: string;
     description?: string;
     template_values?: Record<string, any>;  // Dynamic default values
+
+    // EAN codes for product identification
+    eans?: string[];  // Array of EAN/GTIN codes for barcode scanning
 }
 
 export interface ModelInput {
@@ -33,4 +36,7 @@ export interface ModelInput {
     category_id?: string;
     description?: string;
     template_values?: Record<string, any>;
+
+    // EAN codes
+    eans?: string[];
 }

@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { BatteryCharging, Plus, Pencil, Trash2 } from 'lucide-react';
 import { BatteryHealth } from '../../../types/batteryHealth';
-import { batteryHealthService } from '../../../services/batteryHealths';
+import { batteryHealthService } from '../../../services/batteryHealths-supabase';
 import { BatteryHealthModal } from '../../../components/settings/BatteryHealthModal';
 
 /**

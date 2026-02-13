@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { HardDrive, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Storage } from '../../../types/storage';
-import { storageService } from '../../../services/storages';
+import { storageService } from '../../../services/storages-supabase';
 import { StorageModal } from '../../../components/settings/StorageModal';
 
 /**

@@ -57,16 +57,23 @@ export function useModelTemplate(
             }
 
             // Determinar caminho do campo
-            // Se for preço, vai direto (price_retail, price_cost, etc.)
-            // Se for spec, vai em specs.{key}
+            // Preços: price_* (direto)
+            // Logística: weight_kg (direto), dimensions.* (nested)
+            // Specs: specs.* ou assumir spec se não for preço/logística
             if (key.startsWith('price_')) {
                 setValue(key, value);
                 console.log(`✅ Filled price field: ${key} = ${value}`);
+            } else if (key === 'weight_kg') {
+                setValue('weight_kg', value);
+                console.log(`✅ Filled logistics field: weight_kg = ${value}`);
+            } else if (key.startsWith('dimensions.')) {
+                setValue(key, value);
+                console.log(`✅ Filled logistics field: ${key} = ${value}`);
             } else if (key.startsWith('specs.')) {
                 setValue(key, value);
                 console.log(`✅ Filled spec field: ${key} = ${value}`);
             } else {
-                // Assumir que é spec se não for preço
+                // Assumir que é spec se não for preço ou logística
                 setValue(`specs.${key}`, value);
                 console.log(`✅ Filled spec field: specs.${key} = ${value}`);
             }

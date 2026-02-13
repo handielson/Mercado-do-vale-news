@@ -26,7 +26,6 @@ import { ProductPricing } from './sections/ProductPricing';
 import { ProductImages } from './sections/ProductImages';
 import { ProductBasicInfo } from './sections/ProductBasicInfo';
 import { ProductWarranty } from './sections/ProductWarranty';
-import { ProductSEO } from './sections/ProductSEO';
 import { Model } from '../../types/model';
 import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
@@ -423,19 +422,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
 
     return (
         <form onSubmit={handleFormSubmit} className="space-y-6 pb-20">
-            {/* 0. SCANNER DE CÓDIGO DE BARRAS + 1. INFORMAÇÕES BÁSICAS */}
+            {/* 0. SCANNER EAN + MODELO + DADOS DO TEMPLATE */}
             <ProductBasicInfo
                 watch={watch}
                 setValue={setValue}
                 control={control}
                 errors={errors}
-                selectedCategoryId={selectedCategoryId}
-                selectedBrandId={selectedBrandId}
-                eanSearchMessage={eanSearchMessage}
-                isDuplicateEAN={isDuplicateEAN}
-                existingProduct={existingProduct}
-                isSearchingEAN={isSearchingEAN}
-                handleAddAlternativeEAN={handleAddAlternativeEAN}
             />
 
             {/* 2. ESPECIFICAÇÕES TÉCNICAS */}
@@ -447,29 +439,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 onRefresh={loadCategoryConfig}
             />
 
-            {/* 3. SEO E DESCRIÇÃO */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                    <FileText size={18} className="text-purple-600" />
-                    SEO e Descrição
-                </h3>
-                <ProductSEO
-                    watch={watch}
-                    setValue={setValue}
-                    errors={errors}
-                    productName={watch('name') || ''}
-                    productData={{
-                        name: watch('name'),
-                        brand: watch('brand'),
-                        model: watch('model'),
-                        category: selectedCategoryId,
-                        specs: watch('specs')
-                    }}
-                />
-            </div>
 
-            {/* 4. PRECIFICAÇÃO */}
-            <ProductPricing watch={watch} setValue={setValue} />
+            {/* 3. GARANTIA */}
+            <ProductWarranty
+                warrantyType={watch('warranty_type') || 'brand'}
+                warrantyTemplateId={watch('warranty_template_id') || ''}
+                brandWarrantyDays={brandWarrantyDays}
+                categoryWarrantyDays={categoryWarrantyDays}
+                onWarrantyTypeChange={(type) => setValue('warranty_type', type)}
+                onTemplateChange={(templateId) => setValue('warranty_template_id', templateId)}
+            />
 
             {/* 4. IMAGENS */}
             <ProductImages
@@ -482,15 +461,59 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 hasDefaultImages={!!selectedModel?.id && !!selectedColor}
             />
 
-            {/* 5. GARANTIA */}
-            <ProductWarranty
-                warrantyType={watch('warranty_type') || 'brand'}
-                warrantyTemplateId={watch('warranty_template_id') || ''}
-                brandWarrantyDays={brandWarrantyDays}
-                categoryWarrantyDays={categoryWarrantyDays}
-                onWarrantyTypeChange={(type) => setValue('warranty_type', type)}
-                onTemplateChange={(templateId) => setValue('warranty_template_id', templateId)}
-            />
+            {/* 5. CONTROLE DE ESTOQUE */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <Package size={18} className="text-blue-600" />
+                    Controle de Estoque
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Checkbox: Monitorar Estoque */}
+                    <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+                        <input
+                            type="checkbox"
+                            checked={watch('track_inventory') ?? true}
+                            onChange={(e) => setValue('track_inventory', e.target.checked)}
+                            className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 mt-0.5"
+                        />
+                        <div className="flex-1">
+                            <label className="font-medium text-slate-700 cursor-pointer">
+                                Monitorar Estoque
+                            </label>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Desmarque para produtos sem controle de estoque (serviços, sob encomenda)
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Campo: Quantidade em Estoque */}
+                    {watch('track_inventory') !== false && (
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                Quantidade em Estoque *
+                            </label>
+                            <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                {...register('stock_quantity', { valueAsNumber: true })}
+                                placeholder="Ex: 10"
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            {errors.stock_quantity && (
+                                <p className="text-xs text-red-600 mt-1">{errors.stock_quantity.message}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-1">
+                                Quantidade disponível para venda
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* 6. PRECIFICAÇÃO */}
+            <ProductPricing watch={watch} setValue={setValue} />
 
             {/* 6. FISCAL & AUTOMAÇÃO */}
             < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
@@ -535,127 +558,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 </div>
             </div >
 
-            {/* 7. LOGÍSTICA */}
-            < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
-                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                    <Package size={18} className="text-slate-500" />
-                    Logística & Expedição
-                </h3>
 
-                {/* Info box with postal limits */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm mb-4">
-                    <p className="font-medium text-blue-900 mb-1">📦 Limites dos Correios</p>
-                    <p className="text-blue-700 text-xs">
-                        Peso: até 30kg • Dimensões: 16-105cm (C), até 105cm (L+A), até 200cm (C+L+A)
-                    </p>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Peso (kg)</label>
-                        <input
-                            type="number" step="0.001"
-                            {...register('weight_kg', { valueAsNumber: true })}
-                            placeholder="0.000"
-                            className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                            💡 Ex: 1.5 (um quilo e meio) ou 0.250 (250 gramas)
-                        </p>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Largura (cm)</label>
-                        <input
-                            type="number" step="0.1"
-                            {...register('dimensions.width_cm', { valueAsNumber: true })}
-                            placeholder="0.0"
-                            className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Altura (cm)</label>
-                        <input
-                            type="number" step="0.1"
-                            {...register('dimensions.height_cm', { valueAsNumber: true })}
-                            placeholder="0.0"
-                            className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Profundidade (cm)</label>
-                        <input
-                            type="number" step="0.1"
-                            {...register('dimensions.depth_cm', { valueAsNumber: true })}
-                            placeholder="0.0"
-                            className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                </div>
-            </div >
-
-            {/* 8. CONTROLE DE ESTOQUE */}
-            < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
-                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                    <Package size={18} className="text-blue-600" />
-                    Controle de Estoque
-                </h3>
-
-                {/* Toggle: Monitorar Estoque */}
-                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
-                    <input
-                        type="checkbox"
-                        checked={watch('track_inventory') ?? true}
-                        onChange={(e) => setValue('track_inventory', e.target.checked)}
-                        className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <div>
-                        <label className="font-medium text-slate-700 cursor-pointer">
-                            Monitorar Estoque
-                        </label>
-                        <p className="text-xs text-slate-500">
-                            Desmarque para produtos sem controle de estoque (serviços, sob encomenda)
-                        </p>
-                    </div>
-                </div>
-
-                {/* Campo: Quantidade em Estoque */}
-                {
-                    watch('track_inventory') !== false && (
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Quantidade em Estoque *
-                            </label>
-                            <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                {...register('stock_quantity', { valueAsNumber: true })}
-                                placeholder="Ex: 10"
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            {errors.stock_quantity && (
-                                <p className="text-xs text-red-600 mt-1">{errors.stock_quantity.message}</p>
-                            )}
-                            <p className="text-xs text-slate-500 mt-1">
-                                Quantidade disponível para venda
-                            </p>
-                        </div>
-                    )
-                }
-            </div >
-
-            {/* 9. STATUS */}
-            < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm" >
-                <label className="block text-sm font-medium text-slate-700 mb-1">Status do Produto</label>
-                <select
-                    {...register('status')}
-                    className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                    <option value="active">Ativo (Visível)</option>
-                    <option value="inactive">Inativo (Oculto)</option>
-                    <option value="archived">Arquivado</option>
-                </select>
-            </div >
 
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
                 <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900">

@@ -97,7 +97,7 @@ export interface CatalogProduct extends Product {
     seo_title?: string;
     seo_description?: string;
     seo_keywords?: string[];
-    images?: ProductImage[];
+    // Note: images is inherited from Product as string[] - do not override
     is_favorite?: boolean;
 }
 

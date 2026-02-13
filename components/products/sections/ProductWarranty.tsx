@@ -57,9 +57,10 @@ export const ProductWarranty: React.FC<ProductWarrantyProps> = ({
             <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                 <Shield size={18} className="text-blue-600" />
                 Garantia
+                <span className="ml-2 text-xs text-slate-400 font-mono font-normal">warranty_type | warranty_template_id</span>
             </h3>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Option 1: Brand Warranty */}
                 <label className="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-slate-50"
                     style={{
@@ -133,49 +134,50 @@ export const ProductWarranty: React.FC<ProductWarrantyProps> = ({
                         </div>
                     </div>
                 </label>
+            </div>
 
-                {/* Template Selection */}
-                {warrantyType === 'custom' && (
-                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Template de Garantia *
-                            </label>
-                            {isLoadingTemplates ? (
-                                <div className="text-sm text-slate-500">Carregando templates...</div>
-                            ) : (
-                                <select
-                                    value={warrantyTemplateId}
-                                    onChange={(e) => onTemplateChange(e.target.value)}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                                >
-                                    <option value="">Selecione um template...</option>
-                                    {templates.map(template => (
-                                        <option key={template.id} value={template.id}>
-                                            {template.name} ({template.duration_days} dias)
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
-                        </div>
-
-                        {/* Template Preview */}
-                        {selectedTemplate && (
-                            <div className="bg-white border border-slate-200 rounded-lg p-3">
-                                <div className="text-xs font-semibold text-slate-600 mb-2">
-                                    📄 Preview do Termo:
-                                </div>
-                                <div className="text-sm text-slate-700 whitespace-pre-wrap">
-                                    {selectedTemplate.terms}
-                                </div>
-                                <div className="text-xs text-slate-500 mt-2">
-                                    💡 As variáveis {'{dias}'}, {'{produto}'}, {'{marca}'} e {'{data_compra}'} serão substituídas automaticamente
-                                </div>
-                            </div>
+            {/* Template Selection */}
+            {warrantyType === 'custom' && (
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Template de Garantia *
+                            <span className="ml-2 text-xs text-slate-400 font-mono">warranty_template_id</span>
+                        </label>
+                        {isLoadingTemplates ? (
+                            <div className="text-sm text-slate-500">Carregando templates...</div>
+                        ) : (
+                            <select
+                                value={warrantyTemplateId}
+                                onChange={(e) => onTemplateChange(e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            >
+                                <option value="">Selecione um template...</option>
+                                {templates.map(template => (
+                                    <option key={template.id} value={template.id}>
+                                        {template.name} ({template.duration_days} dias)
+                                    </option>
+                                ))}
+                            </select>
                         )}
                     </div>
-                )}
-            </div>
+
+                    {/* Template Preview */}
+                    {selectedTemplate && (
+                        <div className="bg-white border border-slate-200 rounded-lg p-3">
+                            <div className="text-xs font-semibold text-slate-600 mb-2">
+                                📄 Preview do Termo:
+                            </div>
+                            <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                                {selectedTemplate.terms}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-2">
+                                💡 As variáveis {'{dias}'}, {'{produto}'}, {'{marca}'} e {'{data_compra}'} serão substituídas automaticamente
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Info Box */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm">

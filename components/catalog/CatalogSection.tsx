@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import type { CatalogSection } from '@/types/catalogSections';
 import type { CatalogProduct } from '@/types/catalog';
@@ -12,6 +14,7 @@ interface CatalogSectionProps {
 export function CatalogSectionComponent({ section }: CatalogSectionProps) {
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
+    const { customer } = useSupabaseAuth();
 
     useEffect(() => {
         loadProducts();
@@ -73,7 +76,7 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
             {section.layout_style === 'grid' && (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {products.map((product) => (
-                        <ProductCard key={product.id} product={product} />
+                        <ProductCard key={product.id} product={product} customer={customer} />
                     ))}
                 </div>
             )}
@@ -83,7 +86,7 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
                     <div className="flex gap-4 pb-4">
                         {products.map((product) => (
                             <div key={product.id} className="flex-shrink-0 w-64">
-                                <ProductCard product={product} />
+                                <ProductCard product={product} customer={customer} />
                             </div>
                         ))}
                     </div>
@@ -93,7 +96,7 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
             {section.layout_style === 'list' && (
                 <div className="space-y-4">
                     {products.map((product) => (
-                        <ProductListItem key={product.id} product={product} />
+                        <ProductListItem key={product.id} product={product} customer={customer} />
                     ))}
                 </div>
             )}
@@ -102,7 +105,7 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
 }
 
 // Card de Produto para Grid e Carousel
-function ProductCard({ product }: { product: CatalogProduct }) {
+function ProductCard({ product, customer }: { product: CatalogProduct; customer: any }) {
     return (
         <Link
             href={`/catalog/product/${product.id}`}
@@ -110,9 +113,9 @@ function ProductCard({ product }: { product: CatalogProduct }) {
         >
             {/* Imagem */}
             <div className="aspect-square bg-gray-100 relative overflow-hidden">
-                {product.image_url ? (
+                {product.images && product.images.length > 0 ? (
                     <img
-                        src={product.image_url}
+                        src={product.images[0]}
                         alt={product.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
@@ -146,15 +149,15 @@ function ProductCard({ product }: { product: CatalogProduct }) {
                     {product.discount_percentage && product.discount_percentage > 0 ? (
                         <>
                             <span className="text-lg font-bold text-green-600">
-                                R$ {((product.price_retail / 100) * (1 - product.discount_percentage / 100)).toFixed(2)}
+                                R$ {((getEffectivePrice(product, customer) / 100) * (1 - product.discount_percentage / 100)).toFixed(2)}
                             </span>
                             <span className="text-sm text-gray-500 line-through">
-                                R$ {(product.price_retail / 100).toFixed(2)}
+                                R$ {(getEffectivePrice(product, customer) / 100).toFixed(2)}
                             </span>
                         </>
                     ) : (
                         <span className="text-lg font-bold text-gray-900">
-                            R$ {(product.price_retail / 100).toFixed(2)}
+                            R$ {(getEffectivePrice(product, customer) / 100).toFixed(2)}
                         </span>
                     )}
                 </div>
@@ -164,7 +167,7 @@ function ProductCard({ product }: { product: CatalogProduct }) {
 }
 
 // Item de Produto para Lista
-function ProductListItem({ product }: { product: CatalogProduct }) {
+function ProductListItem({ product, customer }: { product: CatalogProduct; customer: any }) {
     return (
         <Link
             href={`/catalog/product/${product.id}`}
@@ -172,9 +175,9 @@ function ProductListItem({ product }: { product: CatalogProduct }) {
         >
             {/* Imagem */}
             <div className="w-24 h-24 bg-gray-100 rounded flex-shrink-0 overflow-hidden">
-                {product.image_url ? (
+                {product.images && product.images.length > 0 ? (
                     <img
-                        src={product.image_url}
+                        src={product.images[0]}
                         alt={product.name}
                         className="w-full h-full object-cover"
                     />
@@ -213,15 +216,15 @@ function ProductListItem({ product }: { product: CatalogProduct }) {
                     {product.discount_percentage && product.discount_percentage > 0 ? (
                         <>
                             <span className="text-xl font-bold text-green-600">
-                                R$ {((product.price_retail / 100) * (1 - product.discount_percentage / 100)).toFixed(2)}
+                                R$ {((getEffectivePrice(product, customer) / 100) * (1 - product.discount_percentage / 100)).toFixed(2)}
                             </span>
                             <span className="text-sm text-gray-500 line-through">
-                                R$ {(product.price_retail / 100).toFixed(2)}
+                                R$ {(getEffectivePrice(product, customer) / 100).toFixed(2)}
                             </span>
                         </>
                     ) : (
                         <span className="text-xl font-bold text-gray-900">
-                            R$ {(product.price_retail / 100).toFixed(2)}
+                            R$ {(getEffectivePrice(product, customer) / 100).toFixed(2)}
                         </span>
                     )}
                 </div>

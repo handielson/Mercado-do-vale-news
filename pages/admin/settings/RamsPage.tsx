@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { MemoryStick, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Ram } from '../../../types/ram';
-import { ramService } from '../../../services/rams';
+import { ramService } from '../../../services/rams-supabase';
 import { RamModal } from '../../../components/settings/RamModal';
 
 /**

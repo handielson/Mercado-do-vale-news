@@ -1,6 +1,10 @@
+import { useState, useEffect } from 'react';
 import { X, Package, Ruler, Weight, Shield } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import { formatPrice } from '@/services/installmentCalculator';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
+import { supabase } from '@/services/supabase';
 
 interface ProductDetailsModalProps {
     product: CatalogProduct;
@@ -15,6 +19,74 @@ export function ProductDetailsModal({
     onClose,
     onQuote
 }: ProductDetailsModalProps) {
+    // Get customer context for pricing
+    const { customer } = useSupabaseAuth();
+    const effectivePrice = getEffectivePrice(product, customer);
+
+    // State for model template values
+    const [templateValues, setTemplateValues] = useState<Record<string, any> | null>(null);
+    const [loadingTemplate, setLoadingTemplate] = useState(false);
+
+    // Fetch model template_values when modal opens
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        console.log('[ProductDetailsModal] Product:', {
+            id: product.id,
+            name: product.name,
+            model_id: product.model_id
+        });
+
+        if (!product.model_id) {
+            console.warn('[ProductDetailsModal] No model_id found for product');
+            setTemplateValues(null);
+            setLoadingTemplate(false);
+            return;
+        }
+
+        let cancelled = false;
+
+        const fetchModelTemplate = async () => {
+            try {
+                setLoadingTemplate(true);
+                console.log('[ProductDetailsModal] Fetching template for model_id:', product.model_id);
+
+                const { data, error } = await supabase
+                    .from('models')
+                    .select('template_values')
+                    .eq('id', product.model_id)
+                    .single();
+
+                if (cancelled) return;
+
+                if (error) {
+                    console.error('[ProductDetailsModal] Error fetching model template:', error);
+                    setTemplateValues(null);
+                } else {
+                    console.log('[ProductDetailsModal] Template values:', data?.template_values);
+                    setTemplateValues(data?.template_values || null);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    console.error('[ProductDetailsModal] Exception fetching model template:', error);
+                    setTemplateValues(null);
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoadingTemplate(false);
+                }
+            }
+        };
+
+        fetchModelTemplate();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, product.model_id]);
+
     if (!isOpen) return null;
 
     return (
@@ -71,16 +143,21 @@ export function ProductDetailsModal({
                             </div>
                         )}
 
-                        {/* Specifications */}
-                        {product.specs && Object.keys(product.specs).length > 0 && (
+                        {/* Specifications from Model Template */}
+                        {loadingTemplate ? (
+                            <div className="text-center py-8">
+                                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                <p className="text-sm text-slate-600 mt-2">Carregando especificações...</p>
+                            </div>
+                        ) : templateValues && Object.keys(templateValues).length > 0 ? (
                             <div>
                                 <h3 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
                                     <Package className="w-5 h-5" />
                                     Especificações Técnicas
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {Object.entries(product.specs)
-                                        .filter(([key]) => !['imei1', 'imei2', 'serial'].includes(key.toLowerCase()))
+                                    {Object.entries(templateValues)
+                                        .filter(([key]) => !['imei1', 'imei2', 'serial', 'id', 'created_at', 'updated_at'].includes(key.toLowerCase()))
                                         .map(([key, value]) => (
                                             <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
                                                 <span className="text-sm font-medium text-slate-600 capitalize">
@@ -93,55 +170,21 @@ export function ProductDetailsModal({
                                         ))}
                                 </div>
                             </div>
-                        )}
-
-                        {/* Dimensions & Weight */}
-                        {(product.weight || product.dimensions) && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {product.dimensions && (
-                                    <div className="p-4 bg-blue-50 rounded-lg">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Ruler className="w-5 h-5 text-blue-600" />
-                                            <h4 className="font-semibold text-blue-900">Dimensões</h4>
-                                        </div>
-                                        <p className="text-sm text-blue-700">
-                                            {product.dimensions.width_cm} x {product.dimensions.height_cm} x {product.dimensions.depth_cm} cm
-                                        </p>
-                                    </div>
-                                )}
-                                {product.weight && (
-                                    <div className="p-4 bg-green-50 rounded-lg">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Weight className="w-5 h-5 text-green-600" />
-                                            <h4 className="font-semibold text-green-900">Peso</h4>
-                                        </div>
-                                        <p className="text-sm text-green-700">{product.weight}g</p>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Warranty */}
-                        {product.warranty_period && (
-                            <div className="p-4 bg-purple-50 rounded-lg">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Shield className="w-5 h-5 text-purple-600" />
-                                    <h4 className="font-semibold text-purple-900">Garantia</h4>
-                                </div>
-                                <p className="text-sm text-purple-700">
-                                    {product.warranty_period} meses de garantia
-                                </p>
+                        ) : (
+                            <div className="text-center py-8 bg-slate-50 rounded-lg">
+                                <Package className="w-12 h-12 text-slate-400 mx-auto mb-2" />
+                                <p className="text-sm text-slate-600">Especificações técnicas não disponíveis</p>
                             </div>
                         )}
 
                         {/* Pricing */}
                         <div className="border-t border-slate-200 pt-6">
                             <h3 className="text-lg font-semibold text-slate-900 mb-3">Preço</h3>
-                            {product.price_retail && (
+                            {effectivePrice && (
                                 <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg">
                                     <p className="text-sm text-slate-600 mb-2">Preço à Vista</p>
                                     <p className="text-3xl font-bold text-blue-700">
-                                        {formatPrice(product.price_retail)}
+                                        {formatPrice(effectivePrice)}
                                     </p>
                                 </div>
                             )}

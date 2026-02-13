@@ -55,7 +55,6 @@ import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
 import LegacyMigrationPage from '../pages/LegacyMigration';
 import FieldMappingPage from '../pages/FieldMappingPage';
-import { EntradaPage } from '../pages/admin/EntradaPage';
 
 
 // Temporary components (will be moved to separate files in next phase)
@@ -204,11 +203,7 @@ export const router = createBrowserRouter([
     path: "/redefinir-senha",
     element: <RedefinirSenhaPage />
   },
-  // Customer Catalog
-  {
-    path: "/catalog",
-    element: <CustomerCatalogPage />
-  },
+  // Customer Catalog - REMOVED: Now using homepage (/) instead
   // Customer Profile
   {
     path: "/perfil",
@@ -228,14 +223,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><DashboardPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/entrada",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><EntradaPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
@@ -560,10 +547,7 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     )
   },
-  {
-    path: "/catalog",
-    element: <CatalogPage />
-  },
+  // REMOVED: Duplicate /catalog route - using homepage (/) instead
   {
     path: "/store",
     element: (

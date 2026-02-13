@@ -39,6 +39,7 @@ export function SmartInput<T extends FieldValues>({
             <label className="block text-sm font-medium text-slate-700">
                 {fieldDef.label}
                 {fieldDef.required && <span className="text-red-500 ml-1">*</span>}
+                <span className="ml-2 text-xs text-slate-400 font-mono">{name}</span>
             </label>
 
             <Controller

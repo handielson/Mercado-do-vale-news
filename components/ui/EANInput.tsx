@@ -55,6 +55,10 @@ export const EANInput: React.FC<EANInputProps> = ({
         <div className={cn('flex flex-col gap-2', className)}>
             <label className="text-sm font-medium text-slate-700">
                 {label}
+                <span className="ml-2 text-xs text-slate-400 font-mono">
+                    models.eans[]<br />
+                    brand_id | model_id
+                </span>
             </label>
 
             <div className="space-y-2">

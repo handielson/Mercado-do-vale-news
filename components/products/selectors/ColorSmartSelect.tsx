@@ -111,6 +111,7 @@ export function ColorSmartSelect({ value, onChange, error }: ColorSmartSelectPro
         <div className="relative">
             <label className="block text-sm font-medium text-slate-700 mb-1">
                 Cor *
+                <span className="ml-2 text-xs text-slate-400 font-mono">specs.color_id</span>
             </label>
 
             <div className="relative">

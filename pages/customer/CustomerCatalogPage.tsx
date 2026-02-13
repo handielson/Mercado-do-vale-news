@@ -18,12 +18,8 @@ export const CustomerCatalogPage: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [favorites, setFavorites] = useState<string[]>([]);
 
-    // Redirect admins to admin dashboard
-    useEffect(() => {
-        if (customer?.customer_type === 'ADMIN') {
-            navigate('/admin/dashboard', { replace: true });
-        }
-    }, [customer, navigate]);
+    // Note: Admins can now access this catalog page to preview pricing
+    // They can access the admin panel via the header link
 
     // Load products
     useEffect(() => {
@@ -166,8 +162,8 @@ export const CustomerCatalogPage: React.FC = () => {
                         <button
                             onClick={() => setViewMode('grid')}
                             className={`p-2 rounded-lg transition-colors ${viewMode === 'grid'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                             title="Visualização em grade"
                         >
@@ -176,8 +172,8 @@ export const CustomerCatalogPage: React.FC = () => {
                         <button
                             onClick={() => setViewMode('list')}
                             className={`p-2 rounded-lg transition-colors ${viewMode === 'list'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                             title="Visualização em lista"
                         >

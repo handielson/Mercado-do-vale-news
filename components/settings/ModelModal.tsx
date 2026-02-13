@@ -133,6 +133,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [categoryId, setCategoryId] = useState('');
     const [description, setDescription] = useState('');
     const [templateValues, setTemplateValues] = useState<Record<string, any>>({});
+    const [eans, setEans] = useState<string[]>([]);
 
     // Data
     const [brands, setBrands] = useState<Brand[]>([]);
@@ -159,6 +160,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
             setCategoryId(model.category_id || '');
             setDescription(model.description || '');
             setTemplateValues(model.template_values || {});
+            setEans(model.eans || []);
         } else {
             setName('');
             setBrandId('');
@@ -166,6 +168,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
             setCategoryId('');
             setDescription('');
             setTemplateValues({});
+            setEans([]);
         }
         setError('');
         setActiveTab('basic');
@@ -223,6 +226,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
         try {
             console.log('💾 [ModelModal] Saving template values:', templateValues);
             console.log('📊 [ModelModal] Template values keys:', Object.keys(templateValues));
+            console.log('🏷️ [ModelModal] EANs to save:', eans);
 
             const input: ModelInput = {
                 name: name.trim(),
@@ -230,7 +234,8 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                 active,
                 category_id: categoryId || undefined,
                 description: description || undefined,
-                template_values: Object.keys(templateValues).length > 0 ? templateValues : undefined
+                template_values: Object.keys(templateValues).length > 0 ? templateValues : undefined,
+                eans: eans.length > 0 ? eans : undefined
             };
 
             console.log('📤 [ModelModal] Final input:', JSON.stringify(input, null, 2));
@@ -317,7 +322,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                             {/* Brand Select */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Marca <span className="text-red-500">*</span>
+                                    Marca <span className="text-red-500">*</span> <span className="text-slate-400 font-mono text-xs">(models.brand_id)</span>
                                 </label>
                                 {loading ? (
                                     <div className="text-sm text-slate-500">Carregando marcas...</div>
@@ -340,7 +345,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                             {/* Name Input */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Nome do Modelo <span className="text-red-500">*</span>
+                                    Nome do Modelo <span className="text-red-500">*</span> <span className="text-slate-400 font-mono text-xs">(models.name)</span>
                                 </label>
                                 <input
                                     ref={inputRef}
@@ -363,6 +368,53 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     autoFocus
                                 />
+                            </div>
+
+                            {/* EAN Codes */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Códigos EAN/GTIN (Referência) <span className="text-slate-400 font-mono text-xs">(models.eans)</span>
+                                </label>
+                                <div className="space-y-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Digite um EAN e pressione Enter"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                const input = e.currentTarget;
+                                                const value = input.value.trim();
+                                                if (value && !eans.includes(value)) {
+                                                    setEans([...eans, value]);
+                                                    input.value = '';
+                                                }
+                                            }
+                                        }}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    {eans.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {eans.map((ean, index) => (
+                                                <span
+                                                    key={index}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm"
+                                                >
+                                                    {ean}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEans(eans.filter((_, i) => i !== index))}
+                                                        className="hover:text-blue-900"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <p className="text-xs text-slate-500">
+                                        📷 EANs de referência para identificação rápida via scanner. Cada produto terá seu próprio EAN único.
+                                    </p>
+                                </div>
                             </div>
 
                             {/* Active Checkbox */}
@@ -442,6 +494,77 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                                                 onChange={(value) => handleTemplateValueChange(field.key, value)}
                                             />
                                         ))}
+                                </div>
+                            </div>
+
+                            {/* Logistics Fields */}
+                            <div className="border-t border-slate-200 pt-4 mt-4">
+                                <h4 className="font-medium text-slate-800 mb-3">Logística Padrão</h4>
+
+                                {/* Info box with postal limits */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm mb-4">
+                                    <p className="font-medium text-blue-900 mb-1">📦 Limites dos Correios</p>
+                                    <p className="text-blue-700 text-xs">
+                                        Peso: até 30kg • Dimensões: 16-105cm (C), até 105cm (L+A), até 200cm (C+L+A)
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Peso (kg)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.001"
+                                            value={templateValues['weight_kg'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('weight_kg', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                            placeholder="0.000"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            Ex: 0.250 (250g)
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Largura (cm)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            value={templateValues['dimensions.width_cm'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('dimensions.width_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                            placeholder="0.0"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Altura (cm)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            value={templateValues['dimensions.height_cm'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('dimensions.height_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                            placeholder="0.0"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Profundidade (cm)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            value={templateValues['dimensions.depth_cm'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('dimensions.depth_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                            placeholder="0.0"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </>

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Heart, Share2, ShoppingCart } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 
 interface ProductCardProps {
     product: CatalogProduct;
@@ -22,8 +24,12 @@ export function ProductCard({
     const [imageError, setImageError] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
 
-    // Calcular preço com desconto
-    const originalPrice = product.price_retail / 100;
+    // Get customer context for pricing
+    const { customer } = useSupabaseAuth();
+
+    // Calcular preço com desconto usando tipo de cliente efetivo
+    const effectivePrice = getEffectivePrice(product, customer);
+    const originalPrice = effectivePrice / 100;
     const discountedPrice = product.discount_percentage
         ? originalPrice * (1 - product.discount_percentage / 100)
         : originalPrice;

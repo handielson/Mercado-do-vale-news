@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
-import { batteryHealthService } from '../../../services/batteryHealths';
+import { batteryHealthService } from '../../../services/batteryHealths-supabase';
 import { BatteryHealth } from '../../../types/batteryHealth';
 
 interface BatteryHealthSelectProps {

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
-import { ramService } from '../../../services/rams';
+import { ramService } from '../../../services/rams-supabase';
 import { Ram } from '../../../types/ram';
 
 interface RamSelectProps {

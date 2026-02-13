@@ -297,10 +297,7 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
                                     className="px-3 py-2 text-left text-xs font-medium text-slate-700 uppercase tracking-wider"
                                 >
                                     {getFieldLabel(field)}
-                                    {/* Technical: Show field key in tooltip */}
-                                    <span className="text-slate-400 ml-1" title={`Database: specs.${field}`}>
-                                        ({field})
-                                    </span>
+                                    <span className="ml-2 text-xs text-slate-400 font-mono normal-case">specs.{field}</span>
                                 </th>
                             ))}
                             <th className="px-3 py-2 w-12"></th>
@@ -407,13 +404,14 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
             </button>
 
             {/* Technical: Keyboard shortcuts help */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-600">
-                <p className="font-medium mb-1">💡 Atalhos de teclado:</p>
-                <ul className="space-y-1 text-xs">
-                    <li><kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded">Tab</kbd> → Próximo campo</li>
-                    <li><kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded">Enter</kbd> na última coluna → Nova linha</li>
-                    <li><kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded">Shift+Tab</kbd> → Campo anterior</li>
-                </ul>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600">
+                <span className="font-medium">💡 Atalhos de teclado:</span>
+                {' '}
+                <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded">Tab</kbd> → Próximo campo
+                {' • '}
+                <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded">Enter</kbd> na última coluna → Nova linha
+                {' • '}
+                <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded">Shift+Tab</kbd> → Campo anterior
             </div>
         </div>
     );

@@ -7,6 +7,8 @@ import { calculateInstallments, formatPrice } from '@/services/installmentCalcul
 import { getBadgesForCategory, shouldShowBadge } from '@/config/category-badges';
 import { ProductDetailsModal } from './ProductDetailsModal';
 import { QuoteModal } from './QuoteModal';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 
 interface ModernProductCardProps {
     product: CatalogProduct;
@@ -76,12 +78,23 @@ export function ModernProductCard({
         return product;
     }, [selectedVariant, currentColorIndex, product]);
 
-    // Calculate 10x installment based on current product
+    // Get customer context for pricing
+    const { customer } = useSupabaseAuth();
+    const effectiveCustomerType = useEffectiveCustomerType();
+
+    // Calculate 10x installment based on current product and customer type
     useEffect(() => {
-        if (!currentProduct.price_retail) return;
+        const effectivePrice = getEffectivePrice(currentProduct, customer);
+        if (!effectivePrice) return;
+
+        // Atacado só aceita PIX/Dinheiro à vista - sem parcelamento
+        if (effectiveCustomerType === 'wholesale') {
+            setInstallment10x('');
+            return;
+        }
 
         const loadInstallment = async () => {
-            const plans = await calculateInstallments(currentProduct.price_retail!, 12);
+            const plans = await calculateInstallments(effectivePrice, 12);
             const plan10x = plans.find(p => p.installments === 10);
             if (plan10x) {
                 setInstallment10x(formatPrice(plan10x.value));
@@ -89,18 +102,26 @@ export function ModernProductCard({
         };
 
         loadInstallment();
-    }, [currentProduct.price_retail]);
+    }, [currentProduct, customer]);
 
     // Calculate installments for all variants
     useEffect(() => {
         if (!productGroup?.variants) return;
+
+        // Atacado só aceita PIX/Dinheiro à vista - sem parcelamento
+        if (effectiveCustomerType === 'wholesale') {
+            setVariantInstallments(new Map());
+            return;
+        }
 
         const loadVariantInstallments = async () => {
             const newInstallments = new Map<number, string>();
 
             for (let i = 0; i < productGroup.variants.length; i++) {
                 const variant = productGroup.variants[i];
-                const price = variant.priceRange.min;
+                // Use first product in variant to get effective price
+                const firstProduct = variant.products[0];
+                const price = firstProduct ? getEffectivePrice(firstProduct, customer) : variant.priceRange.min;
 
                 if (price > 0) {
                     const plans = await calculateInstallments(price, 12);
@@ -121,7 +142,11 @@ export function ModernProductCard({
     const getImageUrl = () => {
         // Handle images as string array (from Product type)
         if (Array.isArray(product.images) && product.images.length > 0) {
-            return product.images[0]; // First image is primary
+            // Ensure it's actually a string, not an object
+            const firstImage = product.images[0];
+            if (typeof firstImage === 'string' && firstImage.length > 0) {
+                return firstImage;
+            }
         }
 
         // Fallback to placeholder with brand name
@@ -331,9 +356,9 @@ export function ModernProductCard({
                                                 </span>
                                                 <div className="text-right">
                                                     <div className="text-base font-bold text-blue-600">
-                                                        {formatPrice(variant.priceRange.min)}
+                                                        {formatPrice(variant.products[0] ? getEffectivePrice(variant.products[0], customer) : variant.priceRange.min)}
                                                     </div>
-                                                    {installment && (
+                                                    {installment && effectiveCustomerType !== 'wholesale' && (
                                                         <div className="text-xs text-slate-600">
                                                             10x de {installment}
                                                         </div>

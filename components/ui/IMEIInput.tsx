@@ -12,6 +12,7 @@ interface IMEIInputProps {
   error?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   id?: string;
+  technicalName?: string;
 }
 
 /**
@@ -31,7 +32,8 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
   required = false,
   error,
   onKeyDown,
-  id
+  id,
+  technicalName
 }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -54,6 +56,7 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
       {label && (
         <label className="text-sm font-medium text-slate-700">
           {label} {required && <span className="text-red-500">*</span>}
+          {technicalName && <span className="ml-2 text-xs text-slate-400 font-mono">{technicalName}</span>}
         </label>
       )}
       <input

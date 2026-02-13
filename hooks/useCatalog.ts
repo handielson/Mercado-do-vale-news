@@ -62,6 +62,12 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     // Carregar produtos
     const loadProducts = useCallback(async (reset = false) => {
         try {
+            console.log('[useCatalog] Loading products:', {
+                reset,
+                filters,
+                searchQuery,
+                currentPage: reset ? 1 : page
+            });
             setLoading(true);
             setError(null);
 
@@ -84,8 +90,19 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 newOnly: filters.newOnly
             }, currentPage, pageSize);
 
+            console.log('[useCatalog] Products loaded:', {
+                count: response.products.length,
+                hasMore: response.hasMore,
+                total: response.total
+            });
+
             // Aplicar regras de visibilidade
             const filteredProducts = applyVisibilityRules(response.products);
+
+            console.log('[useCatalog] After visibility rules:', {
+                originalCount: response.products.length,
+                filteredCount: filteredProducts.length
+            });
 
             if (reset) {
                 setProducts(filteredProducts);
@@ -102,7 +119,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 return;
             }
 
-            console.error('Erro ao carregar produtos:', err);
+            console.error('[useCatalog] Error loading products:', err);
             setError(err.message || 'Erro ao carregar produtos');
         } finally {
             setLoading(false);

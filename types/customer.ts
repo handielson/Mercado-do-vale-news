@@ -25,6 +25,7 @@ export interface Customer {
     custom_data?: Record<string, any>;
     is_active: boolean;
     account_status?: 'pending' | 'active';  // Account activation status
+    admin_preview_type?: 'retail' | 'resale' | 'wholesale';  // Admin catalog preview preference
     created_at: string;
     updated_at: string;
 }

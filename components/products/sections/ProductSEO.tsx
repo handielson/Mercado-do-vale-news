@@ -285,6 +285,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                     Descrição do Produto <span className="text-purple-600 font-bold">(SEO)</span> *
+                    <span className="ml-2 text-xs text-slate-400 font-mono">description</span>
                 </label>
                 <textarea
                     value={description}
@@ -311,6 +312,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-gray-700">
                         URL Amigável <span className="text-purple-600 font-bold">(SEO)</span>
+                        <span className="ml-2 text-xs text-slate-400 font-mono">slug</span>
                     </label>
                     <button
                         type="button"
@@ -344,6 +346,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-gray-700">
                         Título SEO <span className="text-purple-600 font-bold">(SEO)</span>
+                        <span className="ml-2 text-xs text-slate-400 font-mono">meta_title</span>
                     </label>
                     <button
                         type="button"
@@ -381,6 +384,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-gray-700">
                         Meta Descrição <span className="text-purple-600 font-bold">(SEO)</span>
+                        <span className="ml-2 text-xs text-slate-400 font-mono">meta_description</span>
                     </label>
                     <button
                         type="button"
@@ -418,6 +422,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-gray-700">
                         Palavras-chave <span className="text-purple-600 font-bold">(SEO)</span>
+                        <span className="ml-2 text-xs text-slate-400 font-mono">keywords</span>
                     </label>
                     <button
                         type="button"

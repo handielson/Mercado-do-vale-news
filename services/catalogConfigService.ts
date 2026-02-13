@@ -191,9 +191,9 @@ class CatalogConfigService {
                 categories.map(async (cat) => {
                     const { data } = await supabase
                         .from('products')
-                        .select('stock')
+                        .select('stock_quantity')
                         .eq('category_id', cat.id)
-                        .gt('stock', 0)
+                        .gt('stock_quantity', 0)
                         .limit(1);
 
                     return data && data.length > 0 ? cat : null;

@@ -8,6 +8,8 @@ import { InstallmentSimulator } from './InstallmentSimulator';
 import { DeliveryOptions, type DeliveryOption } from './DeliveryOptions';
 import { calculateInstallments } from '@/services/installmentCalculator';
 import { generateQuoteMessage, generateWhatsAppLink } from '@/utils/whatsappMessageGenerator';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 
 interface QuoteModalProps {
     product: CatalogProduct;
@@ -35,18 +37,22 @@ export function QuoteModal({ product, variants, isOpen, onClose }: QuoteModalPro
         };
     }, []);
 
+    // Get customer context for pricing
+    const { customer } = useSupabaseAuth();
+
     // Load installment plans when price changes
     useEffect(() => {
-        if (!product.price_retail) return;
+        const effectivePrice = getEffectivePrice(product, customer);
+        if (!effectivePrice) return;
 
         const loadPlans = async () => {
-            const plans = await calculateInstallments(product.price_retail!, 12);
+            const plans = await calculateInstallments(effectivePrice, 12);
             setInstallmentPlans(plans);
             setSelectedPlan(plans.find(p => p.highlighted) || plans[0]);
         };
 
         loadPlans();
-    }, [product.price_retail]);
+    }, [product, customer]);
 
     // Generate WhatsApp message
     const handleSendWhatsApp = async () => {

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, X, RefreshCw } from 'lucide-react';
-import { storageService } from '../../../services/storages';
+import { storageService } from '../../../services/storages-supabase';
 import { Storage } from '../../../types/storage';
 
 interface CapacitySelectProps {
@@ -10,6 +10,8 @@ interface CapacitySelectProps {
     error?: string;
     label?: string;
     placeholder?: string;
+    technicalName?: string;
+    type?: 'ram' | 'storage';
 }
 
 /**
@@ -26,7 +28,9 @@ export const CapacitySelect: React.FC<CapacitySelectProps> = ({
     onChange,
     error,
     label = 'Capacidade',
-    placeholder = 'Selecione a capacidade'
+    placeholder = 'Selecione a capacidade',
+    technicalName,
+    type
 }) => {
     const [capacities, setCapacities] = useState<Storage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -75,6 +79,12 @@ export const CapacitySelect: React.FC<CapacitySelectProps> = ({
 
     return (
         <div className="space-y-2">
+            {technicalName && (
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    {label}
+                    <span className="ml-2 text-xs text-slate-400 font-mono">{technicalName}</span>
+                </label>
+            )}
             <div className="flex items-center gap-2">
                 <select
                     value={value}

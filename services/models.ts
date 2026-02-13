@@ -60,7 +60,9 @@ async function list(): Promise<Model[]> {
         // Template fields
         category_id: row.category_id,
         description: row.description,
-        template_values: row.template_values
+        template_values: row.template_values,
+        // EAN codes
+        eans: row.eans
     }));
 }
 
@@ -93,7 +95,9 @@ async function getById(id: string): Promise<Model | null> {
         // Template fields
         category_id: data.category_id,
         description: data.description,
-        template_values: data.template_values
+        template_values: data.template_values,
+        // EAN codes
+        eans: data.eans
     };
 }
 
@@ -123,7 +127,9 @@ async function listByBrand(brandId: string): Promise<Model[]> {
         // Template fields
         category_id: row.category_id,
         description: row.description,
-        template_values: row.template_values
+        template_values: row.template_values,
+        // EAN codes
+        eans: row.eans
     }));
 }
 
@@ -144,7 +150,9 @@ async function create(input: ModelInput): Promise<Model> {
             // Template fields
             category_id: input.category_id,
             description: input.description,
-            template_values: input.template_values || {}
+            template_values: input.template_values || {},
+            // EAN codes
+            eans: input.eans
         })
         .select()
         .single();
@@ -162,7 +170,9 @@ async function create(input: ModelInput): Promise<Model> {
         // Template fields
         category_id: data.category_id,
         description: data.description,
-        template_values: data.template_values
+        template_values: data.template_values,
+        // EAN codes
+        eans: data.eans
     };
 }
 
@@ -186,7 +196,9 @@ async function update(id: string, input: ModelInput): Promise<Model> {
             // Template fields
             category_id: input.category_id,
             description: input.description,
-            template_values: input.template_values
+            template_values: input.template_values,
+            // EAN codes
+            eans: input.eans
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -208,7 +220,9 @@ async function update(id: string, input: ModelInput): Promise<Model> {
         // Template fields
         category_id: data.category_id,
         description: data.description,
-        template_values: data.template_values
+        template_values: data.template_values,
+        // EAN codes
+        eans: data.eans
     };
 }
 

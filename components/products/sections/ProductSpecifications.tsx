@@ -140,6 +140,7 @@ export function ProductSpecifications({
                     <div className="space-y-1">
                         <IMEIInput
                             label="IMEI 1"
+                            technicalName="specs.imei1"
                             value={watch('specs.imei1') || ''}
                             onChange={(val) => setValue('specs.imei1', val)}
                             required={categoryConfig.imei1 === 'required'}
@@ -167,6 +168,7 @@ export function ProductSpecifications({
                         <IMEIInput
                             id="field-imei2"
                             label="IMEI 2"
+                            technicalName="specs.imei2"
                             value={watch('specs.imei2') || ''}
                             onChange={(val) => setValue('specs.imei2', val)}
                             required={categoryConfig.imei2 === 'required'}
@@ -194,7 +196,10 @@ export function ProductSpecifications({
                 {/* COR */}
                 {categoryConfig.color !== 'off' && (
                     <div className="space-y-1">
-                        <FieldLabel label="Cor Predominante" required={categoryConfig.color === 'required'} />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Cor Predominante {categoryConfig.color === 'required' && <span className="text-red-500">*</span>}
+                            <span className="ml-2 text-xs text-slate-400 font-mono">specs.color</span>
+                        </label>
                         <ColorSelect
                             value={watch('specs.color') || ''}
                             onChange={(val) => setValue('specs.color', val)}
@@ -208,11 +213,11 @@ export function ProductSpecifications({
                 {/* ARMAZENAMENTO */}
                 {categoryConfig.storage !== 'off' && (
                     <div className="space-y-1">
-                        <FieldLabel label="Armazenamento" required={categoryConfig.storage === 'required'} />
                         <CapacitySelect
                             value={watch('specs.storage') || ''}
                             onChange={(val) => setValue('specs.storage', val)}
                             label="Armazenamento"
+                            technicalName="specs.storage"
                             placeholder="Selecione o armazenamento"
                         />
                         {categoryConfig.storage === 'required' && errors?.specs?.storage && (
@@ -224,11 +229,11 @@ export function ProductSpecifications({
                 {/* RAM */}
                 {categoryConfig.ram !== 'off' && (
                     <div className="space-y-1">
-                        <FieldLabel label="Memória RAM" required={categoryConfig.ram === 'required'} />
                         <CapacitySelect
                             value={watch('specs.ram') || ''}
                             onChange={(val) => setValue('specs.ram', val)}
-                            label="RAM"
+                            label="Memória RAM"
+                            technicalName="specs.ram"
                             placeholder="Selecione a RAM"
                         />
                         {categoryConfig.ram === 'required' && errors?.specs?.ram && (
@@ -240,7 +245,10 @@ export function ProductSpecifications({
                 {/* VERSÃO */}
                 {categoryConfig.version !== 'off' && (
                     <div className="space-y-1">
-                        <FieldLabel label="Versão" required={categoryConfig.version === 'required'} />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Versão {categoryConfig.version === 'required' && <span className="text-red-500">*</span>}
+                            <span className="ml-2 text-xs text-slate-400 font-mono">specs.version</span>
+                        </label>
                         <VersionSelect
                             value={watch('specs.version') || ''}
                             onChange={(val) => setValue('specs.version', val)}
@@ -254,7 +262,10 @@ export function ProductSpecifications({
                 {/* SAÚDE DA BATERIA */}
                 {categoryConfig.battery_health !== 'off' && (
                     <div className="space-y-1">
-                        <FieldLabel label="Saúde Bateria" required={categoryConfig.battery_health === 'required'} />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Saúde Bateria {categoryConfig.battery_health === 'required' && <span className="text-red-500">*</span>}
+                            <span className="ml-2 text-xs text-slate-400 font-mono">specs.battery_health</span>
+                        </label>
                         <select
                             value={watch('specs.battery_health') || ''}
                             onChange={(e) => setValue('specs.battery_health', e.target.value)}

@@ -1,12 +1,12 @@
 
 /**
  * VERSION TYPES
- * Interface definitions for Version entity (product versions like iOS 17, Android 14, etc.)
+ * Interface definitions for Version entity (regional variants like Global, China, USA, etc.)
  * 
  * ANTIGRAVITY PROTOCOL:
- * - Follows same pattern as other resource types
+ * - Follows same pattern as Brand, Color, Ram, and Storage types
  * - Includes active flag for soft delete
- * - Used for software/firmware versions
+ * - Used for product regional variants
  */
 
 export interface Version {

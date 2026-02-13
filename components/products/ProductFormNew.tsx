@@ -157,6 +157,7 @@ export function ProductFormNew({
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             EAN/GTIN
+                            <span className="ml-2 text-xs text-slate-400 font-mono">eans</span>
                         </label>
                         <EANInput
                             value={watch('eans')?.[0] || ''}
@@ -168,6 +169,7 @@ export function ProductFormNew({
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Modelo
+                            <span className="ml-2 text-xs text-slate-400 font-mono">model</span>
                         </label>
                         <ModelSelect
                             brandId={selectedBrandId}
@@ -192,11 +194,13 @@ export function ProductFormNew({
                             <>
                                 <IMEIInput
                                     label="IMEI 1"
+                                    technicalName="specs.imei1"
                                     value={watch('specs.imei1') || ''}
                                     onChange={(value) => setValue('specs.imei1', value)}
                                 />
                                 <IMEIInput
                                     label="IMEI 2"
+                                    technicalName="specs.imei2"
                                     value={watch('specs.imei2') || ''}
                                     onChange={(value) => setValue('specs.imei2', value)}
                                 />
@@ -207,6 +211,7 @@ export function ProductFormNew({
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                 Serial
+                                <span className="ml-2 text-xs text-slate-400 font-mono">specs.serial</span>
                             </label>
                             <input
                                 type="text"
@@ -221,6 +226,7 @@ export function ProductFormNew({
                         <CapacitySelect
                             label="RAM"
                             type="ram"
+                            technicalName="specs.ram"
                             value={watch('specs.ram') || ''}
                             onChange={(value) => setValue('specs.ram', value)}
                         />
@@ -228,6 +234,7 @@ export function ProductFormNew({
                         <CapacitySelect
                             label="Armazenamento"
                             type="storage"
+                            technicalName="specs.storage"
                             value={watch('specs.storage') || ''}
                             onChange={(value) => setValue('specs.storage', value)}
                         />

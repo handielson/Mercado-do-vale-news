@@ -47,12 +47,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             active={location.pathname === '/admin'}
           />
           <NavItem
-            to="/admin/entrada"
-            icon={<Package size={18} />}
-            label="Entrada (Teste)"
-            active={location.pathname === '/admin/entrada'}
-          />
-          <NavItem
             to="/admin/products"
             icon={<Package size={18} />}
             label="Produtos"
@@ -93,12 +87,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<Database size={18} />}
             label="Migração"
             active={location.pathname.startsWith('/admin/migration')}
-          />
-          <NavItem
-            to="/catalog"
-            icon={<BookOpen size={18} />}
-            label="Catálogo"
-            active={location.pathname.startsWith('/catalog')}
           />
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Configuração</div>
           <NavItem

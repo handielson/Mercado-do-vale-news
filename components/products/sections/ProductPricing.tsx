@@ -17,54 +17,47 @@ export function ProductPricing({ watch, setValue }: ProductPricingProps) {
             <h3 className="font-semibold text-slate-800 mb-4">Precificação</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Preço de Custo *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Preço de Custo *
+                        <span className="ml-2 text-xs text-slate-400 font-mono">price_cost</span>
+                    </label>
                     <CurrencyInput value={watch('price_cost') || 0} onChange={(val) => setValue('price_cost', val)} />
                     <p className="text-xs text-slate-500 mt-1">💰 Preço de compra</p>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Margem Varejo *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Margem Varejo *
+                        <span className="ml-2 text-xs text-slate-400 font-mono">price_retail</span>
+                    </label>
                     <CurrencyInput value={watch('price_retail')} onChange={(val) => setValue('price_retail', val)} />
                     <p className="text-xs text-slate-500 mt-1">💰 Lucro desejado para vendas no varejo</p>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Margem Revenda *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Margem Revenda *
+                        <span className="ml-2 text-xs text-slate-400 font-mono">price_reseller</span>
+                    </label>
                     <CurrencyInput value={watch('price_reseller')} onChange={(val) => setValue('price_reseller', val)} />
                     <p className="text-xs text-slate-500 mt-1">💼 Lucro desejado para revendedores</p>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Margem Atacado *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Margem Atacado *
+                        <span className="ml-2 text-xs text-slate-400 font-mono">price_wholesale</span>
+                    </label>
                     <CurrencyInput value={watch('price_wholesale')} onChange={(val) => setValue('price_wholesale', val)} />
                     <p className="text-xs text-slate-500 mt-1">📦 Lucro desejado para vendas no atacado</p>
                 </div>
             </div>
 
-            {/* Checkbox: Produto Brinde */}
-            <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <input
-                    type="checkbox"
-                    id="is_gift"
-                    checked={watch('is_gift') || false}
-                    onChange={(e) => setValue('is_gift', e.target.checked)}
-                    className="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500 mt-0.5"
-                />
-                <div className="flex-1">
-                    <label htmlFor="is_gift" className="block text-sm font-semibold text-green-800 cursor-pointer">
-                        🎁 Produto Brinde
-                    </label>
-                    <p className="text-xs text-green-700 mt-1">
-                        Produtos brindes recebem <strong>desconto integral automático</strong> no PDV.
-                        O cliente não paga, mas o custo é contabilizado no relatório de lucro.
-                    </p>
-                    <p className="text-xs text-green-600 mt-1 italic">
-                        Exemplo: Custo R$ 10,00 | Preço R$ 20,00 → Cliente paga R$ 0,00 | Impacto no lucro: -R$ 10,00
-                    </p>
-                </div>
-            </div>
 
             {/* Calculadora de Margem Unificada com Abas */}
             <div className="mt-4 p-4 bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg border border-slate-200">
                 <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-slate-800">💹 Calculadora de Margem de Lucro</h4>
+                    <h4 className="text-sm font-semibold text-slate-800">
+                        💹 Calculadora de Margem de Lucro
+                        <span className="ml-2 text-xs text-slate-400 font-mono font-normal">→ price_retail | price_reseller | price_wholesale</span>
+                    </h4>
                 </div>
 
                 {/* Tabs */}
@@ -147,14 +140,20 @@ export function ProductPricing({ watch, setValue }: ProductPricingProps) {
                         <div className="p-3 bg-white rounded-lg border border-green-200">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Margem em R$</label>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                                        Margem em R$
+                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_retail</span>
+                                    </label>
                                     <CurrencyInput value={0} onChange={(marginCents) => {
                                         const cost = watch('price_cost') || 0;
                                         if (marginCents > 0 && cost > 0) setValue('price_retail', cost + marginCents);
                                     }} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Margem em %</label>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                                        Margem em %
+                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_retail</span>
+                                    </label>
                                     <input type="number" step="0.01" placeholder="Ex: 50" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" onChange={(e) => {
                                         const marginPercent = parseFloat(e.target.value) || 0;
                                         const cost = watch('price_cost') || 0;
@@ -223,14 +222,20 @@ export function ProductPricing({ watch, setValue }: ProductPricingProps) {
                         <div className="p-3 bg-white rounded-lg border border-blue-200">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Margem em R$</label>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                                        Margem em R$
+                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_reseller</span>
+                                    </label>
                                     <CurrencyInput value={0} onChange={(marginCents) => {
                                         const cost = watch('price_cost') || 0;
                                         if (marginCents > 0 && cost > 0) setValue('price_reseller', cost + marginCents);
                                     }} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Margem em %</label>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                                        Margem em %
+                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_reseller</span>
+                                    </label>
                                     <input type="number" step="0.01" placeholder="Ex: 40" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" onChange={(e) => {
                                         const marginPercent = parseFloat(e.target.value) || 0;
                                         const cost = watch('price_cost') || 0;
@@ -299,14 +304,20 @@ export function ProductPricing({ watch, setValue }: ProductPricingProps) {
                         <div className="p-3 bg-white rounded-lg border border-purple-200">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Margem em R$</label>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                                        Margem em R$
+                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_wholesale</span>
+                                    </label>
                                     <CurrencyInput value={0} onChange={(marginCents) => {
                                         const cost = watch('price_cost') || 0;
                                         if (marginCents > 0 && cost > 0) setValue('price_wholesale', cost + marginCents);
                                     }} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Margem em %</label>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                                        Margem em %
+                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_wholesale</span>
+                                    </label>
                                     <input type="number" step="0.01" placeholder="Ex: 15" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" onChange={(e) => {
                                         const marginPercent = parseFloat(e.target.value) || 0;
                                         const cost = watch('price_cost') || 0;
