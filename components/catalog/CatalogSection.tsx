@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
+import { ModernProductCard } from './ModernProductCard';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import type { CatalogSection } from '@/types/catalogSections';
 import type { CatalogProduct } from '@/types/catalog';
@@ -74,9 +75,9 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
 
             {/* Grid/Carousel/Lista de Produtos */}
             {section.layout_style === 'grid' && (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {products.map((product) => (
-                        <ProductCard key={product.id} product={product} customer={customer} />
+                        <ModernProductCard key={product.id} product={product} />
                     ))}
                 </div>
             )}
@@ -85,8 +86,8 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
                 <div className="overflow-x-auto">
                     <div className="flex gap-4 pb-4">
                         {products.map((product) => (
-                            <div key={product.id} className="flex-shrink-0 w-64">
-                                <ProductCard product={product} customer={customer} />
+                            <div key={product.id} className="flex-shrink-0 w-80">
+                                <ModernProductCard product={product} />
                             </div>
                         ))}
                     </div>
@@ -96,139 +97,10 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
             {section.layout_style === 'list' && (
                 <div className="space-y-4">
                     {products.map((product) => (
-                        <ProductListItem key={product.id} product={product} customer={customer} />
+                        <ModernProductCard key={product.id} product={product} />
                     ))}
                 </div>
             )}
         </section>
-    );
-}
-
-// Card de Produto para Grid e Carousel
-function ProductCard({ product, customer }: { product: CatalogProduct; customer: any }) {
-    return (
-        <Link
-            href={`/catalog/product/${product.id}`}
-            className="group bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden"
-        >
-            {/* Imagem */}
-            <div className="aspect-square bg-gray-100 relative overflow-hidden">
-                {product.images && product.images.length > 0 ? (
-                    <img
-                        src={product.images[0]}
-                        alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        Sem imagem
-                    </div>
-                )}
-
-                {/* Badges */}
-                <div className="absolute top-2 left-2 flex flex-col gap-1">
-                    {product.is_new && (
-                        <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">
-                            NOVO
-                        </span>
-                    )}
-                    {product.discount_percentage > 0 && (
-                        <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded">
-                            -{product.discount_percentage}%
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            {/* Info */}
-            <div className="p-4">
-                <h3 className="font-medium text-gray-900 line-clamp-2 mb-2">
-                    {product.name}
-                </h3>
-                <div className="flex items-baseline gap-2">
-                    {product.discount_percentage && product.discount_percentage > 0 ? (
-                        <>
-                            <span className="text-lg font-bold text-green-600">
-                                R$ {((getEffectivePrice(product, customer) / 100) * (1 - product.discount_percentage / 100)).toFixed(2)}
-                            </span>
-                            <span className="text-sm text-gray-500 line-through">
-                                R$ {(getEffectivePrice(product, customer) / 100).toFixed(2)}
-                            </span>
-                        </>
-                    ) : (
-                        <span className="text-lg font-bold text-gray-900">
-                            R$ {(getEffectivePrice(product, customer) / 100).toFixed(2)}
-                        </span>
-                    )}
-                </div>
-            </div>
-        </Link>
-    );
-}
-
-// Item de Produto para Lista
-function ProductListItem({ product, customer }: { product: CatalogProduct; customer: any }) {
-    return (
-        <Link
-            href={`/catalog/product/${product.id}`}
-            className="flex gap-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-4"
-        >
-            {/* Imagem */}
-            <div className="w-24 h-24 bg-gray-100 rounded flex-shrink-0 overflow-hidden">
-                {product.images && product.images.length > 0 ? (
-                    <img
-                        src={product.images[0]}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                    />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-                        Sem imagem
-                    </div>
-                )}
-            </div>
-
-            {/* Info */}
-            <div className="flex-1">
-                <div className="flex items-start gap-2 mb-2">
-                    <h3 className="font-medium text-gray-900 flex-1">
-                        {product.name}
-                    </h3>
-                    {product.is_new && (
-                        <span className="px-2 py-1 bg-green-500 text-white text-xs font-bold rounded">
-                            NOVO
-                        </span>
-                    )}
-                    {product.discount_percentage > 0 && (
-                        <span className="px-2 py-1 bg-red-500 text-white text-xs font-bold rounded">
-                            -{product.discount_percentage}%
-                        </span>
-                    )}
-                </div>
-
-                {product.description && (
-                    <p className="text-sm text-gray-600 line-clamp-2 mb-2">
-                        {product.description}
-                    </p>
-                )}
-
-                <div className="flex items-baseline gap-2">
-                    {product.discount_percentage && product.discount_percentage > 0 ? (
-                        <>
-                            <span className="text-xl font-bold text-green-600">
-                                R$ {((getEffectivePrice(product, customer) / 100) * (1 - product.discount_percentage / 100)).toFixed(2)}
-                            </span>
-                            <span className="text-sm text-gray-500 line-through">
-                                R$ {(getEffectivePrice(product, customer) / 100).toFixed(2)}
-                            </span>
-                        </>
-                    ) : (
-                        <span className="text-xl font-bold text-gray-900">
-                            R$ {(getEffectivePrice(product, customer) / 100).toFixed(2)}
-                        </span>
-                    )}
-                </div>
-            </div>
-        </Link>
     );
 }

@@ -330,8 +330,10 @@ export function ModernProductCard({
 
 
 
+
+
                     {/* Variant Selector (RAM/Storage) - NOVO */}
-                    {productGroup && productGroup.variants && productGroup.variants.length > 1 && (
+                    {productGroup && productGroup.variants && productGroup.variants.length > 1 ? (
                         <div className="space-y-2">
                             <span className="text-xs text-slate-600 font-medium">Configurações:</span>
                             <div className="space-y-1.5">
@@ -384,7 +386,42 @@ export function ModernProductCard({
                                 })}
                             </div>
                         </div>
+                    ) : (
+                        // Fallback: Show individual product specs when no productGroup
+                        <div className="space-y-2">
+                            <span className="text-xs text-slate-600 font-medium">Configurações:</span>
+                            <div className="p-2.5 rounded-lg border-2 border-blue-600 bg-blue-50">
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className="font-semibold text-sm">
+                                        {product.specs?.ram || 'N/A'}/{product.specs?.storage || 'N/A'}
+                                    </span>
+                                    <div className="text-right">
+                                        <div className="text-base font-bold text-blue-600">
+                                            {formatPrice(getEffectivePrice(product, customer))}
+                                        </div>
+                                        {installment10x && effectiveCustomerType !== 'wholesale' && (
+                                            <div className="text-xs text-slate-600">
+                                                10x de {installment10x}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                {/* Color indicator */}
+                                {product.specs?.color && (
+                                    <div className="flex gap-1.5 mt-1.5 items-center">
+                                        <div
+                                            className="w-3 h-3 rounded-full border border-slate-300"
+                                            style={{ backgroundColor: product.specs.color_hex || '#gray' }}
+                                            title={product.specs.color}
+                                        />
+                                        <span className="text-xs text-slate-600">{product.specs.color}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     )}
+
+
 
 
 
