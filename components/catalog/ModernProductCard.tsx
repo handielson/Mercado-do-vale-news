@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Info, Heart, Share2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check } from 'lucide-react';
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { ProductVariants } from '@/services/productVariants';
 import { extractVariants } from '@/services/productVariants';
@@ -9,6 +9,7 @@ import { ProductDetailsModal } from './ProductDetailsModal';
 import { QuoteModal } from './QuoteModal';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
+import { useQuoteCart } from '@/contexts/QuoteCartContext';
 
 interface ModernProductCardProps {
     product: CatalogProduct;
@@ -80,6 +81,28 @@ export function ModernProductCard({
 
     // Get customer context for pricing
     const { customer } = useSupabaseAuth();
+    const { items } = useQuoteCart();
+    const isAdmin = customer?.customer_type === 'ADMIN';
+
+    // Check if this product is in cart (by variant, not just product ID)
+    const isInCart = useMemo(() => {
+        if (!isAdmin) return false;
+
+        // Get current product's RAM and Storage
+        const currentRam = currentProduct.specs?.ram;
+        const currentStorage = currentProduct.specs?.storage;
+
+        // Check if any cart item matches this product's variant
+        return items.some(item => {
+            const ramMatch = item.variant.ram === currentRam;
+            const storageMatch = item.variant.storage === currentStorage;
+            const modelMatch = item.product.model === currentProduct.model ||
+                item.product.name === currentProduct.name;
+
+            return ramMatch && storageMatch && modelMatch;
+        });
+    }, [items, currentProduct, isAdmin]);
+
     const effectiveCustomerType = useEffectiveCustomerType();
 
     // Calculate 10x installment based on current product and customer type
@@ -255,6 +278,14 @@ export function ModernProductCard({
 
                     {/* Badges (top left) */}
                     <div className="absolute top-3 left-3 flex flex-col gap-2">
+                        {/* Cart Badge (Admin only) */}
+                        {isAdmin && isInCart && (
+                            <span className="text-xs bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-full font-semibold shadow-lg flex items-center gap-1 animate-pulse">
+                                <ShoppingCart className="w-3 h-3" />
+                                No Orçamento
+                            </span>
+                        )}
+
                         {product.featured && (
                             <span className="text-xs bg-yellow-400 text-yellow-900 px-3 py-1.5 rounded-full font-semibold shadow-md">
                                 ⭐ Destaque
@@ -339,6 +370,18 @@ export function ModernProductCard({
                             <div className="space-y-1.5">
                                 {productGroup.variants.map((variant, idx) => {
                                     const installment = variantInstallments.get(idx);
+
+                                    // Check if THIS specific variant (exact RAM + Storage) is in cart
+                                    const variantInCart = isAdmin && items.some(item => {
+                                        // Must match BOTH RAM and Storage exactly
+                                        const ramMatch = item.variant.ram === variant.ram;
+                                        const storageMatch = item.variant.storage === variant.storage;
+                                        const modelMatch = item.product.model === currentProduct.model ||
+                                            item.product.name === currentProduct.name;
+
+                                        return ramMatch && storageMatch && modelMatch;
+                                    });
+
                                     return (
                                         <button
                                             key={idx}
@@ -347,17 +390,28 @@ export function ModernProductCard({
                                                 setSelectedVariantIndex(idx);
                                                 setCurrentColorIndex(0); // Reset color selection
                                             }}
-                                            className={`w-full p-2.5 rounded-lg border-2 transition-all text-left ${selectedVariantIndex === idx
-                                                ? 'border-blue-600 bg-blue-50'
-                                                : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                                            className={`w-full p-2.5 rounded-lg border-2 transition-all text-left relative ${selectedVariantIndex === idx
+                                                ? variantInCart
+                                                    ? 'border-green-600 bg-green-50'
+                                                    : 'border-blue-600 bg-blue-50'
+                                                : variantInCart
+                                                    ? 'border-green-300 bg-green-50/50 hover:border-green-400'
+                                                    : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
                                                 }`}
                                         >
+                                            {/* Cart indicator badge */}
+                                            {variantInCart && (
+                                                <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-600 rounded-full flex items-center justify-center shadow-md">
+                                                    <Check className="w-3 h-3 text-white" />
+                                                </div>
+                                            )}
+
                                             <div className="flex justify-between items-start mb-1">
-                                                <span className="font-semibold text-sm">
+                                                <span className={`font-semibold text-sm ${variantInCart ? 'text-green-700' : ''}`}>
                                                     {variant.ram}/{variant.storage}
                                                 </span>
                                                 <div className="text-right">
-                                                    <div className="text-base font-bold text-blue-600">
+                                                    <div className={`text-base font-bold ${variantInCart ? 'text-green-600' : 'text-blue-600'}`}>
                                                         {formatPrice(variant.products[0] ? getEffectivePrice(variant.products[0], customer) : variant.priceRange.min)}
                                                     </div>
                                                     {installment && effectiveCustomerType !== 'wholesale' && (
@@ -429,9 +483,19 @@ export function ModernProductCard({
                     <div className="space-y-2">
                         <button
                             onClick={handleCardClick}
-                            className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg active:scale-95"
+                            className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 ${isInCart
+                                ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
+                                : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+                                }`}
                         >
-                            Comprar
+                            {isInCart ? (
+                                <>
+                                    <Check className="w-4 h-4" />
+                                    Adicionado
+                                </>
+                            ) : (
+                                'Enviar'
+                            )}
                         </button>
                         <button
                             onClick={handleInfoClick}
@@ -457,6 +521,11 @@ export function ModernProductCard({
                         variants={variants}
                         isOpen={showQuoteModal}
                         onClose={() => setShowQuoteModal(false)}
+                        initialVariant={
+                            selectedVariant
+                                ? { ram: selectedVariant.ram, storage: selectedVariant.storage }
+                                : undefined
+                        }
                     />
                 </>
             )}

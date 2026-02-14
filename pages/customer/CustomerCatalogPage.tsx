@@ -6,6 +6,7 @@ import { catalogService } from '../../services/catalogService';
 import type { CatalogProduct } from '../../types/catalog';
 import { ModernProductCard } from '../../components/catalog/ModernProductCard';
 import { ProductCard } from '../../components/catalog/ProductCard';
+import { ShareCatalogButton } from '../../components/catalog/ShareCatalogButton';
 
 export const CustomerCatalogPage: React.FC = () => {
     const { user, customer, signOut } = useAuth();
@@ -157,28 +158,34 @@ export const CustomerCatalogPage: React.FC = () => {
                         />
                     </div>
 
-                    {/* View Toggle */}
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setViewMode('grid')}
-                            className={`p-2 rounded-lg transition-colors ${viewMode === 'grid'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
-                            title="Visualização em grade"
-                        >
-                            <Grid size={20} />
-                        </button>
-                        <button
-                            onClick={() => setViewMode('list')}
-                            className={`p-2 rounded-lg transition-colors ${viewMode === 'list'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
-                            title="Visualização em lista"
-                        >
-                            <List size={20} />
-                        </button>
+                    {/* View Toggle and Share */}
+                    <div className="flex items-center gap-3">
+                        {/* Share Catalog Button */}
+                        <ShareCatalogButton />
+
+                        {/* View Toggle */}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setViewMode('grid')}
+                                className={`p-2 rounded-lg transition-colors ${viewMode === 'grid'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                title="Visualização em grade"
+                            >
+                                <Grid size={20} />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-2 rounded-lg transition-colors ${viewMode === 'list'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                title="Visualização em lista"
+                            >
+                                <List size={20} />
+                            </button>
+                        </div>
                     </div>
                 </div>
 

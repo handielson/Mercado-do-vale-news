@@ -21,13 +21,21 @@ export interface QuoteRequest {
     variant: VariantSpecs;
     installmentPlan: InstallmentPlan;
     delivery: DeliveryOption;
+    userType?: 'ADMIN' | 'retail' | 'resale' | 'wholesale'; // User type for conditional formatting
+    availableColors?: string[]; // Available colors in stock (for admin/staff)
 }
 
 /**
  * Generate formatted WhatsApp quote message
  */
 export function generateQuoteMessage(quote: QuoteRequest): string {
-    const { product, variant, installmentPlan, delivery } = quote;
+    const { product, variant, installmentPlan, delivery, userType, availableColors } = quote;
+
+    // Check if user is admin (ADMIN type indicates admin/staff)
+    const isAdmin = userType === 'ADMIN';
+
+    // Check if wholesale (no card payment for wholesale)
+    const isWholesale = userType === 'wholesale';
 
     // Format date
     const date = new Date().toLocaleDateString('pt-BR');
@@ -52,45 +60,69 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
     }).format(installmentPlan.total / 100);
 
     // Build message
-    let message = `*📱 ORÇAMENTO DE PRODUTOS*\n`;
-    message += `📅 Data: ${date}\n\n`;
-    message += `*ITENS:*\n`;
-    message += `• ${productName}\n`;
+    let message = '';
 
-    if (variant.color) {
-        message += `  Cor: ${variant.color}\n`;
-    }
+    if (isAdmin) {
+        // Admin/Staff format
+        message = `*📝 ORÇAMENTO DE PRODUTOS*\n`;
+        message += `📅 Data: ${date}\n\n`;
+        message += `*ITENS:*\n`;
+        message += `• ${productName}\n`;
+        message += `  ${priceAtVista} a vista\n`;
 
-    message += `  ${priceAtVista} à vista\n`;
-
-    if (installmentPlan.installments > 1) {
-        message += `  💳 ${installmentPlan.installments}x de ${installmentValue} (Total: ${installmentTotal})\n`;
-    }
-
-    // Delivery information
-    if (delivery.type === 'delivery' && delivery.address) {
-        message += `\n*🚚 ENTREGA:*\n`;
-        message += `${delivery.address.street}`;
-        if (delivery.address.number) {
-            message += `, ${delivery.address.number}`;
+        // Show card payment only if NOT wholesale
+        if (!isWholesale && installmentPlan.installments > 1) {
+            message += `  💳 ${installmentPlan.installments}x de ${installmentValue} (Total: ${installmentTotal})\n`;
         }
-        if (delivery.address.complement) {
-            message += ` - ${delivery.address.complement}`;
-        }
-        message += `\n`;
-        message += `Bairro ${delivery.address.neighborhood}, ${delivery.address.city} - ${delivery.address.state}\n`;
-        message += `CEP: ${delivery.address.cep}\n`;
 
-        if (delivery.notes) {
-            message += `Obs: ${delivery.notes}\n`;
+        // Show available colors if provided
+        if (availableColors && availableColors.length > 0) {
+            message += `  Cores disponíveis: ${availableColors.join(', ')}\n`;
         }
+
+        message += `\n---\n`;
     } else {
-        message += `\n*🏪 RETIRADA NA LOJA*\n`;
-    }
+        // Customer format (original)
+        message = `*📱 ORÇAMENTO DE PRODUTOS*\n`;
+        message += `📅 Data: ${date}\n\n`;
+        message += `*ITENS:*\n`;
+        message += `• ${productName}\n`;
 
-    message += `\n---\n`;
-    message += `🎯 *Orçamento exclusivo Mercado do Vale!*\n`;
-    message += `Garanta o seu agora enquanto está disponível em estoque! 🔥`;
+        if (variant.color) {
+            message += `  Cor: ${variant.color}\n`;
+        }
+
+        message += `  ${priceAtVista} à vista\n`;
+
+        if (installmentPlan.installments > 1) {
+            message += `  💳 ${installmentPlan.installments}x de ${installmentValue} (Total: ${installmentTotal})\n`;
+        }
+
+        // Delivery information
+        if (delivery.type === 'delivery' && delivery.address) {
+            message += `\n*🚚 ENTREGA:*\n`;
+            message += `${delivery.address.street}`;
+            if (delivery.address.number) {
+                message += `, ${delivery.address.number}`;
+            }
+            if (delivery.address.complement) {
+                message += ` - ${delivery.address.complement}`;
+            }
+            message += `\n`;
+            message += `Bairro ${delivery.address.neighborhood}, ${delivery.address.city} - ${delivery.address.state}\n`;
+            message += `CEP: ${delivery.address.cep}\n`;
+
+            if (delivery.notes) {
+                message += `Obs: ${delivery.notes}\n`;
+            }
+        } else {
+            message += `\n*🏪 RETIRADA NA LOJA*\n`;
+        }
+
+        message += `\n---\n`;
+        message += `🎯 *Orçamento exclusivo Mercado do Vale!*\n`;
+        message += `Garanta o seu agora enquanto está disponível em estoque! 🔥`;
+    }
 
     return message;
 }

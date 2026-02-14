@@ -9,17 +9,24 @@ import {
 import { ProductGroupGrid } from '@/components/catalog/ProductGroupGrid';
 import { PublicHeader } from '@/components/PublicHeader';
 import { CatalogSectionComponent } from '@/components/catalog/CatalogSection';
+import { FloatingCartButton } from '@/components/catalog/FloatingCartButton';
+import { QuoteCartSidebar } from '@/components/catalog/QuoteCartSidebar';
 import { useCatalog } from '@/hooks/useCatalog';
 import { catalogShareService } from '@/services/catalogShareService';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import { groupProductsByVariants } from '@/services/productGrouping';
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { CatalogSection } from '@/types/catalogSections';
+import { QuoteCartProvider } from '@/contexts/QuoteCartContext';
+import { generateWhatsAppLink } from '@/utils/whatsappMessageGenerator';
+import { useQuoteCart } from '@/contexts/QuoteCartContext';
+import { ShareCatalogButton } from '@/components/catalog/ShareCatalogButton';
 
-export default function CatalogPage() {
+function CatalogContent() {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [sections, setSections] = useState<CatalogSection[]>([]);
     const [sectionsLoading, setSectionsLoading] = useState(true);
+    const [isCartOpen, setIsCartOpen] = useState(false);
 
     const {
         products,
@@ -71,6 +78,13 @@ export default function CatalogPage() {
     const productGroups = useMemo(() => {
         return groupProductsByVariants(products);
     }, [products]);
+
+    // Handle send quote (will implement multi-product message in next phase)
+    const handleSendQuote = async () => {
+        // Placeholder - will implement in Phase 3
+        alert('Funcionalidade de envio será implementada na próxima fase!');
+        setIsCartOpen(false);
+    };
 
     if (error) {
         return (
@@ -128,28 +142,34 @@ export default function CatalogPage() {
                             </p>
                         </div>
 
-                        {/* Controles de visualização */}
-                        <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1">
-                            <button
-                                onClick={() => setViewMode('grid')}
-                                className={`p-2 rounded transition-colors ${viewMode === 'grid'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-slate-600 hover:bg-slate-100'
-                                    }`}
-                                title="Visualização em grade"
-                            >
-                                <Grid className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={() => setViewMode('list')}
-                                className={`p-2 rounded transition-colors ${viewMode === 'list'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-slate-600 hover:bg-slate-100'
-                                    }`}
-                                title="Visualização em lista"
-                            >
-                                <List className="w-4 h-4" />
-                            </button>
+                        {/* Share and View Controls */}
+                        <div className="flex items-center gap-3">
+                            {/* Share Catalog Button */}
+                            <ShareCatalogButton />
+
+                            {/* Controles de visualização */}
+                            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1">
+                                <button
+                                    onClick={() => setViewMode('grid')}
+                                    className={`p-2 rounded transition-colors ${viewMode === 'grid'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'text-slate-600 hover:bg-slate-100'
+                                        }`}
+                                    title="Visualização em grade"
+                                >
+                                    <Grid className="w-4 h-4" />
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('list')}
+                                    className={`p-2 rounded transition-colors ${viewMode === 'list'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'text-slate-600 hover:bg-slate-100'
+                                        }`}
+                                    title="Visualização em lista"
+                                >
+                                    <List className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -194,6 +214,24 @@ export default function CatalogPage() {
                     }}
                 />
             </div>
+
+            {/* Floating Cart Button */}
+            <FloatingCartButton onClick={() => setIsCartOpen(true)} />
+
+            {/* Cart Sidebar */}
+            <QuoteCartSidebar
+                isOpen={isCartOpen}
+                onClose={() => setIsCartOpen(false)}
+                onSendQuote={handleSendQuote}
+            />
         </div>
+    );
+}
+
+export default function CatalogPage() {
+    return (
+        <QuoteCartProvider>
+            <CatalogContent />
+        </QuoteCartProvider>
     );
 }

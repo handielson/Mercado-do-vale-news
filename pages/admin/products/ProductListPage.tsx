@@ -1,11 +1,12 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package } from 'lucide-react';
+import { Plus, Package, Share2 } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
 import { Product } from '../../../types/product';
+import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal';
 
 /**
  * ProductListPage
@@ -13,6 +14,8 @@ import { Product } from '../../../types/product';
  */
 export const ProductListPage: React.FC = () => {
     const navigate = useNavigate();
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
     const {
         products,
         isLoading,
@@ -55,6 +58,13 @@ export const ProductListPage: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-3">
+                    <button
+                        onClick={() => setIsExportModalOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                    >
+                        <Share2 className="w-5 h-5" />
+                        <span className="font-medium">Exportar Catálogo</span>
+                    </button>
                     <button
                         onClick={handleBulkRegistration}
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
@@ -102,6 +112,12 @@ export const ProductListPage: React.FC = () => {
                     )}
                 </div>
             )}
+
+            {/* Export Catalog Modal */}
+            <ExportCatalogModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+            />
         </div>
     );
 };
