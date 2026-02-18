@@ -2541,3 +2541,213 @@ avgPrice = (sumOf(price × stock) + newPrice × newQty) / (totalStock + newQty)
 | `payment-fees.ts` | `payment_fees` | `paymentFeesService` | ✅ |
 | `catalogService.ts` | `products` + `categories` | `catalogService` | ✅ |
 
+---
+
+## 📄 MAPA COMPLETO DE PÁGINAS
+
+### Páginas Admin — Raiz (`pages/admin/`)
+
+| Página | Rota | O que faz |
+|--------|------|-----------|
+| `AdminDashboardPage` | `/admin` | Dashboard principal (stub, em desenvolvimento) |
+| `CatalogConfigPage` | `/admin/catalog-config` | Configuração completa do catálogo público (seções, banners, temas) |
+| `DevDiaryPage` | `/admin/dev-diary` | Diário de desenvolvimento — histórico de mudanças |
+| `EntradaPage` | `/admin/entrada` | Entrada em lote de produtos via `ProductEntryWizard` |
+| `GovernancePage` | `/admin/governance` | Documentação viva de padrões e auditoria de configurações |
+| `SimpleEntryPage` | `/admin/simple-entry` | Entrada simplificada de produto único |
+| `catalog-editor` | `/admin/catalog-editor` | Editor visual do catálogo (Draft → Published) |
+
+### Páginas Admin — Produtos (`pages/admin/products/`)
+
+| Página | Rota | O que faz |
+|--------|------|-----------|
+| `ProductsPage` | `/admin/products` | Lista de produtos com filtros e ações |
+| `ProductFormPage` | `/admin/products/new` | Criação de produto |
+| `ProductFormPage` | `/admin/products/:id/edit` | Edição de produto |
+| `ProductDetailPage` | `/admin/products/:id` | Detalhes do produto + unidades (IMEI) |
+
+### Páginas Admin — Configurações (`pages/admin/settings/`)
+
+| Página | Rota | O que faz |
+|--------|------|-----------|
+| `BrandsPage` | `/admin/settings/brands` | CRUD de marcas |
+| `ModelsPage` | `/admin/settings/models` | CRUD de modelos (com `ModelModal`) |
+| `ColorsPage` | `/admin/settings/colors` | CRUD de cores |
+| `RamsPage` | `/admin/settings/rams` | CRUD de RAMs |
+| `StoragesPage` | `/admin/settings/storages` | CRUD de armazenamentos |
+| `VersionsPage` | `/admin/settings/versions` | CRUD de versões |
+| `BatteryHealthsPage` | `/admin/settings/battery-healths` | CRUD de saúdes de bateria |
+| `PaymentFeesPage` | `/admin/settings/payment-fees` | Configuração de taxas por método/parcela |
+| `CompanyDataPage` | `/admin/settings/company` | Dados da empresa (nome, telefone, endereço, logo) |
+| `CatalogSettingsPage` | `/admin/settings/catalog` | Configurações do catálogo (cores, layout, SEO) |
+| `DocumentSettingsPage` | `/admin/settings/documents` | Templates de documentos (garantia, recibo) |
+| `WarrantyTemplatesPage` | `/admin/settings/warranty-templates` | CRUD de templates de garantia |
+| `CustomFieldsLibraryPage` | `/admin/settings/custom-fields` | Biblioteca de campos customizados globais |
+| `FieldConfigPage` | `/admin/settings/fields` | Configuração de campos por categoria |
+| `BannerManagementPage` | `/admin/settings/banners` | CRUD de banners do catálogo |
+| `PermissionsManagementPage` | `/admin/settings/permissions` | Gestão de permissões de usuários |
+| `fields.tsx` | `/admin/settings/fields-legacy` | Configuração de campos (versão legada) |
+| `categories/` | `/admin/settings/categories/*` | CRUD de categorias (3 sub-páginas) |
+
+### Páginas Admin — Inventário (`pages/admin/inventory/`)
+
+| Página | Rota | O que faz |
+|--------|------|-----------|
+| `InventoryPage` | `/admin/inventory` | Gestão de estoque com `inventoryService` |
+
+### Páginas Customer (`pages/customer/`)
+
+| Página | Rota | O que faz |
+|--------|------|-----------|
+| `CustomerCatalogPage` | `/catalog` | Catálogo público para clientes |
+| `CustomerProfilePage` | `/profile` | Perfil do cliente logado |
+
+### Páginas PDV (`pages/pdv/`)
+
+| Página | Rota | O que faz |
+|--------|------|-----------|
+| `PDVPage` | `/admin/pdv` | Ponto de venda (sem sidebar, tela cheia) |
+
+---
+
+## 📱 `CustomerCatalogPage` — Detalhado
+
+**Arquivo:** `pages/customer/CustomerCatalogPage.tsx`
+**Rota:** `/catalog`
+**Acesso:** Clientes logados (via `ProtectedRoute` com role `customer`)
+
+### Estado
+```ts
+const [products, setProducts] = useState<CatalogProduct[]>([]);
+const [favorites, setFavorites] = useState<string[]>([]); // IDs dos favoritos
+const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+const [searchQuery, setSearchQuery] = useState('');
+```
+
+### Handlers
+| Handler | O que faz |
+|---------|-----------|
+| `loadProducts()` | Carrega produtos via `catalogService` |
+| `loadFavorites()` | Carrega favoritos do cliente (localStorage ou banco) |
+| `handleFavorite(productId)` | Toggle favorito — adiciona/remove da lista |
+| `handleShare(product)` | Compartilha produto via `useShareUrl` |
+| `handleLogout()` | Faz logout via `SupabaseAuthContext` |
+
+**Componentes usados:** `ModernProductCard`, `ProductCard`, `ShareCatalogButton`
+**⚠️ Dois tipos de card:** `ModernProductCard` (novo) e `ProductCard` (legado) — verificar qual está ativo
+
+---
+
+## 🚪 `EntradaPage` — Entrada em Lote
+
+**Arquivo:** `pages/admin/EntradaPage.tsx`
+**Rota:** `/admin/entrada`
+**Componente principal:** `ProductEntryWizard`
+
+**Fluxo:**
+1. `ProductEntryWizard` coleta array de `ProductInput[]`
+2. `handleComplete(products)` → salva um a um via `productService.create()`
+3. Navega para `/admin/products` após sucesso
+
+**⚠️ TODO no código:** `// TODO: implement batch insert in service` — salva sequencialmente, não em batch
+**⚠️ Se um produto falhar**, toda a operação falha (sem rollback parcial)
+
+---
+
+## 🏛️ `GovernancePage` — Documentação Viva
+
+**Arquivo:** `pages/admin/GovernancePage.tsx`
+**Rota:** `/admin/governance`
+**Propósito:** Referência de desenvolvimento — padrões Anti-NaN, matriz de configuração por categoria (semáforo)
+
+**Conteúdo:**
+- Padrões de código documentados visualmente
+- Auditoria de configuração de categorias (quais campos estão ativos por categoria)
+- Referência para desenvolvedores
+
+**⚠️ Não é uma página operacional** — é documentação interna para a equipe de desenvolvimento
+
+---
+
+## 📓 `DevDiaryPage` — Diário de Desenvolvimento
+
+**Arquivo:** `pages/admin/DevDiaryPage.tsx`
+**Rota:** `/admin/dev-diary`
+
+**`DiaryEntry`:**
+```ts
+{
+    date: string;
+    title: string;
+    description: string;
+    filesModified: string[];
+    features: string[];
+    status: 'completed' | 'in-progress' | 'planned';
+}
+```
+
+**Propósito:** Histórico cronológico de mudanças no sistema — rastreabilidade e facilidade de handover
+**⚠️ Dados hardcoded** no componente — não persiste no banco
+
+---
+
+## 🔐 FLUXO DE AUTENTICAÇÃO — Detalhado
+
+### Usuários Admin
+```
+1. /admin/login → formulário de email/senha
+2. supabase.auth.signInWithPassword()
+3. SupabaseAuthContext detecta sessão → busca customer por auth.user.email
+4. customer.user_type === 'admin' → redireciona para /admin
+5. customer.user_type !== 'admin' → redireciona para /catalog
+```
+
+### Usuários Cliente
+```
+1. /login → formulário de email/senha
+2. supabase.auth.signInWithPassword()
+3. customer.user_type === 'customer' → redireciona para /catalog
+```
+
+### `ProtectedRoute`
+```tsx
+// Verifica autenticação + role
+<ProtectedRoute requiredRole="admin">
+    <AdminPage />
+</ProtectedRoute>
+```
+- Sem sessão → redireciona para `/admin/login`
+- Role incorreto → redireciona para página adequada
+
+### Modo Dev (`VITE_DEV_MODE=true`)
+- Pula verificação de autenticação
+- Usa usuário mock
+- Banner amarelo no `AdminLayout`
+
+---
+
+## 🗂️ TIPOS RESTANTES — Resumo
+
+| Arquivo | Tipos principais |
+|---------|----------------|
+| `types/color.ts` | `Color { id, name, slug, hex_code, active }`, `ColorInput` |
+| `types/brand.ts` | `Brand { id, name, slug, warranty_days, active }`, `BrandInput` |
+| `types/catalog.ts` | `CatalogProduct`, `Banner`, `CatalogSection`, `CatalogSettings` |
+| `types/customer.ts` | `Customer { id, name, email, phone, cpf_cnpj, user_type, client_type }` |
+| `types/sale.ts` | `Sale`, `SaleItem`, `PaymentMethod`, `PaymentMethodType`, `DeliveryType` |
+| `types/inventory.ts` | `StockMovement`, `InventoryStats`, `InventoryFilters`, `InventoryGroup` |
+| `types/warranty.ts` | `WarrantyTemplate`, `WarrantyTemplateInput` |
+| `types/warrantyDocument.ts` | `WarrantyDocument`, `WarrantyTagData`, `DeliveryTypeWarranty` |
+| `types/team.ts` | `TeamMember`, `TeamMemberInput`, `TeamMemberFilters` |
+| `types/company.ts` | `Company`, `CompanySettings` |
+| `types/catalogSettings.ts` | Configurações detalhadas do catálogo (cores, layout, SEO, etc.) |
+| `types/auth.ts` | `AuthUser`, `AuthSession` |
+| `types/unit.ts` | `Unit`, `UnitInput`, `UnitStatus` |
+| `types/ram.ts` | `Ram`, `RamInput` |
+| `types/storage.ts` | `Storage`, `StorageInput` |
+| `types/version.ts` | `Version`, `VersionInput` |
+| `types/batteryHealth.ts` | `BatteryHealth`, `BatteryHealthInput` |
+| `types/payment-fees.ts` | `PaymentFee { payment_method, installments, applied_fee }` |
+| `types/bulk-product.ts` | `BulkProduct` (entrada em lote) |
+| `types/model-architecture.ts` | `ModelEAN`, `ModelEANInput`, `EANSearchResult` |
+
