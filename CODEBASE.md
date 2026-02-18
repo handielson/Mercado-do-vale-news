@@ -451,6 +451,97 @@ mercado-do-vale/
 
 ---
 
+### `services/model-variants.ts` — Variantes de Modelo (Modelo+Versão+Cor)
+**Exporta:** `modelVariantsService`
+**Tabelas:** `model_variants`, `model_variant_images`
+**Bucket Storage:** `product-images`
+
+| Função | O que faz |
+|--------|-----------|
+| `getOrCreate(params)` | Busca ou cria variante por `{model_id, version_id, color_id}` |
+| `getWithDetails(variantId)` | Variante com JOIN em models, versions, colors, images |
+| `getByModelId(modelId)` | Todas as variantes de um modelo |
+| `remove(variantId)` | Remove variante |
+| `getImages(variantId)` | Imagens da variante |
+| `addImage(input)` | Adiciona imagem à variante |
+| `uploadImage(variantId, file, onProgress?)` | Upload para `product-images` bucket |
+| `reorderImages(variantId, imageIds)` | Reordena imagens |
+| `setPrimaryImage(imageId)` | Define imagem principal |
+| `removeImage(imageId)` | Remove imagem do banco e do storage |
+
+**⚠️ Bucket:** `product-images` (diferente de `catalog-banners`)
+**⚠️ Usado por:** `ModelVariantsManager`, `ModelModal`
+
+---
+
+### `services/bulk-products.ts` — Importação em Massa via Excel
+**Exporta:** `bulkProductService`
+**Depende de:** `productService` (de `products.ts`), `categoryService`
+**Lib:** `xlsx`
+
+| Função | O que faz |
+|--------|-----------|
+| `parseExcelFile(file)` | Lê arquivo Excel e retorna array de linhas normalizadas |
+| `validateBulkRows(rows)` | Valida EAN (13 dígitos), IMEI (15 dígitos), serial obrigatório, duplicatas no lote |
+| `generatePreview(rows)` | Busca produto base por EAN, mescla com campos únicos |
+| `createBulkProducts(previews)` | Cria produtos válidos, retorna `{total, success, failed, errors}` |
+
+**⚠️ `generatePreview` chama `productService.searchByEAN` para cada linha**
+**⚠️ Usado por:** `BulkImportPage`
+
+---
+
+### `services/units.ts` — Unidades de Produto
+**Exporta:** `unitService`
+**Tabela:** `units`
+
+| Função | O que faz |
+|--------|-----------|
+| `listByProduct(productId)` | Unidades de um produto |
+| `getById(id)` | Unidade por ID |
+| `create(input)` | Cria unidade (`imei_1`, `imei_2`, `serial`, `status`) |
+| `updateStatus(id, status)` | Atualiza status da unidade |
+| `delete(id)` | Remove unidade |
+| `getStatsByProduct(productId)` | Contagem por status: `{total, available, reserved, sold, rma}` |
+
+**`UnitStatus`:** `AVAILABLE`, `RESERVED`, `SOLD`, `RMA`
+**⚠️ Tabela `units` é separada de `products`** — cada produto pode ter múltiplas unidades
+**⚠️ Usado por:** `UnitForm`, `UnitList`, `ProductDetailPage`
+
+---
+
+### `services/versions.ts` — Versões de Produto ⚠️ LEGADO localStorage
+**Exporta:** `versionService`
+**Persistência:** `localStorage` (chave: `antigravity_versions_v1`) — **NÃO usa Supabase**
+
+| Função | O que faz |
+|--------|-----------|
+| `list()` | Lista todas as versões |
+| `getById(id)` | Versão por ID |
+| `create(input)` | Cria versão (salva em localStorage) |
+| `update(id, input)` | Atualiza versão |
+| `delete(id)` | Remove versão |
+| `listActive()` | Apenas versões ativas |
+
+**Versões padrão:** Global, China, USA, Europa, Brasil
+**⚠️ LEGADO** — dados ficam no browser, não no banco. Migração para Supabase pendente.
+**⚠️ Usado por:** `VersionSelect`, `ModelModal`
+
+---
+
+### `services/resources.ts` — Services Auxiliares ⚠️ LEGADO Mock
+**Exporta:** `brandService`, `modelService`, `colorService`, `capacityService`, `versionService`, `COLOR_MAP`
+**Persistência:** Mock em memória (DEV_MODE) ou dados hardcoded
+
+**⚠️ LEGADO** — este arquivo é um stub antigo. Os services reais são:
+- `services/brands.ts` → `brandService` (Supabase)
+- `services/models-new.ts` → `modelService` (Supabase)
+- `services/colors.ts` → `colorService` (Supabase)
+
+**⚠️ CONFLITO DE NOMES:** `resources.ts` exporta `brandService`, `modelService`, `colorService` com os mesmos nomes dos services reais. Verificar imports antes de modificar.
+
+---
+
 ## 🪝 HOOKS — Funções Retornadas
 
 ### `hooks/useProducts.ts`
