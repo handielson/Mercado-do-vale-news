@@ -735,6 +735,146 @@ Gera nome automático do produto baseado em modelo + specs.
 
 ---
 
+## 📐 TYPES — Interfaces Principais
+
+### `types/product.ts`
+| Tipo | O que é |
+|------|---------|
+| `Product` | Produto completo (lido do banco). Todos os preços em **centavos** |
+| `ProductInput` | Dados para criar/atualizar produto |
+| `ProductOrigin` | Enum fiscal: `'0'`=Nacional, `'1'`=Importação direta, etc. |
+| `WarrantyType` | `'brand' \| 'category' \| 'custom'` |
+| `ProductDimensions` | `{width_cm, height_cm, depth_cm}` |
+
+**Campos críticos de `Product`:**
+- `specs: Record<string, any>` — JSONB flexível: `{serial, imei1, imei2, color, ram, storage, version, battery_health}`
+- `price_*` — sempre **inteiros em centavos**
+- `images: string[]` — fotos individuais do produto (usado/seminovo)
+- `eans: string[]` — array de EANs
+- `track_inventory` + `stock_quantity` — controle de estoque
+- `is_gift` — brinde (desconto 100% automático no PDV)
+
+---
+
+### `types/catalog.ts`
+| Tipo | O que é |
+|------|---------|
+| `CatalogProduct` | Estende `Product` com campos de catálogo: `featured`, `is_new`, `is_favorite`, `category_slug` |
+| `ProductGroup` | Agrupamento por Brand+Model com `variants[]` e `globalPriceRange` |
+| `ProductVariant` | Combinação RAM+Storage com `colors[]` e `products[]` |
+| `FilterState` | Estado dos filtros: `categories[]`, `brands[]`, `priceRange`, `storage[]`, `ram[]`, `colors[]` |
+| `InstallmentPlan` | Plano de parcelamento: `{installments, value, total, label}` (centavos) |
+| `QuoteRequest` | Cotação completa para WhatsApp: `{product, variant, installmentPlan, delivery}` |
+| `Banner` | Banner do catálogo com `link_type`, `display_order`, contadores de cliques/views |
+
+---
+
+### `types/sale.ts`
+| Tipo | O que é |
+|------|---------|
+| `PaymentMethodType` | `'money' \| 'credit' \| 'debit' \| 'pix'` |
+| `PaymentMethod` | `{method, amount, installments?, fee_percentage?, fee_amount?, total_with_fee}` |
+| `DeliveryType` | `'store_pickup' \| 'store_delivery' \| 'hybrid_delivery'` |
+| `SaleItem` | Item do carrinho: `{product_id, quantity, unit_price, unit_cost, discount, total, is_gift}` |
+| `Sale` | Venda completa com `payment_methods[]`, `delivery_*`, `promotional_discount` |
+| `SaleInput` | Input para criar venda (sem `id`, `status`, `created_at`) |
+| `SaleWithItems` | `Sale` + `items[]` + `customer?` + `seller?` |
+| `SaleSummary` | Relatório: `{total_sales, total_revenue, total_profit, average_ticket, profit_margin}` |
+
+**⚠️ `customer_id` é OBRIGATÓRIO em `Sale`** — PDV exige cliente selecionado
+
+---
+
+### `types/category.ts`
+| Tipo | O que é |
+|------|---------|
+| `FieldRequirement` | `'off' \| 'optional' \| 'required'` — padrão semáforo |
+| `CustomFieldType` | Tipos de campo: `text`, `number`, `dropdown`, `ean13`, `phone`, `cpf`, `cnpj`, `table_relation`, etc. |
+| `CustomField` | Campo dinâmico: `{id, name, key, type, requirement, options?, table_config?}` |
+| `CategoryConfig` | Config de campos da categoria: `imei1?`, `imei2?`, `serial?`, `color?`, `ram?`, `storage?`, `custom_fields?` |
+| `Category` | Categoria com `config: CategoryConfig` e `warranty_days` |
+
+**`CategoryConfig` controla:**
+- Quais campos aparecem no `ProductForm` (off/optional/required)
+- Auto-fill por EAN (`ean_autofill_config`)
+- Geração automática de nome (`auto_name_template`)
+- Campos únicos por produto (`unique_fields`)
+
+---
+
+### Outros types relevantes
+| Arquivo | Tipos exportados |
+|---------|-----------------|
+| `types/model-architecture.ts` | `ModelEAN`, `ModelVariant`, `ModelVariantImage`, `EANSearchResult` |
+| `types/inventory.ts` | `StockMovement`, `StockAdjustmentInput`, `InventoryStats`, `InventoryGroup` |
+| `types/customer.ts` | `Customer`, `CustomerInput`, `CustomerFilters` |
+| `types/warranty.ts` | `WarrantyTemplate`, `WarrantyTemplateInput` |
+| `types/warrantyDocument.ts` | `WarrantyDocument`, `WarrantyDocumentInput` |
+| `types/team.ts` | `TeamMember`, `TeamMemberInput` |
+| `types/company.ts` | `Company` (dados completos: CNPJ, endereço, PIX, redes sociais) |
+| `types/companySettings.ts` | `CompanySettings` (config de recibo: header, footer, largura) |
+| `types/catalogSettings.ts` | `CatalogSettings`, `CategoryDisplayConfig`, `DEFAULT_CATALOG_SETTINGS` |
+| `types/catalogSections.ts` | `CatalogSection`, `SectionType`, `CreateSectionData` |
+| `types/payment-fees.ts` | `PaymentFee` |
+| `types/unit.ts` | `Unit`, `UnitInput` |
+| `types/bulk-product.ts` | `BulkProductRow`, `BulkProductValidation`, `BulkProductPreview`, `BulkUploadResult` |
+
+---
+
+## 📋 SCHEMAS — Validação Zod
+
+### `schemas/product.ts`
+**Exporta:** `productSchema`, `ProductSchemaType`, `validateProduct(data)`
+**Usado por:** `ProductForm.tsx` (ao submeter)
+
+**Validações críticas:**
+- `name`: mínimo 3 caracteres
+- `price_retail >= price_reseller >= price_wholesale` (refinements)
+- `stock_quantity` obrigatório se `track_inventory = true`
+- Preços: `z.coerce.number()` (aceita string e número)
+- Campos logísticos: aceita `NaN`, `null`, `undefined` → transforma em `undefined`
+- `meta_title`: máx 60 chars; `meta_description`: máx 160 chars
+
+### `schemas/unit.ts`
+**Exporta:** `unitSchema`, `UnitSchemaType`
+**Usado por:** `UnitForm.tsx`
+
+---
+
+## ⚙️ CONFIG — Configurações do Sistema
+
+### `config/field-dictionary.ts`
+**Exporta:** `FIELD_DICTIONARY`, `getFieldDefinition(key)`, `applyFieldFormat(value, format)`, funções de runtime
+
+**O que é:** Dicionário centralizado de todos os campos de formulário com labels, placeholders e regras de formatação.
+
+**`FieldFormat`:** `'capitalize' | 'uppercase' | 'lowercase' | 'titlecase' | 'sentence' | 'slug' | 'alphanumeric' | 'numeric' | 'phone' | 'cpf' | 'cnpj' | 'cep' | 'date_br' | 'ncm' | 'ean13' | 'brl' | 'none'`
+
+**Funções de runtime (localStorage):**
+| Função | O que faz |
+|--------|-----------|
+| `getRuntimeFieldDictionary()` | Dicionário atual (localStorage ou padrão) |
+| `getFieldDefinitionRuntime(key)` | Definição de um campo |
+| `updateFieldFormat(key, format)` | Atualiza formato em runtime |
+| `resetFieldDictionary()` | Restaura padrões |
+| `createCustomField(key, def)` | Cria campo customizado |
+| `deleteCustomField(key)` | Remove campo customizado |
+
+**⚠️ Usado por:** `SmartInput` (componente base de todos os inputs)
+**⚠️ Runtime usa localStorage** — mesma armadilha de `versions.ts`
+
+---
+
+### `config/category-badges.ts`
+Mapeamento de categorias para badges visuais no catálogo (ícones, cores, labels).
+**⚠️ Usado por:** `CatalogSection`, `ProductCard` (catálogo público)
+
+### `config/product-fields.ts`
+Configuração de campos visíveis por categoria no `ProductForm`.
+**⚠️ Usado por:** `ProductSpecifications` (seção do ProductForm)
+
+---
+
 ## 🗄️ BANCO DE DADOS — Tabelas e Colunas
 
 ### `products`
