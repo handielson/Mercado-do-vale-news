@@ -20,6 +20,7 @@
 | 6 | `companyService.ts` e `companySettingsService.ts` acessam a **mesma tabela** `company_settings` com lógicas diferentes — risco de sobrescrever dados | `services/companyService.ts`, `services/companySettingsService.ts` | Dados da empresa podem ser sobrescritos por config de recibo | Alta |
 | 7 | `rams.ts` usa **localStorage** (`antigravity_rams_v1`) — mesmo problema de `versions.ts` | `services/rams.ts` | Capacidades de RAM perdidas ao trocar browser/dispositivo | Média |
 | 8 | `config/field-dictionary.ts` runtime usa **localStorage** (`antigravity_field_dictionary_v1`) — campos customizados não persistem no banco | `config/field-dictionary.ts` | Customizações de campos perdidas ao trocar browser | Média |
+| 9 | `storages.ts` usa **localStorage** (`antigravity_storages_v1`) — mesmo padrão de `rams.ts` e `versions.ts` | `services/storages.ts` | Capacidades de storage perdidas ao trocar browser/dispositivo | Média |
 
 ---
 
@@ -1108,9 +1109,99 @@ Configuração de campos visíveis por categoria no `ProductForm`.
 | `promotional_discount` | INTEGER | Desconto promocional |
 | `status` | TEXT | `completed`, `cancelled`, `refunded` |
 
+### `categories`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `name` | TEXT | Nome da categoria |
+| `slug` | TEXT | URL-friendly, gerado automaticamente |
+| `config` | JSONB | `CategoryConfig` — campos obrigatórios/opcionais/ocultos |
+| `warranty_days` | INTEGER | Prazo de garantia padrão em dias |
+| `sort_order` | INTEGER | Ordem de exibição |
+
+### `models`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `name` | TEXT | Nome do modelo |
+| `brand_id` | UUID | FK brands |
+| `category_id` | UUID | FK categories |
+| `template_values` | JSONB | Specs padrão para autofill (ram, storage, etc.) |
+| `is_active` | BOOLEAN | Modelo ativo? |
+
+### `model_eans`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `model_id` | UUID | FK models |
+| `ean` | TEXT | Código EAN-13 |
+| `is_primary` | BOOLEAN | EAN principal do modelo |
+| `region` | TEXT | Região (Global, Brasil, etc.) |
+
+**⚠️ UNIQUE:** `(ean)` — EAN não pode pertencer a dois modelos
+
+### `customers`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `name` | TEXT | Nome do cliente |
+| `cpf_cnpj` | TEXT | CPF ou CNPJ |
+| `email` | TEXT | E-mail |
+| `phone` | TEXT | Telefone |
+| `is_active` | BOOLEAN | Cliente ativo? |
+| `client_type` | TEXT | `varejo`, `revenda`, `atacado` |
+
+### `custom_fields`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `key` | TEXT | Chave interna (ex: `limite_credito`) |
+| `label` | TEXT | Label de exibição |
+| `category` | TEXT | `basic`, `spec`, `price`, `fiscal`, `logistics` |
+| `field_type` | TEXT | Tipo do campo (text, number, dropdown, etc.) |
+| `options` | TEXT[] | Opções para dropdown |
+| `is_system` | BOOLEAN | Campo do sistema (não pode ser deletado) |
+| `display_order` | INTEGER | Ordem de exibição |
+
 ---
 
-## 🚨 ZONAS DE RISCO
+## 📦 SERVICES ADICIONAIS
+
+### `services/custom-fields.ts` — Campos Customizados (Biblioteca Global)
+**Exporta:** `customFieldsService` (instância de classe)
+**Tabela:** `custom_fields`
+**Cache:** 5 minutos em memória
+
+| Função | O que faz |
+|--------|-----------|
+| `list()` | Lista todos os campos da empresa |
+| `getByCategory(category)` | Campos por categoria (`basic`, `spec`, `price`, `fiscal`, `logistics`) |
+| `getById(id)` | Campo por ID |
+| `getByKey(key)` | Campo por chave |
+| `create(input)` | Cria campo (valida chave única) |
+| `update(id, input)` | Atualiza campo (campos `is_system` só permitem atualizar `label`, `placeholder`, `options`, `display_order`) |
+| `delete(id)` | Remove campo (campos `is_system` não podem ser deletados) |
+| `reorder(fieldIds)` | Reordena campos |
+
+**⚠️ Campos `is_system`** — criados pelo sistema, não podem ser deletados nem ter `key`/`field_type`/`category` alterados
+**⚠️ Usado por:** `useEnrichedCustomFields`, `FieldsManagementPage`, `CategoryEditPage`
+
+---
+
+### `services/storages.ts` — Capacidades de Armazenamento ⚠️ LEGADO localStorage
+**Exporta:** `storageService`
+**Persistência:** `localStorage` (chave: `antigravity_storages_v1`) — **NÃO usa Supabase**
+
+**Capacidades padrão:** 4GB, 6GB, 8GB, 12GB, 16GB, 64GB, 128GB, 256GB, 512GB, 1TB, 2TB
+**⚠️ LEGADO** — mesmo padrão de `rams.ts` e `versions.ts`
+**⚠️ Adicionado ao débito técnico #9** — migração para Supabase pendente
+**⚠️ Usado por:** `CapacitySelect`, `ProductSpecifications`
+
+---
 
 ### Zona 1: `specs` (JSONB)
 Campos: `serial`, `imei1`, `imei2`, `color`, `ram`, `storage`, `version`, `battery_health`
