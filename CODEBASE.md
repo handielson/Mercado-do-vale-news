@@ -1272,3 +1272,198 @@ Implementado em **2 lugares**:
 4. Preciso atualizar mais de um arquivo?
 5. A mudança afeta o banco de dados?
 6. **Atualizar este CODEBASE.md** na seção "Histórico de Mudanças"
+
+---
+
+## 🎛️ COMPONENTES UI BASE (`components/ui/`)
+
+> Estes componentes são a base de todos os formulários. **Nunca substituir por inputs HTML diretos.**
+
+### `SmartInput` — Input Inteligente com Formatação Automática
+```tsx
+<SmartInput control={control} name="nome_do_campo" />
+```
+**Props:** `control` (React Hook Form), `name` (chave do `FIELD_DICTIONARY`), `className?`, `disabled?`
+
+**Como funciona:**
+1. Busca definição do campo em `getFieldDefinitionRuntime(name)`
+2. Aplica `applyFieldFormat(value, fieldDef.format)` a cada keystroke
+3. Preserva posição do cursor após formatação
+4. Exibe label, placeholder, contador de caracteres e erro automaticamente
+
+**⚠️ Se o campo não existir no `FIELD_DICTIONARY`** → retorna `null` e loga warning
+**⚠️ Integra com React Hook Form via `Controller`** — não usar com `useState` direto
+
+---
+
+### `CurrencyInput` — Input de Moeda (Centavos)
+```tsx
+<CurrencyInput value={priceInCents} onChange={setPriceInCents} label="Preço Varejo" />
+```
+**Props:** `value` (inteiro em centavos), `onChange(cents)`, `onValueChange(cents)` (alias), `label?`, `disabled?`, `error?`
+
+**Regras críticas:**
+- **NUNCA usar `type="number"` para dinheiro** — usa `type="text"` internamente
+- Aceita vírgula e ponto como separador decimal
+- Converte automaticamente: `"10,50"` → `1050` (centavos)
+- Exibe `R$` como prefixo fixo
+- Seleciona todo o conteúdo ao focar (`e.target.select()`)
+
+---
+
+### `EANInput` — Input de Código de Barras (Array)
+```tsx
+<EANInput value={eans} onChange={setEans} onSearch={handleEANSearch} maxEANs={5} />
+```
+**Props:** `value: string[]`, `onChange(string[])`, `onSearch?(ean)`, `label?`, `maxEANs?` (padrão: 5)
+
+**Comportamento:**
+- Aceita apenas dígitos (remove não-numéricos)
+- Limita a 13 dígitos por EAN
+- **Dispara `onSearch(ean)` automaticamente quando atinge 13 dígitos** — usado para autofill do ProductForm
+- Feedback visual: verde (13 dígitos), laranja (incompleto)
+- Permite adicionar/remover múltiplos EANs
+
+---
+
+### `IMEIInput` — Input de IMEI
+```tsx
+<IMEIInput value={imei} onChange={setImei} label="IMEI 1" required id="imei1" />
+```
+**Props:** `value: string`, `onChange(string)`, `label?`, `required?`, `error?`, `onKeyDown?`, `onBlur?`, `id?`, `technicalName?`
+
+**Comportamento:**
+- Aceita apenas dígitos, limita a 15
+- Auto-uppercase e trim
+- Feedback visual: verde (15 dígitos), laranja (incompleto)
+- `technicalName` exibe o nome técnico do campo em cinza ao lado do label
+
+---
+
+### `ImageUploader` — Upload de Imagens
+```tsx
+<ImageUploader onUpload={handleUpload} maxFiles={5} />
+```
+**⚠️ Usado por:** `ProductImages` (seção do ProductForm)
+
+### `Tab` / `Tabs` — Navegação por Abas
+```tsx
+<Tabs activeTab={tab} onChange={setTab}>
+  <Tab id="info" label="Informações" />
+</Tabs>
+```
+**⚠️ Usado por:** `ProductDetailPage`, `CustomerProfilePage`
+
+---
+
+## ⚖️ REGRAS DE NEGÓCIO (`core/rules.ts`)
+
+### `isPaymentMethodAllowed(clientType, method): boolean`
+**Regra Atacado:** clientes `ATACADO` só podem pagar com `PIX` ou `DINHEIRO`.
+```ts
+isPaymentMethodAllowed(ClientTypes.ATACADO, PaymentMethods.CREDIT_CARD) // false
+isPaymentMethodAllowed(ClientTypes.VAREJO, PaymentMethods.CREDIT_CARD)  // true
+```
+**⚠️ Usado por:** `PaymentSection` (PDV)
+
+### `formatIMEI(imei): string`
+Padroniza IMEI: `trim()` + `toUpperCase()`
+
+### `isValidSystemPassword(password): boolean`
+Senha do sistema deve ter **exatamente 5 dígitos numéricos**.
+
+---
+
+## 🔢 ENUMS — `utils/field-standards.ts`
+
+> **Fonte de verdade para todos os enums.** Nunca usar strings mágicas.
+
+| Enum | Valores |
+|------|---------|
+| `ClientTypes` | `VAREJO='varejo'`, `REVENDA='revenda'`, `ATACADO='atacado'`, `ADMIN='admin'` |
+| `ProductStatus` | `ACTIVE='active'`, `INACTIVE='inactive'`, `OUT_OF_STOCK='out_of_stock'`, `DISCONTINUED='discontinued'` |
+| `PaymentMethods` | `PIX='pix'`, `CASH='dinheiro'`, `CREDIT_CARD='cartao_credito'`, `DEBIT_CARD='cartao_debito'`, `BANK_SLIP='boleto'` |
+| `ShippingTypes` | `STANDARD='standard'`, `EXPRESS='express'`, `PICKUP='retirada'`, `LOCAL_COURIER='moto_boy'` |
+| `UnitStatus` | `AVAILABLE='available'`, `RESERVED='reserved'`, `SOLD='sold'`, `RMA='rma'` |
+| `ProductCondition` | `NEW='new'`, `USED='used'`, `OPEN_BOX='open_box'` |
+| `ProductCategory` | `PHONES='phones'`, `TABLETS='tablets'`, `ACCESSORIES='accessories'` |
+
+**Constantes:**
+- `CURRENCY_PRECISION = 2` — precisão monetária (centavos)
+- `IMEI_MAX_LENGTH = 15` — comprimento máximo do IMEI
+
+---
+
+## 🏗️ LAYOUT — `AdminLayout`
+
+**Arquivo:** `layouts/AdminLayout.tsx`
+**Props:** `{ children: React.ReactNode }`
+
+**O que injeta:**
+- Sidebar esquerda fixa (w-64) com navegação completa
+- `usePageTitle()` — atualiza `<title>` automaticamente por rota
+- `useSupabaseAuth()` — exibe nome/email do usuário logado
+- `useTheme()` — aplica `settings.company_name` no header da sidebar
+- Banner amarelo de topo se `VITE_DEV_MODE=true`
+
+**Itens de navegação (sidebar):**
+Dashboard, Produtos, Vendas, Estoque, Clientes, Equipe, PDV, Migração
+**Configuração:** Categorias, Campos, Marcas, Modelos, Cores, Armazenamento, RAM, Versões, Saúde Bateria, Taxas, Dados da Empresa, Documentos, Garantias, Banners, Config. Catálogo
+**Admin only:** Permissões (visível apenas se `customer_type === 'ADMIN'`)
+**Dev:** Governança, Diário de Dev, Teste de Abas, Ajustes Sistema
+
+**⚠️ `PDVPage` NÃO usa `AdminLayout`** — tela cheia sem sidebar
+
+---
+
+## 🌍 VARIÁVEIS DE AMBIENTE
+
+O projeto usa Vite. Variáveis devem ter prefixo `VITE_` para serem acessíveis no frontend.
+
+| Variável | Onde é usada | Descrição |
+|---------|-------------|-----------|
+| `VITE_SUPABASE_URL` | `services/supabase.ts` | URL do projeto Supabase |
+| `VITE_SUPABASE_ANON_KEY` | `services/supabase.ts` | Chave anônima do Supabase |
+| `VITE_DEV_MODE` | `AdminLayout.tsx` | Se `'true'`, exibe banner de dev e ativa mock de auth |
+
+**Arquivo:** `.env.local` (não commitado) ou `.env` (commitado sem secrets)
+
+**⚠️ Sem `.env.local`** → app não conecta ao Supabase e fica em branco
+**⚠️ `VITE_DEV_MODE=true`** → ativa autenticação mock — nunca usar em produção
+
+---
+
+## 🔐 AUTENTICAÇÃO — Fluxo Supabase
+
+```
+1. App monta → SupabaseAuthProvider inicializa
+2. supabase.auth.getSession() → verifica sessão existente
+3. supabase.auth.onAuthStateChange() → listener de mudanças
+4. Se autenticado: busca customer por email → define customer_type
+5. ProtectedRoute verifica: user existe? isAdmin? → redireciona se não
+6. signOut() → supabase.auth.signOut() → limpa sessão
+```
+
+**`ProtectedRoute`** — wrapper de rota que verifica autenticação:
+- `requireAdmin={true}` → redireciona para `/admin/login` se não autenticado
+- Sem `requireAdmin` → redireciona para `/cliente/login` se não autenticado
+
+**⚠️ Race condition histórica:** havia dois contextos de auth simultâneos causando `AbortError` em produção. Corrigido removendo o contexto duplicado — manter apenas `SupabaseAuthContext`.
+
+---
+
+## 🧩 SELECTORS — Dropdowns de Produto (`components/products/selectors/`)
+
+| Componente | Service usado | O que lista |
+|-----------|--------------|------------|
+| `BrandSelect` | `brandService.list()` | Marcas |
+| `ModelSelect` | `modelService.list()` | Modelos (filtrado por marca) |
+| `ColorSelect` | `colorService.list()` | Cores |
+| `CapacitySelect` | `storageService.list()` | Capacidades de armazenamento |
+| `RamSelect` | `ramService.list()` | Capacidades de RAM |
+| `VersionSelect` | `versionService.list()` | Versões (localStorage) |
+| `CategorySelect` | `categoryService.list()` | Categorias |
+
+**⚠️ `VersionSelect` e `CapacitySelect` usam services de localStorage** — dados não persistem no banco
+**⚠️ Todos os selectors são usados em `ProductSpecifications` e `ProductBasicInfo`**
+
