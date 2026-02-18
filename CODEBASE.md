@@ -170,6 +170,114 @@ mercado-do-vale/
 
 ---
 
+### `services/categories.ts` — Categorias
+**Exporta:** `categoryService`
+**Tabela:** `categories`
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `list()` | `(): Promise<Category[]>` | Lista categorias ordenadas por `sort_order` |
+| `getById(id)` | `(id: string): Promise<Category \| null>` | Categoria por ID |
+| `create(input)` | `(input: CategoryInput): Promise<Category>` | Cria categoria, gera slug automático |
+| `update(id, input)` | `(id, input): Promise<Category>` | Atualiza categoria e slug |
+| `remove(id)` | `(id: string): Promise<void>` | Remove categoria |
+| `updateSortOrder(orders)` | `(orders: {id, sort_order}[]): Promise<void>` | Reordena múltiplas categorias (drag & drop) |
+
+**⚠️ Slug gerado automaticamente** a partir do nome (normalizado, sem acentos)
+**⚠️ Usado por:** `CategoryEditPage`, filtros de produto, `ProductBasicInfo`
+
+---
+
+### `services/models-new.ts` — Modelos
+**Exporta:** `modelService` e `modelsService` (alias de compatibilidade)
+**Tabela:** `models`
+**Depende de:** `services/model-eans.ts` (para EANs do modelo)
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `list()` | `(): Promise<Model[]>` | Lista todos os modelos com brand e category |
+| `getById(id)` | `(id: string): Promise<Model \| null>` | Modelo por ID (inclui `template_values`) |
+| `listByBrand(brandId)` | `(brandId: string): Promise<Model[]>` | Modelos de uma marca |
+| `create(input)` | `(input: ModelInput): Promise<Model>` | Cria modelo |
+| `update(id, input)` | `(id, input): Promise<Model>` | Atualiza modelo |
+| `delete(id)` | `(id: string): Promise<void>` | Remove modelo |
+| `listActive()` | `(): Promise<Model[]>` | Apenas modelos ativos |
+| `listActiveByBrand(brandId)` | `(brandId: string): Promise<Model[]>` | Modelos ativos de uma marca |
+
+**⚠️ `template_values`** — campo JSONB com specs padrão do modelo (preenchido no autofill do ProductForm)
+**⚠️ Usado por:** `ModelSelect`, `ProductForm` (autofill EAN), `ModelModal`, `ModelsPage`
+
+---
+
+### `services/brands.ts` — Marcas
+**Exporta:** `brandService`
+**Tabela:** `brands`
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `list()` | `(): Promise<Brand[]>` | Lista todas as marcas |
+| `getById(id)` | `(id: string): Promise<Brand \| null>` | Marca por ID |
+| `create(input)` | `(input: BrandInput): Promise<Brand>` | Cria marca |
+| `update(id, input)` | `(id, input): Promise<Brand>` | Atualiza marca |
+| `delete(id)` | `(id: string): Promise<void>` | Remove marca |
+| `listActive()` | `(): Promise<Brand[]>` | Marcas ativas (alias de `list()`) |
+
+**⚠️ Campo `active` não existe no banco ainda** — sempre retorna `true`
+**⚠️ Usado por:** `BrandSelect`, `BrandsPage`, `ModelModal`
+
+---
+
+### `services/colors.ts` — Cores
+**Exporta:** `colorService`, `COLOR_MAP`
+**Tabela:** `colors`
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `list()` | `(): Promise<Color[]>` | Lista todas as cores |
+| `getById(id)` | `(id: string): Promise<Color \| null>` | Cor por ID |
+| `create(input)` | `(input: ColorInput): Promise<Color>` | Cria cor, auto-detecta `hex_code` do `COLOR_MAP` |
+| `update(id, input)` | `(id, input): Promise<Color>` | Atualiza cor |
+| `delete(id)` | `(id: string): Promise<void>` | Remove cor |
+| `listActive()` | `(): Promise<Color[]>` | Apenas cores ativas |
+| `getColorHex(name)` | `(name: string): string \| undefined` | Retorna hex do `COLOR_MAP` (síncrono, sem DB) |
+
+**`COLOR_MAP`** — mapa estático: `{ 'Preto': '#000000', 'Branco': '#FFFFFF', ... }`
+**⚠️ Usado por:** `ColorSelect`, `ColorsPage`, `ModelColorImagesManager`
+
+---
+
+### `services/companySettingsService.ts` — Configurações da Empresa
+**Exporta:** `companySettingsService`
+**Tabela:** `company_settings`
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `get()` | `(): Promise<CompanySettings \| null>` | Busca configurações (único registro) |
+| `update(settings)` | `(settings: CompanySettingsInput): Promise<CompanySettings>` | Atualiza ou cria configurações |
+| `getDefaults()` | `(): Partial<CompanySettings>` | Retorna valores padrão (síncrono) |
+
+**⚠️ Usado por:** `PDVPage` (gerar termo de garantia), `CompanySettingsPage`, `ReceiptPreview`
+**⚠️ Não usa `company_id`** — assume único registro na tabela
+
+---
+
+### `services/uploadService.ts` — Upload de Imagens
+**Exporta:** `uploadService`
+**Bucket Supabase:** `catalog-banners`
+**Limites:** 5MB máx, formatos: PNG, JPG, WEBP
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `uploadBannerImage(file)` | `(file: File): Promise<string>` | Upload e retorna URL pública |
+| `deleteBannerImage(url)` | `(url: string): Promise<void>` | Remove imagem do storage |
+| `validateImageFile(file)` | `(file: File): {valid, error?}` | Valida tipo e tamanho |
+| `getPublicUrl(fileName)` | `(fileName: string): string` | URL pública de um arquivo |
+
+**⚠️ Usado por:** `ProductImages` (seção do ProductForm), `BannerManager`
+**⚠️ Bucket é `catalog-banners`** — não confundir com imagens de produto
+
+---
+
 ## 🪝 HOOKS — Funções Retornadas
 
 ### `hooks/useProducts.ts`
