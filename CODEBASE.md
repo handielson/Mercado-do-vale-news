@@ -18,6 +18,8 @@
 | 4 | `productService.ts` (PDV) **não filtra por `company_id`** — queries sem RLS completo | `services/productService.ts` | Em ambiente multi-tenant, poderia retornar produtos de outras empresas | Alta |
 | 5 | `modelColorImages.ts` — interface TypeScript diz `image_url` mas banco usa `images TEXT[]` — interface desatualizada | `services/modelColorImages.ts` | Confusão ao usar o service — `ProductCard` contorna isso com query direta | Média |
 | 6 | `companyService.ts` e `companySettingsService.ts` acessam a **mesma tabela** `company_settings` com lógicas diferentes — risco de sobrescrever dados | `services/companyService.ts`, `services/companySettingsService.ts` | Dados da empresa podem ser sobrescritos por config de recibo | Alta |
+| 7 | `rams.ts` usa **localStorage** (`antigravity_rams_v1`) — mesmo problema de `versions.ts` | `services/rams.ts` | Capacidades de RAM perdidas ao trocar browser/dispositivo | Média |
+| 8 | `config/field-dictionary.ts` runtime usa **localStorage** (`antigravity_field_dictionary_v1`) — campos customizados não persistem no banco | `config/field-dictionary.ts` | Customizações de campos perdidas ao trocar browser | Média |
 
 ---
 
@@ -608,7 +610,178 @@ Retorna o tipo efetivo do cliente (varejo/revenda/atacado) para exibição de pr
 
 ---
 
-## 🛠️ UTILS — Funções Exportadas
+### `hooks/useEnrichedCustomFields.ts`
+**Parâmetro:** `categoryFields: CategoryCustomField[]`
+**Retorna:** `{ fields: EnrichedField[], loading, error }`
+
+Enriquece campos customizados da categoria com dados da biblioteca (`customFieldsService`).
+Suporta dois formatos:
+- **Formato antigo (inline):** `{id, name, key, type, requirement}` — usa dados diretos
+- **Formato novo (referência):** `{id, field_id, requirement}` — busca dados da biblioteca pelo `field_id`
+
+**⚠️ Usado por:** `ProductSpecifications`, `CategoryEditPage`
+
+---
+
+### `hooks/useShareUrl.ts`
+**Retorna:** `{ generateShareUrl, shareUrl, copyToClipboard, canUseNativeShare, nativeShare }`
+
+| Função | O que faz |
+|--------|-----------|
+| `generateShareUrl(platform, options)` | Gera URL para WhatsApp/Facebook/Twitter/Email |
+| `shareUrl(platform, options)` | Abre janela de compartilhamento |
+| `copyToClipboard(text)` | Copia para clipboard (`navigator.clipboard`) |
+| `canUseNativeShare()` | Verifica se Web Share API está disponível |
+| `nativeShare(options)` | Usa Web Share API nativa (mobile) |
+
+**Plataformas:** `'whatsapp' | 'facebook' | 'twitter' | 'email' | 'copy'`
+**⚠️ Usado por:** `SharePaymentDataModal`, catálogo público
+
+---
+
+### `hooks/useFavicon.ts`
+Aplica favicon e título da empresa dinamicamente buscando de `companyService`.
+**⚠️ Chamado em:** `App.tsx` (raiz da aplicação)
+
+### `hooks/usePageTitle.ts`
+Gerencia o `<title>` da página com prefixo da empresa.
+**⚠️ Usado por:** páginas admin e catálogo
+
+### `hooks/useTabUrl.ts`
+Sincroniza estado de aba ativa com a URL (query params).
+**⚠️ Usado por:** páginas com múltiplas abas (ex: `ProductDetailPage`)
+
+### `hooks/useSupabaseAuth.ts`
+Wrapper mínimo sobre `SupabaseAuthContext`.
+**⚠️ Usado por:** componentes que precisam do usuário autenticado
+
+---
+
+## 🗺️ ROTAS — Mapa Completo (`routes/index.tsx`)
+
+### Providers (App.tsx)
+```
+HelmetProvider → SupabaseAuthProvider → ThemeProvider → RouterProvider
+```
+
+### Rotas Públicas
+| Rota | Componente |
+|------|-----------|
+| `/` | `CatalogPage` (homepage pública) |
+| `/admin/login` | `AdminLoginPage` |
+| `/cliente/login` | `ClienteLoginPage` |
+| `/login` | Redirect → `/admin/login` |
+
+### Rotas Admin (requer `requireAdmin=true` + `AdminLayout`)
+| Rota | Componente |
+|------|-----------|
+| `/admin` | `DashboardPage` |
+| `/admin/products` | `ProductListPage` |
+| `/admin/products/new` | `ProductFormPage` |
+| `/admin/products/:id` | `ProductDetailPage` |
+| `/admin/pdv` | `PDVPage` (sem AdminLayout) |
+| `/admin/customers` | `CustomerListPage` |
+| `/admin/customers/new` | `CustomerFormPage` |
+| `/admin/customers/:id` | `CustomerProfilePage` |
+| `/admin/team` | `TeamListPage` |
+| `/admin/team/new` | `TeamFormPage` |
+| `/admin/team/:id/edit` | `TeamEditPage` |
+| `/admin/sales` | `SalesListPage` |
+| `/admin/sales/:id` | `SaleDetailPage` |
+| `/admin/inventory` | `InventoryPage` |
+| `/admin/catalog-editor` | `CatalogEditorPage` |
+| `/admin/catalog-config` | `CatalogConfigPage` |
+| `/admin/governance` | `GovernancePage` |
+| `/admin/settings/categories` | `CategoriesPage` |
+| `/admin/settings/categories/:id/edit` | `EditCategoryPage` |
+| `/admin/settings/fields` | `FieldsManagementPage` |
+| `/admin/settings/brands` | `BrandsPage` |
+| `/admin/settings/models` | `ModelsPage` |
+| `/admin/settings/colors` | `ColorsPage` |
+| `/admin/settings/versions` | `VersionsPage` |
+| `/admin/settings/rams` | `RamsPage` |
+| `/admin/settings/battery-healths` | `BatteryHealthsPage` |
+| `/admin/settings/company` | `CompanyPage` |
+| `/admin/settings/payment-fees` | `PaymentFeesPage` |
+| `/admin/settings/permissions` | `PermissionsManagementPage` |
+| `/admin/migration` | `MigrationPage` |
+
+### Rotas Cliente (requer autenticação de cliente)
+| Rota | Componente |
+|------|-----------|
+| `/cliente/perfil` | `CustomerProfilePage` |
+
+---
+
+## 🔄 FLUXOS DE NEGÓCIO CRÍTICOS
+
+### Fluxo 1: Entrada de Produto (ProductForm)
+```
+1. Usuário escaneia EAN
+2. useEANAutofill → modelEANsService.getByEAN(ean)
+3. Se encontrado: preenche model_id, category_id, specs do template_values
+4. Usuário preenche serial, IMEI1, IMEI2 (conforme CategoryConfig)
+5. Submit → productSchema.safeParse(data)
+6. Se serialList > 0: cria N produtos (um por serial)
+7. Valida unicidade de seriais no banco antes de salvar
+8. Gera SKU: MARCA-MODELO-COR-RAM-STORAGE
+9. productService.create() → salva no banco
+10. updateAveragePrices() → recalcula preço médio da variação
+```
+
+### Fluxo 2: Venda no PDV (PDVPage)
+```
+1. Selecionar cliente (CustomerSection → customerService)
+2. Buscar produto (ProductSearchSection → searchProducts)
+   - Busca por: nome, SKU, serial, IMEI1, IMEI2
+3. Adicionar ao carrinho (handleAddToCart)
+4. Selecionar entrega (DeliverySection)
+5. Selecionar pagamento (PaymentSection → paymentFeesService)
+   - Calcula taxa por método e parcelas
+6. Finalizar venda (handleFinalizeSale)
+   → saleService.createSale() → cria sale + sale_items + atualiza stock
+   → warrantyDocumentService.create() → gera documento de garantia
+7. Exibir recibo (ReceiptPreview)
+```
+
+### Fluxo 3: Catálogo Público (CustomerCatalogPage)
+```
+1. useCatalog() → catalogService.getProducts(filters)
+2. catalogConfigService.applyVisibilityRules() → filtra produtos
+3. Agrupamento por model_id + color + ram + storage (CatalogSection)
+4. Cliente seleciona variante → ProductDetailsModal
+5. useEffectiveCustomerType() → determina preço (varejo/revenda/atacado)
+6. Cliente escolhe parcelamento → InstallmentPlan
+7. Cliente escolhe entrega → DeliveryOption
+8. Gera cotação WhatsApp → whatsappMessageGenerator
+```
+
+---
+
+## 🏗️ CONTEXTOS (React Context)
+
+| Contexto | Arquivo | O que provê |
+|---------|---------|------------|
+| `SupabaseAuthContext` | `contexts/SupabaseAuthContext.tsx` | `user`, `session`, `signIn`, `signOut`, `isAdmin` |
+| `ThemeContext` | `contexts/ThemeContext.tsx` | `theme`, `toggleTheme` (dark/light mode) |
+
+**⚠️ `SupabaseAuthContext`** — único contexto de auth. Havia dois antes (causava race condition com AbortError em produção). Corrigido removendo o duplicado.
+
+---
+
+## 🔴 SERVICES LEGADOS — localStorage (Débito #7)
+
+Além de `versions.ts` e `rams.ts`, existem outros services que usam localStorage:
+
+| Service | Chave localStorage | Padrão |
+|---------|-------------------|--------|
+| `services/versions.ts` | `antigravity_versions_v1` | Global, China, USA, Europa, Brasil |
+| `services/rams.ts` | `antigravity_rams_v1` | 2GB, 3GB, 4GB, 6GB, 8GB, 12GB, 16GB, 24GB, 32GB |
+| `config/field-dictionary.ts` | `antigravity_field_dictionary_v1` | Todos os campos do sistema |
+
+**⚠️ Adicionado ao débito técnico #7:** `rams.ts` também usa localStorage — migração para Supabase pendente.
+
+---
 
 ### `utils/saleCalculations.ts` — Cálculos de Venda
 **Todas as funções trabalham com centavos (inteiros)**
