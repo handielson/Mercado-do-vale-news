@@ -278,6 +278,63 @@ mercado-do-vale/
 
 ---
 
+### `services/customers.ts` — Clientes
+**Exporta:** `customerService` (instância de classe)
+**Tabela:** `customers`
+**Cache:** 5 minutos em memória
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `list(filters?)` | `(filters?: CustomerFilters): Promise<Customer[]>` | Lista clientes com filtros (search, is_active, datas) |
+| `getById(id)` | `(id: string): Promise<Customer \| null>` | Cliente por ID |
+| `getByCpfCnpj(cpfCnpj)` | `(cpfCnpj: string): Promise<Customer \| null>` | Cliente por CPF/CNPJ |
+| `create(input)` | `(input: CustomerInput): Promise<Customer>` | Cria cliente |
+| `update(id, input)` | `(id, input): Promise<Customer>` | Atualiza cliente |
+| `softDelete(id)` | `(id: string): Promise<void>` | Desativa cliente (`is_active = false`) |
+| `delete(id)` | `(id: string): Promise<void>` | Remove cliente do banco |
+| `search(query)` | `(query: string): Promise<Customer[]>` | Busca por nome (alias de `list({search})`) |
+| `getActiveCount()` | `(): Promise<number>` | Conta clientes ativos |
+| `clearCache()` | `(): void` | Limpa cache em memória |
+
+**⚠️ Busca por:** `name`, `cpf_cnpj`, `email` (via `.or()`)
+**⚠️ Usado por:** `CustomerSection` (PDV), `CustomerListPage`, `CustomerFormPage`
+
+---
+
+### `services/warrantyDocumentService.ts` — Documentos de Garantia
+**Exporta:** `warrantyDocumentService`
+**Tabela:** `warranty_documents`
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `create(input)` | `(input: WarrantyDocumentInput): Promise<WarrantyDocument>` | Cria documento de garantia |
+| `getBySaleId(saleId)` | `(saleId: string): Promise<WarrantyDocument \| null>` | Documento por ID de venda |
+| `getById(id)` | `(id: string): Promise<WarrantyDocument \| null>` | Documento por ID |
+| `list()` | `(): Promise<WarrantyDocument[]>` | Lista todos os documentos |
+| `update(id, input)` | `(id, input): Promise<WarrantyDocument>` | Atualiza documento |
+| `remove(id)` | `(id: string): Promise<void>` | Remove documento |
+
+**⚠️ Usado por:** `PDVPage` (geração de garantia após venda)
+
+---
+
+### `services/payment-fees.ts` — Taxas de Pagamento
+**Exporta:** `paymentFeesService`, `getDefaultOperatorFee`, `getDefaultAppliedFee`
+**Tabela:** `payment_fees`
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `list()` | `(): Promise<PaymentFee[]>` | Lista todas as taxas (ordenadas por método e parcelas) |
+| `update(id, input)` | `(id, input): Promise<void>` | Atualiza taxa |
+| `initializeDefaults()` | `(): Promise<void>` | Inicializa taxas padrão se tabela vazia |
+| `getDefaultOperatorFee(n)` | `(installments: number): number` | Taxa padrão da operadora por parcelas |
+| `getDefaultAppliedFee(n)` | `(installments: number): number` | Taxa aplicada padrão por parcelas |
+
+**Taxas padrão:** débito=1%, pix=0%, crédito 1x=0%, crédito 2x-18x=6%-22%
+**⚠️ Usado por:** `PaymentSection` (PDV), `PaymentFeesPage`
+
+---
+
 ## 🪝 HOOKS — Funções Retornadas
 
 ### `hooks/useProducts.ts`
@@ -296,6 +353,104 @@ mercado-do-vale/
 ```
 **Usa:** `productService.list()` de `services/products.ts`
 **Filtra no cliente:** por `name`, `sku` (search) e `status`
+
+---
+
+### `hooks/useCatalog.ts`
+**Retorna:**
+```ts
+{
+  products: CatalogProduct[],
+  isLoading: boolean,
+  error: string | null,
+  filters: FilterState,
+  settings: CatalogSettings,
+  categories: string[],
+  brands: string[],
+  hasMore: boolean,
+  total: number,
+  setFilters: (filters) => void,
+  loadMore: () => void,
+  refresh: () => void,
+  metadata: { categories, brands }
+}
+```
+**Usa:** `catalogService.getProducts()` + `catalogConfigService`
+**⚠️ Usado por:** `CustomerCatalogPage`, `CatalogSection`
+
+---
+
+### `hooks/useEffectiveCustomerType.ts`
+Retorna o tipo efetivo do cliente (varejo/revenda/atacado) para exibição de preços no catálogo.
+**⚠️ Usado por:** `ModernProductCard`, `ProductDetailsModal`
+
+---
+
+## 🛠️ UTILS — Funções Exportadas
+
+### `utils/saleCalculations.ts` — Cálculos de Venda
+**Todas as funções trabalham com centavos (inteiros)**
+
+| Função | O que faz |
+|--------|-----------|
+| `calculateItemTotal(item)` | Total do item (0 se brinde) |
+| `calculateItemSubtotal(item)` | Subtotal sem desconto |
+| `calculateItemDiscount(item)` | Desconto do item (100% se brinde) |
+| `calculateItemCost(item)` | Custo do item |
+| `calculateSaleTotals(items)` | Retorna `{subtotal, discount_total, total, cost_total, profit}` |
+| `calculatePaymentFee(amount, method, installments, fees)` | Retorna `{fee_percentage, fee_amount, total_with_fee}` |
+| `calculateTotalPaid(payments)` | Soma total pago (usa `total_with_fee` se existir) |
+| `calculateDeliveryDiscount(type, storeCost)` | Desconto de entrega para a loja |
+| `calculateDeliveryTotal(type, customerCost)` | Custo de entrega para o cliente |
+| `calculateChange(total, payments)` | Troco |
+| `calculateRemaining(total, payments)` | Valor restante a pagar |
+| `isPaymentComplete(total, payments)` | Pagamento completo? |
+| `calculateProfitMargin(profit, total)` | Margem de lucro em % |
+| `formatCurrency(centavos)` | Formata centavos para `R$ X,XX` |
+| `getPaymentMethodLabel(method, installments?)` | Label em português |
+| `getPaymentMethodIcon(method)` | Emoji do método |
+| `getDeliveryTypeLabel(type)` | Label de entrega em português |
+
+**⚠️ Usado por:** `PDVPage`, `saleService.ts`, `ReceiptPreview`, `PaymentSection`
+
+---
+
+### `utils/field-standards.ts` — Enums e Padrões
+**Exporta:** `ProductStatus`, `ClientType`, constantes de formatação
+**⚠️ Usado por:** `useProducts`, `ProductForm`, `ProductCard`, filtros
+
+---
+
+### `utils/calculateAveragePrice.ts`
+**Exporta:** `calculateAllAveragePrices(totalStock, currentPrices, newQty, newPrices)`
+Calcula média ponderada para todos os tipos de preço.
+**⚠️ Usado por:** `averagePriceService.ts`
+
+---
+
+### `utils/pricing.ts`
+Funções de cálculo de preços para exibição no catálogo (parcelamento, desconto).
+**⚠️ Usado por:** `ModernProductCard`, `ProductDetailsModal`
+
+---
+
+### `utils/whatsappMessageGenerator.ts`
+Gera mensagem de WhatsApp com detalhes do produto/pedido.
+**⚠️ Usado por:** `ProductDetailsModal`, `CartSection`
+
+---
+
+### `utils/warrantyTagReplacement.ts`
+Substitui tags `{{campo}}` no template de garantia com dados reais da venda.
+**⚠️ Usado por:** `PDVPage` (geração do documento de garantia)
+
+---
+
+### `utils/product-name-generator.ts`
+Gera nome automático do produto baseado em modelo + specs.
+**⚠️ Usado por:** `ProductForm` (sugestão de nome)
+
+---
 
 ---
 
