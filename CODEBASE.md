@@ -278,6 +278,122 @@ mercado-do-vale/
 
 ---
 
+### `services/catalogConfigService.ts` — Configurações do Catálogo
+**Exporta:** `catalogConfigService` (instância de classe)
+**Tabelas:** `catalog_settings`, `category_display_config`
+**Cache:** 15 minutos em memória
+
+| Função | O que faz |
+|--------|-----------|
+| `getSettings(userId?)` | Busca configurações do catálogo (retorna `DEFAULT_CATALOG_SETTINGS` se não autenticado) |
+| `saveSettings(settings)` | Salva via upsert por `user_id` |
+| `getCategoryConfig(categoryId)` | Configuração de exibição de uma categoria |
+| `getAllCategoryConfigs()` | Todas as configurações de categorias |
+| `saveCategoryConfig(config)` | Salva config de categoria via upsert |
+| `applyVisibilityRules(products, settings)` | Filtra produtos por: `hide_inactive`, `hide_out_of_stock`, `hide_zero_price`, `min_stock_to_show` |
+| `applyCategoryVisibilityRules(categories, settings)` | Filtra categorias por: `hide_empty_categories`, `hide_categories_no_stock` |
+| `clearCache()` | Limpa cache |
+
+**⚠️ `getSettings` usa `supabase.auth.getUser()`** — depende de autenticação
+**⚠️ Usado por:** `useCatalog`, `CatalogConfigPage`, `CustomerCatalogPage`
+
+---
+
+### `services/catalogEditorService.ts` — Editor de Catálogo (Draft/Publish)
+**Exporta:** `catalogEditorService`
+**Tabelas:** `catalog_banners`, `catalog_settings`
+
+| Função | O que faz |
+|--------|-----------|
+| `loadCatalogState(mode)` | Carrega estado do catálogo (`'draft'` ou `'published'`) |
+| `saveDraft(state)` | Salva rascunho (banners + settings) |
+| `publish()` | Publica rascunho atual (copia draft → published) |
+| `discardDraft()` | Descarta rascunho |
+| `copyPublishedToDraft()` | Copia versão publicada para draft (para começar edição) |
+
+**⚠️ Fluxo:** `copyPublishedToDraft` → editar → `saveDraft` → `publish`
+**⚠️ Usado por:** `CatalogEditorPage`
+
+---
+
+### `services/catalogSectionsService.ts` — Seções do Catálogo
+**Exporta:** `catalogSectionsService` (instância de classe)
+**Tabela:** `catalog_sections`
+**Cache:** 5 minutos
+
+| Função | O que faz |
+|--------|-----------|
+| `getSections(userId?)` | Todas as seções do usuário |
+| `getActiveSections(userId?)` | Apenas seções habilitadas |
+| `getSection(id)` | Seção por ID |
+| `createSection(data)` | Cria nova seção |
+| `updateSection(id, updates)` | Atualiza seção |
+| `deleteSection(id)` | Remove seção |
+| `reorderSections(sectionIds)` | Reordena seções (drag & drop) |
+| `getProductsForSection(section)` | Busca produtos para uma seção (aplica filtros de tipo) |
+| `clearCache()` | Limpa cache |
+
+**Tipos de seção (`SectionType`):** `featured`, `new`, `category`, `brand`, `custom`
+**⚠️ Usado por:** `CatalogEditorPage`, `CatalogSection` (homepage)
+
+---
+
+### `services/inventory.ts` — Controle de Estoque
+**Exporta:** `inventoryService` (instância de classe)
+**Tabelas:** `products`, `stock_movements`
+
+| Função | O que faz |
+|--------|-----------|
+| `getInventory(filters)` | Lista produtos com filtros de inventário |
+| `getInventoryGrouped(filters)` | Produtos agrupados por `brand+model+color+storage` (serializados) ou individuais |
+| `getStats()` | Estatísticas: total de produtos, valor total, produtos com baixo estoque |
+| `adjustStock(adjustment)` | Ajusta estoque de um produto + registra movimento |
+| `getMovements(productId, limit)` | Histórico de movimentações de um produto |
+| `getLowStockProducts(threshold)` | Produtos com estoque abaixo do threshold (padrão: 10) |
+| `getBrands()` | Lista de marcas únicas no inventário |
+
+**⚠️ `adjustStock` cria registro em `stock_movements` (imutável — trilha de auditoria)**
+**⚠️ Usado por:** `InventoryPage`, `StockAdjustmentModal`
+
+---
+
+### `services/model-eans.ts` — EANs por Modelo
+**Exporta:** `modelEANsService`
+**Tabela:** `model_eans`
+
+| Função | O que faz |
+|--------|-----------|
+| `getByEAN(ean)` | Busca modelo pelo EAN (retorna `{found, model, ean_record}`) |
+| `getByModelId(modelId)` | Lista todos os EANs de um modelo |
+| `add(input)` | Adiciona EAN a um modelo (valida 13 dígitos) |
+| `update(id, updates)` | Atualiza EAN |
+| `setPrimary(id)` | Define EAN como principal |
+| `remove(id)` | Remove EAN |
+| `validateEAN13(ean)` | Valida checksum EAN-13 (síncrono) |
+| `checkDuplicate(ean)` | Verifica se EAN já existe no banco |
+
+**⚠️ `getByEAN` faz JOIN com `models`, `brands`, `categories`**
+**⚠️ Usado por:** `useEANAutofill` (ProductForm), `ModelModal`, `models-new.ts`
+
+---
+
+### `services/companyService.ts` — Dados da Empresa
+**Exporta:** `getCompanyData`, `saveCompanyData`, `clearCompanyData`
+**Tabela:** `company_settings` (registro único global)
+
+| Função | O que faz |
+|--------|-----------|
+| `getCompanyData()` | Busca dados da empresa (retorna `defaultCompany` se não existir) |
+| `saveCompanyData(data)` | Salva/atualiza dados da empresa |
+| `clearCompanyData()` | Remove todos os registros |
+
+**⚠️ DIFERENTE de `companySettingsService.ts`** — dois services para a mesma tabela!
+- `companyService.ts` → dados completos da empresa (CNPJ, endereço, redes sociais, PIX)
+- `companySettingsService.ts` → configurações de recibo/PDV (header, footer, largura)
+**⚠️ Usado por:** `CompanyPage` (configurações da empresa)
+
+---
+
 ### `services/customers.ts` — Clientes
 **Exporta:** `customerService` (instância de classe)
 **Tabela:** `customers`
