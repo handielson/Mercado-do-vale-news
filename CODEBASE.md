@@ -3349,3 +3349,252 @@ const [warrantyData, setWarrantyData] = useState<WarrantyTagData | null>(null);
 **⚠️ `is_gift=true`** → `unit_price` é mantido, mas `discount = unit_price` (desconto 100%)
 **⚠️ Pagamentos múltiplos** — venda pode ter vários métodos (ex: parte em dinheiro + parte no crédito)
 **⚠️ `handleSelectInstallment`** — cria `PaymentMethod` com `method='credit'`, `installments`, `fee_percentage`, `fee_amount`, `total_with_fee`
+
+---
+
+## 🧩 `services/custom-fields.ts` — Campos Customizados
+
+**Exporta:** `customFieldsService` (instância de `CustomFieldsService`)
+**Tabela:** `custom_fields`
+**Cache:** 5 minutos
+
+### `CustomField` — Tipos de campo disponíveis
+
+**`field_type`** (18 tipos):
+| Tipo | Descrição |
+|------|-----------|
+| `text` | Texto simples |
+| `textarea` | Texto longo |
+| `capitalize` | Primeira letra maiúscula |
+| `uppercase` | Tudo maiúsculo |
+| `lowercase` | Tudo minúsculo |
+| `titlecase` | Cada palavra maiúscula |
+| `sentence` | Primeira letra de cada frase |
+| `slug` | URL-friendly |
+| `phone` | Telefone formatado |
+| `cpf` | CPF formatado |
+| `cnpj` | CNPJ formatado |
+| `ncm` | NCM fiscal (8 dígitos) |
+| `ean13` | EAN-13 (13 dígitos) |
+| `cest` | CEST fiscal (7 dígitos) |
+| `brl` | Moeda BRL |
+| `select` | Seleção de opções |
+| `checkbox` | Booleano |
+| `table_relation` | Relação com outra tabela |
+
+**`category`:** `'basic' | 'spec' | 'price' | 'fiscal' | 'logistics'`
+
+### Métodos
+
+| Método | O que faz |
+|--------|-----------|
+| `list()` | Lista todos os campos da empresa (com cache) |
+| `getByCategory(category)` | Campos por categoria |
+| `getById(id)` | Campo por ID |
+| `getByKey(key)` | Campo por chave |
+| `create(input)` | Cria campo → limpa cache |
+| `update(id, input)` | Atualiza campo (system fields: só label/placeholder/help_text/options/display_order) |
+| `delete(id)` | Remove campo (system fields NÃO podem ser deletados) |
+| `reorder(fieldIds[])` | Reordena campos (atualiza `display_order`) |
+
+**`TableConfig`** (para `table_relation`):
+```ts
+{ table_name: string, value_column: string, label_column: string, order_by?: string }
+```
+
+**⚠️ System fields (`is_system=true`)** — não podem ser deletados e só permitem editar label/placeholder/help_text/options/display_order
+**⚠️ `getCompanyId`** — tenta auth context primeiro, fallback para primeiro registro da tabela `companies`
+**⚠️ Usado por:** `ModelModal`, `ProductForm`, `CustomFieldsLibraryPage`, `FieldConfigPage`
+
+---
+
+## 🏢 `services/companyService.ts` — Dados da Empresa
+
+**Exporta:** `getCompanyData`, `saveCompanyData`, `clearCompanyData`
+**Tabela:** `company_settings` (registro único global)
+
+| Função | O que faz |
+|--------|-----------|
+| `getCompanyData()` | Busca dados da empresa (retorna `defaultCompany` se vazio) |
+| `saveCompanyData(data)` | Upsert: atualiza se existe, insere se não existe |
+| `clearCompanyData()` | Deleta todos os registros (hard delete) |
+
+**Mapeamento de campos** (`rowToCompany` / `companyToRow`):
+| Banco (`snake_case`) | TypeScript (`camelCase`) |
+|---------------------|------------------------|
+| `razao_social` | `razaoSocial` |
+| `state_registration` | `stateRegistration` |
+| `situacao_cadastral` | `situacaoCadastral` |
+| `data_abertura` | `dataAbertura` |
+| `address_zip_code` | `address.zipCode` |
+| `address_street` | `address.street` |
+| `social_instagram` | `socialMedia.instagram` |
+| `pix_key` | `pixKey` |
+| `pix_key_type` | `pixKeyType` |
+| `pix_beneficiary_name` | `pixBeneficiaryName` |
+| `google_reviews_link` | `googleReviewsLink` |
+| `business_hours` | `businessHours` |
+| `internal_notes` | `internalNotes` |
+
+**Campos completos da tabela `company_settings`:**
+`name`, `razao_social`, `cnpj`, `state_registration`, `cnae`, `situacao_cadastral`, `data_abertura`, `porte`, `phone`, `email`, `logo`, `favicon`, `address_*` (7 campos), `address_lat/lng`, `social_*` (4 campos), `google_reviews_link`, `pix_key`, `pix_key_type`, `pix_beneficiary_name`, `bank_name`, `bank_agency`, `bank_account`, `business_hours`, `description`, `internal_notes`
+
+**⚠️ Registro único** — `saveCompanyData` faz `SELECT id LIMIT 1` antes de decidir INSERT vs UPDATE
+**⚠️ `clearCompanyData` usa `.neq('id', '00000000-...')`** — deleta todos os registros reais
+
+---
+
+## 📄 `services/warrantyDocumentService.ts` — Documentos de Garantia
+
+**Exporta:** `warrantyDocumentService`
+**Tabela:** `warranty_documents`
+**⚠️ `TEMP_COMPANY_ID = 'mercado-do-vale'`**
+
+| Método | O que faz |
+|--------|-----------|
+| `create(input)` | Cria documento de garantia |
+| `getBySaleId(saleId)` | Busca documento por ID da venda |
+| `getById(id)` | Busca documento por ID |
+| `list()` | Lista todos os documentos da empresa |
+| `update(id, input)` | Atualiza documento |
+| `remove(id)` | Remove documento |
+
+**`WarrantyDocumentInput`:**
+```ts
+{
+    sale_id: string;
+    customer_id: string;
+    delivery_type: DeliveryTypeWarranty;
+    customer_signature: string;  // Base64 da assinatura
+    warranty_content: string;    // HTML do documento gerado
+}
+```
+
+**⚠️ `customer_signature`** — imagem Base64 da assinatura digital do cliente
+**⚠️ `warranty_content`** — HTML completo do termo de garantia com dados preenchidos
+**⚠️ Chamado por:** `PDVPage.handleGenerateWarranty()` após assinatura
+
+---
+
+## 📐 `utils/calculateAveragePrice.ts` — Fórmula de Preço Médio
+
+**Exporta:** `calculateAveragePrice`, `calculateAllAveragePrices`
+
+### Fórmula
+```
+avgPrice = (currentStock × currentPrice + newQuantity × newPrice) / (currentStock + newQuantity)
+```
+Arredondado para 2 casas decimais: `Math.round(value * 100) / 100`
+
+### `calculateAveragePrice(input)` → `AveragePriceResult`
+```ts
+// Input
+{ currentStock: number, currentPrice: number, newQuantity: number, newPrice: number }
+
+// Output
+{ averagePrice: number, totalQuantity: number, priceChange: number, percentageChange: number }
+```
+
+**Caso especial:** se `currentStock === 0 || currentPrice === 0` → retorna `newPrice` diretamente (primeiro produto)
+
+### `calculateAllAveragePrices(currentStock, currentPrices, newQuantity, newPrices)`
+Aplica `calculateAveragePrice` para os 4 tipos de preço simultaneamente:
+`price_cost`, `price_retail`, `price_reseller`, `price_wholesale`
+
+**⚠️ Chamado por:** `averagePriceService.updateAveragePrices()`
+
+---
+
+## 📖 `config/field-dictionary.ts` — Dicionário de Campos
+
+**Propósito:** Fonte única de verdade para metadados de campos de formulário (label, placeholder, formato)
+**Usado por:** `SmartInput` component
+
+### `FieldFormat` — 20+ formatos disponíveis
+
+| Formato | Resultado |
+|---------|-----------|
+| `capitalize` | `"iphone 14"` → `"Iphone 14"` |
+| `uppercase` | `"iphone"` → `"IPHONE"` |
+| `lowercase` | `"IPHONE"` → `"iphone"` |
+| `titlecase` | `"iphone 14 pro"` → `"Iphone 14 Pro"` |
+| `sentence` | `"hello. world."` → `"Hello. World."` |
+| `slug` | `"iPhone 14 Pro"` → `"iphone-14-pro"` |
+| `phone` | `"11987654321"` → `"(11) 98765-4321"` |
+| `cpf` | `"12345678901"` → `"123.456.789-01"` |
+| `cnpj` | `"12345678000190"` → `"12.345.678/0001-90"` |
+| `cep` | `"12345678"` → `"12345-678"` |
+| `brl` | `"1234.56"` → `"R$ 1.234,56"` |
+| `numeric` | Remove não-números |
+| `alphanumeric` | Remove caracteres especiais |
+| `date_br` | `"31/01/2026"` |
+| `ncm` | 8 dígitos |
+| `ean13` | 13 dígitos |
+| `cest` | 7 dígitos |
+| `currency` | Usa `CurrencyInput` (centavos) |
+| `imei` | Usa `IMEIInput` (15 dígitos) |
+| `selector` | Usa componente dedicado |
+| `none` | Sem formatação |
+
+### `FieldDefinition`
+```ts
+{ label: string, placeholder: string, format: FieldFormat, required?: boolean, description?: string, minLength?: number, maxLength?: number }
+```
+
+### `FIELD_DICTIONARY`
+Objeto com 20+ campos pré-definidos: `name`, `sku`, `description`, `brand`, `model`, `color`, `storage`, `ram`, `version`, `battery_health`, `imei_1`, `imei_2`, `serial_number`, `phone`, `cpf`, `cnpj`, `cep`, `ncm`, `cest`, `slug`, `meta_title`, `meta_description`, etc.
+
+**⚠️ `getFieldDefinitionRuntime(name)`** — busca campo no dicionário em runtime
+**⚠️ `applyFieldFormat(value, format)`** — aplica formatação ao valor
+**⚠️ Campos `currency`, `imei`, `selector`** — NÃO usar com SmartInput, usar componentes dedicados
+
+---
+
+## 📋 `config/product-fields.ts` — Campos do Produto
+
+**Propósito:** Array de todos os campos do produto com categorias — usado para configuração de campos por categoria
+
+### `PRODUCT_FIELDS` — Campos disponíveis
+
+| Categoria | Campos |
+|-----------|--------|
+| `basic` | `category_id`, `brand`, `model`, `name`, `sku`, `description`, `images` |
+| `spec` | `specs.imei1`, `specs.imei2`, `specs.serial`, `specs.color`, `specs.storage`, `specs.ram`, `specs.version`, `specs.battery_health`, `specs.battery_mah`, `specs.display` |
+| `price` | `price_cost`, `price_retail`, `price_reseller`, `price_wholesale` |
+
+### `UNIQUE_FIELDS` — Campos que NÃO são auto-preenchidos do template do modelo
+
+```ts
+// Variação (diferem por produto do mesmo modelo)
+'ram', 'storage', 'color',
+// Identificadores únicos por unidade
+'imei1', 'imei2', 'serial', 'ean', 'sku'
+```
+
+**⚠️ Quando o EAN scanner preenche o formulário** via `template_values`, esses campos são ignorados
+**⚠️ Funções auxiliares:** `getFieldsByCategory()`, `getBasicFields()`, `getSpecFields()`, `getPriceFields()`
+
+---
+
+## 🧠 `components/ui/SmartInput` — Input Inteligente
+
+**Arquivo:** `components/ui/SmartInput.tsx`
+**Props:** `{ control: Control<T>, name: Path<T>, className?, disabled? }`
+
+### Como funciona
+1. Busca `FieldDefinition` no `FIELD_DICTIONARY` pelo `name`
+2. Se não encontrado → `console.warn` e retorna `null`
+3. Integra com `react-hook-form` via `Controller`
+4. Aplica `applyFieldFormat(value, fieldDef.format)` a cada keystroke
+5. Preserva posição do cursor após formatação (`setSelectionRange`)
+
+### O que renderiza
+- Label com asterisco se `required`
+- Input com placeholder do dicionário
+- Mensagem de erro do react-hook-form
+- Descrição do campo (se sem erro)
+- Contador de caracteres (se `maxLength` definido)
+
+**⚠️ Só funciona com campos cadastrados no `FIELD_DICTIONARY`**
+**⚠️ Para campos `currency`, `imei`, `selector`** — usar `CurrencyInput`, `IMEIInput`, `*Select` respectivamente
+**⚠️ Preserva cursor position** — usa `setTimeout(0)` para restaurar após formatação assíncrona
