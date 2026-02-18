@@ -2751,3 +2751,305 @@ const [searchQuery, setSearchQuery] = useState('');
 | `types/bulk-product.ts` | `BulkProduct` (entrada em lote) |
 | `types/model-architecture.ts` | `ModelEAN`, `ModelEANInput`, `EANSearchResult` |
 
+---
+
+## ✅ SCHEMAS DE VALIDAÇÃO (Zod)
+
+### `schemas/product.ts` — `productSchema`
+
+**Campos e regras:**
+
+| Campo | Tipo Zod | Regra |
+|-------|----------|-------|
+| `name` | `string.min(3)` | Obrigatório |
+| `price_retail` | `coerce.number.min(0)` | Obrigatório |
+| `price_reseller` | `coerce.number.min(0)` | Obrigatório |
+| `price_wholesale` | `coerce.number.min(0)` | Obrigatório |
+| `price_cost` | `coerce.number.min(0).nullable.optional` | Opcional |
+| `weight_kg` | `union([number, nan, null, undefined])` | Anti-NaN |
+| `dimensions` | `object({width_cm, height_cm, depth_cm})` | Anti-NaN |
+| `ncm` | `string.max(8).nullable.optional` | Fiscal |
+| `cest` | `string.max(7).nullable.optional` | Fiscal |
+| `track_inventory` | `boolean.default(true)` | |
+| `stock_quantity` | `coerce.number.int.min(0).nullable.optional` | |
+| `meta_title` | `string.max(60)` | SEO |
+| `meta_description` | `string.max(160)` | SEO |
+
+**3 `.refine()` de preço:**
+```ts
+price_retail >= price_reseller  // "Preço varejo deve ser >= preço revenda"
+price_reseller >= price_wholesale // "Preço revenda deve ser >= preço atacado"
+track_inventory=true → stock_quantity obrigatório
+```
+
+**Padrão Anti-NaN (campos de logística):**
+```ts
+z.union([z.number(), z.nan(), z.null(), z.undefined()])
+  .optional()
+  .transform(val => {
+    if (val === null || val === undefined || Number.isNaN(val) || val === 0) return undefined;
+    return val;
+  })
+```
+**⚠️ Limites dos Correios:** peso máx 30kg, dimensões máx 105cm
+
+---
+
+### `schemas/unit.ts` — `createUnitSchema(context)` — Traffic Light
+
+**Validação dinâmica** baseada em `CategoryConfig` + `ProductCondition`:
+
+```ts
+createUnitSchema({ categoryConfig, condition }) → ZodSchema
+```
+
+**Regras por campo:**
+| Campo | `'off'` | `'optional'` | `'required'` |
+|-------|---------|-------------|-------------|
+| `imei_1` | permissivo | `string.optional` | `string.length(15).regex(/^\d+$/)` |
+| `imei_2` | permissivo | `string.optional` | `string.optional` (sempre opcional) |
+| `serial_number` | permissivo | `string.optional` | `string.min(3)` |
+| `battery_health` | `number.optional` | `number.optional` | `number.min(0).max(100)` **só se `condition=USED`** |
+
+**Schemas pré-definidos:**
+```ts
+// Para celulares novos (padrão)
+export const unitSchema = createUnitSchema({
+    categoryConfig: { imei: 'required', serial: 'optional', battery_health: 'required', ... },
+    condition: ProductCondition.NEW
+});
+
+// Para atualizar só o status
+export const unitStatusUpdateSchema = z.object({ status: z.nativeEnum(UnitStatus) });
+```
+
+**⚠️ `battery_health` só é obrigatório** quando `condition === ProductCondition.USED AND categoryConfig.battery_health === 'required'`
+
+---
+
+## 🪝 HOOKS — Mapa Completo
+
+| Hook | Arquivo | O que faz |
+|------|---------|-----------|
+| `useProducts` | `hooks/useProducts.ts` | Lista produtos com filtros client-side |
+| `useCatalog` | `hooks/useCatalog.ts` | Carrega catálogo público (settings + produtos + metadata) |
+| `useShareUrl` | `hooks/useShareUrl.ts` | Compartilhamento em redes sociais + Web Share API |
+| `useEffectiveCustomerType` | `hooks/useEffectiveCustomerType.ts` | Tipo de cliente efetivo (com suporte a preview admin) |
+| `useEnrichedCustomFields` | `hooks/useEnrichedCustomFields.ts` | Campos customizados enriquecidos com valores |
+| `useFavicon` | `hooks/useFavicon.ts` | Atualiza favicon dinamicamente |
+| `usePageTitle` | `hooks/usePageTitle.ts` | Atualiza título da página |
+| `useSupabaseAuth` | `hooks/useSupabaseAuth.ts` | Re-exporta `useSupabaseAuth` do contexto |
+| `useTabUrl` | `hooks/useTabUrl.ts` | Gerencia URL de abas |
+
+---
+
+### `useProducts` — Detalhado
+
+**Retorna:**
+```ts
+{
+    products: Product[];        // filteredProducts
+    allProducts: Product[];     // todos sem filtro
+    isLoading: boolean;
+    error: string | null;
+    filters: ProductFiltersState;
+    handleFilterChange(newFilters): void;
+    refetch(): void;
+    deleteProduct(id): Promise<boolean>;
+}
+```
+
+**Filtros client-side** (aplicados após fetch):
+- `search` → filtra por `name` ou `sku` (case-insensitive)
+- `status` → filtra por `ProductStatus` (`'all'` = sem filtro)
+
+**⚠️ Busca todos os produtos de uma vez** — sem paginação server-side
+**⚠️ `deleteProduct` chama `refetch` automaticamente** após deletar
+
+---
+
+### `useCatalog` — Detalhado
+
+**Opções:** `{ initialFilters?, pageSize? }`
+
+**Responsabilidades:**
+1. `loadSettings()` — carrega `CatalogSettings` via `catalogConfigService`
+2. Carrega produtos via `catalogService` com filtros
+3. `loadMetadata()` — carrega metadata do catálogo (SEO, etc.)
+
+**⚠️ Usado pela homepage pública** e `CustomerCatalogPage`
+
+---
+
+### `useShareUrl` — Detalhado
+
+**Plataformas:** `'whatsapp' | 'facebook' | 'twitter' | 'email' | 'copy'`
+
+| Método | O que faz |
+|--------|-----------|
+| `generateShareUrl(platform, options)` | Gera URL sem abrir |
+| `shareUrl(platform, options)` | Gera URL e abre em nova aba |
+| `copyToClipboard(text)` | Copia via `navigator.clipboard` |
+| `canUseNativeShare()` | Verifica se Web Share API está disponível |
+| `nativeShare(options)` | Usa `navigator.share()` (mobile) |
+
+**⚠️ `'copy'` platform** → chama `copyToClipboard` em vez de abrir janela
+**⚠️ `nativeShare` só funciona em HTTPS** e mobile
+
+---
+
+### `useEffectiveCustomerType` — Detalhado
+
+**Problema que resolve:** Admin pode pré-visualizar o catálogo como cliente varejo/revenda/atacado.
+
+```ts
+// customer.customer_type === 'ADMIN' && customer.admin_preview_type === 'wholesale'
+// → retorna 'wholesale' (não 'ADMIN')
+useEffectiveCustomerType() → 'retail' | 'resale' | 'wholesale'
+```
+
+**Funções auxiliares (não hooks):**
+```ts
+getPriceField('retail')    → 'price_retail'
+getPriceField('resale')    → 'price_reseller'
+getPriceField('wholesale') → 'price_wholesale'
+
+getProductPrice(product, 'resale') → product.price_reseller || product.price_retail || 0
+getEffectivePrice(product, customer) → preço correto baseado no customer object
+```
+
+**⚠️ `getEffectivePrice`** — use quando não pode usar hooks (ex: callbacks, funções puras)
+
+---
+
+## 📄 `ProductDetailPage` — Detalhado
+
+**Arquivo:** `pages/admin/products/ProductDetailPage.tsx`
+**Rota:** `/admin/products/:id`
+**Propósito:** Página unificada de edição de produto + gestão de unidades físicas (IMEI)
+
+### Abas
+- **Aba "Produto"** → `ProductForm` (edição dos dados do produto)
+- **Aba "Unidades"** → `UnitList` (lista de IMEIs) + `UnitForm` (adicionar nova unidade)
+
+### Estado
+```ts
+const [product, setProduct] = useState<Product | null>(null);
+const [units, setUnits] = useState<Unit[]>([]);
+const [activeTab, setActiveTab] = useState<TabType>('product' | 'units');
+const [showUnitForm, setShowUnitForm] = useState(false);
+```
+
+### Handlers
+| Handler | O que faz |
+|---------|-----------|
+| `fetchProduct()` | Carrega produto por `params.id` |
+| `fetchUnits()` | Carrega unidades via `unitService.listByProduct(id)` |
+| `handleProductSubmit(data)` | Salva edições do produto |
+| `handleUnitSubmit(data)` | Cria nova unidade → refetch |
+| `handleDeleteUnit(unit)` | Deleta unidade → refetch |
+| `handleCancel()` | Volta para `/admin/products` |
+
+**⚠️ Só carrega unidades** quando aba "Unidades" está ativa (lazy load)
+
+---
+
+## 📋 `UnitForm` — Detalhado
+
+**Arquivo:** `components/units/UnitForm.tsx`
+**Props:** `{ productId, initialData?, onSubmit, onCancel, isLoading? }`
+
+### Fluxo de inicialização
+1. `loadConfig()` → busca produto por `productId` → busca categoria → obtém `CategoryConfig`
+2. Cria schema dinâmico: `createUnitSchema({ categoryConfig, condition })`
+3. Usa `react-hook-form` com `zodResolver(schema)`
+
+**⚠️ Schema recriado** quando `condition` muda (campo no formulário)
+**⚠️ Campos exibidos** dependem do `CategoryConfig` (Traffic Light)
+
+---
+
+## 📋 `ProductListPage` — Detalhado
+
+**Arquivo:** `pages/admin/products/ProductListPage.tsx`
+**Rota:** `/admin/products`
+
+### Botões de ação
+| Botão | Ação |
+|-------|------|
+| **Exportar Catálogo** (roxo) | Abre `ExportCatalogModal` |
+| **Cadastro em Massa** (verde) | Navega para `/admin/products/bulk` |
+| **Novo Produto** (azul) | Navega para `/admin/products/new` |
+
+**Usa:** `useProducts` hook, `ProductFilters`, `ProductList`, `ExportCatalogModal`
+**⚠️ Delete usa `window.confirm`** — sem modal customizado
+
+---
+
+## 💾 `backup-daily.ps1` — Script de Backup
+
+**Localização:** raiz do projeto
+**Como executar:** `.\backup-daily.ps1` no PowerShell
+
+**O que faz:**
+1. Verifica se há mudanças (`git status --porcelain`)
+2. Se sim: `git add .` → `git commit -m "🔄 Backup Diário - YYYY-MM-DD às HH:mm"` → `git tag -a backup-YYYY-MM-DD`
+3. Se não: exibe mensagem "Nenhuma mudança detectada"
+4. Lista os últimos 5 backups (`git tag -l "backup-*"`)
+
+**⚠️ Cria tag anotada** (`-a`) — inclui mensagem e data
+**⚠️ Faz `git add .`** — inclui TODOS os arquivos modificados
+**⚠️ Não faz `git push`** — apenas commit local
+
+---
+
+## 🔑 VARIÁVEIS DE AMBIENTE
+
+| Variável | Onde usar | O que faz |
+|----------|-----------|-----------|
+| `VITE_SUPABASE_URL` | `.env` | URL do projeto Supabase |
+| `VITE_SUPABASE_ANON_KEY` | `.env` | Chave anônima do Supabase |
+| `VITE_DEV_MODE` | `.env.local` | `true` = pula autenticação (desenvolvimento) |
+| `VITE_GEMINI_API_KEY` | `.env` | Chave da API Gemini (geração de SEO) |
+
+**⚠️ `VITE_DEV_MODE=true`** — nunca usar em produção, pula toda autenticação
+**⚠️ Arquivo `.env`** — não commitar (está no `.gitignore`)
+
+---
+
+## 🏗️ ARQUITETURA DE COMPONENTES — Hierarquia
+
+```
+AdminLayout
+└── [Página Admin]
+    ├── ProductListPage
+    │   ├── ProductFilters
+    │   ├── ProductList
+    │   │   └── ProductCard (admin)
+    │   └── ExportCatalogModal
+    ├── ProductDetailPage
+    │   ├── ProductForm
+    │   │   ├── ProductBasicInfo
+    │   │   ├── ProductSpecifications
+    │   │   │   ├── BrandSelect
+    │   │   │   ├── ModelSelect
+    │   │   │   ├── ColorSelect
+    │   │   │   ├── RamSelect
+    │   │   │   ├── CapacitySelect
+    │   │   │   └── VersionSelect
+    │   │   └── EANInput
+    │   ├── UnitList
+    │   └── UnitForm
+    └── [Settings Pages]
+        ├── BrandsPage → BrandModal
+        ├── ModelsPage → ModelModal (+ ColorImageManager)
+        └── ColorsPage → ColorModal
+
+[Catálogo Público]
+└── CustomerCatalogPage
+    ├── ModernProductCard (novo)
+    └── ProductCard (legado)
+
+PDVPage (standalone, sem AdminLayout)
+```
+
