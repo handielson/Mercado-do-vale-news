@@ -3053,3 +3053,299 @@ AdminLayout
 PDVPage (standalone, sem AdminLayout)
 ```
 
+---
+
+## 🛍️ `types/product.ts` — Tipo `Product` Completo
+
+**⚠️ REGRA CRÍTICA: Todos os preços são em CENTAVOS (integer)**
+```ts
+// R$ 10,50 → 1050 (centavos)
+// Nunca armazenar como float
+```
+
+### Interface `Product`
+
+| Campo | Tipo | Observação |
+|-------|------|-----------|
+| `id` | `string` | UUID |
+| `model_id` | `string` | FK → `models` (source of truth) |
+| `model` | `string` | Nome denormalizado para display |
+| `category_id` | `string?` | Override do modelo |
+| `brand` | `string?` | Override do modelo |
+| `name` | `string` | Nome do produto |
+| `sku` | `string` | Código único |
+| `price_cost` | `number` | Custo em centavos |
+| `price_retail` | `number` | Varejo em centavos |
+| `price_reseller` | `number` | Revenda em centavos |
+| `price_wholesale` | `number` | Atacado em centavos |
+| `images` | `string[]` | URLs ou blob URLs |
+| `eans` | `string[]` | Códigos EAN-13 |
+| `ncm` | `string?` | 8 dígitos — fiscal |
+| `cest` | `string?` | 7 dígitos — fiscal |
+| `origin` | `ProductOrigin?` | Origem da mercadoria (0-8) |
+| `weight_kg` | `number?` | Peso em kg |
+| `dimensions` | `ProductDimensions?` | `{width_cm, height_cm, depth_cm}` |
+| `specs` | `Record<string, any>` | JSONB flexível por categoria |
+| `status` | `ProductStatus` | `active`, `inactive`, `draft` |
+| `track_inventory` | `boolean` | Se true, controla estoque |
+| `stock_quantity` | `number?` | Null se `track_inventory=false` |
+| `is_gift` | `boolean?` | Brinde → desconto 100% automático no PDV |
+| `warranty_type` | `WarrantyType` | `'brand'`, `'category'`, `'custom'` |
+| `warranty_template_id` | `string?` | Só quando `warranty_type='custom'` |
+| `description` | `string?` | HTML/Rich Text para SEO |
+| `slug` | `string?` | URL-friendly |
+| `meta_title` | `string?` | Máx 60 chars |
+| `meta_description` | `string?` | Máx 160 chars |
+| `keywords` | `string[]?` | Tags para busca/SEO |
+| `created` | `string` | ISO timestamp |
+| `updated` | `string` | ISO timestamp |
+
+### `ProductOrigin` — Enum Fiscal
+```ts
+enum ProductOrigin {
+    NATIONAL = '0',                    // Nacional
+    FOREIGN_DIRECT = '1',              // Estrangeira - Importação direta
+    FOREIGN_INTERNAL = '2',            // Estrangeira - Adquirida no mercado interno
+    NATIONAL_FOREIGN_40 = '3',         // Nacional com conteúdo estrangeiro > 40%
+    NATIONAL_FOREIGN_70 = '4',         // Nacional com conteúdo estrangeiro <= 40%
+    NATIONAL_IMPORT_NO_SIMILAR = '5',  // Nacional com importação sem similar
+    FOREIGN_NO_SIMILAR = '6',          // Estrangeira sem similar nacional
+    FOREIGN_INDUSTRIALIZATION = '7',   // Estrangeira - Industrialização no Brasil
+    NATIONAL_FOREIGN_70_NO_SIMILAR = '8'
+}
+```
+
+**⚠️ `is_gift=true`** → PDV aplica desconto de 100% automaticamente
+**⚠️ `specs` é JSONB** → query com `specs->>'ram'` no Supabase
+**⚠️ `model_id` é a fonte de verdade** — `brand` e `category_id` no produto são overrides
+
+---
+
+## 💰 `types/sale.ts` — Sistema de Vendas (PDV)
+
+### `PaymentMethod`
+```ts
+{
+    method: 'money' | 'credit' | 'debit' | 'pix';
+    amount: number;           // Valor BASE em centavos (sem taxa)
+    installments?: number;    // Apenas para 'credit'
+    fee_percentage?: number;  // Taxa aplicada (%)
+    fee_amount?: number;      // Valor da taxa em centavos
+    total_with_fee: number;   // amount + fee_amount
+}
+```
+
+### `SaleItem` (Carrinho)
+```ts
+{
+    id: string;              // UUID temporário (gerado no frontend)
+    product_id: string;
+    product_name: string;
+    product_sku?: string;
+    quantity: number;
+    unit_price: number;      // em centavos
+    unit_cost: number;       // price_cost do produto (em centavos)
+    discount: number;        // desconto por unidade (em centavos)
+    subtotal: number;        // unit_price × quantity
+    total: number;           // subtotal - (discount × quantity)
+    is_gift: boolean;
+    track_inventory: boolean;
+    stock_quantity?: number;
+}
+```
+
+### `Sale` (Venda Completa)
+```ts
+{
+    id: string;
+    customer_id: string;      // OBRIGATÓRIO
+    seller_id?: string;
+    subtotal: number;         // em centavos
+    discount_total: number;   // em centavos
+    total: number;            // em centavos
+    cost_total: number;       // em centavos
+    profit: number;           // em centavos
+    payment_methods: PaymentMethod[];
+    notes?: string;
+    status: 'completed' | 'cancelled' | 'refunded';
+    delivery_type?: 'store_pickup' | 'store_delivery' | 'hybrid_delivery';
+    delivery_person_id?: string;
+    delivery_cost_store?: number;    // custo para a loja (em centavos)
+    delivery_cost_customer?: number; // custo para o cliente (em centavos)
+    delivery_total?: number;         // total de entrega (em centavos)
+    promotional_discount?: number;   // em centavos
+    created_at: string;
+    updated_at: string;
+}
+```
+
+### `DeliveryCredit`
+```ts
+{
+    id: string;
+    delivery_person_id: string;
+    sale_id: string;
+    amount: number;           // em centavos
+    delivery_type: DeliveryType;
+    status: 'pending' | 'paid' | 'cancelled';
+    paid_at?: string;
+}
+```
+
+**⚠️ Todos os valores monetários em centavos** — nunca float
+**⚠️ `SaleItem.id`** — UUID temporário gerado no frontend, não persiste no banco
+**⚠️ `delivery_cost_store`** — custo que a loja paga ao entregador (vai para `delivery_credits`)
+**⚠️ `delivery_cost_customer`** — custo cobrado do cliente (vai para o total da venda)
+
+---
+
+## 🏪 `services/saleService.ts` — Serviço de Vendas
+
+**Exporta funções individuais** (não classe)
+**Tabelas:** `sales`, `sale_items`, `delivery_credits`
+**⚠️ Sem filtro por `company_id`** — vendas são globais no schema atual
+
+### `createSale(saleInput)` — Fluxo Crítico
+```
+1. calculateSaleTotals(items) → {subtotal, discount_total, total, cost_total, profit}
+2. INSERT em 'sales' → obtém sale.id
+3. INSERT em 'sale_items' (todos de uma vez)
+   ↳ Se falhar → DELETE sale (rollback manual)
+4. Se delivery_person_id + delivery_total > 0:
+   → INSERT em 'delivery_credits' (status='pending')
+   ↳ Se falhar → apenas loga, NÃO faz rollback da venda
+```
+
+**⚠️ Rollback parcial** — se `sale_items` falhar, a venda é deletada. Mas se `delivery_credits` falhar, a venda permanece.
+
+### Funções
+
+| Função | O que faz |
+|--------|-----------|
+| `createSale(input)` | Cria venda + itens + crédito de entrega |
+| `getSaleById(id)` | Venda com join em `customers` e `team_members` |
+| `getSales(filters?)` | Lista vendas com join + **N+1 para items** |
+| `cancelSale(id)` | `status='cancelled'` + cancela `delivery_credits` |
+| `refundSale(id)` | `status='refunded'` + cancela `delivery_credits` |
+| `getSalesSummary(filters?)` | `{total_sales, total_revenue, total_profit, average_ticket, profit_margin}` |
+
+**⚠️ `getSales` tem problema N+1** — busca items de cada venda separadamente (um query por venda)
+**⚠️ `getSalesSummary` só conta vendas `completed`** — cancelladas e refundadas são ignoradas
+
+### Tabelas do banco
+
+**`sales`:**
+| Coluna | Tipo |
+|--------|------|
+| `id` | UUID PK |
+| `customer_id` | UUID FK customers |
+| `seller_id` | UUID FK team_members |
+| `subtotal`, `discount_total`, `total`, `cost_total`, `profit` | INTEGER (centavos) |
+| `payment_methods` | JSONB (array de PaymentMethod) |
+| `status` | TEXT (`completed`, `cancelled`, `refunded`) |
+| `delivery_type`, `delivery_person_id` | TEXT/UUID |
+| `delivery_cost_store`, `delivery_cost_customer`, `delivery_total` | INTEGER |
+| `notes` | TEXT |
+
+**`sale_items`:**
+| Coluna | Tipo |
+|--------|------|
+| `id` | UUID PK |
+| `sale_id` | UUID FK sales |
+| `product_id` | UUID FK products |
+| `product_name`, `product_sku` | TEXT |
+| `quantity` | INTEGER |
+| `unit_price`, `unit_cost`, `discount`, `subtotal`, `total` | INTEGER (centavos) |
+| `is_gift` | BOOLEAN |
+
+---
+
+## 👤 `services/customers.ts` — Serviço de Clientes
+
+**Exporta:** `customerService` (instância de `CustomerService`)
+**Tabela:** `customers`
+**Cache:** 5 minutos (igual ao `TeamService`)
+**⚠️ `TEMP_COMPANY_ID = 'mercado-do-vale'`**
+
+| Método | O que faz |
+|--------|-----------|
+| `list(filters?)` | Lista com filtros: `search` (nome/CPF/email), `is_active`, datas |
+| `getById(id)` | Cliente por ID |
+| `getByCpfCnpj(cpfCnpj)` | Cliente por CPF/CNPJ |
+| `create(input)` | Cria cliente → limpa cache |
+| `update(id, input)` | Atualiza cliente → limpa cache |
+| `softDelete(id)` | `is_active = false` |
+| `delete(id)` | Hard delete → limpa cache |
+| `search(query)` | Busca por nome/CPF/email (chama `list({search: query})`) |
+| `getActiveCount()` | Conta clientes ativos |
+| `clearCache()` | Limpa cache manualmente |
+
+**`CustomerFilters`:** `{ search?, is_active?, created_after?, created_before? }`
+**⚠️ `search` usa `.or(name.ilike, cpf_cnpj.ilike, email.ilike)`** — busca nos 3 campos
+**⚠️ `getById` não usa `company_id`** — busca global por ID
+
+### Tabela `customers`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `name` | TEXT | Nome completo |
+| `cpf_cnpj` | TEXT | CPF ou CNPJ |
+| `email` | TEXT | |
+| `phone` | TEXT | |
+| `is_active` | BOOLEAN | Soft delete |
+| `customer_type` | TEXT | `'retail'`, `'resale'`, `'wholesale'`, `'ADMIN'` |
+| `admin_preview_type` | TEXT | Tipo de preview para admin |
+| `created_at` | TIMESTAMPTZ | |
+
+---
+
+## 🖥️ `PDVPage` — Ponto de Venda
+
+**Arquivo:** `pages/pdv/PDVPage.tsx`
+**Rota:** `/admin/pdv`
+**Layout:** Standalone (sem `AdminLayout`, tela cheia)
+**Tamanho:** 497 linhas, 20KB
+
+### Estado Principal
+```ts
+const [cart, setCart] = useState<SaleItem[]>([]);
+const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
+const [delivery, setDelivery] = useState<DeliveryInfo | null>(null);
+const [warrantyData, setWarrantyData] = useState<WarrantyTagData | null>(null);
+```
+
+### Handlers Críticos
+
+| Handler | O que faz |
+|---------|-----------|
+| `fetchPaymentFees()` | Carrega taxas de pagamento do banco |
+| `handleAddToCart(product, qty)` | Adiciona produto ao carrinho (agrupa se já existe) |
+| `handleUpdateQuantity(itemId, qty)` | Atualiza quantidade de item |
+| `handleRemoveItem(itemId)` | Remove item do carrinho |
+| `handleClearCart()` | Limpa carrinho + pagamentos |
+| `handleAddPayment(payment)` | Adiciona método de pagamento |
+| `handleRemovePayment(index)` | Remove método de pagamento |
+| `handleDeliveryChange(type, personId, costStore, costCustomer)` | Atualiza dados de entrega |
+| `handleSelectInstallment(installments, amount, feeAmount)` | Seleciona parcelamento no crédito |
+| `handleFinalizeSale()` | **Finaliza a venda** |
+| `generateWarrantyTerm(sale, customer, items)` | Gera dados para o termo de garantia |
+| `handleWarrantyDeliveryTypeChange(type)` | Atualiza tipo de entrega no termo |
+| `handleGenerateWarranty(signature)` | Salva termo de garantia com assinatura |
+
+### `handleFinalizeSale()` — Fluxo
+```
+1. Valida: carrinho não vazio + cliente selecionado + pagamentos cobrem o total
+2. createSale(saleInput) → Sale
+3. generateWarrantyTerm(sale, customer, items) → WarrantyTagData
+4. Exibe modal de garantia para assinatura
+5. handleGenerateWarranty(signature) → salva documento
+6. Limpa carrinho e navega para /admin/pdv
+```
+
+**⚠️ `handleAddToCart`** — se produto já está no carrinho, incrementa quantidade (não duplica)
+**⚠️ `is_gift=true`** → `unit_price` é mantido, mas `discount = unit_price` (desconto 100%)
+**⚠️ Pagamentos múltiplos** — venda pode ter vários métodos (ex: parte em dinheiro + parte no crédito)
+**⚠️ `handleSelectInstallment`** — cria `PaymentMethod` com `method='credit'`, `installments`, `fee_percentage`, `fee_amount`, `total_with_fee`
