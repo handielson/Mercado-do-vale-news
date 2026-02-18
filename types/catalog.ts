@@ -99,6 +99,7 @@ export interface CatalogProduct extends Product {
     seo_keywords?: string[];
     // Note: images is inherited from Product as string[] - do not override
     is_favorite?: boolean;
+    category_slug?: string; // Slug da categoria para exibição de badges
 }
 
 // Product Variants - For grouping products by model

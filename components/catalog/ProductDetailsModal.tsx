@@ -46,6 +46,16 @@ const SPEC_LABELS: Record<string, string> = {
     weight: 'Peso',
     dimensions: 'Dimensões',
     color: 'Cor',
+    material: 'Material',
+    // Dimensions (nested keys like "Dimensions.Depth")
+    'dimensions.depth': 'Profundidade',
+    'dimensions.width': 'Largura',
+    'dimensions.height': 'Altura',
+    'dimensions.weight': 'Peso',
+    depth: 'Profundidade',
+    width: 'Largura',
+    height: 'Altura',
+    length: 'Comprimento',
     // Software
     version: 'Versão',
     os: 'Sistema Operacional',
@@ -55,6 +65,54 @@ const SPEC_LABELS: Record<string, string> = {
     sensors: 'Sensores',
     audio: 'Áudio',
     gps: 'GPS',
+    // Accessories / General
+    compatibility: 'Compatibilidade',
+    max_load: 'Carga Máxima',
+    installation: 'Instalação',
+    warranty: 'Garantia',
+    quantity: 'Quantidade',
+    type: 'Tipo',
+    brand: 'Marca',
+    model: 'Modelo',
+    // Dimensions with _cm suffix
+    depth_cm: 'Profundidade (cm)',
+    height_cm: 'Altura (cm)',
+    width_cm: 'Largura (cm)',
+    length_cm: 'Comprimento (cm)',
+    weight_kg: 'Peso (kg)',
+    weight_g: 'Peso (g)',
+    peso_g: 'Peso (g)',
+    peso_kg: 'Peso (kg)',
+    // Other common fields
+    voltage: 'Voltagem',
+    power_w: 'Potência (W)',
+    frequency: 'Frequência',
+    capacity: 'Capacidade',
+    speed: 'Velocidade',
+    interface: 'Interface',
+    connector: 'Conector',
+    cable_length: 'Comprimento do Cabo',
+    color_name: 'Cor',
+    finish: 'Acabamento',
+    origin: 'Origem',
+    certification: 'Certificação',
+};
+
+/** Converts an unknown field key to a human-readable Portuguese label */
+const formatFieldKey = (key: string): string => {
+    const lower = key.toLowerCase();
+    // Check full key first
+    if (SPEC_LABELS[lower]) return SPEC_LABELS[lower];
+    // Handle dotted keys like "Dimensions.Depth" → check last segment
+    if (lower.includes('.')) {
+        const parts = lower.split('.');
+        const lastPart = parts[parts.length - 1];
+        if (SPEC_LABELS[lastPart]) return SPEC_LABELS[lastPart];
+        // Return last segment formatted
+        return lastPart.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+    // Default: replace underscores and capitalize
+    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 };
 
 export function ProductDetailsModal({
@@ -73,6 +131,7 @@ export function ProductDetailsModal({
     const [templateValues, setTemplateValues] = useState<Record<string, any> | null>(null);
     const [loadingTemplate, setLoadingTemplate] = useState(false);
     const [installment12x, setInstallment12x] = useState<string>('');
+    const [warrantyDays, setWarrantyDays] = useState<number | null>(null);
 
     // Calculate 12x installment when modal opens (not for wholesale)
     useEffect(() => {
@@ -145,6 +204,57 @@ export function ProductDetailsModal({
             cancelled = true;
         };
     }, [isOpen, product.model_id]);
+
+    // Fetch warranty days from brand, category or custom template
+    useEffect(() => {
+        if (!isOpen) return;
+        setWarrantyDays(null);
+
+        const fetchWarranty = async () => {
+            try {
+                const p = product as any;
+                const warrantyType = p.warranty_type;
+
+                if (warrantyType === 'brand') {
+                    // Busca warranty_days da marca pelo nome (product.brand)
+                    const brandName = p.brand;
+                    if (brandName) {
+                        const { data } = await supabase
+                            .from('brands').select('warranty_days').eq('name', brandName).single();
+                        if (data?.warranty_days) setWarrantyDays(data.warranty_days);
+                    }
+                } else if (warrantyType === 'category') {
+                    let categoryId = p.category_id;
+                    if (!categoryId && p.id) {
+                        const { data: prod } = await supabase
+                            .from('products').select('category_id').eq('id', p.id).single();
+                        categoryId = prod?.category_id;
+                    }
+                    if (categoryId) {
+                        const { data } = await supabase
+                            .from('categories').select('warranty_days').eq('id', categoryId).single();
+                        if (data?.warranty_days) setWarrantyDays(data.warranty_days);
+                    }
+                } else if (warrantyType === 'custom') {
+                    let templateId = p.warranty_template_id;
+                    if (!templateId && p.id) {
+                        const { data: prod } = await supabase
+                            .from('products').select('warranty_template_id').eq('id', p.id).single();
+                        templateId = prod?.warranty_template_id;
+                    }
+                    if (templateId) {
+                        const { data } = await supabase
+                            .from('warranty_templates').select('duration_days').eq('id', templateId).single();
+                        if (data?.duration_days) setWarrantyDays(data.duration_days);
+                    }
+                }
+            } catch (err) {
+                console.error('[ProductDetailsModal] Error fetching warranty:', err);
+            }
+        };
+
+        fetchWarranty();
+    }, [isOpen, product]);
 
     if (!isOpen) return null;
 
@@ -230,7 +340,7 @@ export function ProductDetailsModal({
                                         .map(([key, value]) => (
                                             <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
                                                 <span className="text-sm font-medium text-slate-600">
-                                                    {SPEC_LABELS[key.toLowerCase()] ?? key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}:
+                                                    {formatFieldKey(key)}:
                                                 </span>
                                                 <span className="text-sm text-slate-900 font-semibold">
                                                     {String(value)}
@@ -245,6 +355,37 @@ export function ProductDetailsModal({
                                 <p className="text-sm text-slate-600">Especificações técnicas não disponíveis</p>
                             </div>
                         )}
+
+                        {/* Warranty */}
+                        {(() => {
+                            const warrantyType = (product as any).warranty_type as string | undefined;
+                            const warrantyLabel = warrantyType === 'brand' ? 'Garantia da Marca'
+                                : warrantyType === 'category' ? 'Garantia da Categoria'
+                                    : warrantyType === 'custom' ? 'Garantia Diferenciada'
+                                        : null;
+                            if (!warrantyLabel) return null;
+                            return (
+                                <div className="border-t border-slate-200 pt-6">
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                        🛡️ Garantia
+                                    </h3>
+                                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-4">
+                                        <div className="text-3xl">🛡️</div>
+                                        <div>
+                                            <p className="font-semibold text-green-800">{warrantyLabel}</p>
+                                            {warrantyDays !== null && (
+                                                <p className="text-sm text-green-700 mt-0.5">
+                                                    Período: <strong>{warrantyDays} dias</strong>
+                                                    {warrantyDays >= 365 && (
+                                                        <span className="ml-1 text-green-600">({Math.round(warrantyDays / 30)} meses)</span>
+                                                    )}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* Pricing */}
                         <div className="border-t border-slate-200 pt-6">

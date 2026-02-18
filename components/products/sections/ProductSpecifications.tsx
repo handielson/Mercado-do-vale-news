@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { UseFormWatch, UseFormSetValue, FieldErrors } from 'react-hook-form';
 import { ProductInput } from '../../../types/product';
 import { CategoryConfig, FieldRequirement } from '../../../types/category';
@@ -6,10 +6,11 @@ import { IMEIInput } from '../../ui/IMEIInput';
 import { ColorSelect } from '../selectors/ColorSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
 import { VersionSelect } from '../selectors/VersionSelect';
-import { Package, RefreshCw } from 'lucide-react';
+import { Package, RefreshCw, Loader2 } from 'lucide-react';
 import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
 import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
 import { TableRelationField } from '../../fields/TableRelationField';
+import { supabase } from '../../../services/supabase';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -17,20 +18,52 @@ interface ProductSpecificationsProps {
     setValue: UseFormSetValue<ProductInput>;
     errors: FieldErrors<ProductInput>;
     onRefresh?: () => void;
+    templateValues?: Record<string, any>;
+    onSerialConfirm?: (type: 'serial' | 'imei1' | 'imei2', value: string) => void;
 }
+
+// Fields that must be unique per product
+const DB_UNIQUE_FIELDS = ['serial', 'imei1', 'imei2'];
 
 export function ProductSpecifications({
     categoryConfig,
     watch,
     setValue,
     errors,
-    onRefresh
+    onRefresh,
+    templateValues,
+    onSerialConfirm
 }: ProductSpecificationsProps) {
     // ANTIGRAVITY PROTOCOL: Custom Fields Synchronization
-    // Enrich custom fields with data from library (supports old & new formats)
     const { fields: customFields, loading: fieldsLoading } = useEnrichedCustomFields(
         categoryConfig?.custom_fields
     );
+
+    // Unique field validation state
+    const [uniqueErrors, setUniqueErrors] = useState<Record<string, string>>({});
+    const [checkingField, setCheckingField] = useState<string | null>(null);
+
+    const checkUniqueInDb = useCallback(async (field: string, value: string) => {
+        if (!value || !DB_UNIQUE_FIELDS.includes(field)) return;
+        setCheckingField(field);
+        try {
+            const { data, error } = await supabase
+                .from('products')
+                .select('id')
+                .eq(`specs->>${field}`, value)
+                .limit(1);
+            if (error) throw error;
+            setUniqueErrors(prev => ({
+                ...prev,
+                [field]: data && data.length > 0 ? 'Já cadastrado no sistema' : ''
+            }));
+        } catch {
+            // silently ignore
+        } finally {
+            setCheckingField(null);
+        }
+    }, []);
+
     if (!categoryConfig) return null;
 
     // Helper para Labels com Asterisco
@@ -53,32 +86,62 @@ export function ProductSpecifications({
 
         // Text input
         if (metadata.type === 'text' || metadata.type === 'number') {
+            const isUnique = DB_UNIQUE_FIELDS.includes(key);
+            const uniqueError = uniqueErrors[key];
+            const isChecking = checkingField === key;
             return (
                 <div key={key} className="space-y-1">
                     <FieldLabel label={metadata.label} required={isRequired} />
-                    <input
-                        id={`field-${key}`}
-                        type={metadata.type}
-                        value={watch(fieldKey) || ''}
-                        onChange={(e) => setValue(fieldKey, e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                const form = e.currentTarget.form;
-                                if (form) {
-                                    const inputs = Array.from(form.querySelectorAll('input, select, textarea'));
-                                    const currentIndex = inputs.indexOf(e.currentTarget);
-                                    const nextInput = inputs[currentIndex + 1] as HTMLElement;
-                                    if (nextInput) nextInput.focus();
+                    <div className="relative">
+                        <input
+                            id={`field-${key}`}
+                            type={metadata.type}
+                            value={watch(fieldKey) || ''}
+                            onChange={(e) => {
+                                setValue(fieldKey, e.target.value);
+                                // Clear unique error when user starts typing again
+                                if (isUnique && uniqueErrors[key]) {
+                                    setUniqueErrors(prev => ({ ...prev, [key]: '' }));
                                 }
-                            }
-                        }}
-                        className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${errors?.specs?.[key] ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
-                            }`}
-                        placeholder={metadata.placeholder}
-                    />
+                            }}
+                            onBlur={(e) => {
+                                if (isUnique && e.target.value) {
+                                    checkUniqueInDb(key, e.target.value);
+                                }
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const val = (e.currentTarget as HTMLInputElement).value;
+                                    // If serial/unique field and has value, add to list
+                                    if (isUnique && val && onSerialConfirm) {
+                                        onSerialConfirm(key as 'serial' | 'imei1' | 'imei2', val);
+                                        setValue(fieldKey, '');
+                                        setUniqueErrors(prev => ({ ...prev, [key]: '' }));
+                                        return;
+                                    }
+                                    const form = e.currentTarget.form;
+                                    if (form) {
+                                        const inputs = Array.from(form.querySelectorAll('input, select, textarea'));
+                                        const currentIndex = inputs.indexOf(e.currentTarget);
+                                        const nextInput = inputs[currentIndex + 1] as HTMLElement;
+                                        if (nextInput) nextInput.focus();
+                                    }
+                                }
+                            }}
+                            className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${(errors?.specs?.[key] || uniqueError) ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
+                                } ${isChecking ? 'pr-8' : ''}`}
+                            placeholder={metadata.placeholder}
+                        />
+                        {isChecking && (
+                            <Loader2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
+                        )}
+                    </div>
                     {errors?.specs?.[key] && (
                         <p className="text-xs text-red-600 mt-1">{errors.specs[key].message}</p>
+                    )}
+                    {uniqueError && !errors?.specs?.[key] && (
+                        <p className="text-xs text-red-600 mt-1">⚠️ {uniqueError}</p>
                     )}
                 </div>
             );
@@ -136,7 +199,7 @@ export function ProductSpecifications({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 {/* IMEI 1 */}
-                {categoryConfig.imei1 !== 'off' && (
+                {categoryConfig.imei1 && categoryConfig.imei1 !== 'off' && (
                     <div className="space-y-1">
                         <IMEIInput
                             label="IMEI 1"
@@ -145,25 +208,26 @@ export function ProductSpecifications({
                             onChange={(val) => setValue('specs.imei1', val)}
                             required={categoryConfig.imei1 === 'required'}
                             placeholder="Digite 15 dígitos"
+                            onBlur={(e) => { if (e.target.value.length === 15) checkUniqueInDb('imei1', e.target.value); }}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
-                                    // Focus next field (IMEI2 or Serial)
                                     const nextField = document.getElementById('field-imei2') || document.getElementById('field-serial');
-                                    if (nextField) {
-                                        (nextField as HTMLInputElement).focus();
-                                    }
+                                    if (nextField) (nextField as HTMLInputElement).focus();
                                 }
                             }}
                         />
                         {categoryConfig.imei1 === 'required' && errors?.specs?.imei1?.message && (
                             <p className="text-xs text-red-600 mt-1">{errors.specs.imei1.message}</p>
                         )}
+                        {uniqueErrors.imei1 && (
+                            <p className="text-xs text-red-600 mt-1">⚠️ {uniqueErrors.imei1}</p>
+                        )}
                     </div>
                 )}
 
                 {/* IMEI 2 */}
-                {categoryConfig.imei2 !== 'off' && (
+                {categoryConfig.imei2 && categoryConfig.imei2 !== 'off' && (
                     <div className="space-y-1">
                         <IMEIInput
                             id="field-imei2"
@@ -173,25 +237,26 @@ export function ProductSpecifications({
                             onChange={(val) => setValue('specs.imei2', val)}
                             required={categoryConfig.imei2 === 'required'}
                             placeholder="Digite 15 dígitos"
+                            onBlur={(e) => { if (e.target.value.length === 15) checkUniqueInDb('imei2', e.target.value); }}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
-                                    // Focus Serial field
                                     const serialField = document.getElementById('field-serial');
-                                    if (serialField) {
-                                        (serialField as HTMLInputElement).focus();
-                                    }
+                                    if (serialField) (serialField as HTMLInputElement).focus();
                                 }
                             }}
                         />
                         {categoryConfig.imei2 === 'required' && errors?.specs?.imei2?.message && (
                             <p className="text-xs text-red-600 mt-1">{errors.specs.imei2.message}</p>
                         )}
+                        {uniqueErrors.imei2 && (
+                            <p className="text-xs text-red-600 mt-1">⚠️ {uniqueErrors.imei2}</p>
+                        )}
                     </div>
                 )}
 
                 {/* SERIAL - Rendered here to ensure it's 3rd field */}
-                {categoryConfig.serial !== 'off' && renderGenericField('serial', categoryConfig.serial)}
+                {categoryConfig.serial && categoryConfig.serial !== 'off' && renderGenericField('serial', categoryConfig.serial)}
 
                 {/* 
                     UNIQUE FIELDS (color, storage, ram, version) 
@@ -200,7 +265,7 @@ export function ProductSpecifications({
                 */}
 
                 {/* COR */}
-                {categoryConfig.color !== 'off' && (
+                {categoryConfig.color && categoryConfig.color !== 'off' && (
                     <div className="space-y-1">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Cor Predominante {categoryConfig.color === 'required' && <span className="text-red-500">*</span>}
@@ -217,7 +282,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* ARMAZENAMENTO */}
-                {categoryConfig.storage !== 'off' && (
+                {categoryConfig.storage && categoryConfig.storage !== 'off' && (
                     <div className="space-y-1">
                         <CapacitySelect
                             value={watch('specs.storage') || ''}
@@ -233,7 +298,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* RAM */}
-                {categoryConfig.ram !== 'off' && (
+                {categoryConfig.ram && categoryConfig.ram !== 'off' && (
                     <div className="space-y-1">
                         <CapacitySelect
                             value={watch('specs.ram') || ''}
@@ -250,7 +315,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* VERSÃO */}
-                {categoryConfig.version !== 'off' && (
+                {categoryConfig.version && categoryConfig.version !== 'off' && !templateValues?.['version'] && (
                     <div className="space-y-1">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Versão {categoryConfig.version === 'required' && <span className="text-red-500">*</span>}
@@ -267,7 +332,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* SAÚDE DA BATERIA */}
-                {categoryConfig.battery_health !== 'off' && (
+                {categoryConfig.battery_health && categoryConfig.battery_health !== 'off' && (
                     <div className="space-y-1">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Saúde Bateria {categoryConfig.battery_health === 'required' && <span className="text-red-500">*</span>}
@@ -299,27 +364,17 @@ export function ProductSpecifications({
                 {Object.entries(categoryConfig)
                     .filter(([key, value]) => {
                         if (typeof value !== 'string') return false;
-
-                        // Skip if field is off
                         if (value === 'off') return false;
-
-                        // Skip special fields (already rendered above)
                         if (isSpecialField(key)) return false;
-
-                        // Skip custom_fields array
                         if (key === 'custom_fields') return false;
-
-                        // Skip config fields
                         if (key.includes('ean_autofill') || key.includes('auto_name')) return false;
-
-
+                        // Hide fields already in template
+                        if (templateValues && templateValues[key] !== undefined) return false;
                         return true;
                     })
                     .sort(([keyA], [keyB]) => {
-                        // Serial comes first (after IMEI1/IMEI2)
                         if (keyA === 'serial') return -1;
                         if (keyB === 'serial') return 1;
-                        // Rest alphabetically
                         return keyA.localeCompare(keyB);
                     })
                     .map(([key, value]) => renderGenericField(key, value as any))

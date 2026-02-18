@@ -6,8 +6,8 @@
  * Features: Keyboard navigation, inline validation, auto-add rows
  */
 
-import React, { useRef, useEffect, useState } from 'react';
-import { Plus, Trash2, AlertCircle } from 'lucide-react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { Plus, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import { BatchProductRow } from '../ProductEntryWizard';
 import { UNIQUE_FIELDS } from '../../../../config/product-fields';
 import { customFieldsService, CustomField } from '../../../../services/custom-fields';
@@ -19,6 +19,9 @@ interface BatchEntryGridProps {
     uniqueFields: string[]; // Fields to show as columns (from UNIQUE_FIELDS)
 }
 
+// Fields that must be unique in the database
+const DB_UNIQUE_FIELDS = ['imei1', 'imei2', 'serial'];
+
 export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridProps) {
     const gridRef = useRef<HTMLDivElement>(null);
 
@@ -26,6 +29,8 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
     const [customFields, setCustomFields] = useState<Record<string, CustomField>>({});
     const [tableOptions, setTableOptions] = useState<Record<string, Array<{ id: string, name: string }>>>({});
     const [loading, setLoading] = useState(true);
+    // Technical: Track which cells are being checked against DB (rowId:field)
+    const [checkingDb, setCheckingDb] = useState<Set<string>>(new Set());
 
     // Technical: addRow - Add new empty row to grid
     const addRow = () => {
@@ -102,54 +107,93 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
         allRows: BatchProductRow[],
         fields: string[]
     ): Record<string, string> => {
-        const errors: Record<string, string> = {};
+        const errors: Record<string, string> = { ...row.errors }; // preserve DB errors
 
         // Technical: Validate IMEI1 format (15 digits)
         if (row.imei1) {
-            // Check if IMEI1 has exactly 15 numeric digits
             const imei1Regex = /^\d{15}$/;
             if (!imei1Regex.test(row.imei1)) {
                 errors.imei1 = 'IMEI deve ter 15 dígitos';
-            } else {
-                // Check for duplicate IMEI1 only if format is valid
+            } else if (!errors.imei1) {
+                // Check for duplicate IMEI1 within the grid
                 const duplicates = allRows.filter(r =>
                     r.id !== row.id && r.imei1 === row.imei1
                 );
-                if (duplicates.length > 0) {
-                    errors.imei1 = 'IMEI duplicado';
-                }
+                if (duplicates.length > 0) errors.imei1 = 'IMEI duplicado na lista';
             }
+        } else {
+            delete errors.imei1;
         }
 
         // Technical: Validate IMEI2 format (15 digits)
         if (row.imei2) {
-            // Check if IMEI2 has exactly 15 numeric digits
             const imei2Regex = /^\d{15}$/;
             if (!imei2Regex.test(row.imei2)) {
                 errors.imei2 = 'IMEI deve ter 15 dígitos';
-            } else {
-                // Check for duplicate IMEI2 only if format is valid
+            } else if (!errors.imei2) {
                 const duplicates = allRows.filter(r =>
                     r.id !== row.id && r.imei2 === row.imei2
                 );
-                if (duplicates.length > 0) {
-                    errors.imei2 = 'IMEI duplicado';
-                }
+                if (duplicates.length > 0) errors.imei2 = 'IMEI duplicado na lista';
             }
+        } else {
+            delete errors.imei2;
         }
 
-        // Check for duplicate Serial
+        // Check for duplicate Serial within the grid
         if (row.serial) {
-            const duplicates = allRows.filter(r =>
-                r.id !== row.id && r.serial === row.serial
-            );
-            if (duplicates.length > 0) {
-                errors.serial = 'Serial duplicado';
+            if (!errors.serial) {
+                const duplicates = allRows.filter(r =>
+                    r.id !== row.id && r.serial === row.serial
+                );
+                if (duplicates.length > 0) errors.serial = 'Serial duplicado na lista';
             }
+        } else {
+            delete errors.serial;
         }
 
         return errors;
     };
+
+    // Technical: checkUniqueInDb - Verify field value against database
+    const checkUniqueInDb = useCallback(async (rowId: string, field: string, value: string) => {
+        if (!value || !DB_UNIQUE_FIELDS.includes(field)) return;
+
+        const key = `${rowId}:${field}`;
+        setCheckingDb(prev => new Set(prev).add(key));
+
+        try {
+            // Query specs column: specs->>'field' = value
+            const { data, error } = await supabase
+                .from('products')
+                .select('id')
+                .eq(`specs->>${field}`, value)
+                .limit(1);
+
+            if (error) throw error;
+
+            const alreadyExists = data && data.length > 0;
+
+            // Update error for this specific field
+            onChange(rows.map(row => {
+                if (row.id !== rowId) return row;
+                const newErrors = { ...row.errors };
+                if (alreadyExists) {
+                    newErrors[field] = 'Já cadastrado no sistema';
+                } else {
+                    // Remove DB error if value changed and is now clean
+                    if (newErrors[field] === 'Já cadastrado no sistema') {
+                        delete newErrors[field];
+                    }
+                }
+                return { ...row, errors: newErrors, isValid: Object.keys(newErrors).length === 0 && !!(row.imei1 || row.serial) };
+            }));
+        } catch (err) {
+            console.error('[BatchEntryGrid] DB unique check failed:', err);
+        } finally {
+            setCheckingDb(prev => { const s = new Set(prev); s.delete(key); return s; });
+        }
+    }, [rows, onChange]);
 
     // Technical: handleKeyDown - Keyboard navigation (Tab, Enter, Shift+Tab)
     const handleKeyDown = (
@@ -276,6 +320,15 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
 
     return (
         <div ref={gridRef} className="space-y-4">
+            {/* Explanatory banner */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+                <span className="text-blue-500 text-lg">📋</span>
+                <div className="text-sm text-blue-800">
+                    <strong>Cada linha = 1 produto.</strong> Preencha o campo único de cada unidade.
+                    Pressione <kbd className="px-1 py-0.5 bg-white border border-blue-300 rounded text-xs">Enter</kbd> na última coluna ou clique em <strong>+ Adicionar produto</strong> para incluir mais.
+                </div>
+            </div>
+
             {/* Technical: Loading State */}
             {loading && (
                 <div className="text-center py-4 text-slate-600">
@@ -347,23 +400,34 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
                                                 </select>
                                             ) : (
                                                 /* Technical: Render INPUT for text fields */
-                                                <input
-                                                    type="text"
-                                                    value={(row as any)[field] || ''}
-                                                    onChange={(e) => updateCell(row.id, field, e.target.value)}
-                                                    onKeyDown={(e) => handleKeyDown(e, rowIndex, fieldIndex)}
-                                                    data-row={rowIndex}
-                                                    data-field={fieldIndex}
-                                                    placeholder={getFieldLabel(field)}
-                                                    // Technical: Limit IMEI fields to 15 digits
-                                                    maxLength={field === 'imei1' || field === 'imei2' ? 15 : undefined}
-                                                    inputMode={field === 'imei1' || field === 'imei2' ? 'numeric' : undefined}
-                                                    className={`
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={(row as any)[field] || ''}
+                                                        onChange={(e) => updateCell(row.id, field, e.target.value)}
+                                                        onKeyDown={(e) => handleKeyDown(e, rowIndex, fieldIndex)}
+                                                        onBlur={(e) => {
+                                                            if (DB_UNIQUE_FIELDS.includes(field) && e.target.value) {
+                                                                checkUniqueInDb(row.id, field, e.target.value);
+                                                            }
+                                                        }}
+                                                        data-row={rowIndex}
+                                                        data-field={fieldIndex}
+                                                        placeholder={getFieldLabel(field)}
+                                                        // Technical: Limit IMEI fields to 15 digits
+                                                        maxLength={field === 'imei1' || field === 'imei2' ? 15 : undefined}
+                                                        inputMode={field === 'imei1' || field === 'imei2' ? 'numeric' : undefined}
+                                                        className={`
                                                         w-full px-2 py-1 border rounded
                                                         focus:outline-none focus:ring-2 focus:ring-blue-500
                                                         ${row.errors[field] ? 'border-red-500 bg-red-50' : 'border-slate-300'}
+                                                        ${checkingDb.has(`${row.id}:${field}`) ? 'pr-7' : ''}
                                                     `}
-                                                />
+                                                    />
+                                                    {checkingDb.has(`${row.id}:${field}`) && (
+                                                        <Loader2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 animate-spin" />
+                                                    )}
+                                                </div>
                                             )}
                                             {/* Technical: Show error message */}
                                             {row.errors[field] && (
@@ -397,10 +461,10 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
             {/* Technical: Add Row Button */}
             <button
                 onClick={addRow}
-                className="flex items-center gap-2 px-4 py-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
             >
                 <Plus size={18} />
-                Adicionar linha
+                + Adicionar produto
             </button>
 
             {/* Technical: Keyboard shortcuts help */}

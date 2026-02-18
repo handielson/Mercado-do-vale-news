@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { User, MapPin, Lock, ShoppingBag, TrendingUp } from 'lucide-react';
+import { User, MapPin, Lock, ShoppingBag, TrendingUp, ArrowLeft } from 'lucide-react';
 import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
+import { useNavigate } from 'react-router-dom';
 
 // Tab components (to be created separately)
 import { PersonalInfoTab } from '../../components/customer/profile/PersonalInfoTab';
@@ -22,6 +23,7 @@ type TabType = 'personal' | 'address' | 'password' | 'history' | 'upgrade';
 export const CustomerProfilePage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<TabType>('personal');
     const { customer, isLoading } = useSupabaseAuth();
+    const navigate = useNavigate();
 
     if (isLoading) {
         return (
@@ -57,6 +59,13 @@ export const CustomerProfilePage: React.FC = () => {
             <div className="max-w-5xl mx-auto">
                 {/* Header */}
                 <div className="mb-6">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 mb-4 transition-colors"
+                    >
+                        <ArrowLeft size={16} />
+                        Voltar
+                    </button>
                     <h1 className="text-3xl font-bold text-slate-900">Meu Perfil</h1>
                     <p className="text-slate-600 mt-1">Gerencie suas informações pessoais e preferências</p>
                 </div>
@@ -71,8 +80,8 @@ export const CustomerProfilePage: React.FC = () => {
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex items-center gap-2 px-6 py-4 font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === tab.id
-                                            ? 'border-blue-600 text-blue-600'
-                                            : 'border-transparent text-slate-600 hover:text-slate-900'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-slate-600 hover:text-slate-900'
                                         }`}
                                 >
                                     <Icon size={18} />

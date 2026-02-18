@@ -298,22 +298,18 @@ export function ModernProductCard({
                             </span>
                         )}
 
-                        {/* Dynamic Spec Badges */}
-                        {product.specs?.nfc === 'Sim' && (
-                            <span className="text-xs bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-3 py-1.5 rounded-full font-semibold shadow-md">
-                                📡 NFC
-                            </span>
-                        )}
-                        {product.specs?.['5g'] === 'Sim' && (
-                            <span className="text-xs bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-3 py-1.5 rounded-full font-semibold shadow-md">
-                                📶 5G
-                            </span>
-                        )}
-                        {product.specs?.dual_sim === 'Sim' && (
-                            <span className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-1.5 rounded-full font-semibold shadow-md">
-                                📱 Dual SIM
-                            </span>
-                        )}
+                        {/* Dynamic Spec Badges - based on category config */}
+                        {getBadgesForCategory(product.category_slug || product.category_id || '')
+                            .filter(badge => shouldShowBadge(product, badge))
+                            .map(badge => (
+                                <span
+                                    key={badge.spec}
+                                    className={`text-xs bg-gradient-to-r ${badge.color} text-white px-3 py-1.5 rounded-full font-semibold shadow-md`}
+                                >
+                                    {badge.icon} {badge.label}
+                                </span>
+                            ))
+                        }
                     </div>
 
                     {/* Action Buttons (bottom right on hover) */}

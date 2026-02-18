@@ -146,6 +146,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const eanInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         loadData();
@@ -246,9 +247,18 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
         setError('');
 
         try {
+            // Capture any pending EAN value in the input before saving
+            const pendingEan = eanInputRef.current?.value.trim();
+            const finalEans = pendingEan && !eans.includes(pendingEan)
+                ? [...eans, pendingEan]
+                : eans;
+            if (pendingEan && eanInputRef.current) {
+                eanInputRef.current.value = '';
+            }
+
             console.log('💾 [ModelModal] Saving template values:', templateValues);
             console.log('📊 [ModelModal] Template values keys:', Object.keys(templateValues));
-            console.log('🏷️ [ModelModal] EANs to save:', eans);
+            console.log('🏷️ [ModelModal] EANs to save:', finalEans);
 
             const input: ModelInput = {
                 name: name.trim(),
@@ -257,7 +267,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                 category_id: categoryId || undefined,
                 description: description || undefined,
                 template_values: Object.keys(templateValues).length > 0 ? templateValues : undefined,
-                eans: eans.length > 0 ? eans : undefined
+                eans: finalEans.length > 0 ? finalEans : undefined
             };
 
             console.log('📤 [ModelModal] Final input:', JSON.stringify(input, null, 2));
@@ -398,22 +408,37 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                                     Códigos EAN/GTIN (Referência) <span className="text-slate-400 font-mono text-xs">(models.eans)</span>
                                 </label>
                                 <div className="space-y-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Digite um EAN e pressione Enter"
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                const input = e.currentTarget;
-                                                const value = input.value.trim();
+                                    <div className="flex gap-2">
+                                        <input
+                                            ref={eanInputRef}
+                                            type="text"
+                                            placeholder="Digite um EAN e pressione Enter"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const input = e.currentTarget;
+                                                    const value = input.value.trim();
+                                                    if (value && !eans.includes(value)) {
+                                                        setEans([...eans, value]);
+                                                        input.value = '';
+                                                    }
+                                                }
+                                            }}
+                                            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const value = eanInputRef.current?.value.trim();
                                                 if (value && !eans.includes(value)) {
                                                     setEans([...eans, value]);
-                                                    input.value = '';
+                                                    if (eanInputRef.current) eanInputRef.current.value = '';
                                                 }
-                                            }
-                                        }}
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
+                                            }}
+                                            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold"
+                                            title="Adicionar EAN"
+                                        >+</button>
+                                    </div>
                                     {eans.length > 0 && (
                                         <div className="flex flex-wrap gap-2">
                                             {eans.map((ean, index) => (

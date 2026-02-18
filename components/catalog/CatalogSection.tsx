@@ -52,6 +52,29 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
         return null; // Não mostrar seção vazia
     }
 
+    // Agrupar por modelo + variação (cor, RAM, storage)
+    const groupedProducts = (() => {
+        const groups = new Map<string, CatalogProduct>();
+        for (const product of products) {
+            const key = [
+                product.model_id || product.model || product.name,
+                product.specs?.color || '',
+                product.specs?.ram || '',
+                product.specs?.storage || '',
+            ].join('|');
+            if (groups.has(key)) {
+                const existing = groups.get(key)!;
+                groups.set(key, {
+                    ...existing,
+                    stock_quantity: (existing.stock_quantity || 0) + (product.stock_quantity || 0)
+                });
+            } else {
+                groups.set(key, { ...product });
+            }
+        }
+        return Array.from(groups.values());
+    })();
+
     return (
         <section className="py-8">
             {/* Header da Seção */}
@@ -76,8 +99,8 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
             {/* Grid/Carousel/Lista de Produtos */}
             {section.layout_style === 'grid' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {products.map((product) => (
-                        <ModernProductCard key={product.id} product={product} />
+                    {groupedProducts.map((product) => (
+                        <ModernProductCard key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`} product={product} />
                     ))}
                 </div>
             )}
@@ -85,8 +108,8 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
             {section.layout_style === 'carousel' && (
                 <div className="overflow-x-auto">
                     <div className="flex gap-4 pb-4">
-                        {products.map((product) => (
-                            <div key={product.id} className="flex-shrink-0 w-80">
+                        {groupedProducts.map((product) => (
+                            <div key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`} className="flex-shrink-0 w-80">
                                 <ModernProductCard product={product} />
                             </div>
                         ))}
@@ -96,8 +119,8 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
 
             {section.layout_style === 'list' && (
                 <div className="space-y-4">
-                    {products.map((product) => (
-                        <ModernProductCard key={product.id} product={product} />
+                    {groupedProducts.map((product) => (
+                        <ModernProductCard key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`} product={product} />
                     ))}
                 </div>
             )}

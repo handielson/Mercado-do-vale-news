@@ -8,7 +8,7 @@ import { Product } from '../types/product';
 
 /**
  * Search products by multiple criteria
- * Searches in: name, sku, eans (array), imei1, imei2
+ * Searches in: name, sku, eans (array), serial, imei1, imei2
  */
 export const searchProducts = async (searchTerm: string): Promise<Product[]> => {
     try {
@@ -19,11 +19,11 @@ export const searchProducts = async (searchTerm: string): Promise<Product[]> => 
         const term = searchTerm.trim().toLowerCase();
         console.log('🔍 Buscando produtos com termo:', term);
 
-        // Build query with OR conditions - apenas name e sku
+        // Build query with OR conditions — inclui serial e IMEI nos specs
         const { data, error } = await supabase
             .from('products')
             .select('*')
-            .or(`name.ilike.%${term}%,sku.ilike.%${term}%`)
+            .or(`name.ilike.%${term}%,sku.ilike.%${term}%,specs->>serial.ilike.%${term}%,specs->>imei1.ilike.%${term}%,specs->>imei2.ilike.%${term}%`)
             .order('name', { ascending: true })
             .limit(20);
 
@@ -44,6 +44,7 @@ export const searchProducts = async (searchTerm: string): Promise<Product[]> => 
         throw error;
     }
 };
+
 
 /**
  * Get product by ID

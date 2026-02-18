@@ -27,7 +27,8 @@ export const catalogMetadataService = {
         // Fetch all categories
         const { data: cats, error: catsError } = await supabase
             .from('categories')
-            .select('id, name')
+            .select('id, name, sort_order')
+            .order('sort_order', { ascending: true })
             .order('name', { ascending: true });
 
         if (catsError) {

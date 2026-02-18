@@ -34,7 +34,8 @@ async function list(): Promise<Category[]> {
         .from('categories')
         .select('*')
         .eq('company_id', companyId)
-        .order('name');
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true });
 
     if (error) throw new Error(`Failed to fetch categories: ${error.message}`);
 
@@ -178,10 +179,21 @@ async function remove(id: string): Promise<void> {
     if (error) throw new Error(`Failed to delete category: ${error.message}`);
 }
 
+/**
+ * Update sort_order for multiple categories at once
+ */
+async function updateSortOrder(orders: { id: string; sort_order: number }[]): Promise<void> {
+    const updates = orders.map(({ id, sort_order }) =>
+        supabase.from('categories').update({ sort_order }).eq('id', id)
+    );
+    await Promise.all(updates);
+}
+
 export const categoryService = {
     list,
     create,
     getById,
     update,
-    remove
+    remove,
+    updateSortOrder
 };

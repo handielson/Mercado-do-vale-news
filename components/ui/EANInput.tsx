@@ -5,6 +5,7 @@ import { cn } from '../../utils/cn';
 interface EANInputProps {
     value: string[];
     onChange: (value: string[]) => void;
+    onSearch?: (ean: string) => void;
     label?: string;
     className?: string;
     maxEANs?: number;
@@ -21,6 +22,7 @@ interface EANInputProps {
 export const EANInput: React.FC<EANInputProps> = ({
     value = [],
     onChange,
+    onSearch,
     label = 'Códigos de Barras (EAN-13)',
     className,
     maxEANs = 5
@@ -35,6 +37,11 @@ export const EANInput: React.FC<EANInputProps> = ({
         const newEANs = [...value];
         newEANs[index] = limited;
         onChange(newEANs);
+
+        // Trigger search when EAN reaches 13 digits
+        if (limited.length === 13 && onSearch) {
+            onSearch(limited);
+        }
     };
 
     const handleAddEAN = () => {
@@ -55,10 +62,7 @@ export const EANInput: React.FC<EANInputProps> = ({
         <div className={cn('flex flex-col gap-2', className)}>
             <label className="text-sm font-medium text-slate-700">
                 {label}
-                <span className="ml-2 text-xs text-slate-400 font-mono">
-                    models.eans[]<br />
-                    brand_id | model_id
-                </span>
+                <span className="ml-2 text-xs text-slate-400 font-mono">eans[]</span>
             </label>
 
             <div className="space-y-2">

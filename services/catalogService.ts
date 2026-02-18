@@ -37,7 +37,7 @@ export const catalogService = {
         // Construir query
         let query = supabase
             .from('products')
-            .select('*', { count: 'exact' });
+            .select('*, categories(slug)', { count: 'exact' });
 
         // Aplicar filtros
         if (filters?.search) {
@@ -94,7 +94,11 @@ export const catalogService = {
 
         if (error) throw error;
 
-        let products = (data || []) as CatalogProduct[];
+        let products = ((data || []) as any[]).map(p => ({
+            ...p,
+            category_slug: p.categories?.slug || undefined,
+            categories: undefined, // remove o objeto aninhado
+        })) as CatalogProduct[];
 
         // Enrich products with model images if they have no custom images
         const productsNeedingImages = products.filter(

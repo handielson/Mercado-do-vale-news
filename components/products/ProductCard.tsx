@@ -1,9 +1,10 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Edit, Package, Trash2 } from 'lucide-react';
 import { Product } from '../../types/product';
 import { ProductStatus } from '../../utils/field-standards';
 import { cn } from '../../utils/cn';
+import { supabase } from '../../services/supabase';
 
 interface ProductCardProps {
     product: Product;
@@ -16,6 +17,43 @@ interface ProductCardProps {
  * Displays product information in a card format with image, prices, and status
  */
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
+    const [modelImageUrl, setModelImageUrl] = useState<string | null>(null);
+
+    // Buscar foto do modelo como fallback quando produto não tem imagem própria
+    useEffect(() => {
+        if (product.images && product.images.length > 0) return;
+        if (!product.model_id) return;
+
+        const fetchModelImage = async () => {
+            // Buscar company_id (necessário para RLS)
+            const { data: company } = await supabase
+                .from('companies')
+                .select('id')
+                .eq('slug', 'mercado-do-vale')
+                .single();
+
+            if (!company?.id) return;
+
+            const { data, error } = await supabase
+                .from('model_color_images')
+                .select('images')
+                .eq('company_id', company.id)
+                .eq('model_id', product.model_id)
+                .maybeSingle();
+
+            if (error) console.warn('[ProductCard] Erro ao buscar foto do modelo:', error.message);
+            if (data?.images && data.images.length > 0) setModelImageUrl(data.images[0]);
+        };
+
+
+        fetchModelImage();
+    }, [product.model_id]);
+
+
+    const coverImage = (product.images && product.images.length > 0)
+        ? product.images[0]
+        : modelImageUrl;
+
     // Format price from centavos to BRL
     const formatPrice = (centavos: number): string => {
         return new Intl.NumberFormat('pt-BR', {
@@ -59,9 +97,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow duration-200">
             {/* Image */}
             <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden relative">
-                {product.images && product.images.length > 0 ? (
+                {coverImage ? (
                     <img
-                        src={product.images[0]}
+                        src={coverImage}
                         alt={product.name}
                         className="w-full h-full object-cover"
                     />

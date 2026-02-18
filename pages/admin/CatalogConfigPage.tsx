@@ -5,6 +5,7 @@ import type { CatalogSettings } from '@/types/catalogSettings';
 import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { SectionsTab } from '@/components/admin/SectionsTab';
+import { categoryService } from '@/services/categories';
 
 type TabType = 'display' | 'categories' | 'appearance' | 'seo' | 'sharing' | 'sections';
 
@@ -344,8 +345,132 @@ function DisplayRulesTab({ settings, updateSetting }: TabProps) {
 
 // ==================== CATEGORIES TAB ====================
 function CategoriesTab({ settings, updateSetting }: TabProps) {
+    const [categories, setCategories] = useState<{ id: string; name: string; sort_order: number }[]>([]);
+    const [loadingCats, setLoadingCats] = useState(true);
+    const [savingOrder, setSavingOrder] = useState(false);
+    const [orderChanged, setOrderChanged] = useState(false);
+
+    useEffect(() => {
+        loadCategories();
+    }, []);
+
+    const loadCategories = async () => {
+        try {
+            setLoadingCats(true);
+            const cats = await categoryService.list();
+            const sorted = [...cats]
+                .map((c, i) => ({ id: c.id, name: c.name, sort_order: (c as any).sort_order ?? i }))
+                .sort((a, b) => a.sort_order - b.sort_order);
+            setCategories(sorted);
+        } catch (err) {
+            console.error('Erro ao carregar categorias:', err);
+        } finally {
+            setLoadingCats(false);
+        }
+    };
+
+    const moveUp = (index: number) => {
+        if (index === 0) return;
+        const updated = [...categories];
+        [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
+        setCategories(updated);
+        setOrderChanged(true);
+    };
+
+    const moveDown = (index: number) => {
+        if (index === categories.length - 1) return;
+        const updated = [...categories];
+        [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+        setCategories(updated);
+        setOrderChanged(true);
+    };
+
+    const saveOrder = async () => {
+        try {
+            setSavingOrder(true);
+            const orders = categories.map((cat, i) => ({ id: cat.id, sort_order: i }));
+            await categoryService.updateSortOrder(orders);
+            setOrderChanged(false);
+            alert('✅ Ordem das categorias salva com sucesso!');
+        } catch (err) {
+            console.error('Erro ao salvar ordem:', err);
+            alert('❌ Erro ao salvar ordem das categorias');
+        } finally {
+            setSavingOrder(false);
+        }
+    };
+
     return (
         <div className="space-y-8">
+            {/* Ordenação de Categorias */}
+            <Section title="Ordem de Exibição das Categorias">
+                <p className="text-sm text-gray-500 mb-4">
+                    Defina a ordem em que as categorias aparecem na barra de navegação do catálogo.
+                    Use os botões ▲▼ para reordenar.
+                </p>
+
+                {loadingCats ? (
+                    <div className="flex items-center gap-2 py-4 text-gray-500">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm">Carregando categorias...</span>
+                    </div>
+                ) : categories.length === 0 ? (
+                    <p className="text-sm text-gray-400 py-4">Nenhuma categoria encontrada.</p>
+                ) : (
+                    <div className="space-y-2">
+                        {categories.map((cat, index) => (
+                            <div
+                                key={cat.id}
+                                className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                            >
+                                <span className="w-6 text-center text-xs font-bold text-gray-400 select-none">
+                                    {index + 1}
+                                </span>
+                                <span className="flex-1 text-sm font-medium text-gray-800">
+                                    {cat.name}
+                                </span>
+                                <div className="flex gap-1">
+                                    <button
+                                        onClick={() => moveUp(index)}
+                                        disabled={index === 0}
+                                        className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        title="Mover para cima"
+                                    >
+                                        ▲
+                                    </button>
+                                    <button
+                                        onClick={() => moveDown(index)}
+                                        disabled={index === categories.length - 1}
+                                        className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        title="Mover para baixo"
+                                    >
+                                        ▼
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+
+                        <div className="pt-3">
+                            <button
+                                onClick={saveOrder}
+                                disabled={!orderChanged || savingOrder}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${orderChanged
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                    }`}
+                            >
+                                {savingOrder ? (
+                                    <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+                                ) : (
+                                    <><Save className="w-4 h-4" /> Salvar Ordem</>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Section>
+
+            {/* Estilo de Exibição */}
             <Section title="Estilo de Exibição">
                 <Select
                     label="Estilo das categorias"
@@ -396,16 +521,10 @@ function CategoriesTab({ settings, updateSetting }: TabProps) {
                     onChange={(checked) => updateSetting('show_category_images', checked)}
                 />
             </Section>
-
-            <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                    💡 <strong>Dica:</strong> Para configurar ícones específicos de cada categoria,
-                    use a página de edição de categorias.
-                </p>
-            </div>
         </div>
     );
 }
+
 
 // ==================== APPEARANCE TAB ====================
 function AppearanceTab({ settings, updateSetting }: TabProps) {

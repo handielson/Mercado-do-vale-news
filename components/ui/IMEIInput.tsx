@@ -11,6 +11,7 @@ interface IMEIInputProps {
   required?: boolean;
   error?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void;
   id?: string;
   technicalName?: string;
 }
@@ -32,6 +33,7 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
   required = false,
   error,
   onKeyDown,
+  onBlur,
   id,
   technicalName
 }) => {
@@ -66,6 +68,7 @@ export const IMEIInput: React.FC<IMEIInputProps> = ({
         value={value}
         onChange={handleChange}
         onKeyDown={onKeyDown}
+        onBlur={onBlur}
         placeholder={placeholder}
         maxLength={15}
         className={cn(

@@ -18,7 +18,7 @@ import { EANInput } from '../ui/EANInput';
 import { SmartInput } from '../ui/SmartInput';
 import { compressImage } from '../../utils/image-compression';
 import { generateProductName } from '../../utils/product-name-generator';
-import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText } from 'lucide-react';
+import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText, Trash2, CheckCircle2, ListOrdered } from 'lucide-react';
 import { useEANAutofill } from './hooks/useEANAutofill';
 import { useModelTemplate } from './hooks/useModelTemplate';
 import { ProductSpecifications } from './sections/ProductSpecifications';
@@ -47,6 +47,22 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
 
     // Estado para rastrear se o nome foi editado manualmente
     const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
+
+    // Lista de seriais/IMEIs para entrada em massa
+    const [serialList, setSerialList] = useState<{ type: 'serial' | 'imei1' | 'imei2'; value: string }[]>([]);
+
+    const handleSerialConfirm = (type: 'serial' | 'imei1' | 'imei2', value: string) => {
+        // Evita duplicatas na lista
+        if (serialList.some(item => item.type === type && item.value === value)) {
+            toast.warning(`${value} já está na lista`);
+            return;
+        }
+        setSerialList(prev => [...prev, { type, value }]);
+    };
+
+    const removeFromSerialList = (index: number) => {
+        setSerialList(prev => prev.filter((_, i) => i !== index));
+    };
 
     // Estado para indicadores de preço
     const [priceStats, setPriceStats] = useState<{
@@ -423,12 +439,14 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                             console.log('✅ Applied weight from template:', mergedData.weight_kg);
                         }
 
-                        // Auto-generate SKU if empty
+                        // Auto-generate SKU if empty — baseado no modelo+config para ser consistente
                         if (!data.sku || data.sku.trim() === '') {
                             const brandPrefix = data.brand?.substring(0, 2).toUpperCase() || 'XX';
-                            const modelPrefix = model.name.substring(0, 3).toUpperCase();
-                            const timestamp = Date.now().toString().slice(-6);
-                            mergedData.sku = `${brandPrefix}-${modelPrefix}-${timestamp}`;
+                            const modelPrefix = model.name.replace(/\s+/g, '').substring(0, 5).toUpperCase();
+                            const colorPart = data.specs?.color ? `-${data.specs.color.substring(0, 2).toUpperCase()}` : '';
+                            const ramPart = data.specs?.ram ? `-${String(data.specs.ram).replace(/\s+/g, '')}` : '';
+                            const storagePart = data.specs?.storage ? `-${String(data.specs.storage).replace(/\s+/g, '')}` : '';
+                            mergedData.sku = `${brandPrefix}-${modelPrefix}${colorPart}${ramPart}${storagePart}`;
                             console.log('✅ Auto-generated SKU:', mergedData.sku);
                         }
                     }
@@ -444,12 +462,63 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 console.log('✅ Cleared stock_quantity (inventory tracking disabled)');
             }
 
-            // 1. Salvar produto
+            // 1. Salvar produto(s)
             console.log('📤 [ProductForm] Sending to onSubmit:', mergedData);
-            console.log('🛡️ [ProductForm] Final WARRANTY check:');
-            console.log('  - warranty_type:', mergedData.warranty_type);
-            console.log('  - warranty_template_id:', mergedData.warranty_template_id);
-            await onSubmit(mergedData);
+
+            if (serialList.length > 0) {
+                // Entrada em massa: verificar unicidade de todos antes de salvar qualquer um
+                const { supabase } = await import('../../services/supabase');
+                const duplicates: string[] = [];
+
+                for (const item of serialList) {
+                    const { data: existing } = await supabase
+                        .from('products')
+                        .select('id')
+                        .eq(`specs->>${item.type}`, item.value)
+                        .limit(1);
+                    if (existing && existing.length > 0) {
+                        duplicates.push(`${item.type === 'imei1' ? 'IMEI 1' : item.type === 'imei2' ? 'IMEI 2' : 'Serial'}: ${item.value}`);
+                    }
+                }
+
+                if (duplicates.length > 0) {
+                    toast.error(`Cadastro bloqueado: ${duplicates.length} item(s) já existem no sistema`, {
+                        description: duplicates.join(' | '),
+                        duration: 8000
+                    });
+                    return;
+                }
+
+                // Todos únicos — salvar um por um
+                for (const item of serialList) {
+                    const itemData = {
+                        ...mergedData,
+                        specs: { ...mergedData.specs, [item.type]: item.value }
+                    };
+                    await onSubmit(itemData);
+                }
+                toast.success(`${serialList.length} produto(s) cadastrado(s) com sucesso!`);
+                setSerialList([]);
+            } else {
+                // Produto único — verificar serial/IMEI do campo se preenchido
+                const { supabase } = await import('../../services/supabase');
+                const uniqueFields = ['serial', 'imei1', 'imei2'] as const;
+                for (const field of uniqueFields) {
+                    const val = mergedData.specs?.[field];
+                    if (val) {
+                        const { data: existing } = await supabase
+                            .from('products')
+                            .select('id')
+                            .eq(`specs->>${field}`, val)
+                            .limit(1);
+                        if (existing && existing.length > 0) {
+                            toast.error(`${field === 'imei1' ? 'IMEI 1' : field === 'imei2' ? 'IMEI 2' : 'Serial'} já cadastrado no sistema: ${val}`);
+                            return;
+                        }
+                    }
+                }
+                await onSubmit(mergedData);
+            }
 
             // 2. Calcular preço médio se for novo produto com variação
             if (!initialData && selectedBrandId && mergedData.specs?.ram && mergedData.specs?.storage) {
@@ -514,6 +583,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 control={control}
                 errors={errors}
                 initialData={initialData}
+                onModelSelected={(model) => setSelectedModel(model ?? undefined)}
             />
 
             {/* 2. ESPECIFICAÇÕES TÉCNICAS */}
@@ -523,7 +593,39 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 setValue={setValue}
                 errors={errors}
                 onRefresh={loadCategoryConfig}
+                templateValues={selectedModel?.template_values}
+                onSerialConfirm={!initialData ? handleSerialConfirm : undefined}
             />
+
+            {/* LISTA DE SERIAIS PARA ENTRADA EM MASSA */}
+            {serialList.length > 0 && (
+                <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-sm space-y-3">
+                    <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                        <ListOrdered size={18} className="text-blue-600" />
+                        Lista para Cadastro em Massa
+                        <span className="ml-auto text-sm font-normal text-slate-500">{serialList.length} {serialList.length === 1 ? 'item' : 'itens'}</span>
+                    </h3>
+                    <div className="space-y-2">
+                        {serialList.map((item, index) => (
+                            <div key={index} className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                                <CheckCircle2 size={16} className="text-green-500 shrink-0" />
+                                <span className="text-xs text-slate-500 font-medium uppercase w-12 shrink-0">{item.type === 'imei1' ? 'IMEI 1' : item.type === 'imei2' ? 'IMEI 2' : 'Serial'}</span>
+                                <span className="font-mono text-sm text-slate-800 flex-1">{item.value}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => removeFromSerialList(index)}
+                                    className="text-slate-400 hover:text-red-500 transition-colors"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
+                        💡 Ao clicar em <strong>Salvar Produto</strong>, serão criados <strong>{serialList.length} produto(s)</strong> com os dados acima, um para cada item da lista.
+                    </p>
+                </div>
+            )}
 
 
             {/* 3. GARANTIA */}
@@ -676,7 +778,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                         : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
                         } disabled:opacity-50`}
                 >
-                    {isDuplicateEAN ? '⚠️ EAN Duplicado - Não Permitido' : isLoading ? 'Salvando...' : 'Salvar Produto'}
+                    {isDuplicateEAN ? '⚠️ EAN Duplicado - Não Permitido' : isLoading ? 'Salvando...' : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
                 </button>
             </div>
         </form >

@@ -107,6 +107,32 @@ export const CustomerCatalogPage: React.FC = () => {
         );
     });
 
+    // Agrupar produtos por modelo + variação (cor, RAM, storage)
+    // Produtos com o mesmo modelo e mesma configuração são a mesma unidade de venda
+    const groupedProducts = (() => {
+        const groups = new Map<string, typeof filteredProducts[0]>();
+        for (const product of filteredProducts) {
+            const key = [
+                product.model_id || product.model || product.name,
+                product.specs?.color || '',
+                product.specs?.ram || '',
+                product.specs?.storage || '',
+            ].join('|');
+
+            if (groups.has(key)) {
+                // Somar estoque ao representante do grupo
+                const existing = groups.get(key)!;
+                groups.set(key, {
+                    ...existing,
+                    stock_quantity: (existing.stock_quantity || 0) + (product.stock_quantity || 0)
+                });
+            } else {
+                groups.set(key, { ...product });
+            }
+        }
+        return Array.from(groups.values());
+    })();
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50">
             {/* Header */}
@@ -217,9 +243,9 @@ export const CustomerCatalogPage: React.FC = () => {
                                 : 'space-y-4'
                         }
                     >
-                        {filteredProducts.map((product) => (
+                        {groupedProducts.map((product) => (
                             <ModernProductCard
-                                key={product.id}
+                                key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`}
                                 product={product}
                                 onFavorite={handleFavorite}
                                 onShare={handleShare}
@@ -230,9 +256,12 @@ export const CustomerCatalogPage: React.FC = () => {
                 )}
 
                 {/* Product Count */}
-                {!loading && filteredProducts.length > 0 && (
+                {!loading && groupedProducts.length > 0 && (
                     <div className="mt-8 text-center text-sm text-slate-600">
-                        Mostrando {filteredProducts.length} {filteredProducts.length === 1 ? 'produto' : 'produtos'}
+                        Mostrando {groupedProducts.length} {groupedProducts.length === 1 ? 'produto' : 'produtos'}
+                        {groupedProducts.length < products.length && (
+                            <span className="text-slate-400"> ({products.length} unidades no total)</span>
+                        )}
                     </div>
                 )}
             </main>
