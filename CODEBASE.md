@@ -3598,3 +3598,404 @@ Objeto com 20+ campos pré-definidos: `name`, `sku`, `description`, `brand`, `mo
 **⚠️ Só funciona com campos cadastrados no `FIELD_DICTIONARY`**
 **⚠️ Para campos `currency`, `imei`, `selector`** — usar `CurrencyInput`, `IMEIInput`, `*Select` respectivamente
 **⚠️ Preserva cursor position** — usa `setTimeout(0)` para restaurar após formatação assíncrona
+
+---
+
+## 🔍 REVISÃO SISTEMÁTICA — Arquivos Adicionais Documentados
+
+### `services/catalogConfigService.ts` — Configurações do Catálogo
+
+**Exporta:** `catalogConfigService`
+**Tabela:** `catalog_settings` (por `user_id`), `category_display_config`
+**Cache:** 15 minutos (Map por `settings_${userId}`)
+
+| Método | O que faz |
+|--------|-----------|
+| `getSettings(userId?)` | Busca settings por user_id (retorna `DEFAULT_CATALOG_SETTINGS` se não autenticado) |
+| `saveSettings(settings)` | Upsert com `onConflict: 'user_id'` |
+| `getCategoryConfig(categoryId)` | Config de exibição de uma categoria |
+| `getAllCategoryConfigs()` | Todas as configs ordenadas por `display_order` |
+| `saveCategoryConfig(config)` | Upsert com `onConflict: 'category_id'` |
+| `applyVisibilityRules(products, settings)` | Filtra produtos por `hide_inactive`, `hide_out_of_stock`, `hide_zero_price`, `min_stock_to_show` |
+| `applyCategoryVisibilityRules(categories, settings)` | Filtra categorias por `hide_empty_categories`, `hide_categories_no_stock` |
+| `clearCache()` | Limpa todo o cache |
+
+**⚠️ `hide_categories_no_stock`** — faz query por categoria (N queries), pode ser lento
+**⚠️ `stock_quantity=null`** — produtos sem controle de estoque são tratados como disponíveis
+**⚠️ Usado por:** `useCatalog` hook, `CustomerCatalogPage`
+
+---
+
+### `services/catalogEditorService.ts` — Editor de Catálogo (Draft/Published)
+
+**Exporta:** `catalogEditorService`
+**Tabelas:** `catalog_settings`, `catalog_banners`
+**Sistema:** Draft → Published (dois estados separados)
+
+| Método | O que faz |
+|--------|-----------|
+| `loadCatalogState(mode)` | Carrega banners + settings do modo `'draft'` ou `'published'` |
+| `saveDraft(state)` | Salva rascunho (banners + settings com `is_draft=true`) |
+| `publish()` | Copia draft para published (`is_draft=false`, seta `published_at`) |
+| `discardDraft()` | Descarta rascunho (restaura estado published) |
+| `copyPublishedToDraft()` | Copia versão publicada para draft (para começar nova edição) |
+
+**⚠️ `publish()`** — copia banners do draft para published em sequência
+**⚠️ `discardDraft()`** — chama `copyPublishedToDraft()` internamente
+**⚠️ Usado por:** `CatalogConfigPage` (editor de catálogo admin)
+
+---
+
+### `services/catalogShareService.ts` — Compartilhamento do Catálogo
+
+**Exporta:** `catalogShareService`
+
+| Método | O que faz |
+|--------|-----------|
+| `generateCatalogText(options)` | Gera texto formatado do catálogo para compartilhamento |
+| `shareViaWhatsApp(options)` | Gera texto + abre WhatsApp |
+| `copyToClipboard(options)` | Gera texto + copia para clipboard |
+| `generatePDF(options)` | Gera HTML + abre janela de impressão |
+| `generatePDFHTML(products, company, options)` | Gera HTML completo do catálogo para PDF |
+| `trackShare(type, scope, scopeValue?)` | Registra evento de compartilhamento no banco |
+
+**`ShareOptions`:** `{ categoryId?, productId?, customerType?, includePrice?, includePriceRetail? }`
+**⚠️ `generatePDF`** — usa `window.print()` (não gera PDF real, abre diálogo de impressão)
+**⚠️ `trackShare`** — registra em tabela de analytics (não bloqueia se falhar)
+
+---
+
+### `services/catalogSectionsService.ts` — Seções do Catálogo
+
+**Exporta:** `catalogSectionsService`
+**Tabela:** `catalog_sections`
+**Cache:** 5 minutos
+
+| Método | O que faz |
+|--------|-----------|
+| `getSections(userId?)` | Lista todas as seções do usuário |
+| `getActiveSections(userId?)` | Só seções habilitadas |
+| `getSection(id)` | Seção por ID |
+| `createSection(data)` | Cria nova seção |
+| `updateSection(id, updates)` | Atualiza seção |
+| `deleteSection(id)` | Remove seção |
+| `reorderSections(sectionIds[])` | Reordena (N updates sequenciais) |
+| `getProductsForSection(section)` | Busca produtos da seção com filtros de `SectionType` |
+
+**`SectionType`:** `'featured'`, `'new_arrivals'`, `'on_sale'`, `'by_category'`, `'manual'`
+**⚠️ `getProductsForSection`** — aplica `applySectionTypeFilter` e `applySorting` na query
+
+---
+
+### `services/monitoringService.ts` — Monitoramento do Sistema
+
+**Exporta:** `monitoringService`
+**Tabelas:** `system_logs`, `performance_metrics`
+
+| Método | O que faz |
+|--------|-----------|
+| `getSystemStatus()` | Status completo: database + performance + errors |
+| `getDatabaseStatus()` | Testa conexão com Supabase + conta registros |
+| `getPerformanceMetrics()` | Métricas de performance do sistema |
+| `getRecentErrors(limit=50)` | Últimos N erros do banco |
+| `calculateOverallHealth(db, perf, errors)` | Retorna `'healthy'`, `'warning'` ou `'critical'` |
+| `logError(error, context?)` | Registra erro com stack trace |
+| `logWarning(message, context?)` | Registra warning |
+| `logInfo(message, context?)` | Registra info |
+| `recordMetric(type, value, metadata?)` | Registra métrica de performance |
+| `cleanOldLogs()` | Remove logs com mais de 30 dias |
+| `cleanOldMetrics()` | Remove métricas com mais de 7 dias |
+
+**⚠️ Intercepta erros globais** — registra `window.addEventListener('error')` e `unhandledrejection` automaticamente
+**⚠️ Usado por:** `SystemStatusPage` (admin)
+
+---
+
+### `services/typeUpgradeRequests.ts` — Solicitações de Upgrade de Tipo
+
+**Exporta funções individuais**
+**Tabela:** `customer_type_requests`
+
+| Função | O que faz |
+|--------|-----------|
+| `createUpgradeRequest(customerId, requestedType)` | Cria solicitação (verifica se já existe pendente) |
+| `getCustomerUpgradeRequest(customerId)` | Status atual da solicitação do cliente |
+| `getAllUpgradeRequests(status?)` | Lista todas com join em `customers` (admin) |
+| `approveUpgradeRequest(requestId, reviewerId)` | Aprova: atualiza `customer_type` + status da solicitação |
+| `rejectUpgradeRequest(requestId, reviewerId, reason?)` | Rejeita com motivo opcional |
+| `getUpgradeRequestStats()` | `{pending, approved, rejected, total}` |
+
+**`RequestedCustomerType`:** `'resale'` ou `'wholesale'`
+**⚠️ `createUpgradeRequest`** — lança erro se já existe solicitação `pending`
+**⚠️ `approveUpgradeRequest`** — atualiza `customers.customer_type` diretamente
+
+---
+
+### `services/model-variants.ts` — Variantes de Modelo (Fotos)
+
+**Exporta:** `modelVariantsService`
+**Tabelas:** `model_variants`, `model_variant_images`
+**Storage:** bucket `product-images`
+
+| Método | O que faz |
+|--------|-----------|
+| `getOrCreate(params)` | Busca ou cria variante `(model_id, version_id, color_id)` |
+| `getWithDetails(variantId)` | Variante com join completo (model, version, color, images) |
+| `getByModelId(modelId)` | Todas as variantes de um modelo |
+| `remove(variantId)` | Remove variante |
+| `getImages(variantId)` | Imagens ordenadas por `display_order` |
+| `addImage(input)` | Adiciona imagem à variante |
+| `uploadImage(variantId, file, onProgress?)` | Upload para `product-images/{variantId}/{timestamp}.ext` |
+| `reorderImages(variantId, imageIds[])` | N updates paralelos de `display_order` |
+| `setPrimaryImage(imageId)` | Define `is_primary=true` (não desmarca as outras!) |
+| `removeImage(imageId)` | Remove do storage + banco |
+
+**⚠️ `setPrimaryImage`** — só marca a nova como primária, não desmarca as outras
+**⚠️ `uploadImage`** — retorna `{success: boolean, image_url?, error?}` (nunca lança)
+**⚠️ Usado por:** `ModelModal` (aba de fotos por cor)
+
+---
+
+### `services/bulk-products.ts` — Importação em Massa (Excel)
+
+**Exporta:** `bulkProductService`
+
+| Método | O que faz |
+|--------|-----------|
+| `parseExcelFile(file)` | Lê Excel via `XLSX`, normaliza colunas para lowercase |
+| `validateBulkRows(rows)` | Valida EAN (13 dígitos), IMEI (15 dígitos), serial obrigatório, duplicatas no lote |
+| `generatePreview(rows)` | Busca produto base por EAN, mescla com campos únicos |
+| `createBulkProducts(previews)` | Cria produtos um a um via `productService.create()` |
+
+**`BulkProductRow`:** `{ ean, imei1?, imei2?, serial?, ... }`
+**`BulkUploadResult`:** `{ total, success, failed, errors[] }`
+**⚠️ `generatePreview`** — busca produto base por EAN (deve existir no banco)
+**⚠️ `createBulkProducts`** — sem rollback parcial (falhas individuais são contadas em `failed`)
+**⚠️ Usado por:** `EntradaPage` (cadastro em massa)
+
+---
+
+### `services/documentService.ts` — Documentos da Empresa
+
+**Exporta:** `uploadDocument`, `getDocuments`, `deleteDocument`, `getDocumentUrl`, `formatFileSize`
+**Tabela:** `company_documents`
+**Storage:** bucket `company-documents`
+**Limites:** 10MB por arquivo, máx 20 documentos, apenas PDF
+
+| Função | O que faz |
+|--------|-----------|
+| `uploadDocument(data)` | Valida + faz upload + salva metadados (rollback se DB falhar) |
+| `getDocuments()` | Lista documentos do usuário autenticado |
+| `deleteDocument(id)` | Remove do storage + banco |
+| `getDocumentUrl(filePath)` | URL assinada válida por **1 hora** |
+| `formatFileSize(bytes)` | `"1.5 MB"`, `"512 KB"`, etc. |
+
+**⚠️ `getDocumentUrl`** — URL expira em 1 hora (não cachear)
+**⚠️ `uploadDocument`** — rollback manual: se DB falhar, deleta arquivo do storage
+**⚠️ Usa `user_id` do auth** — fallback para UUID zero se não autenticado (com `console.warn`)
+
+---
+
+### `services/companySettingsService.ts` — Settings para Recibos
+
+**Exporta:** `companySettingsService`
+**Tabela:** `company_settings`
+**⚠️ Diferente de `companyService.ts`** — este é mais simples, focado em recibos/PDV
+
+| Método | O que faz |
+|--------|-----------|
+| `get()` | Busca primeiro registro (retorna `null` se vazio) |
+| `update(settings)` | Upsert manual (get → update ou insert) |
+| `getDefaults()` | Valores padrão para recibos |
+
+**Defaults:** `company_name='Mercado do Vale'`, `receipt_width='80mm'`, `show_company_info=true`, `footer_text='Obrigado pela preferência!'`
+**⚠️ Usado por:** PDV para configurar recibos e documentos
+
+---
+
+### `services/productGrouping.ts` — Agrupamento de Produtos do Catálogo
+
+**Exporta:** `groupProductsByVariants`, `filterAvailableProducts`, `findProductByVariant`, `getDefaultProductFromVariant`
+
+| Função | O que faz |
+|--------|-----------|
+| `filterAvailableProducts(products)` | Filtra: `status=active` + `stock_quantity>0` (se `track_inventory`) |
+| `groupProductsByVariants(products)` | Agrupa por `brand+model`, cria variantes por `ram+storage`, cores por variante |
+| `findProductByVariant(group, ram, storage, color)` | Encontra produto específico dentro de um grupo |
+| `getDefaultProductFromVariant(variant)` | Primeiro produto da variante |
+
+**`normalizeRAMAndStorage`** — detecta inversão (RAM > Storage) e corrige automaticamente
+**`generateGroupKey`** — `brand_model` (lowercase, espaços → hífens)
+**`ProductGroup`:** `{ groupKey, brand, model, variants[], allColors[], globalPriceRange, representativeProduct }`
+**`ProductVariant`:** `{ ram, storage, colors[], products[], priceRange }`
+**⚠️ Usado por:** `ModernProductCard` e catálogo público para exibir variações
+
+---
+
+### `utils/product-name-generator.ts` — Gerador de Nome de Produto
+
+**Exporta:** `generateProductName`, `generatePreviewName`, `getAvailableFieldsForNaming`, `getSeparatorOptions`, `getTemplatePresets`
+
+| Função | O que faz |
+|--------|-----------|
+| `generateProductName(config, productData)` | Gera nome baseado em `CategoryConfig.auto_name_*` |
+| `generatePreviewName(config)` | Preview com dados de exemplo (Apple iPhone 13, 4GB, 128GB...) |
+| `getAvailableFieldsForNaming()` | Lista de campos disponíveis para composição do nome |
+| `getSeparatorOptions()` | `' '`, `'/'`, `'-'`, `'_'`, `' - '`, `' / '` |
+| `getTemplatePresets()` | 4 templates prontos (Simples, Com vírgula, Completo, Compacto) |
+
+**Dois modos:**
+1. **Template** (`auto_name_template`): `"{modelo}, {ram}/{armazenamento} - {versao}"` → `"Redmi Note 14, 6GB/256GB - Global"`
+2. **Campos** (`auto_name_fields`): array de campos + separador
+
+**Placeholders em português:** `{marca}→brand`, `{modelo}→model`, `{ram}→ram`, `{armazenamento}→storage`, `{cor}→color`, `{versao}→version`, `{bateria}→battery_health`
+**⚠️ `generateFromTemplate`** — limpa separadores duplos (`,,`, `//`, `--`, `()` vazios)
+**⚠️ Usado por:** `CategoryConfigPage` e `ProductForm` para auto-preencher nome
+
+---
+
+### `utils/cpfCnpjValidation.ts` — Validação Fiscal Brasileira
+
+**Exporta:** `validateCPF`, `validateCNPJ`, `validateCpfCnpj`, `formatCpfCnpj`, `formatPhone`, `validateEmail`
+
+| Função | O que faz |
+|--------|-----------|
+| `validateCPF(cpf)` | Algoritmo oficial com 2 dígitos verificadores |
+| `validateCNPJ(cnpj)` | Algoritmo oficial com pesos `[5,4,3,2,9,8,7,6,5,4,3,2]` |
+| `validateCpfCnpj(value)` | Auto-detecta CPF (11 dígitos) ou CNPJ (14 dígitos) |
+| `formatCpfCnpj(value)` | `"123.456.789-01"` ou `"12.345.678/0001-90"` |
+| `formatPhone(value)` | `"(11) 98765-4321"` (celular) ou `"(11) 3456-7890"` (fixo) |
+| `validateEmail(email)` | Regex simples `^[^\s@]+@[^\s@]+\.[^\s@]+$` |
+
+**⚠️ `validateCpfCnpj('')`** → retorna `true` (campo opcional)
+**⚠️ Rejeita padrões inválidos** — `111.111.111-11`, `00.000.000/0000-00`, etc.
+
+---
+
+### `utils/warrantyTagReplacement.ts` — Substituição de Tags de Garantia
+
+**Exporta:** `replaceWarrantyTags`, `getWarrantyDeclaration`, `formatWarrantyDate`, `formatWarrantyPhone`, `formatWarrantyCpfCnpj`
+
+| Função | O que faz |
+|--------|-----------|
+| `replaceWarrantyTags(template, data)` | Substitui `{{tag_name}}` por valores de `WarrantyTagData` |
+| `getWarrantyDeclaration(deliveryType)` | Texto de declaração: "retirei na loja" ou "recebi" |
+| `formatWarrantyDate(date)` | `"DD/MM/YYYY"` |
+| `formatWarrantyPhone(phone)` | `"(11) 98765-4321"` ou `"(11) 3456-7890"` |
+| `formatWarrantyCpfCnpj(cpfCnpj)` | `"123.456.789-01"` ou `"12.345.678/0001-90"` |
+
+**⚠️ `replaceWarrantyTags`** — usa `RegExp` com escape de caracteres especiais para cada tag
+**⚠️ Usado por:** `PDVPage.generateWarrantyTerm()` para preencher o template HTML
+
+---
+
+### `utils/catalogMessageGenerator.ts` — Gerador de Mensagem de Catálogo
+
+**Exporta:** `generateCatalogMessage`, `generateCategoryMessage`, `generateFullCatalogMessage`
+
+| Função | O que faz |
+|--------|-----------|
+| `generateCatalogMessage(products, customerType, categoryName?)` | Gera mensagem WhatsApp formatada com emojis |
+| `generateCategoryMessage(categoryId, customerType)` | Busca produtos da categoria + gera mensagem |
+| `generateFullCatalogMessage(customerType)` | Busca todos os produtos ativos + gera mensagem |
+
+**Formato da mensagem:**
+```
+📱 *CATÁLOGO - SMARTPHONES*
+📅 Data: 18/02/2026
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+1. *iPhone 13*
+   📱 4GB/128GB
+   💰 R$ 2.500,00 à vista
+   💳 10x de R$ 290,00 (R$ 2.900,00)
+   🎨 Cores: Azul, Preto
+```
+
+**⚠️ `calculateInstallment`** — usa 10x com 16% de juros **hardcoded** (não usa `payment_fees` do banco)
+**⚠️ `groupProductsByVariant`** — agrupa por `model+ram+storage`, acumula cores
+**⚠️ Diferente de `whatsappMessageGenerator.ts`** — este é para catálogo geral, aquele é para orçamentos individuais
+
+---
+
+## 📊 TABELA FINAL — Todos os Services (54 arquivos)
+
+| Service | Tabela(s) | Tipo | Documentado |
+|---------|-----------|------|-------------|
+| `addressLookup.ts` | ViaCEP API | Util | ✅ |
+| `averagePriceService.ts` | `products` | Service | ✅ |
+| `bannerService.ts` | `catalog_banners` | Service | ✅ |
+| `batteryHealths-supabase.ts` | `battery_healths` | Service (atual) | ✅ |
+| `batteryHealths.ts` | localStorage | Service (legado) | ✅ |
+| `brands.ts` | `brands` | Service | ✅ |
+| `bulk-products.ts` | `products` via Excel | Service | ✅ |
+| `catalogConfigService.ts` | `catalog_settings` | Service | ✅ |
+| `catalogEditorService.ts` | `catalog_settings`, `catalog_banners` | Service | ✅ |
+| `catalogMetadataService.ts` | `catalog_metadata` | Service | ⚠️ Básico |
+| `catalogSectionsService.ts` | `catalog_sections` | Service | ✅ |
+| `catalogService.ts` | `products`, `categories` | Service | ✅ |
+| `catalogShareService.ts` | analytics | Service | ✅ |
+| `categories.ts` | `categories` | Service | ✅ |
+| `colors.ts` | `colors` | Service | ✅ |
+| `companyService.ts` | `company_settings` | Service | ✅ |
+| `companySettingsService.ts` | `company_settings` | Service | ✅ |
+| `custom-fields.ts` | `custom_fields` | Service | ✅ |
+| `customers.ts` | `customers` | Service | ✅ |
+| `documentService.ts` | `company_documents` | Service | ✅ |
+| `installmentCalculator.ts` | `payment_fees` | Service | ✅ |
+| `inventory.ts` | `products`, `stock_movements` | Service | ✅ |
+| `legacyAPI.ts` | localStorage | Legado | ⚠️ Legado |
+| `legacyAdapters.ts` | localStorage | Legado | ⚠️ Legado |
+| `model-color-images.ts` | `model_variant_images` | Service | ⚠️ Duplicado |
+| `model-eans.ts` | `model_eans` | Service | ✅ |
+| `model-variants.ts` | `model_variants` | Service | ✅ |
+| `modelColorImages.ts` | `model_variant_images` | Service (atual) | ✅ |
+| `models-new-backup.ts` | `models` | Backup | ⚠️ Backup |
+| `models-new.ts` | `models` | Service (atual) | ✅ |
+| `models.ts` | `models` | Service (legado) | ✅ |
+| `monitoringService.ts` | `system_logs`, `performance_metrics` | Service | ✅ |
+| `payment-fees.ts` | `payment_fees` | Service | ✅ |
+| `pricing.ts` | — | Util | ⚠️ Básico |
+| `productGrouping.ts` | — | Util | ✅ |
+| `productService.ts` | `products` | Service (wrapper) | ✅ |
+| `productVariants.ts` | — | Util | ✅ |
+| `products.ts` | `products` | Service (principal) | ✅ |
+| `rams-supabase.ts` | `rams` | Service (atual) | ✅ |
+| `rams.ts` | localStorage | Service (legado) | ✅ |
+| `resources.ts` | `resources` | Service | ⚠️ Básico |
+| `saleService.ts` | `sales`, `sale_items` | Service | ✅ |
+| `storages-supabase.ts` | `storages` | Service (atual) | ✅ |
+| `storages.ts` | localStorage | Service (legado) | ✅ |
+| `supabase.ts` | — | Config | ✅ |
+| `table-data.ts` | qualquer tabela | Util | ✅ |
+| `team.ts` | `team_members` | Service | ✅ |
+| `typeUpgradeRequests.ts` | `customer_type_requests` | Service | ✅ |
+| `units.ts` | `units` | Service | ✅ |
+| `uploadService.ts` | `catalog-banners` bucket | Service | ✅ |
+| `versions-supabase.ts` | `versions` | Service (atual) | ✅ |
+| `versions.ts` | localStorage | Service (legado) | ✅ |
+| `warrantyDocumentService.ts` | `warranty_documents` | Service | ✅ |
+| `warrantyTemplates.ts` | `warranty_templates` | Service | ✅ |
+
+## 📊 TABELA FINAL — Todos os Utils (17 arquivos)
+
+| Util | O que faz | Documentado |
+|------|-----------|-------------|
+| `calculateAveragePrice.ts` | Fórmula ponderada de preço médio | ✅ |
+| `catalogMessageGenerator.ts` | Mensagem WhatsApp de catálogo | ✅ |
+| `catalogPDFGenerator.ts` | Gerador de PDF do catálogo (16KB) | ⚠️ Básico |
+| `cn.ts` | `clsx` + `tailwind-merge` helper | ✅ |
+| `cnpjHelper.ts` | Helpers de CNPJ | ⚠️ Básico |
+| `cpfCnpjValidation.ts` | Validação CPF/CNPJ algoritmo oficial | ✅ |
+| `customerFormUtils.ts` | Utilitários de formulário de cliente | ⚠️ Básico |
+| `field-standards.ts` | `ProductStatus` enum e padrões | ✅ |
+| `image-compression.ts` | Compressão de imagens antes do upload | ⚠️ Básico |
+| `multiProductQuoteGenerator.ts` | Gerador de orçamento multi-produto | ⚠️ Básico |
+| `pricing.ts` | Funções de formatação de preço | ⚠️ Básico |
+| `product-name-generator.ts` | Gerador de nome automático por template | ✅ |
+| `saleCalculations.ts` | 18 funções de cálculo de vendas | ✅ |
+| `socialMediaHelpers.ts` | Helpers de redes sociais | ⚠️ Básico |
+| `urlHelpers.ts` | Helpers de URL para compartilhamento | ⚠️ Básico |
+| `warrantyTagReplacement.ts` | Substituição de `{{tags}}` em templates | ✅ |
+| `whatsappMessageGenerator.ts` | Gerador de mensagem de orçamento | ✅ |
