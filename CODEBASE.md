@@ -6,6 +6,21 @@
 
 ---
 
+## 🔴 DÉBITOS TÉCNICOS — Corrigir no Final
+
+> Problemas identificados durante o mapeamento. Não causam bugs críticos agora, mas devem ser corrigidos.
+
+| # | Problema | Arquivo(s) | Impacto | Prioridade |
+|---|---------|-----------|---------|-----------|
+| 1 | `versions.ts` usa **localStorage** em vez de Supabase — dados não persistem entre dispositivos | `services/versions.ts` | Versões de produto perdidas ao trocar browser/dispositivo | Média |
+| 2 | `resources.ts` é um **stub legado mock** que exporta `brandService`, `modelService`, `colorService` com os mesmos nomes dos services reais de Supabase — risco de import errado | `services/resources.ts` | Se importado por engano, retorna dados mock em vez do banco | Alta |
+| 3 | `brands.ts` — campo `active` **não existe no banco** — sempre retorna `true` hardcoded | `services/brands.ts` | Impossível desativar marcas | Baixa |
+| 4 | `productService.ts` (PDV) **não filtra por `company_id`** — queries sem RLS completo | `services/productService.ts` | Em ambiente multi-tenant, poderia retornar produtos de outras empresas | Alta |
+| 5 | `modelColorImages.ts` — interface TypeScript diz `image_url` mas banco usa `images TEXT[]` — interface desatualizada | `services/modelColorImages.ts` | Confusão ao usar o service — `ProductCard` contorna isso com query direta | Média |
+| 6 | `companyService.ts` e `companySettingsService.ts` acessam a **mesma tabela** `company_settings` com lógicas diferentes — risco de sobrescrever dados | `services/companyService.ts`, `services/companySettingsService.ts` | Dados da empresa podem ser sobrescritos por config de recibo | Alta |
+
+---
+
 ## 🏗️ Stack
 
 | Camada | Tecnologia |
