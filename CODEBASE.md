@@ -1712,3 +1712,269 @@ Seguir o padrão de `BrandModal`:
 3. `handleSave()` com validação + try/catch + `setSaving(true/false)`
 4. Retornar `null` se `!isOpen`
 
+---
+
+## 🎨 `services/colors.ts` — Detalhado
+
+**Exporta:** `colorService`, `COLOR_MAP`
+**Tabela:** `colors`
+**⚠️ `TEMP_COMPANY_ID = 'mercado-do-vale'`** — mesmo padrão de `models.ts`
+
+| Função | O que faz |
+|--------|-----------|
+| `list()` | Lista todas as cores da empresa |
+| `listActive()` | Apenas cores com `active=true` |
+| `getById(id)` | Cor por ID |
+| `create(input)` | Cria cor — auto-detecta `hex_code` do `COLOR_MAP` se não fornecido |
+| `update(id, input)` | Atualiza cor |
+| `delete(id)` | Remove cor |
+| `getColorHex(name)` | Retorna hex do `COLOR_MAP` (síncrono, apenas fallback) |
+
+**`COLOR_MAP`** — mapeamento nome→hex para preview visual:
+```ts
+{ 'Preto': '#000000', 'Branco': '#FFFFFF', 'Azul': '#3B82F6',
+  'Verde': '#10B981', 'Vermelho': '#EF4444', 'Rosa': '#EC4899',
+  'Dourado': '#F59E0B', 'Prata': '#9CA3AF', 'Cinza': '#6B7280',
+  'Roxo': '#8B5CF6', 'Amarelo': '#EAB308', 'Laranja': '#F97316' }
+```
+
+**⚠️ `getColorHex` é síncrono** — não consulta o banco, usa apenas `COLOR_MAP`
+**⚠️ Ao criar cor:** se `hex_code` não fornecido → busca no `COLOR_MAP` → fallback `'#000000'`
+
+### `ColorModal` — Detalhado
+**Campos:** `name` (formatação titlecase via `field-dictionary`), `hex_code` (color picker), `active`
+**`selectKnownColor(name)`** — ao clicar em cor conhecida: preenche nome E hex automaticamente
+**Preservação de cursor:** usa `useRef` para manter posição ao formatar o nome
+
+---
+
+## 🛒 `PDVPage` — Estado Interno
+
+**Arquivo:** `pages/pdv/PDVPage.tsx`
+**Sem `AdminLayout`** — tela cheia, sem sidebar
+
+### Estado principal
+```ts
+const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+const [cartItems, setCartItems] = useState<SaleItem[]>([]);
+const [payments, setPayments] = useState<PaymentMethod[]>([]);
+const [deliveryType, setDeliveryType] = useState<DeliveryType | undefined>();
+const [deliveryPersonId, setDeliveryPersonId] = useState<string | undefined>();
+const [deliveryCostStore, setDeliveryCostStore] = useState(0);
+const [deliveryCostCustomer, setDeliveryCostCustomer] = useState(0);
+const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
+const [showReceipt, setShowReceipt] = useState(false);
+const [lastSale, setLastSale] = useState<any>(null);
+```
+
+### Handlers principais
+| Handler | O que faz |
+|---------|-----------|
+| `handleAddToCart(product, qty)` | Adiciona produto — se já existe, incrementa quantidade |
+| `handleUpdateQuantity(itemId, qty)` | Atualiza quantidade de item |
+| `handleRemoveItem(itemId)` | Remove item do carrinho |
+| `handleClearCart()` | Limpa carrinho + pagamentos + entrega |
+| `handleAddPayment(payment)` | Adiciona método de pagamento |
+| `handleRemovePayment(index)` | Remove método de pagamento |
+| `handleDeliveryChange(type, personId, costStore, costCustomer)` | Atualiza entrega |
+| `handleSelectInstallment(installments, amount, feeAmount)` | Seleciona parcela com taxa |
+| `handleFinalizeSale()` | Finaliza venda → cria sale + items → gera garantia |
+| `generateWarrantyTerm(sale, customer, items)` | Prepara dados do termo de garantia |
+| `handleWarrantyDeliveryTypeChange(type)` | Atualiza tipo de entrega no termo |
+| `handleGenerateWarranty(signature)` | Salva termo com assinatura digital |
+
+**⚠️ `handleFinalizeSale`** — fluxo crítico:
+1. Valida: cliente selecionado? carrinho não vazio? pagamento completo?
+2. `saleService.createSale()` → cria venda no banco
+3. `generateWarrantyTerm()` → prepara dados do termo
+4. `setShowReceipt(true)` → exibe recibo
+5. Limpa carrinho após sucesso
+
+---
+
+## 📄 PADRÃO DE PÁGINAS CRUD (Settings)
+
+Todas as páginas de configuração (`BrandsPage`, `ModelsPage`, `ColorsPage`, etc.) seguem o mesmo padrão:
+
+```tsx
+const [items, setItems] = useState<Item[]>([]);
+const [loading, setLoading] = useState(true);
+const [isModalOpen, setIsModalOpen] = useState(false);
+const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+
+// Carrega dados ao montar
+useEffect(() => { loadData(); }, []);
+
+const loadData = async () => {
+    const data = await itemService.list();
+    setItems(data);
+};
+
+// Handlers
+const handleAdd = () => { setSelectedItem(null); setIsModalOpen(true); };
+const handleEdit = (item) => { setSelectedItem(item); setIsModalOpen(true); };
+const handleDelete = async (item) => { await itemService.delete(item.id); loadData(); };
+const handleSave = () => { loadData(); }; // Recarrega após salvar no modal
+```
+
+**Renderização:** tabela com colunas + botões Editar/Excluir + botão "Novo" no header
+**Modal:** `<XxxModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSave} item={selectedItem} />`
+
+---
+
+## 🛠️ UTILS RESTANTES
+
+### `utils/cn.ts` — Merge de Classes CSS
+```ts
+cn('px-4', condition && 'bg-blue-500', 'rounded') // → 'px-4 bg-blue-500 rounded'
+```
+Combina `clsx` (condicionais) + `tailwind-merge` (resolve conflitos de classes Tailwind).
+**⚠️ Usado em praticamente todos os componentes** — importar de `utils/cn`, não de `clsx` diretamente.
+
+---
+
+### `utils/urlHelpers.ts` — Helpers de URL
+| Função | O que faz |
+|--------|-----------|
+| `getFullUrl(path)` | `window.location.origin + path` |
+| `addUrlParams(url, params)` | Adiciona query params à URL |
+| `generateSlug(text)` | Texto → slug URL-friendly (remove acentos, espaços→hífens) |
+| `getCurrentUrlParams()` | Retorna todos os query params da URL atual |
+| `getWhatsAppShareUrl(url, text?)` | `https://wa.me/?text=...` |
+| `getFacebookShareUrl(url)` | URL de share do Facebook |
+| `getTwitterShareUrl(url, text?)` | URL de share do Twitter |
+| `getEmailShareUrl(url, subject?, body?)` | `mailto:?subject=...&body=...` |
+
+**⚠️ Usado por:** `useShareUrl` hook
+
+---
+
+### `utils/catalogPDFGenerator.ts` — Gerador de PDF do Catálogo
+**Usa:** `jsPDF` + `jspdf-autotable`
+
+| Função | O que faz |
+|--------|-----------|
+| `generateCatalogPDF(products, customerType, categoryName?)` | PDF completo com imagens, preços e parcelamento |
+| `generateCategoryPDF(categoryId, customerType)` | PDF de uma categoria específica |
+| `generateFullCatalogPDF(customerType)` | PDF de todo o catálogo |
+
+**`CustomerType`:** `'retail' | 'reseller' | 'wholesale'`
+**Agrupamento:** por variação (modelo + RAM + storage), exibe cores disponíveis
+**Parcelamento:** 10x com 16% de juros (hardcoded)
+**Imagens:** carrega via `loadImageAsBase64` (fetch → blob → base64)
+**⚠️ Busca `company_settings`** para header do PDF (nome, telefone, email, endereço, logo)
+
+---
+
+### `utils/cpfCnpjValidation.ts`
+Validação de CPF e CNPJ com algoritmo de dígitos verificadores.
+**⚠️ Usado por:** `CustomerForm`
+
+### `utils/cnpjHelper.ts`
+Formatação e consulta de CNPJ (máscara XX.XXX.XXX/XXXX-XX).
+
+### `utils/image-compression.ts`
+Compressão de imagens antes do upload usando `browser-image-compression`.
+**⚠️ Usado por:** `ImageUploader`
+
+### `utils/multiProductQuoteGenerator.ts`
+Gera mensagem de cotação para múltiplos produtos no WhatsApp.
+
+### `utils/catalogMessageGenerator.ts`
+Gera mensagem de catálogo para WhatsApp com lista de produtos.
+**`CustomerType`:** `'retail' | 'reseller' | 'wholesale'`
+
+### `utils/socialMediaHelpers.ts`
+Helpers para redes sociais (formatação de URLs, validação de handles).
+
+### `utils/customerFormUtils.ts`
+Utilitários para o formulário de cliente (formatação de CPF/CNPJ, validações).
+
+### `utils/pricing.ts`
+Funções de precificação (cálculo de margem, markup, preço sugerido).
+**⚠️ Usado por:** `ProductPricing` (seção do ProductForm)
+
+---
+
+## 🗄️ TABELAS DO BANCO — Complemento
+
+### `colors`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `name` | TEXT | Nome da cor |
+| `slug` | TEXT | URL-friendly |
+| `hex_code` | TEXT | Código hexadecimal (ex: `#3B82F6`) |
+| `active` | BOOLEAN | Cor ativa? |
+
+### `brands`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `name` | TEXT | Nome da marca |
+| `slug` | TEXT | URL-friendly |
+| `warranty_days` | INTEGER | Garantia padrão em dias |
+| `active` | BOOLEAN | **⚠️ Não existe no banco** — sempre `true` (débito #3) |
+
+### `warranty_documents`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `sale_id` | UUID | FK sales |
+| `customer_id` | UUID | FK customers |
+| `content` | TEXT | HTML do documento com tags substituídas |
+| `signature` | TEXT | Assinatura digital (base64) |
+| `delivery_type` | TEXT | `store_pickup` ou `delivery` |
+| `created_at` | TIMESTAMPTZ | |
+
+### `sale_items`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `sale_id` | UUID | FK sales |
+| `product_id` | UUID | FK products |
+| `product_name` | TEXT | Nome no momento da venda (snapshot) |
+| `quantity` | INTEGER | Quantidade |
+| `unit_price` | INTEGER | Preço unitário em centavos |
+| `unit_cost` | INTEGER | Custo unitário em centavos |
+| `discount` | INTEGER | Desconto em centavos |
+| `total` | INTEGER | Total em centavos |
+| `is_gift` | BOOLEAN | Item brinde? |
+
+### `stock_movements`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `product_id` | UUID | FK products |
+| `type` | TEXT | `in` (entrada) ou `out` (saída) |
+| `quantity` | INTEGER | Quantidade movimentada |
+| `reason` | TEXT | Motivo do ajuste |
+| `created_at` | TIMESTAMPTZ | **Imutável** — nunca deletar |
+
+**⚠️ `stock_movements` é append-only** — nunca deletar registros, apenas adicionar
+
+---
+
+## 🔑 SUPABASE RLS — Resumo
+
+| Tabela | RLS ativo? | Filtro obrigatório |
+|--------|-----------|-------------------|
+| `products` | ✅ | `company_id` |
+| `categories` | ✅ | `company_id` |
+| `models` | ✅ | `company_id` |
+| `brands` | ✅ | `company_id` |
+| `colors` | ✅ | `company_id` |
+| `customers` | ✅ | `company_id` |
+| `sales` | ✅ | `company_id` |
+| `sale_items` | ✅ | via `sale_id` |
+| `model_color_images` | ✅ | `company_id` |
+| `custom_fields` | ✅ | `company_id` |
+| `company_settings` | ✅ | usuário autenticado |
+| `stock_movements` | ✅ | via `product_id` |
+
+**⚠️ Sem `company_id` no filtro → query retorna vazio silenciosamente (sem erro)**
+**⚠️ `company_id` padrão:** obtido via `companies.select('id').eq('slug', 'mercado-do-vale')`
+
