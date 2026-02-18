@@ -20,72 +20,93 @@ export function useModelTemplate(
     useEffect(() => {
         if (!selectedModel) return;
 
-        console.log('🔍 useModelTemplate - Model selected:', {
-            name: selectedModel.name,
-            hasTemplateValues: !!selectedModel.template_values,
-            templateValues: selectedModel.template_values,
-            category_id: selectedModel.category_id,
-            description: selectedModel.description
-        });
+        // Use async IIFE to handle async operations
+        (async () => {
+            console.log('🔍 useModelTemplate - Model selected:', {
+                name: selectedModel.name,
+                hasTemplateValues: !!selectedModel.template_values,
+                templateValues: selectedModel.template_values,
+                category_id: selectedModel.category_id,
+                description: selectedModel.description,
+                brand_id: selectedModel.brand_id
+            });
 
-        // Skip if no template values
-        if (!selectedModel.template_values || Object.keys(selectedModel.template_values).length === 0) {
-            console.log('⏭️ useModelTemplate - No template values, skipping');
-            return;
-        }
+            let fieldsFilledCount = 0;
 
-        let fieldsFilledCount = 0;
-
-        // 1. Preencher categoria
-        if (selectedModel.category_id) {
-            setValue('category_id', selectedModel.category_id);
-            fieldsFilledCount++;
-        }
-
-        // 2. Preencher descrição
-        if (selectedModel.description) {
-            setValue('description', selectedModel.description);
-            fieldsFilledCount++;
-        }
-
-        // 3. Preencher valores do template (excluindo campos únicos)
-        Object.entries(selectedModel.template_values).forEach(([key, value]) => {
-            // Pular campos únicos
-            if (UNIQUE_FIELDS.includes(key)) {
-                console.log(`⏭️ Skipping unique field: ${key}`);
-                return;
+            // 1. Preencher marca (buscar nome da marca pelo brand_id)
+            if (selectedModel.brand_id) {
+                try {
+                    const { brandService } = await import('../../../services/brands');
+                    const brands = await brandService.list();
+                    const brand = brands.find(b => b.id === selectedModel.brand_id);
+                    if (brand) {
+                        setValue('brand', brand.name);
+                        fieldsFilledCount++;
+                        console.log(`✅ Filled brand: ${brand.name}`);
+                    }
+                } catch (error) {
+                    console.error('Error loading brand:', error);
+                }
             }
 
-            // Determinar caminho do campo
-            // Preços: price_* (direto)
-            // Logística: weight_kg (direto), dimensions.* (nested)
-            // Specs: specs.* ou assumir spec se não for preço/logística
-            if (key.startsWith('price_')) {
-                setValue(key, value);
-                console.log(`✅ Filled price field: ${key} = ${value}`);
-            } else if (key === 'weight_kg') {
-                setValue('weight_kg', value);
-                console.log(`✅ Filled logistics field: weight_kg = ${value}`);
-            } else if (key.startsWith('dimensions.')) {
-                setValue(key, value);
-                console.log(`✅ Filled logistics field: ${key} = ${value}`);
-            } else if (key.startsWith('specs.')) {
-                setValue(key, value);
-                console.log(`✅ Filled spec field: ${key} = ${value}`);
-            } else {
-                // Assumir que é spec se não for preço ou logística
-                setValue(`specs.${key}`, value);
-                console.log(`✅ Filled spec field: specs.${key} = ${value}`);
+            // 2. Preencher categoria
+            if (selectedModel.category_id) {
+                setValue('category_id', selectedModel.category_id);
+                fieldsFilledCount++;
+                console.log(`✅ Filled category_id: ${selectedModel.category_id}`);
             }
 
-            fieldsFilledCount++;
-        });
+            // 3. Preencher descrição
+            if (selectedModel.description) {
+                setValue('description', selectedModel.description);
+                fieldsFilledCount++;
+                console.log(`✅ Filled description`);
+            }
 
-        // Mostrar toast apenas se preencheu algum campo
-        if (fieldsFilledCount > 0 && !skipToast) {
-            toast.success(`📋 ${fieldsFilledCount} campos preenchidos do template!`);
-        }
+            // 4. Preencher valores do template (se existirem)
+            if (selectedModel.template_values && Object.keys(selectedModel.template_values).length > 0) {
+                Object.entries(selectedModel.template_values).forEach(([key, value]) => {
+                    // Pular campos únicos
+                    if (UNIQUE_FIELDS.includes(key)) {
+                        console.log(`⏭️ Skipping unique field: ${key}`);
+                        return;
+                    }
 
-        console.log(`🎯 Template applied: ${fieldsFilledCount} fields filled from model "${selectedModel.name}"`);
+                    // Determinar caminho do campo
+                    // Preços: price_* (direto)
+                    // Logística: weight_kg (direto), dimensions.* (nested)
+                    // Specs: specs.* ou assumir spec se não for preço/logística
+                    if (key.startsWith('price_')) {
+                        setValue(key, value);
+                        console.log(`✅ Filled price field: ${key} = ${value}`);
+                    } else if (key === 'weight_kg') {
+                        setValue('weight_kg', value);
+                        console.log(`✅ Filled logistics field: weight_kg = ${value}`);
+                    } else if (key.startsWith('dimensions.')) {
+                        setValue(key, value);
+                        console.log(`✅ Filled logistics field: ${key} = ${value}`);
+                    } else if (key.startsWith('specs.')) {
+                        setValue(key, value);
+                        console.log(`✅ Filled spec field: ${key} = ${value}`);
+                    } else {
+                        // Assumir que é spec se não for preço ou logística
+                        setValue(`specs.${key}`, value);
+                        console.log(`✅ Filled spec field: specs.${key} = ${value}`);
+                    }
+
+                    fieldsFilledCount++;
+                });
+
+                // Mostrar toast apenas se preencheu algum campo
+                if (fieldsFilledCount > 0 && !skipToast) {
+                    toast.success(`📋 ${fieldsFilledCount} campos preenchidos do template!`);
+                }
+
+                console.log(`🎯 Template applied: ${fieldsFilledCount} fields filled from model "${selectedModel.name}"`);
+            } // Closing brace for template_values if block
+
+            // Show summary log
+            console.log(`✅ useModelTemplate completed: ${fieldsFilledCount} total fields filled`);
+        })();
     }, [selectedModel, setValue, skipToast]);
 }

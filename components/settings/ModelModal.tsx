@@ -139,6 +139,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [brands, setBrands] = useState<Brand[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
+    const [categoryConfig, setCategoryConfig] = useState<any>(null);
 
     // UI State
     const [saving, setSaving] = useState(false);
@@ -192,6 +193,27 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
             setLoading(false);
         }
     };
+
+    // Load category configuration when category changes
+    useEffect(() => {
+        const loadCategoryConfig = async () => {
+            if (!categoryId) {
+                setCategoryConfig(null);
+                return;
+            }
+            try {
+                const category = await categoryService.getById(categoryId);
+                if (category) {
+                    console.log('🔍 [ModelModal] Loaded category config:', category.name, category.config);
+                    setCategoryConfig(category.config);
+                }
+            } catch (error) {
+                console.error('Error loading category config:', error);
+                setCategoryConfig(null);
+            }
+        };
+        loadCategoryConfig();
+    }, [categoryId]);
 
     const handleTemplateValueChange = (key: string, value: any) => {
         setTemplateValues(prev => ({
@@ -482,10 +504,40 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                             <div className="border-t border-slate-200 pt-4">
                                 <h4 className="font-medium text-slate-800 mb-3">Valores Padrão</h4>
 
+                                {/* Category Info */}
+                                {categoryId && categoryConfig && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                        <p className="text-xs text-blue-800">
+                                            📋 Mostrando apenas campos configurados para a categoria selecionada
+                                        </p>
+                                    </div>
+                                )}
+
                                 {/* Spec Fields */}
                                 <div className="grid grid-cols-2 gap-4">
                                     {customFields
                                         .filter(f => f.category === 'spec')
+                                        .filter(field => {
+                                            // If no category selected, show all fields
+                                            if (!categoryId || !categoryConfig) {
+                                                console.log(`🔍 [FieldConfigSection] ${field.key} field: No category, showing all`);
+                                                return true;
+                                            }
+
+                                            // Check if field is configured in category
+                                            const fieldKey = field.key;
+                                            const configValue = categoryConfig[fieldKey];
+
+                                            console.log(`🔍 [FieldConfigSection] ${fieldKey} field: {fieldKey: ${fieldKey}, currentValue: ${configValue}, configValue: ${configValue}}`);
+
+                                            // If field is explicitly set to 'off', hide it
+                                            if (configValue === 'off') {
+                                                return false;
+                                            }
+
+                                            // Show field if it's required, optional, or not configured
+                                            return true;
+                                        })
                                         .map((field) => (
                                             <TemplateFieldInput
                                                 key={field.id}
@@ -495,6 +547,18 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                                             />
                                         ))}
                                 </div>
+
+                                {/* No fields message */}
+                                {categoryId && categoryConfig && customFields
+                                    .filter(f => f.category === 'spec')
+                                    .filter(field => {
+                                        const configValue = categoryConfig[field.key];
+                                        return configValue !== 'off';
+                                    }).length === 0 && (
+                                        <div className="text-center py-8 text-slate-500">
+                                            <p className="text-sm">Nenhum campo de especificação configurado para esta categoria</p>
+                                        </div>
+                                    )}
                             </div>
 
                             {/* Logistics Fields */}

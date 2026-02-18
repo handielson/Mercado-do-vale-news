@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Package, Ruler, Weight, Shield } from 'lucide-react';
+import { X, Package } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
-import { formatPrice } from '@/services/installmentCalculator';
+import { formatPrice, calculateInstallments } from '@/services/installmentCalculator';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
-import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
+import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { supabase } from '@/services/supabase';
 
 interface ProductDetailsModalProps {
@@ -12,6 +12,50 @@ interface ProductDetailsModalProps {
     onClose: () => void;
     onQuote: () => void;
 }
+
+/** Maps technical field keys to Portuguese display labels */
+const SPEC_LABELS: Record<string, string> = {
+    // Connectivity
+    nfc: 'NFC',
+    network: 'Rede',
+    wifi: 'Wi-Fi',
+    bluetooth: 'Bluetooth',
+    usb: 'USB',
+    // Performance
+    chipset: 'Chipset',
+    processor: 'Processador',
+    antutu: 'AnTuTu',
+    gpu: 'GPU',
+    // Memory
+    ram: 'Memória RAM',
+    storage: 'Armazenamento',
+    // Display
+    display: 'Display (pol)',
+    resolution: 'Resolução',
+    refresh_rate: 'Taxa de Atualização',
+    // Camera
+    main_camera_mpx: 'Câmera Principal',
+    selfie_camera_mpx: 'Câmera Frontal',
+    camera: 'Câmera',
+    // Battery
+    battery_mah: 'Bateria (mAh)',
+    battery_health: 'Saúde da Bateria',
+    charging: 'Carregamento',
+    // Physical
+    resistencia: 'Resistência',
+    weight: 'Peso',
+    dimensions: 'Dimensões',
+    color: 'Cor',
+    // Software
+    version: 'Versão',
+    os: 'Sistema Operacional',
+    android: 'Android',
+    // Other
+    sim: 'SIM Card',
+    sensors: 'Sensores',
+    audio: 'Áudio',
+    gps: 'GPS',
+};
 
 export function ProductDetailsModal({
     product,
@@ -22,10 +66,25 @@ export function ProductDetailsModal({
     // Get customer context for pricing
     const { customer } = useSupabaseAuth();
     const effectivePrice = getEffectivePrice(product, customer);
+    const effectiveCustomerType = useEffectiveCustomerType();
+    const isWholesale = effectiveCustomerType === 'wholesale';
 
     // State for model template values
     const [templateValues, setTemplateValues] = useState<Record<string, any> | null>(null);
     const [loadingTemplate, setLoadingTemplate] = useState(false);
+    const [installment12x, setInstallment12x] = useState<string>('');
+
+    // Calculate 12x installment when modal opens (not for wholesale)
+    useEffect(() => {
+        if (!isOpen || !effectivePrice || isWholesale) {
+            setInstallment12x('');
+            return;
+        }
+        calculateInstallments(effectivePrice, 12).then(plans => {
+            const plan = plans.find(p => p.installments === 12);
+            if (plan) setInstallment12x(formatPrice(plan.value));
+        });
+    }, [isOpen, effectivePrice, isWholesale]);
 
     // Fetch model template_values when modal opens
     useEffect(() => {
@@ -158,10 +217,20 @@ export function ProductDetailsModal({
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {Object.entries(templateValues)
                                         .filter(([key]) => !['imei1', 'imei2', 'serial', 'id', 'created_at', 'updated_at'].includes(key.toLowerCase()))
+                                        .sort(([a], [b]) => {
+                                            const keys = Object.keys(SPEC_LABELS);
+                                            const idxA = keys.indexOf(a.toLowerCase());
+                                            const idxB = keys.indexOf(b.toLowerCase());
+                                            // Known fields first (by SPEC_LABELS order), unknown fields alphabetically at end
+                                            if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+                                            if (idxA === -1) return 1;
+                                            if (idxB === -1) return -1;
+                                            return idxA - idxB;
+                                        })
                                         .map(([key, value]) => (
                                             <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                                                <span className="text-sm font-medium text-slate-600 capitalize">
-                                                    {key.replace(/_/g, ' ')}:
+                                                <span className="text-sm font-medium text-slate-600">
+                                                    {SPEC_LABELS[key.toLowerCase()] ?? key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}:
                                                 </span>
                                                 <span className="text-sm text-slate-900 font-semibold">
                                                     {String(value)}
@@ -181,11 +250,21 @@ export function ProductDetailsModal({
                         <div className="border-t border-slate-200 pt-6">
                             <h3 className="text-lg font-semibold text-slate-900 mb-3">Preço</h3>
                             {effectivePrice && (
-                                <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg">
-                                    <p className="text-sm text-slate-600 mb-2">Preço à Vista</p>
-                                    <p className="text-3xl font-bold text-blue-700">
-                                        {formatPrice(effectivePrice)}
-                                    </p>
+                                <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg space-y-3">
+                                    <div>
+                                        <p className="text-sm text-slate-500 mb-1">Preço à Vista (PIX)</p>
+                                        <p className="text-3xl font-bold text-blue-700">
+                                            {formatPrice(effectivePrice)}
+                                        </p>
+                                    </div>
+                                    {installment12x && (
+                                        <div className="border-t border-blue-100 pt-3">
+                                            <p className="text-sm text-slate-500 mb-1">No Cartão de Crédito</p>
+                                            <p className="text-xl font-bold text-slate-700">
+                                                12x de {installment12x}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -5,12 +5,13 @@
  * Database: Displays models.template_values, collects data for products table
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Model } from '../../../../types/model';
 import { BatchProductRow } from '../ProductEntryWizard';
 import { BatchEntryGrid } from '../components/BatchEntryGrid';
 import { UNIQUE_FIELDS } from '../../../../config/product-fields';
+import { categoryService } from '../../../../services/categories';
 
 interface BatchEntryStepProps {
     model: Model; // Selected model from Step 1
@@ -23,11 +24,82 @@ export function BatchEntryStep({ model, templateData, onComplete, onBack }: Batc
     // Technical: State for batch products grid
     const [batchProducts, setBatchProducts] = useState<BatchProductRow[]>([]);
 
-    // Technical: Filter UNIQUE_FIELDS to show only relevant ones
-    // For smartphones: imei1, imei2, serial, color, storage, ram
-    const relevantFields = UNIQUE_FIELDS.filter(field =>
-        !['sku', 'ean'].includes(field) // Hide SKU and EAN for now (can be added later)
-    );
+    // Technical: State for category configuration
+    const [categoryConfig, setCategoryConfig] = useState<any>(null);
+    const [loadingConfig, setLoadingConfig] = useState(true);
+
+    // Technical: Load category configuration when model changes
+    useEffect(() => {
+        const loadCategoryConfig = async () => {
+            if (!model.category_id) {
+                console.log('⏭️ [BatchEntryStep] No category_id in model, showing all fields');
+                setCategoryConfig(null);
+                setLoadingConfig(false);
+                return;
+            }
+
+            try {
+                console.log('🔄 [BatchEntryStep] Loading category config for model:', model.name, 'category_id:', model.category_id);
+                const category = await categoryService.getById(model.category_id);
+                if (category) {
+                    console.log('✅ [BatchEntryStep] Category config loaded:', category.name, category.config);
+                    setCategoryConfig(category.config);
+                } else {
+                    console.log('⚠️ [BatchEntryStep] Category not found');
+                    setCategoryConfig(null);
+                }
+            } catch (error) {
+                console.error('❌ [BatchEntryStep] Error loading category config:', error);
+                setCategoryConfig(null);
+            } finally {
+                setLoadingConfig(false);
+            }
+        };
+
+        loadCategoryConfig();
+    }, [model.category_id]);
+
+    // Technical: Filter UNIQUE_FIELDS based on category configuration
+    // Using useMemo to recalculate when categoryConfig changes
+    const relevantFields = useMemo(() => {
+        // Wait for config to load before filtering
+        if (loadingConfig) {
+            console.log('⏳ [BatchEntryStep] Config still loading, returning empty fields');
+            return [];
+        }
+
+        const filtered = UNIQUE_FIELDS.filter(field => {
+            // Always hide SKU and EAN for now (can be added later)
+            if (['sku', 'ean'].includes(field)) {
+                console.log(`🔍 [BatchEntryStep] Hiding ${field} (SKU/EAN always hidden)`);
+                return false;
+            }
+
+            // If no category config loaded or no category, show all remaining fields
+            if (!categoryConfig) {
+                console.log(`🔍 [BatchEntryStep] Showing ${field} (no category config)`);
+                return true;
+            }
+
+            // Check if field is configured in category
+            const configValue = categoryConfig[field];
+
+            console.log(`🔍 [BatchEntryStep] Field ${field}: configValue = ${configValue}`);
+
+            // If field is explicitly set to 'off', hide it
+            if (configValue === 'off') {
+                console.log(`🔍 [BatchEntryStep] Hiding ${field} (configured as 'off')`);
+                return false;
+            }
+
+            // Show field if it's required, optional, or not configured
+            console.log(`🔍 [BatchEntryStep] Showing ${field} (required/optional/not configured)`);
+            return true;
+        });
+
+        console.log('✅ [BatchEntryStep] Filtered fields:', filtered);
+        return filtered;
+    }, [categoryConfig, loadingConfig]);
 
     // Technical: Count valid products (ready to save)
     const validProductsCount = batchProducts.filter(p => p.isValid).length;

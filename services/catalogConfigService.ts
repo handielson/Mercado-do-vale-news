@@ -185,15 +185,15 @@ class CatalogConfigService {
         }
 
         // Regra: Ocultar categorias sem estoque
+        // Produtos com stock_quantity=null não monitoram estoque (ex: acessórios) → tratados como disponíveis
         if (settings.hide_categories_no_stock) {
-            // Buscar produtos de cada categoria e verificar estoque
             const categoriesWithStock = await Promise.all(
                 categories.map(async (cat) => {
                     const { data } = await supabase
                         .from('products')
-                        .select('stock_quantity')
+                        .select('id')
                         .eq('category_id', cat.id)
-                        .gt('stock_quantity', 0)
+                        .or('stock_quantity.gt.0,stock_quantity.is.null')
                         .limit(1);
 
                     return data && data.length > 0 ? cat : null;

@@ -181,8 +181,8 @@ function CatalogContent() {
                     />
                 </div>
 
-                {/* Seções do Catálogo */}
-                {!sectionsLoading && Array.isArray(sections) && sections.length > 0 && (
+                {/* Seções do Catálogo - ocultar quando há filtro de categoria ativo */}
+                {!sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && (
                     <div className="mb-12 space-y-12">
                         {sections.map((section) => (
                             <CatalogSectionComponent key={section.id} section={section} />
@@ -191,7 +191,7 @@ function CatalogContent() {
                 )}
 
                 {/* Divisor */}
-                {sections.length > 0 && (
+                {sections.length > 0 && !filters.categories.length && (
                     <div className="mb-8">
                         <div className="border-t border-slate-200"></div>
                     </div>

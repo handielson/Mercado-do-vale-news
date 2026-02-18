@@ -33,6 +33,7 @@ export function ModernProductCard({
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showQuoteModal, setShowQuoteModal] = useState(false);
     const [installment10x, setInstallment10x] = useState<string>('');
+    const [installment12x, setInstallment12x] = useState<string>('');
     const [currentColorIndex, setCurrentColorIndex] = useState(0);
 
     // NEW: Selected variant state (defaults to first variant)
@@ -119,9 +120,9 @@ export function ModernProductCard({
         const loadInstallment = async () => {
             const plans = await calculateInstallments(effectivePrice, 12);
             const plan10x = plans.find(p => p.installments === 10);
-            if (plan10x) {
-                setInstallment10x(formatPrice(plan10x.value));
-            }
+            const plan12x = plans.find(p => p.installments === 12);
+            if (plan10x) setInstallment10x(formatPrice(plan10x.value));
+            if (plan12x) setInstallment12x(formatPrice(plan12x.value));
         };
 
         loadInstallment();
@@ -148,9 +149,9 @@ export function ModernProductCard({
 
                 if (price > 0) {
                     const plans = await calculateInstallments(price, 12);
-                    const plan10x = plans.find(p => p.installments === 10);
-                    if (plan10x) {
-                        newInstallments.set(i, formatPrice(plan10x.value));
+                    const plan12x = plans.find(p => p.installments === 12);
+                    if (plan12x) {
+                        newInstallments.set(i, formatPrice(plan12x.value));
                     }
                 }
             }
@@ -174,11 +175,11 @@ export function ModernProductCard({
 
         // Fallback to placeholder with brand name
         const brandName = product.brand || 'Produto';
-        return `https://via.placeholder.com/400x300/3B82F6/FFFFFF?text=${encodeURIComponent(brandName)}`;
+        return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%233B82F6'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>${encodeURIComponent(brandName)}</text></svg>`;
     };
 
     const imageUrl = !imageError ? getImageUrl() :
-        `https://via.placeholder.com/400x300/EF4444/FFFFFF?text=Sem+Imagem`;
+        `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%23EF4444'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>Sem Imagem</text></svg>`;
 
     // Build memory badge (RAM/Storage)
     const memoryBadge = variants && variants.rams.length > 0 && variants.storages.length > 0
@@ -340,7 +341,7 @@ export function ModernProductCard({
                     </div>
 
                     {/* Out of Stock Overlay */}
-                    {product.stock_quantity !== undefined && product.stock_quantity <= 0 && (
+                    {product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0 && (
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
                             <span className="text-white font-bold text-lg">Esgotado</span>
                         </div>
@@ -352,7 +353,9 @@ export function ModernProductCard({
                     {/* Title & Brand */}
                     <div>
                         <h3 className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                            {currentProduct.model || currentProduct.name}
+                            {productGroup
+                                ? productGroup.model
+                                : product.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim()}
                         </h3>
                         {currentProduct.brand && (
                             <p className="text-sm text-slate-600 mt-1">{currentProduct.brand}</p>
@@ -415,8 +418,8 @@ export function ModernProductCard({
                                                         {formatPrice(variant.products[0] ? getEffectivePrice(variant.products[0], customer) : variant.priceRange.min)}
                                                     </div>
                                                     {installment && effectiveCustomerType !== 'wholesale' && (
-                                                        <div className="text-xs text-slate-600">
-                                                            10x de {installment}
+                                                        <div className="text-xs text-slate-500">
+                                                            12x de {installment}
                                                         </div>
                                                     )}
                                                 </div>
@@ -446,22 +449,29 @@ export function ModernProductCard({
                             <span className="text-xs text-slate-600 font-medium">Configurações:</span>
                             <div className="p-2.5 rounded-lg border-2 border-blue-600 bg-blue-50">
                                 <div className="flex justify-between items-start mb-1">
-                                    <span className="font-semibold text-sm">
-                                        {product.specs?.ram || 'N/A'}/{product.specs?.storage || 'N/A'}
-                                    </span>
+                                    {/* Only show RAM/Storage if at least one exists */}
+                                    {(product.specs?.ram || product.specs?.storage) ? (
+                                        <span className="font-semibold text-sm">
+                                            {product.specs?.ram || 'N/A'}/{product.specs?.storage || 'N/A'}
+                                        </span>
+                                    ) : (
+                                        <span className="font-semibold text-sm text-slate-500">
+                                            {product.specs?.color || 'Padrão'}
+                                        </span>
+                                    )}
                                     <div className="text-right">
                                         <div className="text-base font-bold text-blue-600">
                                             {formatPrice(getEffectivePrice(product, customer))}
                                         </div>
-                                        {installment10x && effectiveCustomerType !== 'wholesale' && (
-                                            <div className="text-xs text-slate-600">
-                                                10x de {installment10x}
+                                        {installment12x && effectiveCustomerType !== 'wholesale' && (
+                                            <div className="text-xs text-slate-500">
+                                                12x de {installment12x}
                                             </div>
                                         )}
                                     </div>
                                 </div>
-                                {/* Color indicator */}
-                                {product.specs?.color && (
+                                {/* Color indicator — only show if we already showed RAM/Storage above */}
+                                {(product.specs?.ram || product.specs?.storage) && product.specs?.color && (
                                     <div className="flex gap-1.5 mt-1.5 items-center">
                                         <div
                                             className="w-3 h-3 rounded-full border border-slate-300"

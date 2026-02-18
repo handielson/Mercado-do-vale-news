@@ -184,14 +184,14 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         const loadMetadata = async () => {
             try {
                 const { catalogMetadataService } = await import('@/services/catalogMetadataService');
-                const [categories, brands] = await Promise.all([
+                const [allCategories, brands] = await Promise.all([
                     catalogMetadataService.getAllCategories(),
                     catalogMetadataService.getAllBrands()
                 ]);
 
-                // Aplicar regras de visibilidade às categorias
+                // Aplicar regras de visibilidade às categorias (hide_empty_categories, hide_categories_no_stock)
                 const filteredCategories = await catalogConfigService.applyCategoryVisibilityRules(
-                    categories,
+                    allCategories,
                     catalogSettings
                 );
 
@@ -205,6 +205,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             loadMetadata();
         }
     }, [catalogSettings, settingsLoading]);
+
 
     return {
         products,

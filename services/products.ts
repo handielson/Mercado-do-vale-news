@@ -59,6 +59,10 @@ async function getById(id: string): Promise<Product | null> {
         throw new Error(`Failed to fetch product: ${error.message}`);
     }
 
+    console.log('🔍 [productService.getById] Raw database data:', data);
+    console.log('🔍 [productService.getById] data.specs:', data.specs);
+    console.log('🔍 [productService.getById] typeof data.specs:', typeof data.specs);
+
     return transformFromDB(data);
 }
 
@@ -89,13 +93,40 @@ async function getByEan(ean: string): Promise<Product | null> {
 async function create(input: ProductInput): Promise<Product> {
     const companyId = await getCompanyId();
 
+    // Validate model_id is provided
+    if (!input.model_id || input.model_id.trim() === '') {
+        throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
+    }
+
+    // Fetch model data to populate brand, category, dimensions
+    const { data: modelData, error: modelError } = await supabase
+        .from('models')
+        .select(`
+            id,
+            name,
+            brand_id,
+            category_id,
+            template_values,
+            brand:brands(name)
+        `)
+        .eq('id', input.model_id)
+        .single();
+
+    if (modelError) throw new Error(`Failed to fetch model: ${modelError.message}`);
+
+    // Merge model data with input
+    const brand = modelData.brand?.name || input.brand;
+    const category_id = modelData.category_id || input.category_id;
+    const dimensions = input.dimensions || modelData.template_values?.dimensions;
+    const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
+
     const { data, error } = await supabase
         .from('products')
         .insert({
             company_id: companyId,
-            category_id: input.category_id,
-            brand: input.brand,
-            model: input.model,
+            model_id: input.model_id,
+            brand,
+            category_id,
             name: input.name,
             sku: input.sku || null,
             description: input.description || null,
@@ -110,14 +141,16 @@ async function create(input: ProductInput): Promise<Product> {
             ncm: input.ncm || null,
             cest: input.cest || null,
             origin: input.origin || null,
-            weight_kg: input.weight_kg || null,
-            dimensions: input.dimensions || null,
+            weight_kg,
+            dimensions,
             stock_quantity: input.stock_quantity || 0,
             status: input.status,
             track_inventory: input.track_inventory,
-            is_gift: input.is_gift || false
+            is_gift: input.is_gift || false,
+            warranty_type: input.warranty_type || 'brand',
+            warranty_template_id: input.warranty_template_id || null
         })
-        .select()
+        .select('*')
         .single();
 
     if (error) throw new Error(`Failed to create product: ${error.message}`);
@@ -131,12 +164,39 @@ async function create(input: ProductInput): Promise<Product> {
 async function update(id: string, input: ProductInput): Promise<Product> {
     const companyId = await getCompanyId();
 
+    // Validate model_id is provided
+    if (!input.model_id || input.model_id.trim() === '') {
+        throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
+    }
+
+    // Fetch model data to populate brand, category, dimensions
+    const { data: modelData, error: modelError } = await supabase
+        .from('models')
+        .select(`
+            id,
+            name,
+            brand_id,
+            category_id,
+            template_values,
+            brand:brands(name)
+        `)
+        .eq('id', input.model_id)
+        .single();
+
+    if (modelError) throw new Error(`Failed to fetch model: ${modelError.message}`);
+
+    // Merge model data with input
+    const brand = modelData.brand?.name || input.brand;
+    const category_id = modelData.category_id || input.category_id;
+    const dimensions = input.dimensions || modelData.template_values?.dimensions;
+    const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
+
     const { data, error } = await supabase
         .from('products')
         .update({
-            category_id: input.category_id,
-            brand: input.brand,
-            model: input.model,
+            model_id: input.model_id,
+            brand,
+            category_id,
             name: input.name,
             sku: input.sku || null,
             description: input.description || null,
@@ -151,12 +211,14 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             ncm: input.ncm || null,
             cest: input.cest || null,
             origin: input.origin || null,
-            weight_kg: input.weight_kg || null,
-            dimensions: input.dimensions || null,
+            weight_kg,
+            dimensions,
             stock_quantity: input.stock_quantity || 0,
             status: input.status,
             track_inventory: input.track_inventory,
-            is_gift: input.is_gift || false
+            is_gift: input.is_gift || false,
+            warranty_type: input.warranty_type || 'brand',
+            warranty_template_id: input.warranty_template_id || null
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -226,9 +288,10 @@ async function searchByEAN(ean: string): Promise<Product[]> {
 function transformFromDB(row: any): Product {
     return {
         id: row.id,
+        model_id: row.model_id,
+        model: '', // Will be populated when needed
         category_id: row.category_id,
-        brand: row.brand || '',
-        model: row.model || '',
+        brand: row.brand,
         name: row.name,
         sku: row.sku,
         description: row.description,
@@ -250,6 +313,8 @@ function transformFromDB(row: any): Product {
         status: row.status || ProductStatus.ACTIVE,
         track_inventory: row.track_inventory !== false,
         is_gift: row.is_gift || false,
+        warranty_type: row.warranty_type || 'brand',
+        warranty_template_id: row.warranty_template_id || null,
         created: row.created_at,
         updated: row.updated_at
     };

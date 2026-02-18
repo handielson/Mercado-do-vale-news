@@ -197,7 +197,34 @@ class CatalogSectionsService {
             const { data, error } = await query;
 
             if (error) throw error;
-            return (data || []) as CatalogProduct[];
+            let products = (data || []) as CatalogProduct[];
+
+            // Enrich products with model images if they have no custom images
+            const productsNeedingImages = products.filter(
+                p => (!p.images || p.images.length === 0) && p.model_id
+            );
+
+            if (productsNeedingImages.length > 0) {
+                const modelIds = [...new Set(productsNeedingImages.map(p => p.model_id))];
+                const { data: modelImages } = await supabase
+                    .from('model_color_images')
+                    .select('model_id, color_id, images')
+                    .in('model_id', modelIds);
+
+                if (modelImages && modelImages.length > 0) {
+                    products = products.map(product => {
+                        if (product.images && product.images.length > 0) return product;
+                        if (!product.model_id) return product;
+                        const modelImgEntry = modelImages.find(mi => mi.model_id === product.model_id);
+                        if (modelImgEntry && modelImgEntry.images?.length > 0) {
+                            return { ...product, images: modelImgEntry.images };
+                        }
+                        return product;
+                    });
+                }
+            }
+
+            return products;
         } catch (error) {
             console.error('Erro ao buscar produtos da seção:', error);
             return [];

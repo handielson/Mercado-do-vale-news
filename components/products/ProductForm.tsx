@@ -56,16 +56,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
 
     // useForm DEVE vir ANTES de useEANAutofill
     const {
-        register,
         handleSubmit,
         setValue,
         getValues,
         watch,
         control,
+        reset,
         formState: { errors }
     } = useForm<ProductInput>({
         resolver: zodResolver(productSchema),
         defaultValues: {
+            model_id: '',
+            name: '',
+            sku: '',
             status: 'active',
             images: [],
             specs: {},
@@ -74,20 +77,29 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             price_retail: 0,
             price_reseller: 0,
             price_wholesale: 0,
+            track_inventory: true,
+            stock_quantity: 0,
             warranty_type: 'brand', // Default to brand warranty
             warranty_template_id: '',
             ...initialData // Spread initialData AFTER defaults to override with actual values
         }
     });
 
-    // DEBUG: Log initialData to see what's coming from database
+    // Reset form when initialData changes (for edit mode)
     useEffect(() => {
         if (initialData) {
-            console.log('🔍 ProductForm initialData:', initialData);
+            console.log('🔍 [ProductForm] initialData:', initialData);
+            console.log('🛡️ [ProductForm] warranty_type:', initialData.warranty_type);
+            console.log('🛡️ [ProductForm] warranty_template_id:', initialData.warranty_template_id);
             console.log('💰 price_cost value:', initialData.price_cost);
             console.log('💰 price_retail value:', initialData.price_retail);
+            console.log('📦 specs value:', initialData.specs);
+            console.log('📦 specs type:', typeof initialData.specs);
+            console.log('📦 specs keys:', initialData.specs ? Object.keys(initialData.specs) : 'NO SPECS');
+            console.log('🔄 Resetting form with initialData...');
+            reset(initialData);
         }
-    }, [initialData]);
+    }, [initialData, reset]);
 
     // EAN auto-fill hook (DEPOIS do useForm)
     const {
@@ -363,15 +375,88 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(
         async (data) => {
+            console.log('🔍 [ProductForm] Form data received:', data);
+            console.log('  - model_id:', data.model_id);
+            console.log('  - brand:', data.brand);
+            console.log('  - category_id:', data.category_id);
+            console.log('  - model:', data.model);
+            console.log('  - sku:', data.sku);
+            console.log('🛡️ [ProductForm] WARRANTY FIELDS:');
+            console.log('  - warranty_type:', data.warranty_type);
+            console.log('  - warranty_template_id:', data.warranty_template_id);
+
+            // 0. Buscar modelo selecionado para pegar template_values
+            let mergedData = { ...data };
+
+            // CRITICAL FIX: Manually add warranty fields from watch() since they're not in data
+            const currentWarrantyType = watch('warranty_type');
+            const currentWarrantyTemplateId = watch('warranty_template_id');
+
+            console.log('🔧 [ProductForm] MANUAL WARRANTY INJECTION:');
+            console.log('  - watch(warranty_type):', currentWarrantyType);
+            console.log('  - watch(warranty_template_id):', currentWarrantyTemplateId);
+
+            mergedData.warranty_type = currentWarrantyType || 'brand';
+            mergedData.warranty_template_id = currentWarrantyTemplateId || null;
+
+            if (data.model) {
+                try {
+                    const models = await modelService.listActive();
+                    const model = models.find(m => m.name === data.model);
+
+                    if (model?.template_values) {
+                        console.log('📋 Merging template values from model:', model.name);
+
+                        // Merge dimensions from template if not manually filled
+                        if (!data.dimensions || Object.keys(data.dimensions).length === 0) {
+                            mergedData.dimensions = {
+                                width_cm: model.template_values['dimensions.width_cm'],
+                                height_cm: model.template_values['dimensions.height_cm'],
+                                depth_cm: model.template_values['dimensions.depth_cm']
+                            };
+                            console.log('✅ Applied dimensions from template:', mergedData.dimensions);
+                        }
+
+                        // Merge weight from template if not filled
+                        if (!data.weight_kg) {
+                            mergedData.weight_kg = model.template_values.weight_kg;
+                            console.log('✅ Applied weight from template:', mergedData.weight_kg);
+                        }
+
+                        // Auto-generate SKU if empty
+                        if (!data.sku || data.sku.trim() === '') {
+                            const brandPrefix = data.brand?.substring(0, 2).toUpperCase() || 'XX';
+                            const modelPrefix = model.name.substring(0, 3).toUpperCase();
+                            const timestamp = Date.now().toString().slice(-6);
+                            mergedData.sku = `${brandPrefix}-${modelPrefix}-${timestamp}`;
+                            console.log('✅ Auto-generated SKU:', mergedData.sku);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching model for template merge:', error);
+                    // Continue without template merge
+                }
+            }
+
+            // Clear stock_quantity if not tracking inventory
+            if (!mergedData.track_inventory) {
+                mergedData.stock_quantity = undefined;
+                console.log('✅ Cleared stock_quantity (inventory tracking disabled)');
+            }
+
             // 1. Salvar produto
-            await onSubmit(data);
+            console.log('📤 [ProductForm] Sending to onSubmit:', mergedData);
+            console.log('🛡️ [ProductForm] Final WARRANTY check:');
+            console.log('  - warranty_type:', mergedData.warranty_type);
+            console.log('  - warranty_template_id:', mergedData.warranty_template_id);
+            await onSubmit(mergedData);
 
             // 2. Calcular preço médio se for novo produto com variação
-            if (!initialData && selectedBrandId && data.specs?.ram && data.specs?.storage) {
+            if (!initialData && selectedBrandId && mergedData.specs?.ram && mergedData.specs?.storage) {
                 try {
                     console.log('📊 Calculating average prices...');
                     const result = await averagePriceService.updateAveragePrices({
-                        ...data,
+                        ...mergedData,
                         model_id: selectedBrandId // Usar brand_id como model_id temporariamente
                     });
 
@@ -428,6 +513,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 setValue={setValue}
                 control={control}
                 errors={errors}
+                initialData={initialData}
             />
 
             {/* 2. ESPECIFICAÇÕES TÉCNICAS */}
@@ -446,8 +532,22 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 warrantyTemplateId={watch('warranty_template_id') || ''}
                 brandWarrantyDays={brandWarrantyDays}
                 categoryWarrantyDays={categoryWarrantyDays}
-                onWarrantyTypeChange={(type) => setValue('warranty_type', type)}
-                onTemplateChange={(templateId) => setValue('warranty_template_id', templateId)}
+                onWarrantyTypeChange={(type) => setValue('warranty_type', type, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
+                onTemplateChange={(templateId) => setValue('warranty_template_id', templateId, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
+            />
+
+            {/* Simple hidden inputs to ensure warranty fields are in form submission */}
+            <input
+                type="hidden"
+                name="warranty_type"
+                value={watch('warranty_type') || 'brand'}
+                readOnly
+            />
+            <input
+                type="hidden"
+                name="warranty_template_id"
+                value={watch('warranty_template_id') || ''}
+                readOnly
             />
 
             {/* 4. IMAGENS */}
@@ -497,7 +597,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                                 type="number"
                                 min="0"
                                 step="1"
-                                {...register('stock_quantity', { valueAsNumber: true })}
+                                value={watch('stock_quantity') || 0}
+                                onChange={(e) => setValue('stock_quantity', e.target.valueAsNumber || 0)}
                                 placeholder="Ex: 10"
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -526,27 +627,30 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">NCM (8 dígitos)</label>
                         <input
-                            {...register('ncm')}
+                            value={watch('ncm') || ''}
+                            onChange={(e) => setValue('ncm', e.target.value)}
                             maxLength={8}
                             placeholder="12345678"
                             className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                            onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, '') }}
+                            onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, ''); }}
                         />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">CEST (7 dígitos)</label>
                         <input
-                            {...register('cest')}
+                            value={watch('cest') || ''}
+                            onChange={(e) => setValue('cest', e.target.value)}
                             maxLength={7}
                             placeholder="1234567"
                             className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                            onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, '') }}
+                            onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, ''); }}
                         />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Origem da Mercadoria</label>
                         <select
-                            {...register('origin')}
+                            value={watch('origin') || '0'}
+                            onChange={(e) => setValue('origin', e.target.value)}
                             className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                         >
                             <option value="">Selecione...</option>
@@ -578,3 +682,4 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
         </form >
     );
 }
+

@@ -50,10 +50,10 @@ export function ProductCard({
 
         // Fallback genérico baseado na marca
         const brandName = product.brand || 'Produto';
-        return `https://via.placeholder.com/400x300/3B82F6/FFFFFF?text=${encodeURIComponent(brandName)}`;
+        return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%233B82F6'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>${encodeURIComponent(brandName)}</text></svg>`;
     };
 
-    const imageUrl = !imageError ? getImageUrl() : `https://via.placeholder.com/400x300/EF4444/FFFFFF?text=Sem+Imagem`;
+    const imageUrl = !imageError ? getImageUrl() : `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%23EF4444'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>Sem Imagem</text></svg>`;
 
     const handleFavorite = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -219,7 +219,7 @@ export function ProductCard({
                 </div>
 
                 {/* Overlay de estoque */}
-                {product.stock_quantity !== undefined && product.stock_quantity <= 0 && (
+                {product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0 && (
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
                         <span className="text-white font-bold text-lg">Esgotado</span>
                     </div>
@@ -257,14 +257,14 @@ export function ProductCard({
                 {onAddToCart && (
                     <button
                         onClick={handleAddToCart}
-                        disabled={product.stock_quantity !== undefined && product.stock_quantity <= 0}
-                        className={`w-full py-2.5 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${product.stock_quantity !== undefined && product.stock_quantity <= 0
+                        disabled={product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0}
+                        className={`w-full py-2.5 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0
                             ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
                             : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md active:scale-95'
                             }`}
                     >
                         <ShoppingCart className="w-4 h-4" />
-                        {product.stock_quantity !== undefined && product.stock_quantity <= 0 ? 'Esgotado' : 'Adicionar ao Carrinho'}
+                        {product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0 ? 'Esgotado' : 'Adicionar ao Carrinho'}
                     </button>
                 )}
             </div>

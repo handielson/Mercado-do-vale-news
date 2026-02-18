@@ -9,14 +9,17 @@ import { ProductStatus } from '../utils/field-standards';
  */
 
 export const productSchema = z.object({
-    // Category & Brand
-    category_id: z.string().min(1, 'Categoria é obrigatória'),
-    brand: z.string().min(1, 'Marca é obrigatória'),
-    model: z.string().min(1, 'Modelo é obrigatório'),
+    // Model Reference (optional - populated by EAN scanner)
+    model_id: z.string().optional(),
+
+    // Category & Brand (optional - come from model)
+    category_id: z.string().optional(),
+    brand: z.string().optional(),
+    model: z.string().optional(),
 
     // Basic Information
     name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
-    sku: z.string().min(3, 'SKU deve ter pelo menos 3 caracteres'),
+    sku: z.string().optional(), // Auto-generated if empty
 
     // Pricing (in centavos) - Fixed NaN issue with z.coerce
     price_cost: z.coerce.number().min(0, 'Preço de custo deve ser maior ou igual a zero').nullable().optional(),
@@ -92,7 +95,7 @@ export const productSchema = z.object({
         }),
         depth_cm: z.union([
             z.number()
-                .min(16, 'Profundidade mínima permitida pelos Correios: 16cm')
+                .min(0, 'Profundidade deve ser maior ou igual a zero')
                 .max(105, 'Profundidade máxima permitida pelos Correios: 105cm'),
             z.nan(),
             z.null(),
@@ -122,7 +125,7 @@ export const productSchema = z.object({
 ).refine(
     (data) => {
         // If tracking inventory, stock_quantity is required
-        if (data.track_inventory && data.stock_quantity === undefined) {
+        if (data.track_inventory === true && (data.stock_quantity === undefined || data.stock_quantity === null)) {
             return false;
         }
         return true;

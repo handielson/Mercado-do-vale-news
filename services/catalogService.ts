@@ -94,7 +94,43 @@ export const catalogService = {
 
         if (error) throw error;
 
-        const products = (data || []) as CatalogProduct[];
+        let products = (data || []) as CatalogProduct[];
+
+        // Enrich products with model images if they have no custom images
+        const productsNeedingImages = products.filter(
+            p => (!p.images || p.images.length === 0) && p.model_id
+        );
+
+        if (productsNeedingImages.length > 0) {
+            const modelIds = [...new Set(productsNeedingImages.map(p => p.model_id))];
+            console.log('🖼️ [catalogService] Products needing images:', productsNeedingImages.length);
+            console.log('🖼️ [catalogService] Model IDs to fetch:', modelIds);
+
+            const { data: modelImages, error: imgError } = await supabase
+                .from('model_color_images')
+                .select('model_id, color_id, images')
+                .in('model_id', modelIds);
+
+            console.log('🖼️ [catalogService] model_color_images result:', { modelImages, imgError });
+
+            if (modelImages && modelImages.length > 0) {
+                products = products.map(product => {
+                    if (product.images && product.images.length > 0) return product;
+                    if (!product.model_id) return product;
+
+                    // Find any image entry for this model
+                    const modelImgEntry = modelImages.find(mi => mi.model_id === product.model_id);
+                    console.log(`🖼️ [catalogService] Product "${product.name}" model_id=${product.model_id}, found entry:`, modelImgEntry);
+
+                    if (modelImgEntry && modelImgEntry.images?.length > 0) {
+                        return { ...product, images: modelImgEntry.images };
+                    }
+                    return product;
+                });
+            } else {
+                console.log('🖼️ [catalogService] No model images found! Error:', imgError);
+            }
+        }
 
         // Atualizar cache
         productCache.set(cacheKey, { data: products, timestamp: Date.now() });

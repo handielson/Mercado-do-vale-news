@@ -40,10 +40,13 @@ export interface ProductDimensions {
 export interface Product {
     id: string;
 
-    // Category & Brand
-    category_id: string;
-    brand: string;
-    model: string;
+    // Model Reference (source of truth for brand, category, dimensions)
+    model_id: string;          // FK to models table
+    model: string;             // Model name (denormalized for display)
+
+    // Category & Brand (from model, optional for override)
+    category_id?: string;
+    brand?: string;
 
     // Basic Information
     name: string;
@@ -111,9 +114,10 @@ export interface Product {
  * Data required to create or update a product
  */
 export interface ProductInput {
-    category_id: string;
-    brand: string;
-    model: string;
+    model_id: string;          // Required: FK to models table
+    model?: string;            // Optional: model name for display
+    category_id?: string;      // Optional: override from model
+    brand?: string;            // Optional: override from model
     name: string;
     sku: string;
     price_cost: number;

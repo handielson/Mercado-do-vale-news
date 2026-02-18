@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, RefreshCw } from 'lucide-react';
 import { storageService } from '../../../services/storages-supabase';
+import { ramService } from '../../../services/rams-supabase';
 import { Storage } from '../../../types/storage';
 
 interface CapacitySelectProps {
@@ -19,8 +20,8 @@ interface CapacitySelectProps {
  * Generic selector for storage/RAM capacities with inline creation
  * 
  * ANTIGRAVITY PROTOCOL:
- * - Uses localStorage-based storageService
- * - Shows only active storages
+ * - Uses ramService for RAM, storageService for storage
+ * - Shows only active entries
  * - Inline creation capability
  */
 export const CapacitySelect: React.FC<CapacitySelectProps> = ({
@@ -40,13 +41,16 @@ export const CapacitySelect: React.FC<CapacitySelectProps> = ({
 
     useEffect(() => {
         loadCapacities();
-    }, []);
+    }, [type]);
 
     const loadCapacities = async () => {
         try {
             setIsLoading(true);
-            const data = await storageService.listActive(); // Only active storages
-            setCapacities(data);
+            // Use ramService for RAM fields, storageService for storage fields
+            const data = type === 'ram'
+                ? await ramService.listActive()
+                : await storageService.listActive();
+            setCapacities(data as Storage[]);
         } catch (error) {
             console.error('Error loading capacities:', error);
         } finally {

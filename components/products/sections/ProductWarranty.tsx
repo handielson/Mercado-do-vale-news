@@ -34,6 +34,12 @@ export const ProductWarranty: React.FC<ProductWarrantyProps> = ({
     const [templates, setTemplates] = useState<WarrantyTemplate[]>([]);
     const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
 
+    // Debug: Log warranty values
+    useEffect(() => {
+        console.log('🔍 [ProductWarranty] warrantyType:', warrantyType);
+        console.log('🔍 [ProductWarranty] warrantyTemplateId:', warrantyTemplateId);
+    }, [warrantyType, warrantyTemplateId]);
+
     // Load warranty templates
     useEffect(() => {
         const loadTemplates = async () => {

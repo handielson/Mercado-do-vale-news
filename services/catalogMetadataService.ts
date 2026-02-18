@@ -24,37 +24,40 @@ export const catalogMetadataService = {
      * Buscar todas as categorias com contagem de produtos
      */
     getAllCategories: async (): Promise<Array<{ id: string; name: string; count: number }>> => {
-        const { data, error } = await supabase
+        // Fetch all categories
+        const { data: cats, error: catsError } = await supabase
             .from('categories')
-            .select('id, name');
+            .select('id, name')
+            .order('name', { ascending: true });
 
-        if (error) {
-            console.error('Erro ao buscar categorias:', error);
+        if (catsError) {
+            console.error('Erro ao buscar categorias:', catsError);
             return [];
         }
 
-        // Buscar contagem de produtos por categoria
-        const { data: products, error: productsError } = await supabase
+        // For each category, count products via a single aggregated query
+        const { data: counts, error: countsError } = await supabase
             .from('products')
-            .select('category_id');
+            .select('category_id')
+            .not('category_id', 'is', null);
 
-        if (productsError) {
-            console.error('Erro ao buscar produtos:', productsError);
-            return (data || []).map(cat => ({ ...cat, count: 0 }));
+        if (countsError) {
+            console.error('Erro ao contar produtos:', countsError);
+            return (cats || []).map(cat => ({ ...cat, count: 0 }));
         }
 
-        // Contar produtos por categoria
-        const counts = new Map<string, number>();
-        (products || []).forEach(p => {
+        // Build count map
+        const countMap = new Map<string, number>();
+        (counts || []).forEach(p => {
             if (p.category_id) {
-                counts.set(p.category_id, (counts.get(p.category_id) || 0) + 1);
+                countMap.set(p.category_id, (countMap.get(p.category_id) || 0) + 1);
             }
         });
 
-        return (data || []).map(cat => ({
+        return (cats || []).map(cat => ({
             id: cat.id,
             name: cat.name,
-            count: counts.get(cat.id) || 0
+            count: countMap.get(cat.id) || 0
         }));
     },
 

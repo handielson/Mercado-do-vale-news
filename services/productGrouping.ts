@@ -180,11 +180,15 @@ export function groupProductsByVariants(products: CatalogProduct[]): ProductGrou
 
         // Use first product as representative
         const representative = modelProducts[0];
+        // Derive clean display name from product.name (strip RAM/Storage variant suffix)
+        const cleanName = (representative.name || representative.model || '')
+            .replace(/,?\s*\d+GB\/\d+GB/gi, '')
+            .trim();
 
         groups.push({
             groupKey: modelKey,
             brand: representative.brand || '',
-            model: representative.model || '',
+            model: cleanName,
             variants,
             allColors: Array.from(allColorsMap.values()),
             globalPriceRange: {
