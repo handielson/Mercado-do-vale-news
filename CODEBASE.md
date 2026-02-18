@@ -1467,3 +1467,248 @@ O projeto usa Vite. Variáveis devem ter prefixo `VITE_` para serem acessíveis 
 **⚠️ `VersionSelect` e `CapacitySelect` usam services de localStorage** — dados não persistem no banco
 **⚠️ Todos os selectors são usados em `ProductSpecifications` e `ProductBasicInfo`**
 
+---
+
+## 🪟 MODAIS DE CONFIGURAÇÃO (`components/settings/`)
+
+### Padrão de Modal (todos seguem este padrão)
+```tsx
+interface XxxModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    item?: Xxx | null; // null = criar, Xxx = editar
+}
+```
+- `isOpen=false` → retorna `null` (não renderiza)
+- `useEffect([item, isOpen])` → reseta formulário ao abrir
+- `handleSave()` → valida → chama `service.create()` ou `service.update()` → `onSave()` → `onClose()`
+
+### `BrandModal`
+**Campos:** `name` (obrigatório, mín. 2 chars), `warranty_days` (padrão: 90), `active`
+**Service:** `brandService.create()` / `brandService.update()`
+**⚠️ Campo `active` existe no modal mas `brands.ts` sempre retorna `active=true` (débito #3)**
+
+### `ModelModal` — O mais complexo
+**Abas:** `basic` (nome, marca, categoria, EANs) + `template` (valores padrão por campo)
+**Sub-componente:** `TemplateFieldInput` — renderiza input adequado por tipo de campo (`text`, `number`, `dropdown`, `brl`, `table_relation`)
+**Fluxo:**
+1. Ao selecionar categoria → `loadCategoryConfig()` → busca campos da categoria
+2. Aba Template → preenche `template_values` (JSONB) com valores padrão
+3. Ao escanear EAN no ProductForm → `template_values` é aplicado automaticamente
+**⚠️ `template_values` é salvo como JSONB na tabela `models`**
+**⚠️ Inclui `ColorImageManager`** — gerencia fotos por cor do modelo
+
+### `ColorModal`
+**Campos:** `name`, `hex` (cor hexadecimal), `active`
+**⚠️ Histórico:** tinha memory leak de `setTimeout` sem cleanup — corrigido
+
+---
+
+## 🎨 THEMECONTEXT — Detalhado
+
+**Arquivo:** `contexts/ThemeContext.tsx`
+**Hook:** `useTheme()` → `{ settings, isLoading }`
+
+**`ThemeSettings`:**
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `company_name` | string | Nome da empresa (padrão: `'Mercado do Vale'`) |
+| `theme_colors` | `Record<string, string>` | Cores CSS (padrão: `{primary: '#3b82f6', secondary: '#1e293b'}`) |
+| `logo_main` | string? | URL do logo principal (favicon + header) |
+| `logo_dark` | string? | URL do logo para modo escuro |
+
+**Comportamento:**
+- Inicia com valores padrão **imediatamente** (sem bloqueio de render)
+- Busca `company_settings` em background (sem `isLoading=true`)
+- Injeta CSS variables em `:root`: `--primary`, `--secondary`, etc.
+- Aplica `<title>` e `<link rel="icon">` via `react-helmet-async`
+
+**⚠️ Tabela:** `company_settings` (mesma que `companyService` e `companySettingsService`)
+**⚠️ Campos lidos:** `company_name`, `theme_colors`, `logo_main`, `logo_dark`
+
+---
+
+## 🏭 `services/models.ts` — Detalhado
+
+**Exporta:** `modelService`
+**Tabela:** `models`
+**⚠️ `TEMP_COMPANY_ID = 'mercado-do-vale'`** — company_id obtido via slug hardcoded (não usa auth)
+
+| Função | O que faz |
+|--------|-----------|
+| `list()` | Lista todos os modelos da empresa |
+| `getById(id)` | Modelo por ID |
+| `listByBrand(brandId)` | Modelos filtrados por marca |
+| `listActive()` | Alias para `list()` (todos são considerados ativos) |
+| `listActiveByBrand(brandId)` | Alias para `listByBrand()` |
+| `create(input)` | Cria modelo com `template_values`, `category_id`, `eans` |
+| `update(id, input)` | Atualiza modelo (inclui `template_values`) |
+| `delete(id)` | Remove modelo |
+
+**Campos mapeados do banco:**
+- `template_values` (JSONB) → valores padrão para autofill no ProductForm
+- `category_id` → categoria padrão do modelo
+- `eans` → EANs do modelo (legado, substituído por `model_eans`)
+
+**⚠️ Diferença de `models-new.ts`:** `models.ts` é o service atual usado em produção. `models-new.ts` pode ser uma versão experimental — verificar antes de usar.
+
+---
+
+## 📝 GERADOR DE NOMES — `utils/product-name-generator.ts`
+
+**Exporta:** `generateProductName`, `generatePreviewName`, `getAvailableFieldsForNaming`, `getSeparatorOptions`, `getTemplatePresets`
+
+### `generateProductName(config, productData): string`
+Gera nome do produto baseado na `CategoryConfig`.
+
+**Dois modos:**
+1. **Template** (novo): `config.auto_name_template = "{modelo}, {ram}/{armazenamento} - {versao}"`
+2. **Campos** (legado): `config.auto_name_fields = ['model', 'ram', 'storage']` + `auto_name_separator`
+
+**Placeholders do template:**
+| Placeholder | Campo |
+|------------|-------|
+| `{marca}` | `brand` |
+| `{modelo}` | `model` |
+| `{ram}` | `specs.ram` |
+| `{armazenamento}` | `specs.storage` |
+| `{cor}` | `specs.color` |
+| `{versao}` | `specs.version` |
+| `{bateria}` | `specs.battery_health` |
+| `{serial}` | `specs.serial` |
+| `{imei1}` | `specs.imei1` |
+
+**Limpeza automática:** remove vírgulas duplas, parênteses vazios, hífens duplicados quando campos estão vazios.
+
+**⚠️ Usado por:** `ProductForm` (gera nome automaticamente ao preencher campos)
+
+---
+
+## 🔒 FLUXO DE GARANTIA
+
+### Fluxo completo
+```
+1. Venda finalizada → saleService.createSale()
+2. warrantyDocumentService.create(saleId, items)
+3. Para cada item: busca WarrantyTemplate da categoria/marca
+4. replaceWarrantyTags(template.content, data) → substitui {{tags}}
+5. Documento salvo na tabela warranty_documents
+6. Admin pode imprimir/baixar PDF via WarrantyDocumentPage
+```
+
+### Tags disponíveis (`{{tag_name}}`)
+| Tag | Valor |
+|-----|-------|
+| `{{cliente_nome}}` | Nome do cliente |
+| `{{cliente_cpf}}` | CPF/CNPJ formatado |
+| `{{produto_nome}}` | Nome do produto |
+| `{{produto_serial}}` | Serial do produto |
+| `{{produto_imei1}}` | IMEI 1 |
+| `{{produto_imei2}}` | IMEI 2 |
+| `{{garantia_dias}}` | Prazo em dias |
+| `{{data_venda}}` | Data da venda (DD/MM/YYYY) |
+| `{{data_expiracao}}` | Data de expiração da garantia |
+| `{{empresa_nome}}` | Nome da empresa |
+| `{{empresa_telefone}}` | Telefone formatado |
+| `{{declaracao}}` | Texto de declaração (retirada vs entrega) |
+
+**⚠️ Funções de formatação:** `formatWarrantyDate`, `formatWarrantyPhone`, `formatWarrantyCpfCnpj`
+
+---
+
+## 📦 DEPENDÊNCIAS EXTERNAS
+
+| Lib | Versão | Para que serve |
+|-----|--------|---------------|
+| `@supabase/supabase-js` | ^2.93.3 | Banco de dados, auth, storage |
+| `react-hook-form` | ^7.71.1 | Formulários (ProductForm, etc.) |
+| `@hookform/resolvers` | ^5.2.2 | Integração react-hook-form + Zod |
+| `zod` | ^3.25.76 | Validação de schemas |
+| `react-router-dom` | ^6.22.0 | Roteamento SPA |
+| `react-helmet-async` | ^2.0.4 | SEO: `<title>`, `<meta>`, favicon |
+| `sonner` | ^2.0.7 | Toast notifications (substituiu react-hot-toast) |
+| `react-hot-toast` | ^2.6.0 | Toast legacy (ainda presente) |
+| `lucide-react` | ^0.344.0 | Ícones |
+| `react-icons` | ^5.5.0 | Ícones adicionais |
+| `jspdf` + `jspdf-autotable` | ^4.1.0 | Geração de PDF (catálogo, garantia) |
+| `xlsx` | ^0.18.5 | Exportação/importação Excel (bulk products) |
+| `browser-image-compression` | ^2.0.2 | Compressão de imagens antes do upload |
+| `react-dropzone` | ^14.4.0 | Upload de imagens via drag-and-drop |
+| `qrcode.react` | ^4.2.0 | Geração de QR Code |
+| `zustand` | ^4.5.0 | State management (usado em alguns lugares) |
+| `clsx` + `tailwind-merge` | ^2.1.0 / ^2.2.1 | Utilitário de classes CSS (`cn()`) |
+| `@google/generative-ai` | ^0.24.1 | Gemini AI (geração de SEO, descrições) |
+| `tailwindcss` | ^3.4.1 | CSS utility-first |
+| `vite` | ^5.1.0 | Build tool / dev server |
+| `typescript` | ^5.3.3 | Tipagem estática |
+
+**⚠️ `sonner` e `react-hot-toast` coexistem** — preferir `sonner` em novos componentes
+**⚠️ `zustand`** — verificar onde está sendo usado antes de remover
+
+---
+
+## 🐛 ERROS CONHECIDOS E SOLUÇÕES
+
+| Erro | Causa | Solução |
+|------|-------|---------|
+| `AbortError` em produção | Dois contextos de auth chamando `getSession()` simultaneamente | Removido contexto duplicado — manter apenas `SupabaseAuthContext` |
+| Query retorna vazio sem erro | RLS ativo sem `company_id` no filtro | Sempre filtrar por `company_id` obtido via `companies.slug` |
+| `NaN` em campos logísticos | `z.number()` não aceita string vazia | Usar `z.union([z.number(), z.nan(), z.null(), z.undefined()])` |
+| Preço zerado ao salvar | `type="number"` com vírgula | Usar `CurrencyInput` — nunca `input type="number"` para dinheiro |
+| `model_color_images` retorna vazio | Falta `company_id` no filtro | Buscar `company_id` via `companies.eq('slug', 'mercado-do-vale')` |
+| Memory leak em modais | `setTimeout` sem cleanup em `useEffect` | Usar `clearTimeout` no return do `useEffect` |
+| `Cannot read properties of undefined (reading 'showCash')` | Item antigo no carrinho sem campo `paymentOptions` | Adicionar fallback: `item.paymentOptions?.showCash ?? true` |
+| Categorias sumindo do catálogo | Filtro de estoque removendo categorias com produtos zerados | Buscar categorias independente do estoque |
+
+---
+
+## 🧱 PADRÕES DE CÓDIGO
+
+### Como criar um novo Service (Supabase)
+```ts
+import { supabase } from './supabase';
+
+// 1. Obter company_id (padrão do projeto)
+async function getCompanyId(): Promise<string> {
+    const { data } = await supabase
+        .from('companies').select('id')
+        .eq('slug', 'mercado-do-vale').single();
+    return data.id;
+}
+
+// 2. Sempre filtrar por company_id
+export const meuService = {
+    async list() {
+        const companyId = await getCompanyId();
+        const { data, error } = await supabase
+            .from('minha_tabela')
+            .select('*')
+            .eq('company_id', companyId);
+        if (error) throw new Error(error.message);
+        return data || [];
+    }
+};
+```
+
+### Como adicionar um campo ao ProductForm
+1. Adicionar campo ao `types/product.ts` (`Product` e `ProductInput`)
+2. Adicionar validação ao `schemas/product.ts`
+3. Adicionar ao `FIELD_DICTIONARY` em `config/field-dictionary.ts` (se for SmartInput)
+4. Adicionar ao componente adequado (`ProductBasicInfo`, `ProductSpecifications`, `ProductPricing`)
+5. Verificar se `CategoryConfig` deve controlar visibilidade do campo
+6. Atualizar `CODEBASE.md` → seção "Histórico de Mudanças"
+
+### Como adicionar uma nova rota
+1. Criar página em `pages/admin/` ou `pages/customer/`
+2. Adicionar rota em `routes/index.tsx` com `ProtectedRoute`
+3. Adicionar item de navegação em `layouts/AdminLayout.tsx`
+4. Atualizar `CODEBASE.md`
+
+### Como criar um novo Modal de configuração
+Seguir o padrão de `BrandModal`:
+1. Props: `{ isOpen, onClose, onSave, item? }`
+2. `useEffect([item, isOpen])` para resetar estado
+3. `handleSave()` com validação + try/catch + `setSaving(true/false)`
+4. Retornar `null` se `!isOpen`
+
