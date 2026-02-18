@@ -1978,3 +1978,223 @@ Funções de precificação (cálculo de margem, markup, preço sugerido).
 **⚠️ Sem `company_id` no filtro → query retorna vazio silenciosamente (sem erro)**
 **⚠️ `company_id` padrão:** obtido via `companies.select('id').eq('slug', 'mercado-do-vale')`
 
+---
+
+## 📦 `types/model.ts` — Detalhado
+
+```ts
+interface Model {
+    id: string;
+    name: string;
+    slug: string;
+    brand_id: string;
+    active: boolean;
+    created: string;
+    updated: string;
+    // Template fields
+    category_id?: string;
+    description?: string;
+    template_values?: Record<string, any>; // Valores padrão para autofill
+    // EAN codes
+    eans?: string[]; // Array de EAN/GTIN para leitura de código de barras
+}
+
+interface ModelInput {
+    name: string;
+    brand_id: string;
+    active?: boolean;
+    category_id?: string;
+    description?: string;
+    template_values?: Record<string, any>;
+    eans?: string[];
+}
+```
+
+**`template_values`** — JSONB com valores padrão por campo:
+```json
+{ "ram": "4GB", "storage": "128GB", "color": "Preto", "version": "Global" }
+```
+**⚠️ Aplicado automaticamente** quando EAN é escaneado no ProductForm
+
+---
+
+## 📋 `components/units/UnitList` — O que é uma "Unit"
+
+**Conceito:** Uma `Unit` é uma **unidade física individual** de um produto — cada aparelho com seu próprio IMEI/serial.
+
+**Diferença de `Product`:**
+- `Product` = modelo/configuração (ex: "iPhone 13 128GB Preto")
+- `Unit` = unidade física (ex: IMEI `352999001234567`)
+
+**`UnitStatus`** (de `field-standards.ts`):
+| Status | Cor | Significado |
+|--------|-----|-------------|
+| `AVAILABLE` | 🟢 Verde | Disponível para venda |
+| `RESERVED` | 🟡 Amarelo | Reservado para cliente |
+| `SOLD` | 🔵 Azul | Vendido |
+| `RMA` | 🔴 Vermelho | Em garantia/reparo |
+
+**`UnitList` Props:** `units: Unit[]`, `isLoading?`, `onDelete?(unit)`
+**⚠️ Só permite deletar unidades com status `AVAILABLE`**
+**Colunas exibidas:** IMEI 1, IMEI 2, Serial, Status, Custo
+
+**`Unit` type** (de `types/unit.ts`):
+- `imei_1: string` — IMEI principal
+- `imei_2?: string` — IMEI secundário (dual SIM)
+- `serial_number?: string` — número de série
+- `status: UnitStatus`
+- `cost_price?: number` — custo em centavos
+
+---
+
+## 💰 `utils/saleCalculations.ts` — Cálculos de Venda
+
+**18 funções exportadas.** Todas trabalham com **centavos**.
+
+### Cálculos de Item
+| Função | Fórmula |
+|--------|---------|
+| `calculateItemSubtotal(item)` | `unit_price × quantity` |
+| `calculateItemDiscount(item)` | `discount × quantity` (ou `unit_price × quantity` se `is_gift`) |
+| `calculateItemTotal(item)` | `subtotal - discount` (ou `0` se `is_gift`) |
+| `calculateItemCost(item)` | `unit_cost × quantity` |
+
+### Cálculos de Venda
+```ts
+calculateSaleTotals(items) → { subtotal, discount_total, total, cost_total, profit }
+```
+
+### Cálculos de Pagamento
+| Função | O que faz |
+|--------|-----------|
+| `calculatePaymentFee(amount, method, installments, fees)` | Taxa por método/parcela da tabela `payment_fees` |
+| `calculateTotalPaid(payments)` | Soma `total_with_fee` de cada pagamento |
+| `calculateChange(total, payments)` | Troco (totalPago - total, se positivo) |
+| `calculateRemaining(total, payments)` | Restante a pagar |
+| `isPaymentComplete(total, payments)` | `totalPago >= total` |
+| `calculateProfitMargin(profit, total)` | `(profit / total) × 100` |
+
+### Regras de Taxa
+- `money`, `pix`, `debit` → **sem taxa**
+- `credit` 1x → **sem taxa**
+- `credit` 2x+ → busca taxa na tabela `payment_fees`
+- Se taxa não configurada → avisa no console e aplica 0%
+
+### Helpers de Exibição
+| Função | Exemplo |
+|--------|---------|
+| `formatCurrency(centavos)` | `1050` → `"R$ 10,50"` |
+| `getPaymentMethodLabel(method, installments?)` | `"credit", 3` → `"Cartão de Crédito 3x"` |
+| `getPaymentMethodIcon(method)` | `"pix"` → `"📱"` |
+| `getDeliveryTypeLabel(type)` | `"store_pickup"` → `"Retirada na Loja"` |
+
+### Tipos de Entrega (`DeliveryType`)
+| Valor | Label | Taxa |
+|-------|-------|------|
+| `store_pickup` | Retirada na Loja | Sem custo |
+| `store_delivery` | Entrega pela Loja | `deliveryCostStore` (desconto integral) |
+| `hybrid_delivery` | Entrega Híbrida | Parte loja + parte cliente |
+
+---
+
+## 💬 `utils/whatsappMessageGenerator.ts`
+
+### `generateQuoteMessage(quote: QuoteRequest): string`
+Gera mensagem formatada para WhatsApp.
+
+**`QuoteRequest`:**
+```ts
+{
+    product: CatalogProduct;
+    variant: VariantSpecs;         // { ram, storage, color }
+    installmentPlan: InstallmentPlan;
+    delivery: DeliveryOption;      // { type: 'pickup'|'delivery', address? }
+    userType?: 'ADMIN' | 'retail' | 'resale' | 'wholesale';
+    availableColors?: string[];
+}
+```
+
+**Dois formatos de mensagem:**
+- **Admin/Staff** (`userType === 'ADMIN'`): formato interno, mostra cores disponíveis, sem endereço
+- **Cliente** (outros): formato público, mostra endereço de entrega, CTA de urgência
+
+**Regra Atacado:** se `userType === 'wholesale'` → não exibe opção de parcelamento no cartão
+
+### `generateWhatsAppLink(message): Promise<string>`
+1. Busca `phone` da tabela `company_settings`
+2. Limpa dígitos não-numéricos
+3. Detecta mobile vs desktop → usa `api.whatsapp.com` ou `web.whatsapp.com`
+4. Retorna `https://api.whatsapp.com/send?phone=55{phone}&text={encoded}`
+
+**⚠️ Lança erro** se `phone` não configurado nas settings da empresa
+
+---
+
+## 📊 `services/installmentCalculator.ts`
+
+### `calculateInstallments(priceInCents, maxInstallments=12): Promise<InstallmentPlan[]>`
+Calcula planos de parcelamento usando a tabela `payment_fees` do banco.
+
+**`InstallmentPlan`:**
+```ts
+{ installments: number; value: number; total: number; label: string; highlighted?: boolean }
+```
+
+**Planos gerados:**
+1. **PIX à vista** — taxa do `payment_fees` onde `method='pix' AND installments=1`
+2. **Crédito 1x–12x** — taxa do `payment_fees` onde `method='credit' AND installments=N`
+
+**⚠️ Destaca `highlighted=true` para 10x** (padrão visual)
+**⚠️ Pula parcelas sem taxa configurada** (sem erro, apenas ignora)
+**⚠️ Usa `paymentFeesService.list()`** — busca do banco a cada chamada
+
+### `formatPrice(cents): string`
+`1050` → `"R$ 10,50"` (usando `Intl.NumberFormat pt-BR`)
+
+---
+
+## 🔗 `services/table-data.ts`
+
+**Propósito:** Carregar opções de **qualquer tabela do banco** para campos do tipo `table_relation` no `ModelModal`.
+
+### `tableDataService.loadOptions(tableName, valueColumn='id', labelColumn='name', orderBy?)`
+```ts
+// Exemplo: carregar marcas para um campo table_relation
+await tableDataService.loadOptions('brands', 'id', 'name', 'name ASC')
+// → [{ value: 'uuid-1', label: 'Apple' }, { value: 'uuid-2', label: 'Samsung' }]
+```
+
+### `tableDataService.loadOption(tableName, value, valueColumn='id', labelColumn='name')`
+Carrega uma única opção por valor (para exibir seleção atual).
+
+**⚠️ Não filtra por `company_id`** — retorna dados de todas as empresas
+**⚠️ Usado por:** `TemplateFieldInput` no `ModelModal` para campos `field_type='table_relation'`
+
+---
+
+## 📁 MAPA DE DIRETÓRIOS
+
+```
+mercado-do-vale/
+├── components/
+│   ├── catalog/          # CatalogSection, ProductCard (catálogo público)
+│   ├── products/         # ProductForm, ProductCard, ProductFilters, selectors/
+│   ├── settings/         # BrandModal, ModelModal, ColorModal, ColorImageManager
+│   ├── ui/               # SmartInput, CurrencyInput, EANInput, IMEIInput, ImageUploader, Tab/Tabs
+│   └── units/            # UnitList
+├── config/               # field-dictionary.ts, category-badges.ts, product-fields.ts
+├── contexts/             # SupabaseAuthContext.tsx, ThemeContext.tsx
+├── core/                 # rules.ts (regras de negócio puras)
+├── hooks/                # useCatalog, useProducts, useShareUrl, useEnrichedCustomFields, etc.
+├── layouts/              # AdminLayout.tsx
+├── pages/
+│   ├── admin/            # Todas as páginas admin (products, sales, customers, settings/, etc.)
+│   ├── customer/         # CustomerCatalogPage, CustomerProfilePage
+│   └── pdv/              # PDVPage.tsx
+├── routes/               # index.tsx (mapa completo de rotas)
+├── schemas/              # product.ts, unit.ts (validação Zod)
+├── services/             # Todos os services (Supabase + localStorage legados)
+├── types/                # Todos os tipos TypeScript
+└── utils/                # Funções utilitárias (17 arquivos)
+```
+
