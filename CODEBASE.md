@@ -2198,3 +2198,346 @@ mercado-do-vale/
 └── utils/                # Funções utilitárias (17 arquivos)
 ```
 
+---
+
+## 📍 `services/addressLookup.ts` — Busca de CEP
+
+**API externa:** [ViaCEP](https://viacep.com.br) — gratuita, sem autenticação
+
+| Função | O que faz |
+|--------|-----------|
+| `lookupCEP(cep)` | Busca endereço pelo CEP via ViaCEP API |
+| `formatCEP(cep)` | Formata CEP com máscara: `12345-678` |
+
+**`Address`:**
+```ts
+{ cep, street, neighborhood, city, state, number?, complement? }
+```
+
+**⚠️ Valida 8 dígitos** antes de chamar a API
+**⚠️ Lança erro** se CEP não encontrado (`data.erro === true`)
+**⚠️ Usado por:** `whatsappMessageGenerator` (endereço de entrega no orçamento)
+
+---
+
+## 🔀 `services/productVariants.ts` — Variações do Catálogo
+
+**Propósito:** Extrair e manipular variações de produtos no catálogo público.
+
+| Função | O que faz |
+|--------|-----------|
+| `groupProductsByModel(products)` | Agrupa `CatalogProduct[]` por `model_id` → `Map<string, CatalogProduct[]>` |
+| `extractVariants(products)` | Extrai RAMs, storages, cores únicas e faixa de preço |
+| `findProductBySpecs(products, specs)` | Encontra produto específico por `{ram, storage, color}` |
+
+**`VariantSpecs`:** `{ ram?, storage?, color? }`
+**`ProductVariants`:** `{ rams: string[], storages: string[], colors: ColorOption[], priceRange: {min, max} }`
+**`ColorOption`:** `{ name: string, hex?: string }`
+
+**⚠️ `findProductBySpecs`** — specs vazias são ignoradas (match parcial)
+**⚠️ Usado por:** `ProductCard` no catálogo para seleção de variação
+
+---
+
+## 🏷️ `services/model-eans.ts` — EANs por Modelo
+
+**Exporta:** `modelEANsService`
+**Tabela:** `model_eans`
+
+| Função | O que faz |
+|--------|-----------|
+| `getByEAN(ean)` | Busca modelo completo por EAN (com join em `models`, `brands`, `categories`) |
+| `getByModelId(modelId)` | Lista todos os EANs de um modelo (primário primeiro) |
+| `add(input)` | Adiciona EAN ao modelo (valida 13 dígitos) |
+| `update(id, updates)` | Atualiza EAN |
+| `setPrimary(id)` | Define EAN como principal |
+| `remove(id)` | Remove EAN |
+| `validateEAN13(ean)` | Valida checksum EAN-13 (algoritmo oficial) |
+| `checkDuplicate(ean)` | Verifica se EAN já existe no banco |
+
+**Algoritmo EAN-13:**
+```ts
+// Dígitos alternados × 1 e × 3, soma, (10 - soma%10) % 10 = checksum
+```
+
+**`EANSearchResult`:** `{ found: boolean, model?, ean_record? }`
+**⚠️ `getByEAN` faz join completo** — retorna modelo com marca e categoria
+**⚠️ Usado por:** `EANInput` (autofill ao escanear) e `ModelModal` (aba Basic)
+
+---
+
+## 📦 `services/units.ts` — Unidades Físicas
+
+**Exporta:** `unitService`
+**Tabela:** `units`
+**⚠️ `TEMP_COMPANY_ID = 'mercado-do-vale'`**
+
+| Função | O que faz |
+|--------|-----------|
+| `listByProduct(productId)` | Lista unidades de um produto (mais recentes primeiro) |
+| `getById(id)` | Unidade por ID |
+| `create(input)` | Cria unidade com IMEI, serial, status inicial `AVAILABLE` |
+| `updateStatus(id, status)` | Atualiza status da unidade |
+| `delete(id)` | Remove unidade |
+| `getStatsByProduct(productId)` | `{total, available, reserved, sold, rma}` |
+
+**`UnitInput`:** `{ product_id, imei_1?, imei_2?, serial_number?, status?, internal_notes? }`
+**⚠️ `cost_price` não existe no schema atual** — `transformFromDB` retorna `null`
+**⚠️ Coluna `serial` no banco** → mapeada para `serial_number` no tipo
+
+---
+
+## 🖼️ `services/bannerService.ts` — Banners do Catálogo
+
+**Exporta:** `bannerService`
+**Tabela:** `catalog_banners`
+**Sem filtro por `company_id`** — banners são globais
+
+| Função | O que faz |
+|--------|-----------|
+| `getActiveBanners()` | Banners ativos dentro do período (`start_date`/`end_date`) |
+| `getAllBanners()` | Todos os banners (admin) |
+| `getBannerById(id)` | Banner por ID |
+| `createBanner(banner)` | Cria banner |
+| `updateBanner(id, updates)` | Atualiza banner |
+| `deleteBanner(id)` | Remove banner |
+| `trackBannerClick(bannerId)` | Incrementa `clicks_count` via RPC |
+| `trackBannerView(bannerId)` | Incrementa `views_count` via RPC |
+| `reorderBanners(bannerIds[])` | Atualiza `display_order` de todos os banners |
+
+**`Banner`** (de `types/catalog.ts`): `{ id, title, image_url, link_url, is_active, display_order, start_date?, end_date?, clicks_count, views_count }`
+**⚠️ `trackBannerClick/View` usa RPC** — requer funções `increment_banner_clicks` e `increment_banner_views` no Supabase
+**⚠️ `reorderBanners` faz N updates sequenciais** (um por banner) — pode ser lento com muitos banners
+
+---
+
+## ☁️ `services/uploadService.ts` — Upload de Imagens
+
+**Exporta:** `uploadService`
+**Bucket Supabase Storage:** `catalog-banners`
+
+| Função | O que faz |
+|--------|-----------|
+| `uploadBannerImage(file)` | Upload → retorna URL pública |
+| `deleteBannerImage(imageUrl)` | Remove imagem do bucket (extrai filename da URL) |
+| `validateImageFile(file)` | Valida tipo e tamanho |
+| `getPublicUrl(fileName)` | URL pública de um arquivo no bucket |
+
+**Limites:**
+- Tamanho máximo: **5MB**
+- Tipos permitidos: `PNG`, `JPG`, `JPEG`, `WEBP`
+- Nome gerado: `{timestamp}_{random}.{ext}`
+
+**⚠️ `deleteBannerImage` não lança erro** — falha silenciosa para não bloquear exclusão do banner
+**⚠️ Usado apenas para banners** — imagens de produtos usam outro mecanismo
+
+---
+
+## 📋 `services/warrantyTemplates.ts` — Templates de Garantia
+
+**Exporta:** `warrantyTemplateService`
+**Tabela:** `warranty_templates`
+**⚠️ `TEMP_COMPANY_ID = 'mercado-do-vale'`**
+
+| Função | O que faz |
+|--------|-----------|
+| `list()` | Lista todos os templates da empresa |
+| `getById(id)` | Template por ID |
+| `create(input)` | Cria template |
+| `update(id, input)` | Atualiza template |
+| `remove(id)` | Remove template |
+
+**`WarrantyTemplate`:**
+```ts
+{ id, company_id, name, description, duration_days, terms, active, created_at, updated_at }
+```
+**`terms`** — HTML do documento com `{{tags}}` para substituição
+**⚠️ Usado por:** `warrantyDocumentService` ao gerar o termo de garantia
+
+---
+
+## 👥 `services/team.ts` — Membros da Equipe
+
+**Exporta:** `teamService` (instância de `TeamService`)
+**Tabela:** `team_members`
+**⚠️ Sem filtro por `company_id`** — equipe é global
+
+**Classe `TeamService` com cache de 5 minutos:**
+```ts
+private cache: TeamMember[] | null = null;
+private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 min
+```
+
+| Método | O que faz |
+|--------|-----------|
+| `list(filters?)` | Lista com filtros: `search`, `role`, `employment_type`, `is_active`, datas |
+| `getById(id)` | Membro por ID |
+| `getByCpfCnpj(cpfCnpj)` | Membro por CPF/CNPJ |
+| `getByRole(role)` | Membros por cargo |
+| `create(input)` | Cria membro → limpa cache |
+| `update(id, input)` | Atualiza membro → limpa cache |
+| `softDelete(id)` | `is_active = false` |
+| `delete(id)` | Hard delete → limpa cache |
+| `search(query)` | Busca por nome/CPF/email |
+| `getActiveCount()` | Conta membros ativos |
+| `clearCache()` | Limpa cache manualmente |
+
+**`TeamMember`** (de `types/team.ts`): `{ id, name, cpf_cnpj, email, phone, role, employment_type, is_active, ... }`
+
+---
+
+## 💹 `services/averagePriceService.ts` — Preço Médio Ponderado
+
+**Exporta:** `averagePriceService`
+**Regra crítica:** Só recalcula ao **entrar estoque**, nunca ao vender.
+
+### Chave de variação
+```ts
+{ model_id: string, ram: string, storage: string }
+```
+
+### `updateAveragePrices(newProduct)` — Fluxo
+1. Extrai `{model_id, ram, storage}` do novo produto
+2. Se qualquer campo vazio → **pula** (log: "Skipping average price calculation")
+3. Busca todos os produtos da mesma variação (`status='active'`)
+4. Calcula média ponderada atual por `stock_quantity`
+5. Calcula nova média incluindo o produto novo
+6. **Atualiza todos os produtos existentes** da variação com os novos preços médios
+
+**Fórmula (média ponderada):**
+```
+avgPrice = (sumOf(price × stock) + newPrice × newQty) / (totalStock + newQty)
+```
+
+**Preços recalculados:** `price_cost`, `price_retail`, `price_reseller`, `price_wholesale`
+**⚠️ Usa `specs->>'ram'` e `specs->>'storage'`** — query JSONB no Supabase
+**⚠️ Chamado por:** `productService.create()` após criar produto
+
+---
+
+## 📊 `services/inventory.ts` — Gestão de Estoque
+
+**Exporta:** `inventoryService` (instância de `InventoryService`)
+**Tabela principal:** `products` (com filtros de estoque) + `stock_movements`
+
+| Método | O que faz |
+|--------|-----------|
+| `getInventory(filters)` | Lista produtos com filtros: `search`, `category`, `brand`, `status`, `lowStock` |
+| `getInventoryGrouped(filters)` | Agrupa por variação: serializados (IMEI/serial) por brand+model+color+storage |
+| `getStats()` | `{ totalProducts, totalStock, totalValue, lowStockCount, outOfStockCount }` |
+| `adjustStock(adjustment)` | Ajusta estoque + cria `stock_movement` imutável |
+| `getMovements(productId, limit=50)` | Histórico de movimentos de um produto |
+| `getLowStockProducts(threshold=10)` | Produtos com estoque abaixo do threshold |
+| `getBrands()` | Lista de marcas únicas no inventário |
+
+**`StockAdjustmentInput`:** `{ product_id, type: 'in'|'out', quantity, reason }`
+**⚠️ `adjustStock` cria `stock_movement` imutável** — nunca deletar
+**⚠️ `getInventoryGrouped`** — produtos serializados (com IMEI/serial) são agrupados diferente dos não-serializados
+**⚠️ `getStats` calcula `totalValue`** usando `price_cost × stock_quantity`
+
+---
+
+## 📋 TABELAS DO BANCO — Complemento Final
+
+### `team_members`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `name` | TEXT | Nome completo |
+| `cpf_cnpj` | TEXT | Único |
+| `email` | TEXT | |
+| `phone` | TEXT | |
+| `role` | TEXT | Cargo |
+| `employment_type` | TEXT | Tipo de contrato |
+| `is_active` | BOOLEAN | Soft delete |
+
+### `catalog_banners`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `title` | TEXT | |
+| `image_url` | TEXT | URL do Supabase Storage |
+| `link_url` | TEXT | Link ao clicar |
+| `is_active` | BOOLEAN | |
+| `display_order` | INTEGER | Ordem de exibição |
+| `start_date` | TIMESTAMPTZ | Início da veiculação |
+| `end_date` | TIMESTAMPTZ | Fim da veiculação |
+| `clicks_count` | INTEGER | Incrementado via RPC |
+| `views_count` | INTEGER | Incrementado via RPC |
+
+### `warranty_templates`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `name` | TEXT | Nome do template |
+| `description` | TEXT | |
+| `duration_days` | INTEGER | Prazo de garantia |
+| `terms` | TEXT | HTML com `{{tags}}` |
+| `active` | BOOLEAN | |
+
+### `units`
+| Coluna | Tipo | Observação |
+|--------|------|-----------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK companies |
+| `product_id` | UUID | FK products |
+| `imei_1` | TEXT | IMEI principal |
+| `imei_2` | TEXT | IMEI secundário |
+| `serial` | TEXT | **⚠️ Mapeado para `serial_number` no tipo** |
+| `status` | TEXT | `available`, `reserved`, `sold`, `rma` |
+| `internal_notes` | TEXT | Notas internas |
+
+---
+
+## ⚠️ SERVICES LEGADOS / DUPLICADOS
+
+| Service | Status | Observação |
+|---------|--------|-----------|
+| `batteryHealths.ts` | 🔴 localStorage | Legado — usar `batteryHealths-supabase.ts` |
+| `batteryHealths-supabase.ts` | ✅ Supabase | Versão atual |
+| `rams.ts` | 🔴 localStorage | Débito #7 |
+| `rams-supabase.ts` | ✅ Supabase | Versão atual |
+| `storages.ts` | 🔴 localStorage | Débito #9 |
+| `storages-supabase.ts` | ✅ Supabase | Versão atual |
+| `versions.ts` | 🔴 localStorage | Legado |
+| `versions-supabase.ts` | ✅ Supabase | Versão atual |
+| `models.ts` | ✅ Supabase | Produção |
+| `models-new.ts` | ⚠️ Experimental | Verificar antes de usar |
+| `models-new-backup.ts` | 🗑️ Backup | Não usar |
+| `legacyAPI.ts` | 🔴 Legado | Adaptadores para API antiga |
+| `legacyAdapters.ts` | 🔴 Legado | Adaptadores de tipos antigos |
+| `model-color-images.ts` | ⚠️ Duplicado | Verificar vs `modelColorImages.ts` |
+| `modelColorImages.ts` | ✅ Atual | Versão em uso |
+
+**⚠️ Sempre preferir a versão Supabase** — versões localStorage perdem dados ao trocar de dispositivo/browser
+
+---
+
+## 🔄 SERVICES SUPABASE — TABELA COMPLETA
+
+| Service | Tabela | Exporta | Tem company_id? |
+|---------|--------|---------|----------------|
+| `brands.ts` | `brands` | `brandService` | ✅ via slug |
+| `categories.ts` | `categories` | `categoryService` | ✅ via slug |
+| `colors.ts` | `colors` | `colorService` | ✅ via slug |
+| `models.ts` | `models` | `modelService` | ✅ via slug |
+| `products.ts` | `products` | `productService` | ✅ via slug |
+| `customers.ts` | `customers` | `customerService` | ✅ via slug |
+| `units.ts` | `units` | `unitService` | ✅ via slug |
+| `saleService.ts` | `sales` + `sale_items` | `saleService` | ✅ |
+| `inventory.ts` | `products` + `stock_movements` | `inventoryService` | ✅ |
+| `custom-fields.ts` | `custom_fields` | `customFieldsService` | ✅ |
+| `warrantyTemplates.ts` | `warranty_templates` | `warrantyTemplateService` | ✅ via slug |
+| `warrantyDocumentService.ts` | `warranty_documents` | `warrantyDocumentService` | ✅ |
+| `bannerService.ts` | `catalog_banners` | `bannerService` | ❌ global |
+| `team.ts` | `team_members` | `teamService` | ❌ global |
+| `companyService.ts` | `companies` + `company_settings` | `companyService` | ✅ |
+| `companySettingsService.ts` | `company_settings` | `companySettingsService` | ✅ |
+| `model-eans.ts` | `model_eans` | `modelEANsService` | ❌ (sem company_id) |
+| `averagePriceService.ts` | `products` | `averagePriceService` | ❌ (filtra por model+specs) |
+| `uploadService.ts` | Storage `catalog-banners` | `uploadService` | ❌ |
+| `table-data.ts` | Qualquer tabela | `tableDataService` | ❌ |
+| `payment-fees.ts` | `payment_fees` | `paymentFeesService` | ✅ |
+| `catalogService.ts` | `products` + `categories` | `catalogService` | ✅ |
+
