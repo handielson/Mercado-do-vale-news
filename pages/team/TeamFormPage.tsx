@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText, ExternalLink, MessageCircle, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { teamService } from '../../services/team';
-import { TeamMember, TeamMemberInput, TeamMemberAddress } from '../../types/team';
+import { TeamMember, TeamMemberInput, TeamMemberAddress, Role, EmploymentType } from '../../types/team';
 import { validateCpfCnpj, formatCpfCnpj, formatPhone, validateEmail } from '../../utils/cpfCnpjValidation';
 import {
     capitalizeName,
@@ -43,8 +43,9 @@ export default function TeamFormPage() {
         cpf_cnpj: '',
         email: '',
         phone: '',
-        role: '',
-        employment_type: '',
+        role: '' as Role,
+        employment_type: '' as EmploymentType,
+        hire_date: '',
         address: {
             street: '',
             number: '',
@@ -76,6 +77,7 @@ export default function TeamFormPage() {
                     phone: member.phone,
                     role: member.role,
                     employment_type: member.employment_type,
+                    hire_date: member.hire_date,
                     salary: member.salary,
                     hourly_rate: member.hourly_rate,
                     commission_rate: member.commission_rate,

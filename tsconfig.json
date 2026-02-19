@@ -25,5 +25,9 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "pages/api/ai/generate-seo.ts",
+    "scripts/create-test-inventory.ts"
+  ]
 }

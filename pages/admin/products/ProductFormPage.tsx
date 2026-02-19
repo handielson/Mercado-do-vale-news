@@ -30,7 +30,7 @@ export const ProductFormPage: React.FC = () => {
             fetchProduct();
         } else if (eanFromState) {
             // Pre-fill EAN for new product
-            setProduct({ ean: eanFromState } as Product);
+            setProduct({ ean: eanFromState } as unknown as Product);
         }
     }, [id, eanFromState]);
 

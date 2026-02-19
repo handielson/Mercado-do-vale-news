@@ -36,7 +36,7 @@ import { customFieldsService, CustomField } from '../services/custom-fields';
 interface CategoryCustomField {
     id: string;
     field_id?: string; // NEW: Reference to library
-    requirement: 'off' | 'optional' | 'required';
+    requirement: 'off' | 'hidden' | 'optional' | 'required';
     // OLD FORMAT fields (for backward compatibility)
     name?: string;
     key?: string;
@@ -46,7 +46,10 @@ interface CategoryCustomField {
 }
 
 interface EnrichedField extends CustomField {
-    requirement: 'off' | 'optional' | 'required';
+    requirement: 'off' | 'hidden' | 'optional' | 'required';
+    name: string;
+    key: string;
+    type: string;
 }
 
 export const useEnrichedCustomFields = (categoryFields: CategoryCustomField[] | undefined) => {

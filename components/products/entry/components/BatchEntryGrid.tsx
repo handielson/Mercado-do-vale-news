@@ -98,7 +98,7 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
     const validateRow = (row: BatchProductRow, fields: string[]): boolean => {
         // At least IMEI1 or Serial is required
         const hasIdentifier = row.imei1 || row.serial;
-        return hasIdentifier;
+        return !!(hasIdentifier);
     };
 
     // Technical: getRowErrors - Get validation errors for row

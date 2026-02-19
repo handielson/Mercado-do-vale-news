@@ -55,7 +55,7 @@ export function ProductFormNew({
         watch,
         formState: { errors }
     } = useForm<ProductInput>({
-        resolver: zodResolver(productSchema),
+        resolver: zodResolver(productSchema) as any,
         defaultValues: {
             status: 'active',
             condition: 'NOVO',
@@ -67,11 +67,11 @@ export function ProductFormNew({
             price_wholesale: 0,
             warranty_type: 'brand',
             ...initialData
-        }
+        } as any
     });
 
     // Watch key fields
-    const condition = watch('condition') || 'NOVO';
+    const condition = (watch as any)('condition') || 'NOVO';
     const selectedBrand = watch('brand');
     const selectedModel = watch('model');
     const selectedColorId = watch('specs.color_id');
@@ -145,7 +145,7 @@ export function ProductFormNew({
     };
 
     return (
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(handleFormSubmit as any)} className="space-y-6">
             {/* Section 1: Model Lookup */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <h3 className="font-semibold text-slate-800 text-lg">
@@ -160,9 +160,8 @@ export function ProductFormNew({
                             <span className="ml-2 text-xs text-slate-400 font-mono">eans</span>
                         </label>
                         <EANInput
-                            value={watch('eans')?.[0] || ''}
-                            onChange={(value) => setValue('eans', value ? [value] : [])}
-                            error={errors.eans?.message}
+                            value={watch('eans') as string[] || []}
+                            onChange={(values) => setValue('eans' as any, values)}
                         />
                     </div>
 
@@ -246,7 +245,7 @@ export function ProductFormNew({
                                 setValue('specs.color_id', colorId);
                                 setValue('specs.color', colorName);
                             }}
-                            error={errors.specs?.color?.message}
+                            error={errors.specs?.color?.message as string | undefined}
                         />
                     </div>
                 </div>
@@ -298,15 +297,13 @@ export function ProductFormNew({
             {/* Section 4: Condition */}
             <ProductConditionSelector
                 value={condition}
-                onChange={(value) => setValue('condition', value)}
+                onChange={(value) => (setValue as any)('condition', value)}
             />
 
             {/* Section 5: Pricing */}
             <ProductPricing
-                control={watch as any}
                 setValue={setValue}
                 watch={watch}
-                errors={errors}
             />
 
             {/* Section 6: Images (Conditional) */}

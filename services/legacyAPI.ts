@@ -30,13 +30,25 @@ export interface LegacyCustomer {
     id: string
     name: string
     cpf: string
+    cpf_cnpj?: string  // Alias do campo cpf no sistema antigo
     whatsapp?: string
+    phone?: string     // Alias do campo whatsapp
     email?: string
     birth_date?: string
     type: string  // "Atacado", "Varejo", etc.
+    is_wholesale?: boolean
     wholesale_status?: string  // "APPROVED", "PENDING", etc.
+    wholesale_approved?: boolean
     registration_date?: string
     updated_at?: string
+    // Campos de endereço como propriedades diretas (formato alternativo)
+    address_street?: string
+    address_number?: string
+    address_complement?: string
+    address_neighborhood?: string
+    address_city?: string
+    address_state?: string
+    address_zip_code?: string
     address?: {
         street?: string
         number?: string
@@ -56,6 +68,10 @@ export interface LegacyCustomer {
 
 export interface LegacyProduct {
     id: string
+    name?: string          // Nome do produto (campo alternativo)
+    code?: string          // Código do produto (campo alternativo)
+    price?: number         // Preço de venda (campo alternativo)
+    stock?: number         // Estoque (campo alternativo a quantity)
     device_type: string
     imei1: string
     imei2?: string
@@ -99,7 +115,9 @@ export interface LegacySale {
     id: string
     customer_id: string
     sale_date: string
+    created_at?: string    // Alias do campo sale_date
     total_amount: number
+    total?: number         // Alias do campo total_amount
     payment_method: string
     status: string
     customer?: LegacyCustomer

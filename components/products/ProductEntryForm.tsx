@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { productSchema, type ProductInput } from '../../schemas/product';
+import { productSchema } from '../../schemas/product';
+import type { ProductInput } from '../../types/product';
 import { EANInput } from '../ui/EANInput';
 import { IMEIInput } from '../ui/IMEIInput';
 import { ModelSelect } from './selectors/ModelSelect';
@@ -39,8 +40,8 @@ export const ProductEntryForm: React.FC<ProductEntryFormProps> = ({
     onSubmit,
     onCancel
 }) => {
-    const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<ProductInput>({
-        resolver: zodResolver(productSchema),
+    const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<any>({
+        resolver: zodResolver(productSchema) as any,
         defaultValues: initialData || {
             condition: 'NOVO',
             status: 'ATIVO',
@@ -161,9 +162,8 @@ export const ProductEntryForm: React.FC<ProductEntryFormProps> = ({
                             EAN/GTIN
                         </label>
                         <EANInput
-                            value={selectedEAN}
-                            onChange={(value) => setValue('eans', value ? [value] : [])}
-                            error={errors.eans?.message}
+                            value={watch('eans') || []}
+                            onChange={(values) => (setValue as any)('eans', values)}
                         />
                     </div>
 
@@ -174,7 +174,7 @@ export const ProductEntryForm: React.FC<ProductEntryFormProps> = ({
                         <ModelSelect
                             value={selectedModel}
                             onChange={(value) => setValue('model', value)}
-                            error={errors.model?.message}
+                            error={String(errors.model?.message || '') || undefined}
                         />
                     </div>
                 </div>
@@ -265,7 +265,7 @@ export const ProductEntryForm: React.FC<ProductEntryFormProps> = ({
                                 setValue('specs.color_id', colorId);
                                 setValue('specs.color', colorName);
                             }}
-                            error={errors.specs?.color?.message}
+                            error={(errors.specs as any)?.color?.message as string | undefined}
                         />
                     </div>
                 </div>

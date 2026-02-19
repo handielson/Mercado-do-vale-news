@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { GitBranch, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Version } from '../../../types/version';
-import { versionService } from '../../../services/versions';
+import { versionService } from '../../../services/versions-supabase';
 import { VersionModal } from '../../../components/settings/VersionModal';
 
 /**

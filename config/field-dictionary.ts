@@ -364,129 +364,21 @@ export function applyFieldFormat(value: string, format: FieldFormat): string {
 }
 
 // ============================================
-// RUNTIME FIELD DICTIONARY MANAGEMENT
+// RUNTIME FIELD DICTIONARY (alias for static)
 // ============================================
 
-const FIELD_DICTIONARY_STORAGE_KEY = 'antigravity_field_dictionary_v1';
-
 /**
- * Load field dictionary from localStorage (with fallback to defaults)
+ * Get current runtime field dictionary.
+ * Returns the static FIELD_DICTIONARY — runtime customizations via localStorage
+ * were removed (dead code: no component used updateFieldFormat / createCustomField).
  */
-function loadFieldDictionary(): Record<string, FieldDefinition> {
-    try {
-        const stored = localStorage.getItem(FIELD_DICTIONARY_STORAGE_KEY);
-        if (stored) {
-            return JSON.parse(stored);
-        }
-    } catch (error) {
-        console.error('Error loading field dictionary from localStorage:', error);
-    }
+export function getRuntimeFieldDictionary(): Record<string, FieldDefinition> {
     return { ...FIELD_DICTIONARY };
 }
 
 /**
- * Save field dictionary to localStorage
- */
-function saveFieldDictionary(dictionary: Record<string, FieldDefinition>): void {
-    try {
-        localStorage.setItem(FIELD_DICTIONARY_STORAGE_KEY, JSON.stringify(dictionary));
-    } catch (error) {
-        console.error('Error saving field dictionary to localStorage:', error);
-    }
-}
-
-/**
- * Runtime field dictionary (loaded from localStorage or defaults)
- */
-let runtimeDictionary: Record<string, FieldDefinition> = loadFieldDictionary();
-
-/**
- * Get current runtime field dictionary
- */
-export function getRuntimeFieldDictionary(): Record<string, FieldDefinition> {
-    return { ...runtimeDictionary };
-}
-
-/**
- * Get field definition by key (from runtime dictionary)
+ * Get field definition by key (runtime — delegates to static dictionary)
  */
 export function getFieldDefinitionRuntime(fieldKey: string): FieldDefinition | undefined {
-    return runtimeDictionary[fieldKey];
-}
-
-/**
- * Update field format at runtime
- */
-export function updateFieldFormat(fieldKey: string, newFormat: FieldFormat): boolean {
-    if (!runtimeDictionary[fieldKey]) {
-        console.error(`Field "${fieldKey}" not found in dictionary`);
-        return false;
-    }
-
-    runtimeDictionary[fieldKey] = {
-        ...runtimeDictionary[fieldKey],
-        format: newFormat
-    };
-
-    saveFieldDictionary(runtimeDictionary);
-    return true;
-}
-
-/**
- * Reset field dictionary to defaults
- */
-export function resetFieldDictionary(): void {
-    runtimeDictionary = { ...FIELD_DICTIONARY };
-    saveFieldDictionary(runtimeDictionary);
-}
-
-/**
- * Create a new custom field
- */
-export function createCustomField(
-    key: string,
-    definition: FieldDefinition
-): boolean {
-    // Validate key format (lowercase, underscores only)
-    if (!/^[a-z_]+$/.test(key)) {
-        console.error('Field key must contain only lowercase letters and underscores');
-        return false;
-    }
-
-    // Check if field already exists
-    if (runtimeDictionary[key]) {
-        console.error(`Field "${key}" already exists`);
-        return false;
-    }
-
-    runtimeDictionary[key] = definition;
-    saveFieldDictionary(runtimeDictionary);
-    return true;
-}
-
-/**
- * Delete a custom field (only non-default fields can be deleted)
- */
-export function deleteCustomField(key: string): boolean {
-    // Prevent deletion of default fields
-    if (FIELD_DICTIONARY[key]) {
-        console.error(`Cannot delete default field "${key}"`);
-        return false;
-    }
-
-    if (!runtimeDictionary[key]) {
-        console.error(`Field "${key}" not found`);
-        return false;
-    }
-
-    delete runtimeDictionary[key];
-    saveFieldDictionary(runtimeDictionary);
-    return true;
-}
-
-/**
- * Check if a field is a custom field (not in defaults)
- */
-export function isCustomField(key: string): boolean {
-    return !FIELD_DICTIONARY[key] && !!runtimeDictionary[key];
+    return FIELD_DICTIONARY[fieldKey];
 }

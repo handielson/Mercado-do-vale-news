@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, X, RefreshCw } from 'lucide-react';
-import { versionService } from '../../../services/versions';
+import { versionService } from '../../../services/versions-supabase';
 import { Version } from '../../../types/version';
 
 interface VersionSelectProps {

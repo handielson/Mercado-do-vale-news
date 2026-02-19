@@ -26,7 +26,7 @@ function getPriceForCustomer(product: Product, customerType: CustomerType): numb
         case 'wholesale':
             return product.price_wholesale || product.price_retail;
         case 'resale':
-            return product.price_resale || product.price_wholesale || product.price_retail;
+            return product.price_reseller || product.price_wholesale || product.price_retail;
         default:
             return product.price_retail;
     }

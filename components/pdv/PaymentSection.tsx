@@ -19,7 +19,7 @@ interface PaymentSectionProps {
     onRemovePayment: (index: number) => void;
     // Props opcionais para calculadora de parcelamento
     paymentFees?: any[];
-    onSelectInstallment?: (installments: number, amount: number) => void;
+    onSelectInstallment?: (installments: number, amount: number, feeAmount: number) => void;
     // Props opcionais para desconto promocional
     promotionalDiscount?: number;
     onPromotionalDiscountChange?: (discount: number) => void;

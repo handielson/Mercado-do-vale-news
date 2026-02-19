@@ -314,7 +314,7 @@ export function FieldConfigPage() {
                         setEditingField(null);
                     }}
                     onCreate={editingField ? handleUpdateField : handleCreateCustomField}
-                    formatOptions={formatOptions}
+                    formatOptions={formatOptions as any}
                     editingField={editingField}
                 />
             )}

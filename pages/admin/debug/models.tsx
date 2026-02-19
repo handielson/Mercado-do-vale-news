@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { modelsService } from '../../../services/models';
-import type { Model } from '../../../types/model';
+import { modelsService } from '../../../services/models-new';
+import type { Model } from '../../../types/model-architecture';
 
 export default function ModelsDebugPage() {
     const [models, setModels] = useState<Model[]>([]);

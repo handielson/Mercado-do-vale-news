@@ -115,7 +115,7 @@ async function create(input: ProductInput): Promise<Product> {
     if (modelError) throw new Error(`Failed to fetch model: ${modelError.message}`);
 
     // Merge model data with input
-    const brand = modelData.brand?.name || input.brand;
+    const brand = (modelData.brand as any)?.[0]?.name || input.brand;
     const category_id = modelData.category_id || input.category_id;
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
@@ -130,8 +130,8 @@ async function create(input: ProductInput): Promise<Product> {
             name: input.name,
             sku: input.sku || null,
             description: input.description || null,
-            ean: input.ean || null,
-            alternative_eans: input.alternative_eans || [],
+            ean: input.eans?.[0] || null,
+            alternative_eans: input.eans || [],
             specs: input.specs || {},
             price_cost: input.price_cost,
             price_retail: input.price_retail,
@@ -186,7 +186,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     if (modelError) throw new Error(`Failed to fetch model: ${modelError.message}`);
 
     // Merge model data with input
-    const brand = modelData.brand?.name || input.brand;
+    const brand = (modelData.brand as any)?.[0]?.name || input.brand;
     const category_id = modelData.category_id || input.category_id;
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
@@ -200,8 +200,8 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             name: input.name,
             sku: input.sku || null,
             description: input.description || null,
-            ean: input.ean || null,
-            alternative_eans: input.alternative_eans || [],
+            ean: input.eans?.[0] || null,
+            alternative_eans: input.eans || [],
             specs: input.specs || {},
             price_cost: input.price_cost,
             price_retail: input.price_retail,
@@ -295,9 +295,7 @@ function transformFromDB(row: any): Product {
         name: row.name,
         sku: row.sku,
         description: row.description,
-        ean: row.ean,
-        eans: row.alternative_eans || [],
-        alternative_eans: row.alternative_eans || [],
+        eans: row.alternative_eans?.length ? row.alternative_eans : (row.ean ? [row.ean] : []),
         specs: row.specs || {},
         price_cost: row.price_cost,
         price_retail: row.price_retail,

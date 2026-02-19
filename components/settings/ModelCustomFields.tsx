@@ -93,7 +93,7 @@ export const ModelCustomFields: React.FC<ModelCustomFieldsProps> = ({
             }));
 
             console.log('✅ [ModelCustomFields] Loaded fields:', categoryFields.length, categoryFields.map(f => f.label));
-            setFields(categoryFields as CustomField[]);
+            setFields(categoryFields as unknown as CustomField[]);
         } catch (err) {
             console.error('Erro ao carregar campos customizados:', err);
         } finally {
@@ -111,7 +111,7 @@ export const ModelCustomFields: React.FC<ModelCustomFieldsProps> = ({
                     <div key={field.id}>
                         <label className="block text-xs font-medium text-slate-700 mb-1">
                             {field.label}
-                            {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                            {(field as any).is_required && <span className="text-red-500 ml-1">*</span>}
                         </label>
                         {field.field_type === 'textarea' ? (
                             <textarea
@@ -141,7 +141,7 @@ export const ModelCustomFields: React.FC<ModelCustomFieldsProps> = ({
                     <div key={field.id}>
                         <label className="block text-xs font-medium text-slate-700 mb-1">
                             {field.label}
-                            {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                            {(field as any).is_required && <span className="text-red-500 ml-1">*</span>}
                         </label>
                         <input
                             type="number"
@@ -163,7 +163,7 @@ export const ModelCustomFields: React.FC<ModelCustomFieldsProps> = ({
                     <div key={field.id}>
                         <label className="block text-xs font-medium text-slate-700 mb-1">
                             {field.label}
-                            {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                            {(field as any).is_required && <span className="text-red-500 ml-1">*</span>}
                         </label>
                         <select
                             value={value}
@@ -194,7 +194,7 @@ export const ModelCustomFields: React.FC<ModelCustomFieldsProps> = ({
                         />
                         <label className="text-sm font-medium text-slate-700">
                             {field.label}
-                            {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                            {(field as any).is_required && <span className="text-red-500 ml-1">*</span>}
                         </label>
                         {field.help_text && (
                             <p className="text-xs text-slate-500 ml-6">{field.help_text}</p>

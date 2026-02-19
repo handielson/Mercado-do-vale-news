@@ -113,12 +113,7 @@ export const bannerService = {
     /**
      * Reordenar banners
      */
-    reorderBanners: async (bannerIds: string[]): Promise<void> => {
-        const updates = bannerIds.map((id, index) => ({
-            id,
-            display_order: index
-        }));
-
+    reorderBanners: async (updates: Array<{ id: string; display_order: number }>): Promise<void> => {
         for (const update of updates) {
             await supabase
                 .from('catalog_banners')

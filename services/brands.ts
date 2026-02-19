@@ -53,7 +53,7 @@ async function list(): Promise<Brand[]> {
         id: row.id,
         name: row.name,
         slug: row.slug,
-        active: true, // Not in DB schema yet, default to true
+        active: row.active ?? true,
         warranty_days: row.warranty_days || 90,
         created: row.created_at,
         updated: row.updated_at
@@ -82,7 +82,7 @@ async function getById(id: string): Promise<Brand | null> {
         id: data.id,
         name: data.name,
         slug: data.slug,
-        active: true,
+        active: data.active ?? true,
         warranty_days: data.warranty_days || 90,
         created: data.created_at,
         updated: data.updated_at
@@ -102,7 +102,8 @@ async function create(input: BrandInput): Promise<Brand> {
             company_id: companyId,
             name: input.name,
             slug,
-            warranty_days: input.warranty_days || 90
+            warranty_days: input.warranty_days || 90,
+            active: input.active !== undefined ? input.active : true
         })
         .select()
         .single();
@@ -113,7 +114,7 @@ async function create(input: BrandInput): Promise<Brand> {
         id: data.id,
         name: data.name,
         slug: data.slug,
-        active: true,
+        active: data.active ?? true,
         warranty_days: data.warranty_days || 90,
         created: data.created_at,
         updated: data.updated_at
@@ -132,7 +133,8 @@ async function update(id: string, input: BrandInput): Promise<Brand> {
         .update({
             name: input.name,
             slug,
-            warranty_days: input.warranty_days || 90
+            warranty_days: input.warranty_days || 90,
+            active: input.active !== undefined ? input.active : undefined
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -145,7 +147,7 @@ async function update(id: string, input: BrandInput): Promise<Brand> {
         id: data.id,
         name: data.name,
         slug: data.slug,
-        active: true,
+        active: data.active ?? true,
         warranty_days: data.warranty_days || 90,
         created: data.created_at,
         updated: data.updated_at
@@ -171,7 +173,24 @@ async function deleteBrand(id: string): Promise<void> {
  * Get only active brands (all brands for now since we don't have active field)
  */
 async function listActive(): Promise<Brand[]> {
-    return list();
+    const companyId = await getCompanyId();
+    const { data, error } = await supabase
+        .from('brands')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('active', true)
+        .order('name');
+
+    if (error) throw new Error(`Failed to fetch active brands: ${error.message}`);
+    return (data || []).map(row => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        active: row.active ?? true,
+        warranty_days: row.warranty_days || 90,
+        created: row.created_at,
+        updated: row.updated_at
+    }));
 }
 
 export const brandService = {

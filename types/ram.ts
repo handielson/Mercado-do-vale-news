@@ -12,13 +12,15 @@
 export interface Ram {
     id: string;
     name: string;
-    slug: string;
+    slug?: string;
     active: boolean;
-    created: string;
-    updated: string;
+    created?: string;
+    updated?: string;
+    value_gb?: number;
 }
 
 export interface RamInput {
     name: string;
     active?: boolean;
+    value_gb?: number;
 }

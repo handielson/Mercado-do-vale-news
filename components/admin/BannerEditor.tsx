@@ -26,9 +26,12 @@ export function BannerEditor({ banners, onChange }: BannerEditorProps) {
             image_url: URL.createObjectURL(file),
             title: file.name,
             is_active: true,
+            link_type: 'none' as const,
             display_order: banners.length + index,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            clicks_count: 0,
+            views_count: 0,
+            created_at: new Date(),
+            updated_at: new Date()
         }));
 
         onChange([...banners, ...newBanners]);
@@ -115,8 +118,8 @@ export function BannerEditor({ banners, onChange }: BannerEditorProps) {
                             onDragOver={(e) => handleDragOver(e, index)}
                             onDragEnd={handleDragEnd}
                             className={`bg-white border rounded-lg p-4 transition-all ${draggedIndex === index
-                                    ? 'opacity-50 scale-95'
-                                    : 'opacity-100 scale-100'
+                                ? 'opacity-50 scale-95'
+                                : 'opacity-100 scale-100'
                                 } hover:shadow-md cursor-move`}
                         >
                             <div className="flex items-start gap-4">
@@ -156,11 +159,11 @@ export function BannerEditor({ banners, onChange }: BannerEditorProps) {
                                             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
                                         >
                                             <LinkIcon className="w-3 h-3" />
-                                            {banner.link_url || banner.link_product_id || banner.link_category_id
+                                            {banner.link_url || banner.link_value
                                                 ? 'Editar Link'
                                                 : 'Adicionar Link'}
                                         </button>
-                                        {(banner.link_url || banner.link_product_id || banner.link_category_id) && (
+                                        {(banner.link_url || banner.link_value) && (
                                             <span className="text-xs text-gray-500">
                                                 Link configurado
                                             </span>

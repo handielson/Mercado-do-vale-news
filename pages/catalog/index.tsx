@@ -64,10 +64,11 @@ function CatalogContent() {
 
     const handleShare = async (product: CatalogProduct) => {
         try {
-            const shareUrl = await catalogShareService.shareProduct(product.id, 'whatsapp');
-
-            // Abrir WhatsApp
-            window.open(shareUrl, '_blank');
+            await catalogShareService.shareViaWhatsApp({
+                type: 'whatsapp',
+                scope: 'product',
+                scopeValue: product.id
+            });
         } catch (error) {
             console.error('Erro ao compartilhar:', error);
             alert('Erro ao compartilhar produto');

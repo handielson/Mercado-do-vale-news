@@ -25,7 +25,7 @@ export default function CatalogEditorPage() {
     // Verificar permissão de ADMIN
     useEffect(() => {
         if (!authLoading && !hasRedirected.current) {
-            if (!customer || customer.client_type !== 'ADMIN') {
+            if (!customer || customer.customer_type !== 'ADMIN') {
                 hasRedirected.current = true;
                 alert('Acesso negado. Apenas administradores podem acessar o editor de catálogo.');
                 navigate('/admin');
@@ -35,7 +35,7 @@ export default function CatalogEditorPage() {
 
     // Carregar estado inicial
     useEffect(() => {
-        if (customer?.client_type === 'ADMIN') {
+        if (customer?.customer_type === 'ADMIN') {
             loadEditor();
         }
     }, [customer]);
@@ -134,7 +134,7 @@ export default function CatalogEditorPage() {
     }
 
     // Se não for ADMIN, não renderizar nada (será redirecionado)
-    if (!customer || customer.client_type !== 'ADMIN') {
+    if (!customer || customer.customer_type !== 'ADMIN') {
         return null;
     }
 

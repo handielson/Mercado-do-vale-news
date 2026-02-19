@@ -138,7 +138,7 @@ export function ProductSpecifications({
                         )}
                     </div>
                     {errors?.specs?.[key] && (
-                        <p className="text-xs text-red-600 mt-1">{errors.specs[key].message}</p>
+                        <p className="text-xs text-red-600 mt-1">{(errors.specs[key] as any)?.message}</p>
                     )}
                     {uniqueError && !errors?.specs?.[key] && (
                         <p className="text-xs text-red-600 mt-1">⚠️ {uniqueError}</p>
@@ -166,7 +166,7 @@ export function ProductSpecifications({
                         ))}
                     </select>
                     {errors?.specs?.[key] && (
-                        <p className="text-xs text-red-600 mt-1">{errors.specs[key].message}</p>
+                        <p className="text-xs text-red-600 mt-1">{(errors.specs[key] as any)?.message}</p>
                     )}
                 </div>
             );
@@ -218,7 +218,7 @@ export function ProductSpecifications({
                             }}
                         />
                         {categoryConfig.imei1 === 'required' && errors?.specs?.imei1?.message && (
-                            <p className="text-xs text-red-600 mt-1">{errors.specs.imei1.message}</p>
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.imei1.message as string}</p>
                         )}
                         {uniqueErrors.imei1 && (
                             <p className="text-xs text-red-600 mt-1">⚠️ {uniqueErrors.imei1}</p>
@@ -247,7 +247,7 @@ export function ProductSpecifications({
                             }}
                         />
                         {categoryConfig.imei2 === 'required' && errors?.specs?.imei2?.message && (
-                            <p className="text-xs text-red-600 mt-1">{errors.specs.imei2.message}</p>
+                            <p className="text-xs text-red-600 mt-1">{errors.specs.imei2.message as string}</p>
                         )}
                         {uniqueErrors.imei2 && (
                             <p className="text-xs text-red-600 mt-1">⚠️ {uniqueErrors.imei2}</p>
@@ -276,7 +276,7 @@ export function ProductSpecifications({
                             onChange={(val) => setValue('specs.color', val)}
                         />
                         {categoryConfig.color === 'required' && errors?.specs?.color && (
-                            <p className="text-xs text-red-600 mt-1">{errors.specs.color.message}</p>
+                            <p className="text-xs text-red-600 mt-1">{(errors.specs.color as any)?.message}</p>
                         )}
                     </div>
                 )}
@@ -292,7 +292,7 @@ export function ProductSpecifications({
                             placeholder="Selecione o armazenamento"
                         />
                         {categoryConfig.storage === 'required' && errors?.specs?.storage && (
-                            <p className="text-xs text-red-600 mt-1">{errors.specs.storage.message}</p>
+                            <p className="text-xs text-red-600 mt-1">{(errors.specs.storage as any)?.message}</p>
                         )}
                     </div>
                 )}
@@ -309,7 +309,7 @@ export function ProductSpecifications({
                             type="ram"
                         />
                         {categoryConfig.ram === 'required' && errors?.specs?.ram && (
-                            <p className="text-xs text-red-600 mt-1">{errors.specs.ram.message}</p>
+                            <p className="text-xs text-red-600 mt-1">{(errors.specs.ram as any)?.message}</p>
                         )}
                     </div>
                 )}
@@ -326,7 +326,7 @@ export function ProductSpecifications({
                             onChange={(val) => setValue('specs.version', val)}
                         />
                         {categoryConfig.version === 'required' && errors?.specs?.version && (
-                            <p className="text-xs text-red-600 mt-1">{errors.specs.version.message}</p>
+                            <p className="text-xs text-red-600 mt-1">{(errors.specs.version as any)?.message}</p>
                         )}
                     </div>
                 )}
@@ -355,7 +355,7 @@ export function ProductSpecifications({
                             <option value="<70">Abaixo de 70%</option>
                         </select>
                         {errors?.specs?.battery_health && (
-                            <p className="text-xs text-red-600 mt-1">{errors.specs.battery_health.message}</p>
+                            <p className="text-xs text-red-600 mt-1">{(errors.specs.battery_health as any)?.message}</p>
                         )}
                     </div>
                 )}

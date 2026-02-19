@@ -196,7 +196,6 @@ export const saveCompanyData = async (data: Company): Promise<void> => {
             console.log('Update successful');
         } else {
             // Insert new record
-            console.log('Inserting new record for user:', userId);
             const { error } = await supabase
                 .from('company_settings')
                 .insert([row]);

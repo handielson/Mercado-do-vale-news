@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { createUnitSchema } from '../../schemas/unit';
 import { UnitInput } from '../../types/unit';
 import { CategoryConfig } from '../../types/category';
-import { ProductCondition } from '../../utils/field-standards';
+import { ProductCondition, UnitStatus } from '../../utils/field-standards';
 import { productService } from '../../services/products';
 import { categoryService } from '../../services/categories';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -48,7 +48,7 @@ export function UnitForm({ productId, initialData, onSubmit, onCancel, isLoading
         watch,
         formState: { errors }
     } = useForm<UnitInput>({
-        resolver: async (data, context, options) => {
+        resolver: (async (data: any, context: any, options: any) => {
             // Truque para o Zod esperar a config carregar
             if (!config) return { values: {}, errors: {} };
             const schema = createUnitSchema({
@@ -56,10 +56,10 @@ export function UnitForm({ productId, initialData, onSubmit, onCancel, isLoading
                 condition: data.condition || ProductCondition.NEW
             });
             return zodResolver(schema)(data, context, options);
-        },
+        }) as any,
         defaultValues: initialData || {
             condition: ProductCondition.NEW,
-            status: 'available'
+            status: UnitStatus.AVAILABLE
         }
     });
 

@@ -91,7 +91,7 @@ export function BannerCarousel({
             window.location.href = `/catalog?product=${banner.link_value}`;
         } else if (banner.link_type === 'category' && banner.link_value) {
             window.location.href = `/catalog?category=${banner.link_value}`;
-        } else if (banner.link_type === 'url' && banner.link_value) {
+        } else if (banner.link_type === 'external' && banner.link_value) {
             window.open(banner.link_value, '_blank');
         } else {
             // Se não tem link, abrir zoom

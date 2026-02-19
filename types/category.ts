@@ -4,7 +4,7 @@
  * - optional: Field is visible but not required
  * - required: Field is visible and mandatory
  */
-export type FieldRequirement = 'off' | 'optional' | 'required';
+export type FieldRequirement = 'off' | 'hidden' | 'optional' | 'required';
 
 /**
  * Custom Field Types
@@ -62,10 +62,14 @@ export interface TableConfig {
  */
 export interface CustomField {
     id: string;                    // Unique identifier
-    name: string;                  // Display name (e.g., "Garantia Estendida")
-    key: string;                   // Internal key (e.g., "extended_warranty")
-    type: CustomFieldType;         // Input type
+    name?: string;                 // Display name (e.g., "Garantia Estendida")
+    key?: string;                  // Internal key (e.g., "extended_warranty")
+    type?: CustomFieldType;        // Input type
     requirement: FieldRequirement; // Traffic light status
+    field_id?: string;             // Reference to global CustomField id
+    help_text?: string;            // Help text shown below the field
+    is_required?: boolean;         // Shortcut for requirement === 'required'
+    label?: string;                // Alternative display label
     options?: string[];            // For dropdown type
     placeholder?: string;          // Placeholder text
     table_config?: TableConfig;    // For table_relation type

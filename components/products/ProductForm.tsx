@@ -80,7 +80,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
         reset,
         formState: { errors }
     } = useForm<ProductInput>({
-        resolver: zodResolver(productSchema),
+        resolver: zodResolver(productSchema) as any,
         defaultValues: {
             model_id: '',
             name: '',
@@ -88,7 +88,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             status: 'active',
             images: [],
             specs: {},
-            origin: '0', // Padrão Nacional
+            origin: '0' as any, // Padrão Nacional
             price_cost: 0,
             price_retail: 0,
             price_reseller: 0,
@@ -376,9 +376,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
 
             // Limpa o formulário e reseta estados
             setValue('eans', []);
-            setIsDuplicateEAN(false);
-            setExistingProduct(null);
-            setEANSearchMessage('');
+            // Note: EAN state is managed internally by useEANAutofill hook
 
             // Opcional: redirecionar para a página do produto
             // window.location.href = `/admin/products/${existingProduct.id}`;
@@ -752,7 +750,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                         <label className="block text-sm font-medium text-slate-700 mb-1">Origem da Mercadoria</label>
                         <select
                             value={watch('origin') || '0'}
-                            onChange={(e) => setValue('origin', e.target.value)}
+                            onChange={(e) => setValue('origin', e.target.value as any)}
                             className="w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                         >
                             <option value="">Selecione...</option>

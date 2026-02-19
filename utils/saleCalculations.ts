@@ -258,7 +258,10 @@ export const getDeliveryTypeLabel = (deliveryType: DeliveryType | undefined): st
     const labels: Record<DeliveryType, string> = {
         store_pickup: 'Retirada na Loja',
         store_delivery: 'Entrega pela Loja',
-        hybrid_delivery: 'Entrega Híbrida'
+        hybrid_delivery: 'Entrega Híbrida',
+        pickup: 'Retirada na Loja',
+        delivery: 'Entrega pela Loja',
+        hybrid: 'Entrega Híbrida'
     };
 
     return labels[deliveryType];

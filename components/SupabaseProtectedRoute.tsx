@@ -19,11 +19,11 @@ export const SupabaseProtectedRoute: React.FC<SupabaseProtectedRouteProps> = ({
     children,
     requireAdmin = false
 }) => {
-    const { user, customer, loading } = useSupabaseAuth();
+    const { user, customer, isLoading } = useSupabaseAuth();
     const location = useLocation();
 
     // Wait for auth to load
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>

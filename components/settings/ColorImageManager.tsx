@@ -218,7 +218,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
                             <div className="flex items-center gap-3">
                                 <div
                                     className="w-6 h-6 rounded border-2 border-slate-300"
-                                    style={{ backgroundColor: cd.color.hex || '#ccc' }}
+                                    style={{ backgroundColor: cd.color.hex_code || '#ccc' }}
                                 />
                                 <span className="font-medium text-slate-800">{cd.color.name}</span>
                                 {hasImages && (

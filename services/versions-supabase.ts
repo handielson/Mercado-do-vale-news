@@ -4,36 +4,15 @@ import { supabase } from './supabase';
 
 /**
  * VERSION SERVICE - Supabase Implementation
- * Multi-tenant service with Row Level Security
- * 
- * ANTIGRAVITY PROTOCOL:
- * - Online storage via Supabase (not localStorage)
- * - Multi-tenant with company_id isolation
- * - Follows same pattern as colorService
- * - Manages regional variants (Global, China, USA, etc.)
+ *
+ * Replaces the legacy versions.ts (localStorage).
+ * The `versions` table has: id, company_id, name, created_at
+ * Fields `slug` and `active` are derived in memory for type compatibility.
  */
 
-// TEMPORARY: Hardcoded company_id until we implement auth
-const TEMP_COMPANY_ID = 'mercado-do-vale';
+const COMPANY_SLUG = 'mercado-do-vale';
 
-/**
- * Get company_id from companies table by slug
- */
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
-}
-
-/**
- * Generate URL-friendly slug from version name
- */
-function generateSlug(name: string): string {
+function toSlug(name: string): string {
     return name
         .toLowerCase()
         .normalize('NFD')
@@ -42,12 +21,30 @@ function generateSlug(name: string): string {
         .replace(/^-+|-+$/g, '');
 }
 
-/**
- * List all versions
- */
+async function getCompanyId(): Promise<string> {
+    const { data, error } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('slug', COMPANY_SLUG)
+        .single();
+
+    if (error) throw new Error(`Failed to get company: ${error.message}`);
+    return data.id;
+}
+
+function mapRow(row: { id: string; name: string; created_at: string }): Version {
+    return {
+        id: row.id,
+        name: row.name,
+        slug: toSlug(row.name),
+        active: true,
+        created: row.created_at,
+        updated: row.created_at,
+    };
+}
+
 async function list(): Promise<Version[]> {
     const companyId = await getCompanyId();
-
     const { data, error } = await supabase
         .from('versions')
         .select('*')
@@ -55,144 +52,58 @@ async function list(): Promise<Version[]> {
         .order('name');
 
     if (error) throw new Error(`Failed to fetch versions: ${error.message}`);
-
-    return (data || []).map(row => ({
-        id: row.id,
-        name: row.name,
-        slug: row.slug,
-        active: row.active ?? true,
-        created: row.created_at,
-        updated: row.updated_at
-    }));
+    return (data || []).map(mapRow);
 }
 
-/**
- * Get version by ID
- */
 async function getById(id: string): Promise<Version | null> {
-    const companyId = await getCompanyId();
-
     const { data, error } = await supabase
         .from('versions')
         .select('*')
         .eq('id', id)
-        .eq('company_id', companyId)
         .single();
 
     if (error) {
         if (error.code === 'PGRST116') return null;
         throw new Error(`Failed to fetch version: ${error.message}`);
     }
-
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        active: data.active ?? true,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    return mapRow(data);
 }
 
-/**
- * Create new version
- */
 async function create(input: VersionInput): Promise<Version> {
     const companyId = await getCompanyId();
-    const slug = generateSlug(input.name);
-
     const { data, error } = await supabase
         .from('versions')
-        .insert({
-            company_id: companyId,
-            name: input.name,
-            slug,
-            active: input.active !== undefined ? input.active : true
-        })
+        .insert({ company_id: companyId, name: input.name })
         .select()
         .single();
 
     if (error) throw new Error(`Failed to create version: ${error.message}`);
-
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        active: data.active,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    return mapRow(data);
 }
 
-/**
- * Update existing version
- */
 async function update(id: string, input: VersionInput): Promise<Version> {
-    const companyId = await getCompanyId();
-    const slug = generateSlug(input.name);
-
     const { data, error } = await supabase
         .from('versions')
-        .update({
-            name: input.name,
-            slug,
-            active: input.active !== undefined ? input.active : undefined
-        })
+        .update({ name: input.name })
         .eq('id', id)
-        .eq('company_id', companyId)
         .select()
         .single();
 
     if (error) throw new Error(`Failed to update version: ${error.message}`);
-
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        active: data.active,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    return mapRow(data);
 }
 
-/**
- * Delete version
- */
 async function deleteVersion(id: string): Promise<void> {
-    const companyId = await getCompanyId();
-
     const { error } = await supabase
         .from('versions')
         .delete()
-        .eq('id', id)
-        .eq('company_id', companyId);
+        .eq('id', id);
 
     if (error) throw new Error(`Failed to delete version: ${error.message}`);
 }
 
-/**
- * Get only active versions
- */
 async function listActive(): Promise<Version[]> {
-    const companyId = await getCompanyId();
-
-    const { data, error } = await supabase
-        .from('versions')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('active', true)
-        .order('name');
-
-    if (error) throw new Error(`Failed to fetch active versions: ${error.message}`);
-
-    return (data || []).map(row => ({
-        id: row.id,
-        name: row.name,
-        slug: row.slug,
-        active: row.active,
-        created: row.created_at,
-        updated: row.updated_at
-    }));
+    return list();
 }
 
 export const versionService = {
@@ -201,5 +112,5 @@ export const versionService = {
     create,
     update,
     delete: deleteVersion,
-    listActive
+    listActive,
 };

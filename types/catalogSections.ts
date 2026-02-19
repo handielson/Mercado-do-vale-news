@@ -1,6 +1,6 @@
 export type SectionType = 'recent' | 'featured' | 'bestsellers' | 'promotions' | 'new' | 'custom';
 export type LayoutStyle = 'grid' | 'carousel' | 'list';
-export type SortBy = 'created_at' | 'sales_count' | 'price' | 'name' | 'updated_at';
+export type SortBy = 'created_at' | 'sales_count' | 'price' | 'name' | 'updated_at' | 'discount_percentage';
 export type SortDirection = 'asc' | 'desc';
 
 export interface CatalogSection {
@@ -139,5 +139,6 @@ export const SORT_BY_LABELS: Record<SortBy, string> = {
     sales_count: 'Mais Vendidos',
     price: 'Preço',
     name: 'Nome',
-    updated_at: 'Última Atualização'
+    updated_at: 'Última Atualização',
+    discount_percentage: '% de Desconto'
 };

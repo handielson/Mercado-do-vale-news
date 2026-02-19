@@ -21,8 +21,8 @@ export const BannerForm: React.FC<BannerFormProps> = ({
         link_target: banner?.link_target || '',
         is_active: banner?.is_active ?? true,
         display_order: banner?.display_order ?? 0,
-        start_date: banner?.start_date || null,
-        end_date: banner?.end_date || null
+        start_date: banner?.start_date ? new Date(banner.start_date).toISOString().slice(0, 16) : '' as string,
+        end_date: banner?.end_date ? new Date(banner.end_date).toISOString().slice(0, 16) : '' as string
     });
 
     const [imagePreview, setImagePreview] = useState(banner?.image_url || '');
@@ -85,7 +85,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({
 
         setIsSaving(true);
         try {
-            await onSave(formData);
+            await onSave(formData as any);
             onClose();
         } catch (error) {
             console.error('Erro ao salvar banner:', error);
@@ -297,7 +297,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({
                             <input
                                 type="datetime-local"
                                 value={formData.start_date ? new Date(formData.start_date).toISOString().slice(0, 16) : ''}
-                                onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value || null }))}
+                                onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                             <p className="text-xs text-gray-500 mt-1">
@@ -311,7 +311,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({
                             <input
                                 type="datetime-local"
                                 value={formData.end_date ? new Date(formData.end_date).toISOString().slice(0, 16) : ''}
-                                onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value || null }))}
+                                onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                             <p className="text-xs text-gray-500 mt-1">

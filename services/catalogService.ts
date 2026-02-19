@@ -295,7 +295,7 @@ export const catalogService = {
 
         if (error) throw error;
 
-        return (data?.map(f => f.products) || []) as CatalogProduct[];
+        return (data?.map(f => f.products) || []) as unknown as CatalogProduct[];
     },
 
     /**

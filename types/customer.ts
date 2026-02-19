@@ -14,7 +14,7 @@ export interface Customer {
     company_id: string;
     name: string;
     cpf_cnpj?: string;
-    customer_type?: 'wholesale' | 'resale' | 'retail';
+    customer_type?: 'wholesale' | 'resale' | 'retail' | 'ADMIN';
     email?: string;
     phone?: string;
     birth_date?: string;
@@ -33,7 +33,7 @@ export interface Customer {
 export interface CustomerInput {
     name: string;
     cpf_cnpj?: string;
-    customer_type?: 'wholesale' | 'resale' | 'retail';
+    customer_type?: 'wholesale' | 'resale' | 'retail' | 'ADMIN';
     email?: string;
     phone?: string;
     birth_date?: string;

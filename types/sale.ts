@@ -20,7 +20,7 @@ export interface PaymentMethod {
 /**
  * Delivery Types
  */
-export type DeliveryType = 'store_pickup' | 'store_delivery' | 'hybrid_delivery';
+export type DeliveryType = 'store_pickup' | 'store_delivery' | 'hybrid_delivery' | 'pickup' | 'delivery' | 'hybrid';
 
 /**
  * Sale Item (Carrinho)

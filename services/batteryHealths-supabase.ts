@@ -22,7 +22,7 @@ export interface BatteryHealth {
 
 export interface BatteryHealthInput {
     name: string;
-    percentage: number;
+    percentage?: number;
     display_order?: number;
     active?: boolean;
 }

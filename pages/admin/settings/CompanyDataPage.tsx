@@ -151,11 +151,10 @@ export const CompanyDataPage: React.FC = () => {
                     ...form,
                     address: {
                         ...form.address,
-                        street: data.logradouro || form.address.street,
-                        neighborhood: data.bairro || form.address.neighborhood,
-                        city: data.localidade || form.address.city,
-                        state: data.uf || form.address.state,
-                        complement: data.complemento || form.address.complement
+                        street: data.street || form.address.street,
+                        neighborhood: data.neighborhood || form.address.neighborhood,
+                        city: data.city || form.address.city,
+                        state: data.state || form.address.state,
                     }
                 });
                 toast.success('Endereço encontrado!');
@@ -276,12 +275,7 @@ export const CompanyDataPage: React.FC = () => {
             <SharePaymentDataModal
                 isOpen={isShareModalOpen}
                 onClose={() => setIsShareModalOpen(false)}
-                pixKey={form.pixKey || ''}
-                pixKeyType={form.pixKeyType || ''}
-                pixBeneficiaryName={form.pixBeneficiaryName || ''}
-                bankName={form.bankName || ''}
-                bankAgency={form.bankAgency || ''}
-                bankAccount={form.bankAccount || ''}
+                companyData={form as any}
             />
         </div>
     );

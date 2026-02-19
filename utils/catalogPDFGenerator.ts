@@ -51,7 +51,7 @@ function getPriceForCustomer(product: Product, customerType: CustomerType): numb
         case 'wholesale':
             return product.price_wholesale || product.price_retail;
         case 'resale':
-            return product.price_resale || product.price_wholesale || product.price_retail;
+            return product.price_reseller || product.price_wholesale || product.price_retail;
         default:
             return product.price_retail;
     }
@@ -98,7 +98,7 @@ function groupProducts(products: Product[], customerType: CustomerType): Grouped
                 priceRetail: price,
                 priceInstallment: installment.value,
                 installmentTotal: installment.total,
-                imageUrl: product.image_url || product.images?.[0] // Add product image
+                imageUrl: product.images?.[0] // Add product image
             });
         }
     });
@@ -256,7 +256,7 @@ export async function generateCatalogPDF(
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        doc.text(`${new Date().toLocaleDateString('pt-BR')}`, company.logo_url ? 82 : margin + 37, 36.5);
+        doc.text(`${new Date().toLocaleDateString('pt-BR')}`, company.receipt_logo_url ? 82 : margin + 37, 36.5);
 
         // Company info (right side)
         doc.setFontSize(8);

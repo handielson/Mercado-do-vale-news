@@ -54,10 +54,8 @@ async function list(): Promise<Model[]> {
         id: row.id,
         company_id: row.company_id,
         name: row.name,
-        slug: row.slug,
         brand_id: row.brand_id,
-        category_id: row.category_id,
-        description: row.description,
+        category_id: row.category_id || '',
 
         // Especificações Técnicas
         processor: row.processor,
@@ -110,10 +108,8 @@ async function getById(id: string): Promise<Model | null> {
         id: data.id,
         company_id: data.company_id,
         name: data.name,
-        slug: data.slug,
         brand_id: data.brand_id,
-        category_id: data.category_id,
-        description: data.description,
+        category_id: data.category_id || '',
 
         // Especificações Técnicas
         processor: data.processor,
@@ -161,14 +157,17 @@ async function listByBrand(brandId: string): Promise<Model[]> {
 
     return (data || []).map(row => ({
         id: row.id,
+        company_id: row.company_id,
         name: row.name,
         slug: row.slug,
         brand_id: row.brand_id,
+        category_id: row.category_id || '',
         active: true,
         created: row.created_at,
         updated: row.updated_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
         // Template fields
-        category_id: row.category_id,
         description: row.description,
         template_values: row.template_values
     }));

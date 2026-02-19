@@ -6,14 +6,14 @@ import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
 export const AuthCallbackPage: React.FC = () => {
     const [status, setStatus] = useState('Processando autenticação...');
     const navigate = useNavigate();
-    const { user, customer, loading } = useAuth();
+    const { user, customer, isLoading } = useAuth();
 
     useEffect(() => {
         const handleCallback = async () => {
-            console.log('[AuthCallback] State:', { loading, user: !!user, customer: !!customer });
+            console.log('[AuthCallback] State:', { isLoading, user: !!user, customer: !!customer });
 
             // Aguardar contexto carregar
-            if (loading) {
+            if (isLoading) {
                 setStatus('Carregando dados...');
                 return;
             }
@@ -56,7 +56,7 @@ export const AuthCallbackPage: React.FC = () => {
         };
 
         handleCallback();
-    }, [user, customer, loading, navigate]);
+    }, [user, customer, isLoading, navigate]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-slate-50">

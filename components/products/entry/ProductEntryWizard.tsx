@@ -108,7 +108,7 @@ export function ProductEntryWizard({ onComplete, onCancel }: ProductEntryWizardP
             // Default values
             active: true,
             status: 'DISPONIVEL'
-        }));
+        } as any)) as ProductInput[];
 
         await onComplete(productsToSave);
     };

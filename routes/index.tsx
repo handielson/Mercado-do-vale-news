@@ -510,7 +510,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin/settings/permissions",
     element: (
-      <ProtectedRoute requiredRole={ClientTypes.ADMIN}>
+      <ProtectedRoute requireAdmin={true}>
         <AdminLayout><PermissionsManagementPage /></AdminLayout>
       </ProtectedRoute>
     )

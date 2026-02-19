@@ -31,10 +31,12 @@ export const CompanyDocumentsSection: React.FC<CompanyDocumentsSectionProps> = (
             </h2>
 
             <div className="space-y-6">
-                <DocumentUploader onUploadComplete={onDocumentsChange} />
+                <DocumentUploader
+                    onUploadSuccess={onDocumentsChange}
+                    currentCount={documents.length}
+                />
                 <DocumentList
                     documents={documents}
-                    isLoading={isLoading}
                     onDelete={onDocumentsChange}
                 />
             </div>

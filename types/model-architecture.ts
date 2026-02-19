@@ -112,6 +112,7 @@ export interface Model {
     depth_cm?: number; // Decimal(6,2)
 
     // Campos antigos (manter para compatibilidade)
+    description?: string;
     template_values?: Record<string, any>;
     default_category_id?: string;
     default_description?: string;

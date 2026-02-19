@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
-import { ProductInput } from '../../types/product';
+import { ProductInput } from '../../../types/product';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 
 interface ProductSEOProps {
@@ -111,7 +111,7 @@ export const ProductSEO: React.FC<ProductSEOProps> = ({
     const name = watch('name') || '';
     const brand = watch('brand') || '';
     const model = watch('model') || '';
-    const category = watch('category') || '';
+    const category = (watch as any)('category') || '';
 
     // Template de prompt padrão
     const defaultPrompt = `Gere conteúdo SEO otimizado para o seguinte produto:
@@ -180,7 +180,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             setValue('meta_description', generateMetaDescription(name, brand, model));
         }
 
-        if (name && (!watch('keywords') || watch('keywords')?.length === 0)) {
+        if (name && (!(watch as any)('keywords') || (watch as any)('keywords')?.length === 0)) {
             setValue('keywords', generateKeywords(name, brand, model, category));
         }
     }, [name, brand, model, category]); // Roda quando esses campos mudarem

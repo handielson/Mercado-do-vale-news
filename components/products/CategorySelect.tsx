@@ -194,7 +194,7 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                                                     <td className="px-4 py-3 text-center">
                                                         <input
                                                             type="radio"
-                                                            name={field}
+                                                            name={String(field)}
                                                             checked={config[field] === 'off'}
                                                             onChange={() => updateFieldConfig(field, 'off')}
                                                             className="w-4 h-4 text-red-600 focus:ring-red-500"
@@ -203,7 +203,7 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                                                     <td className="px-4 py-3 text-center">
                                                         <input
                                                             type="radio"
-                                                            name={field}
+                                                            name={String(field)}
                                                             checked={config[field] === 'optional'}
                                                             onChange={() => updateFieldConfig(field, 'optional')}
                                                             className="w-4 h-4 text-yellow-600 focus:ring-yellow-500"
@@ -212,7 +212,7 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                                                     <td className="px-4 py-3 text-center">
                                                         <input
                                                             type="radio"
-                                                            name={field}
+                                                            name={String(field)}
                                                             checked={config[field] === 'required'}
                                                             onChange={() => updateFieldConfig(field, 'required')}
                                                             className="w-4 h-4 text-green-600 focus:ring-green-500"

@@ -22,7 +22,7 @@ export interface Storage {
 
 export interface StorageInput {
     name: string;
-    value_gb: number;
+    value_gb?: number;
     display_order?: number;
     active?: boolean;
 }

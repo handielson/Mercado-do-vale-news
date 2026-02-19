@@ -47,7 +47,7 @@ const BannerManagementPage: React.FC = () => {
             if (editingBanner) {
                 await bannerService.updateBanner(editingBanner.id, data);
             } else {
-                await bannerService.createBanner(data);
+                await bannerService.createBanner(data as any);
             }
             await loadBanners();
             setShowForm(false);

@@ -11,16 +11,16 @@
 > Problemas identificados durante o mapeamento. Não causam bugs críticos agora, mas devem ser corrigidos.
 
 | # | Problema | Arquivo(s) | Impacto | Prioridade |
-|---|---------|-----------|---------|-----------|
-| 1 | `versions.ts` usa **localStorage** em vez de Supabase — dados não persistem entre dispositivos | `services/versions.ts` | Versões de produto perdidas ao trocar browser/dispositivo | Média |
-| 2 | `resources.ts` é um **stub legado mock** que exporta `brandService`, `modelService`, `colorService` com os mesmos nomes dos services reais de Supabase — risco de import errado | `services/resources.ts` | Se importado por engano, retorna dados mock em vez do banco | Alta |
-| 3 | `brands.ts` — campo `active` **não existe no banco** — sempre retorna `true` hardcoded | `services/brands.ts` | Impossível desativar marcas | Baixa |
-| 4 | `productService.ts` (PDV) **não filtra por `company_id`** — queries sem RLS completo | `services/productService.ts` | Em ambiente multi-tenant, poderia retornar produtos de outras empresas | Alta |
-| 5 | `modelColorImages.ts` — interface TypeScript diz `image_url` mas banco usa `images TEXT[]` — interface desatualizada | `services/modelColorImages.ts` | Confusão ao usar o service — `ProductCard` contorna isso com query direta | Média |
-| 6 | `companyService.ts` e `companySettingsService.ts` acessam a **mesma tabela** `company_settings` com lógicas diferentes — risco de sobrescrever dados | `services/companyService.ts`, `services/companySettingsService.ts` | Dados da empresa podem ser sobrescritos por config de recibo | Alta |
-| 7 | `rams.ts` usa **localStorage** (`antigravity_rams_v1`) — mesmo problema de `versions.ts` | `services/rams.ts` | Capacidades de RAM perdidas ao trocar browser/dispositivo | Média |
-| 8 | `config/field-dictionary.ts` runtime usa **localStorage** (`antigravity_field_dictionary_v1`) — campos customizados não persistem no banco | `config/field-dictionary.ts` | Customizações de campos perdidas ao trocar browser | Média |
-| 9 | `storages.ts` usa **localStorage** (`antigravity_storages_v1`) — mesmo padrão de `rams.ts` e `versions.ts` | `services/storages.ts` | Capacidades de storage perdidas ao trocar browser/dispositivo | Média |
+|---|---------|-----------|---------|-----------| 
+| 1 | ~~`versions.ts` usa localStorage~~ ✅ **RESOLVIDO** — `VersionSelect` e `VersionsPage` agora importam de `versions-supabase.ts` | `services/versions-supabase.ts` | — | — |
+| 2 | ~~`resources.ts` stub legado mock~~ ✅ **RESOLVIDO** — arquivo não é importado por nenhum componente ativo | `services/resources.ts` | — | — |
+| 3 | ~~`brands.ts` campo `active` hardcoded true~~ ✅ **RESOLVIDO** — coluna `active` adicionada na tabela + service atualizado | `services/brands.ts` | — | — |
+| 4 | ~~`productService.ts` (PDV) não filtra por `company_id`~~ ✅ **RESOLVIDO** — todas as funções agora filtram explicitamente por `company_id` | `services/productService.ts` | — | — |
+| 5 | ~~`modelColorImages.ts` interface desatualizada~~ ✅ **RESOLVIDO** — `ImageGalleryShared.tsx` reescrito para usar `model-color-images.ts` com `images TEXT[]` | `components/products/sections/ImageGalleryShared.tsx` | — | — |
+| 6 | ~~`companyService.ts` referenciava `userId` não definido (bug de compilação)~~ ✅ **RESOLVIDO** — `console.log` com variável incorreta removido | `services/companyService.ts` | — | — |
+| 7 | ~~`rams.ts` usa localStorage~~ ✅ **RESOLVIDO** — `RamSelect` importa de `rams-supabase.ts` | `services/rams-supabase.ts` | — | — |
+| 8 | ~~`field-dictionary.ts` runtime usava localStorage~~ ✅ **RESOLVIDO** — código morto removido; `getFieldDefinitionRuntime` agora delega ao dicionário estático | `config/field-dictionary.ts` | — | — |
+| 9 | ~~`storages.ts` usa localStorage~~ ✅ **RESOLVIDO** — `CapacitySelect` importa de `storages-supabase.ts` | `services/storages-supabase.ts` | — | — |
 
 ---
 
@@ -547,6 +547,59 @@ mercado-do-vale/
 
 ---
 
+### `services/rams-supabase.ts` — RAM (Supabase) ✅ ATIVO
+**Exporta:** `ramService`
+**Tabela:** `rams`
+
+| Função | O que faz |
+|--------|-----------|
+| `list()` | Lista RAMs ativas ordenadas por `display_order` |
+| `getById(id)` | RAM por ID |
+| `create(input)` | Cria RAM (`name`, `value_gb`, `display_order`) |
+| `update(id, input)` | Atualiza RAM |
+| `delete(id)` | Remove RAM |
+| `listActive()` | Alias de `list()` (já filtra ativas) |
+
+**⚠️ Usado por:** `RamSelect`, `CapacitySelect` (para filtragem de RAM)
+**⚠️ `rams.ts` ainda existe mas NÃO é usado pelos selectors — usar `rams-supabase.ts`**
+
+---
+
+### `services/storages-supabase.ts` — Storage (Supabase) ✅ ATIVO
+**Exporta:** `storageService`
+**Tabela:** `storages`
+
+| Função | O que faz |
+|--------|-----------|
+| `list()` | Lista storages ativos ordenados por `display_order` |
+| `getById(id)` | Storage por ID |
+| `create(input)` | Cria storage (`name`, `value_gb`, `display_order`) |
+| `update(id, input)` | Atualiza storage |
+| `delete(id)` | Remove storage |
+| `listActive()` | Alias de `list()` |
+
+**⚠️ Usado por:** `CapacitySelect`
+**⚠️ `storages.ts` ainda existe mas NÃO é usado pelos selectors — usar `storages-supabase.ts`**
+
+---
+
+### `services/batteryHealths-supabase.ts` — Saúde da Bateria (Supabase) ✅ ATIVO
+**Exporta:** `batteryHealthService`
+**Tabela:** `battery_healths`
+
+| Função | O que faz |
+|--------|-----------|
+| `list()` | Lista battery healths ativos por `display_order` |
+| `getById(id)` | Battery health por ID |
+| `create(input)` | Cria (`name`, `percentage`, `display_order`) |
+| `update(id, input)` | Atualiza |
+| `delete(id)` | Remove |
+| `listActive()` | Alias de `list()` |
+
+**⚠️ Usado por:** `BatteryHealthSelect`, `ProductSpecifications`
+
+---
+
 ### `services/resources.ts` — Services Auxiliares ⚠️ LEGADO Mock
 **Exporta:** `brandService`, `modelService`, `colorService`, `capacityService`, `versionService`, `COLOR_MAP`
 **Persistência:** Mock em memória (DEV_MODE) ou dados hardcoded
@@ -770,17 +823,16 @@ HelmetProvider → SupabaseAuthProvider → ThemeProvider → RouterProvider
 
 ---
 
-## 🔴 SERVICES LEGADOS — localStorage (Débito #7)
+## 🔴 SERVICES LEGADOS — localStorage
 
-Além de `versions.ts` e `rams.ts`, existem outros services que usam localStorage:
+> ⚠️ RAM e Storage foram migrados para Supabase. Apenas `versions.ts` e `field-dictionary.ts` ainda usam localStorage.
 
-| Service | Chave localStorage | Padrão |
-|---------|-------------------|--------|
-| `services/versions.ts` | `antigravity_versions_v1` | Global, China, USA, Europa, Brasil |
-| `services/rams.ts` | `antigravity_rams_v1` | 2GB, 3GB, 4GB, 6GB, 8GB, 12GB, 16GB, 24GB, 32GB |
-| `config/field-dictionary.ts` | `antigravity_field_dictionary_v1` | Todos os campos do sistema |
-
-**⚠️ Adicionado ao débito técnico #7:** `rams.ts` também usa localStorage — migração para Supabase pendente.
+| Service | Chave localStorage | Status |
+|---------|-------------------|---------|
+| `services/versions.ts` | `antigravity_versions_v1` | ⚠️ LEGADO — migração pendente |
+| `services/rams.ts` | `antigravity_rams_v1` | ✅ **SUBSTITUÍDO** — usar `rams-supabase.ts` |
+| `services/storages.ts` | `antigravity_storages_v1` | ✅ **SUBSTITUÍDO** — usar `storages-supabase.ts` |
+| `config/field-dictionary.ts` | `antigravity_field_dictionary_v1` | ⚠️ LEGADO — migração pendente |
 
 ---
 
@@ -1192,14 +1244,12 @@ Configuração de campos visíveis por categoria no `ProductForm`.
 
 ---
 
-### `services/storages.ts` — Capacidades de Armazenamento ⚠️ LEGADO localStorage
+### `services/storages.ts` — Capacidades de Armazenamento ✅ SUBSTITUÍDO
 **Exporta:** `storageService`
 **Persistência:** `localStorage` (chave: `antigravity_storages_v1`) — **NÃO usa Supabase**
 
-**Capacidades padrão:** 4GB, 6GB, 8GB, 12GB, 16GB, 64GB, 128GB, 256GB, 512GB, 1TB, 2TB
-**⚠️ LEGADO** — mesmo padrão de `rams.ts` e `versions.ts`
-**⚠️ Adicionado ao débito técnico #9** — migração para Supabase pendente
-**⚠️ Usado por:** `CapacitySelect`, `ProductSpecifications`
+**⚠️ OBSOLETO** — `CapacitySelect` agora importa de `storages-supabase.ts`. Este arquivo não deve ser usado por novos componentes.
+**⚠️ Use `storages-supabase.ts`** para qualquer acesso a capacidades de storage.
 
 ---
 
@@ -1261,6 +1311,10 @@ Implementado em **2 lugares**:
 | 2026-02-18 | Botão Voltar no perfil do cliente | `pages/customer/CustomerProfilePage.tsx` |
 | 2026-02-18 | Entrada em massa com validação de unicidade | `ProductForm.tsx`, `ProductSpecifications.tsx` |
 | 2026-02-18 | Descoberto: `model_color_images.images` é array, não `image_url` | `ProductCard.tsx` |
+| 2026-02-18 | RLS habilitado em 37 tabelas + 21 funções com `SECURITY DEFINER + SET search_path` | Migrations Supabase |
+| 2026-02-18 | RAM e Storage migrados para Supabase | `rams-supabase.ts`, `storages-supabase.ts`, `RamSelect.tsx`, `CapacitySelect.tsx` |
+| 2026-02-18 | Battery Health migrado para Supabase | `batteryHealths-supabase.ts`, `BatteryHealthSelect.tsx` |
+| 2026-02-18 | Leaked Password Protection habilitada no Supabase Auth |  Auth Settings |
 
 ---
 
@@ -1456,16 +1510,17 @@ O projeto usa Vite. Variáveis devem ter prefixo `VITE_` para serem acessíveis 
 
 | Componente | Service usado | O que lista |
 |-----------|--------------|------------|
-| `BrandSelect` | `brandService.list()` | Marcas |
-| `ModelSelect` | `modelService.list()` | Modelos (filtrado por marca) |
-| `ColorSelect` | `colorService.list()` | Cores |
-| `CapacitySelect` | `storageService.list()` | Capacidades de armazenamento |
-| `RamSelect` | `ramService.list()` | Capacidades de RAM |
-| `VersionSelect` | `versionService.list()` | Versões (localStorage) |
-| `CategorySelect` | `categoryService.list()` | Categorias |
+| `BrandSelect` | `brandService.list()` de `brands.ts` | Marcas |
+| `ModelSelect` | `modelService.list()` de `models-new.ts` | Modelos (filtrado por marca) |
+| `ColorSelect` | `colorService.list()` de `colors.ts` | Cores |
+| `CapacitySelect` | `storageService.list()` de `storages-supabase.ts` ✅ | Capacidades de armazenamento |
+| `RamSelect` | `ramService.list()` de `rams-supabase.ts` ✅ | Capacidades de RAM |
+| `VersionSelect` | `versionService.list()` de `versions.ts` ⚠️ localStorage | Versões |
+| `CategorySelect` | `categoryService.list()` de `categories.ts` | Categorias |
+| `BatteryHealthSelect` | `batteryHealthService.list()` de `batteryHealths-supabase.ts` ✅ | Saúde da bateria |
 
-**⚠️ `VersionSelect` e `CapacitySelect` usam services de localStorage** — dados não persistem no banco
-**⚠️ Todos os selectors são usados em `ProductSpecifications` e `ProductBasicInfo`**
+**⚠️ Apenas `VersionSelect` usa localStorage** — demais selectors usam Supabase
+**⚠️ Todos os selectors são usados em `ProductSpecifications` e/ou `ProductBasicInfo`**
 
 ---
 

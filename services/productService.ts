@@ -1,135 +1,123 @@
 /**
- * Product Service
- * Service for searching and managing products
+ * Product Service (PDV)
+ * Simplified search service for the Point of Sale screen.
+ * Uses company_id filter explicitly for clarity (RLS also enforces this).
  */
 
 import { supabase } from './supabase';
 import { Product } from '../types/product';
 
+const COMPANY_SLUG = 'mercado-do-vale';
+
+async function getCompanyId(): Promise<string> {
+    const { data, error } = await supabase
+        .from('companies')
+        .select('id')
+        .eq('slug', COMPANY_SLUG)
+        .single();
+
+    if (error) throw new Error(`Failed to get company: ${error.message}`);
+    return data.id;
+}
+
 /**
- * Search products by multiple criteria
- * Searches in: name, sku, eans (array), serial, imei1, imei2
+ * Search products by multiple criteria within the company.
+ * Searches: name, sku, serial, imei1, imei2
  */
 export const searchProducts = async (searchTerm: string): Promise<Product[]> => {
-    try {
-        if (!searchTerm.trim()) {
-            return [];
-        }
+    if (!searchTerm.trim()) return [];
 
-        const term = searchTerm.trim().toLowerCase();
-        console.log('🔍 Buscando produtos com termo:', term);
+    const term = searchTerm.trim().toLowerCase();
+    const companyId = await getCompanyId();
 
-        // Build query with OR conditions — inclui serial e IMEI nos specs
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .or(`name.ilike.%${term}%,sku.ilike.%${term}%,specs->>serial.ilike.%${term}%,specs->>imei1.ilike.%${term}%,specs->>imei2.ilike.%${term}%`)
-            .order('name', { ascending: true })
-            .limit(20);
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyId)
+        .or(`name.ilike.%${term}%,sku.ilike.%${term}%,specs->>serial.ilike.%${term}%,specs->>imei1.ilike.%${term}%,specs->>imei2.ilike.%${term}%`)
+        .order('name', { ascending: true })
+        .limit(20);
 
-        if (error) {
-            console.error('❌ Erro na busca principal:', error);
-            throw error;
-        }
-
-        console.log('✅ Resultados da busca principal:', data?.length || 0);
-        if (data && data.length > 0) {
-            console.log('📦 Primeiro produto encontrado:', data[0].name);
-        }
-
-        // Retornar resultados
-        return data || [];
-    } catch (error) {
-        console.error('❌ Error searching products:', error);
-        throw error;
-    }
+    if (error) throw new Error(`Failed to search products: ${error.message}`);
+    return data || [];
 };
-
 
 /**
  * Get product by ID
  */
 export const getProductById = async (id: string): Promise<Product | null> => {
-    try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('id', id)
-            .single();
+    const companyId = await getCompanyId();
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', id)
+        .eq('company_id', companyId)
+        .single();
 
-        if (error) throw error;
-        return data;
-    } catch (error) {
-        console.error('Error fetching product:', error);
-        throw error;
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch product: ${error.message}`);
     }
+    return data;
 };
 
 /**
  * Get product by SKU
  */
 export const getProductBySku = async (sku: string): Promise<Product | null> => {
-    try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('sku', sku)
-            .eq('is_active', true)
-            .single();
+    const companyId = await getCompanyId();
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('sku', sku)
+        .eq('company_id', companyId)
+        .eq('is_active', true)
+        .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
-        return data;
-    } catch (error) {
-        console.error('Error fetching product by SKU:', error);
-        throw error;
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch product by SKU: ${error.message}`);
     }
+    return data;
 };
 
 /**
  * Get product by IMEI (searches both imei1 and imei2)
  */
 export const getProductByImei = async (imei: string): Promise<Product | null> => {
-    try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .or(`imei1.eq.${imei},imei2.eq.${imei}`)
-            .eq('is_active', true)
-            .single();
+    const companyId = await getCompanyId();
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyId)
+        .or(`specs->>imei1.eq.${imei},specs->>imei2.eq.${imei}`)
+        .eq('is_active', true)
+        .limit(1)
+        .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
-        return data;
-    } catch (error) {
-        console.error('Error fetching product by IMEI:', error);
-        throw error;
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch product by IMEI: ${error.message}`);
     }
+    return data;
 };
 
 /**
  * Get product by barcode (EAN)
  */
 export const getProductByBarcode = async (barcode: string): Promise<Product | null> => {
-    try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .contains('eans', [barcode])
-            .eq('is_active', true)
-            .single();
+    const companyId = await getCompanyId();
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyId)
+        .contains('eans', [barcode])
+        .eq('is_active', true)
+        .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
-        return data;
-    } catch (error) {
-        console.error('Error fetching product by barcode:', error);
-        throw error;
+    if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw new Error(`Failed to fetch product by barcode: ${error.message}`);
     }
+    return data;
 };

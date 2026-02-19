@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { customFieldsService } from '../../services/custom-fields';
 import { Customer, CustomerInput, CustomerAddress } from '../../types/customer';
-import { CustomField } from '../../types';
+import { CustomField } from '../../services/custom-fields';
 import { validateCpfCnpj, formatCpfCnpj, formatPhone, validateEmail } from '../../utils/cpfCnpjValidation';
 import {
     capitalizeName,

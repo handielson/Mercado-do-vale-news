@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Image as ImageIcon, Loader2, X, GripVertical } from 'lucide-react';
-import { modelColorImageService, ModelColorImage } from '../../../services/modelColorImages';
+import { modelColorImagesService } from '../../../services/model-color-images';
 import { compressImage } from '../../../utils/image-compression';
 
 interface ImageGallerySharedProps {
@@ -10,15 +10,13 @@ interface ImageGallerySharedProps {
     colorName: string;
 }
 
+const MAX_IMAGES = 5;
+
 /**
  * ImageGalleryShared Component
  * Shared image gallery for NEW products (Model+Color)
- * 
- * ANTIGRAVITY PROTOCOL:
- * - Images shared across all products with same Model+Color
- * - Drag & drop reordering
- * - First image is always the cover
- * - Maximum 5 images
+ *
+ * Uses model-color-images.ts which stores images as TEXT[] (one row per model+color).
  */
 export function ImageGalleryShared({
     modelId,
@@ -26,14 +24,11 @@ export function ImageGalleryShared({
     modelName,
     colorName
 }: ImageGallerySharedProps) {
-    const [images, setImages] = useState<ModelColorImage[]>([]);
+    const [images, setImages] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-    const MAX_IMAGES = 5;
-
-    // Load images on mount
     useEffect(() => {
         loadImages();
     }, [modelId, colorId]);
@@ -41,13 +36,21 @@ export function ImageGalleryShared({
     const loadImages = async () => {
         try {
             setIsLoading(true);
-            const data = await modelColorImageService.getByModelAndColor(modelId, colorId);
-            setImages(data);
+            const record = await modelColorImagesService.get(modelId, colorId);
+            setImages(record?.images || []);
         } catch (error) {
             console.error('Error loading images:', error);
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const saveImages = async (newImages: string[]) => {
+        await modelColorImagesService.upsert({
+            model_id: modelId,
+            color_id: colorId,
+            images: newImages
+        });
     };
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,30 +66,21 @@ export function ImageGalleryShared({
         const files = Array.from(e.target.files).slice(0, remainingSlots);
 
         try {
-            for (const file of files) {
-                // Compress image
-                const compressed = await compressImage(file);
+            const newImages = [...images];
 
-                // Convert to base64
+            for (const file of files) {
+                const compressed = await compressImage(file);
                 const reader = new FileReader();
-                const base64Promise = new Promise<string>((resolve, reject) => {
+                const base64 = await new Promise<string>((resolve, reject) => {
                     reader.onload = () => resolve(reader.result as string);
                     reader.onerror = reject;
                     reader.readAsDataURL(compressed);
                 });
-
-                const base64String = await base64Promise;
-
-                // Save to database
-                await modelColorImageService.create({
-                    model_id: modelId,
-                    color_id: colorId,
-                    image_url: base64String
-                });
+                newImages.push(base64);
             }
 
-            // Reload images
-            await loadImages();
+            await saveImages(newImages);
+            setImages(newImages);
         } catch (error) {
             console.error('Error uploading images:', error);
             alert('Erro ao fazer upload das imagens');
@@ -96,14 +90,15 @@ export function ImageGalleryShared({
         }
     };
 
-    const handleRemoveImage = async (imageId: string) => {
+    const handleRemoveImage = async (index: number) => {
         if (!confirm('Remover esta imagem? Isso afetará todos os produtos com este modelo e cor.')) {
             return;
         }
 
         try {
-            await modelColorImageService.delete(imageId);
-            await loadImages();
+            const newImages = images.filter((_, i) => i !== index);
+            await saveImages(newImages);
+            setImages(newImages);
         } catch (error) {
             console.error('Error removing image:', error);
             alert('Erro ao remover imagem');
@@ -118,11 +113,9 @@ export function ImageGalleryShared({
         e.preventDefault();
         if (draggedIndex === null || draggedIndex === index) return;
 
-        // Reorder array
         const newImages = [...images];
-        const draggedItem = newImages[draggedIndex];
-        newImages.splice(draggedIndex, 1);
-        newImages.splice(index, 0, draggedItem);
+        const [moved] = newImages.splice(draggedIndex, 1);
+        newImages.splice(index, 0, moved);
 
         setImages(newImages);
         setDraggedIndex(index);
@@ -130,17 +123,14 @@ export function ImageGalleryShared({
 
     const handleDragEnd = async () => {
         if (draggedIndex === null) return;
+        setDraggedIndex(null);
 
         try {
-            // Save new order to database
-            const imageIds = images.map(img => img.id);
-            await modelColorImageService.reorderAll(modelId, colorId, imageIds);
+            await saveImages(images);
         } catch (error) {
             console.error('Error saving order:', error);
             alert('Erro ao salvar ordem das imagens');
-            await loadImages(); // Reload to restore original order
-        } finally {
-            setDraggedIndex(null);
+            await loadImages();
         }
     };
 
@@ -167,7 +157,6 @@ export function ImageGalleryShared({
                 </span>
             </div>
 
-            {/* Info banner */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
                 <strong>🔍 {modelName} + {colorName}</strong>
                 <p className="mt-1 text-xs">
@@ -176,11 +165,10 @@ export function ImageGalleryShared({
                 </p>
             </div>
 
-            {/* Image grid */}
             <div className="grid grid-cols-5 gap-4">
-                {images.map((image, index) => (
+                {images.map((src, index) => (
                     <div
-                        key={image.id}
+                        key={index}
                         draggable
                         onDragStart={() => handleDragStart(index)}
                         onDragOver={(e) => handleDragOver(e, index)}
@@ -188,32 +176,28 @@ export function ImageGalleryShared({
                         className="relative aspect-square group cursor-move"
                     >
                         <img
-                            src={image.image_url}
+                            src={src}
                             alt={`Imagem ${index + 1}`}
                             className="w-full h-full object-cover rounded-lg border-2 border-slate-200"
                         />
 
-                        {/* Cover indicator */}
                         {index === 0 && (
                             <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-2 py-0.5 rounded">
                                 ⭐ CAPA
                             </div>
                         )}
 
-                        {/* Order number */}
                         <div className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">
                             {index + 1}
                         </div>
 
-                        {/* Drag handle */}
                         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <GripVertical size={16} className="text-white drop-shadow" />
                         </div>
 
-                        {/* Remove button */}
                         <button
                             type="button"
-                            onClick={() => handleRemoveImage(image.id)}
+                            onClick={() => handleRemoveImage(index)}
                             className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                         >
                             <X size={12} />
@@ -221,7 +205,6 @@ export function ImageGalleryShared({
                     </div>
                 ))}
 
-                {/* Upload button */}
                 {images.length < MAX_IMAGES && (
                     <label className="flex flex-col items-center justify-center aspect-square rounded-lg border-2 border-dashed border-slate-300 cursor-pointer hover:bg-slate-50 hover:border-blue-400 transition-colors">
                         {isUploading ? (

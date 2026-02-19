@@ -12,13 +12,15 @@
 export interface BatteryHealth {
     id: string;
     name: string;
-    slug: string;
+    slug?: string;
     active: boolean;
-    created: string;
-    updated: string;
+    created?: string;
+    updated?: string;
+    percentage?: number;
 }
 
 export interface BatteryHealthInput {
     name: string;
     active?: boolean;
+    percentage?: number;
 }

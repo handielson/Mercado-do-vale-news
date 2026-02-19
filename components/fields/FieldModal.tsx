@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
-import { CustomField, CustomFieldInput, TableConfig } from '../../../services/custom-fields';
+import { CustomField, CustomFieldInput, TableConfig } from '../../services/custom-fields';
 
 interface FieldModalProps {
     field: CustomField | null;

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search, Download } from 'lucide-react';
-import { InventoryGroup, UnitStatus, SerializedUnit } from '../../../types/inventory';
+import { InventoryGroup, UnitStatus, SerializedUnit } from '../../types/inventory';
 
 interface SerializedUnitsModalProps {
     group: InventoryGroup | null;

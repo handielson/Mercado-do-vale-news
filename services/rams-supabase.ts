@@ -22,7 +22,7 @@ export interface Ram {
 
 export interface RamInput {
     name: string;
-    value_gb: number;
+    value_gb?: number;
     display_order?: number;
     active?: boolean;
 }

@@ -87,7 +87,7 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
                 </div>
                 {section.show_view_all && (
                     <Link
-                        href={section.view_all_url || '/catalog'}
+                        to={section.view_all_url || '/catalog'}
                         className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium"
                     >
                         Ver todos

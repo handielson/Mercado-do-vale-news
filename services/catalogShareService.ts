@@ -39,13 +39,13 @@ export const catalogShareService = {
 
         products.forEach((product, index) => {
             text += `${index + 1}. *${product.name}*\n`;
-            text += `   💰 ${formatCurrency(product.price)}\n`;
+            text += `   💰 ${formatCurrency(product.price_retail)}\n`;
 
             if (product.discount_percentage && product.discount_percentage > 0) {
                 text += `   🏷️ ${product.discount_percentage}% OFF\n`;
             }
 
-            text += `   📦 ${product.stock > 0 ? 'Em estoque' : 'Sob consulta'}\n`;
+            text += `   📦 ${(product.stock_quantity ?? 0) > 0 ? 'Em estoque' : 'Sob consulta'}\n`;
             text += `   🔗 ${window.location.origin}/catalog/${product.id}\n\n`;
         });
 
@@ -196,17 +196,17 @@ export const catalogShareService = {
 
         ${products.map(product => `
           <div class="product clearfix">
-            ${product.image ? `<img src="${product.image}" class="product-image" alt="${product.name}" />` : ''}
+            ${(product.images && product.images.length > 0) ? `<img src="${product.images[0]}" class="product-image" alt="${product.name}" />` : ''}
             <div>
               <div class="product-name">${product.name}</div>
               <div class="product-price">
-                ${formatCurrency(product.price)}
+                ${formatCurrency(product.price_retail)}
                 ${product.discount_percentage && product.discount_percentage > 0 ?
                 `<span class="discount-badge">${product.discount_percentage}% OFF</span>` : ''}
               </div>
               ${product.description ? `<p style="margin: 8px 0; color: #64748b;">${product.description}</p>` : ''}
-              <div class="stock-status ${product.stock > 0 ? '' : 'out-of-stock'}">
-                ${product.stock > 0 ? `✓ Em estoque (${product.stock} unidades)` : '✗ Sob consulta'}
+              <div class="stock-status ${(product.stock_quantity ?? 0) > 0 ? '' : 'out-of-stock'}">
+                ${(product.stock_quantity ?? 0) > 0 ? `✓ Em estoque (${product.stock_quantity} unidades)` : '✗ Sob consulta'}
               </div>
             </div>
           </div>

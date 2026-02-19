@@ -27,6 +27,9 @@ export interface Unit {
     // Financial (optional - specific cost for this unit)
     cost_price?: number;               // Custo de aquisição (centavos)
 
+    // Notes
+    internal_notes?: string;           // Notas internas sobre esta unidade
+
     // Timestamps
     created: string;
     updated: string;
@@ -45,4 +48,5 @@ export interface UnitInput {
     battery_health?: number;
     status: UnitStatus;
     cost_price?: number;
+    internal_notes?: string;           // Notas internas sobre esta unidade
 }

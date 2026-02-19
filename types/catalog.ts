@@ -9,6 +9,8 @@ export interface Banner {
     link_url?: string;
     link_type: 'product' | 'category' | 'external' | 'none';
     link_target?: string;
+    link_value?: string;    // Value for product/category/external links (used by BannerCarousel)
+    subtitle?: string;      // Optional subtitle displayed on banner
     display_order: number;
     is_active: boolean;
     start_date?: Date;
@@ -18,6 +20,9 @@ export interface Banner {
     created_at: Date;
     updated_at: Date;
 }
+
+/** @alias Banner - Alias for backward compatibility with admin components */
+export type CatalogBanner = Banner;
 
 export interface CatalogShare {
     id: string;

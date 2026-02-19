@@ -153,9 +153,10 @@ function transformFromDB(row: any): Unit {
         imei_1: row.imei_1,
         imei_2: row.imei_2,
         serial_number: row.serial,
+        condition: row.condition || 'new',
         status: row.status as UnitStatus,
         internal_notes: row.internal_notes,
-        cost_price: null, // Not in current schema
+        cost_price: row.cost_price ?? undefined,
         created: row.created_at,
         updated: row.updated_at
     };
