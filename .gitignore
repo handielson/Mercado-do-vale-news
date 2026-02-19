@@ -47,3 +47,7 @@ Thumbs.db
 
 .vercel
 .env*.local
+
+# TypeScript diagnostics temporários
+tsc-errors*.txt
+tsc_fix*.txt
