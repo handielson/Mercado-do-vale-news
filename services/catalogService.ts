@@ -18,6 +18,7 @@ export const catalogService = {
             inStockOnly?: boolean;
             featuredOnly?: boolean;
             newOnly?: boolean;
+            sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'featured';
         },
         page: number = 1,
         pageSize: number = 20
@@ -25,8 +26,8 @@ export const catalogService = {
         const cacheKey = JSON.stringify({ filters, page, pageSize });
         const cached = productCache.get(cacheKey);
 
-        // Retornar do cache se válido
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        // Retornar do cache se válido (não cachear buscas por texto)
+        if (cached && !filters?.search && Date.now() - cached.timestamp < CACHE_TTL) {
             return {
                 products: cached.data,
                 total: cached.data.length,
@@ -77,9 +78,22 @@ export const catalogService = {
         const to = from + pageSize - 1;
         query = query.range(from, to);
 
-        // Ordenação (featured primeiro)
-        query = query.order('featured', { ascending: false });
-        query = query.order('created_at', { ascending: false });
+        // Ordenação dinâmica
+        switch (filters?.sortBy) {
+            case 'price_asc':
+                query = query.order('price_retail', { ascending: true });
+                break;
+            case 'price_desc':
+                query = query.order('price_retail', { ascending: false });
+                break;
+            case 'featured':
+                query = query.order('featured', { ascending: false }).order('created_at', { ascending: false });
+                break;
+            case 'recent':
+            default:
+                query = query.order('featured', { ascending: false }).order('created_at', { ascending: false });
+                break;
+        }
 
         const { data, error, count } = await query;
 

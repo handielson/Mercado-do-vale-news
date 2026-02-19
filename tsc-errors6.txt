@@ -1,0 +1,5 @@
+﻿pages/admin/settings/CompanyDataPage.tsx(160,17): error TS1005: ',' expected.
+pages/admin/settings/CompanyDataPage.tsx(160,18): error TS1128: Declaration or statement expected.
+pages/admin/settings/CompanyDataPage.tsx(163,9): error TS1472: 'catch' or 'finally' expected.
+pages/admin/settings/CompanyDataPage.tsx(163,11): error TS1005: ',' expected.
+pages/admin/settings/CompanyDataPage.tsx(288,1): error TS1128: Declaration or statement expected.

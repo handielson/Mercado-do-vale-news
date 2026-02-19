@@ -8,6 +8,7 @@ export interface FilterState {
     inStockOnly: boolean;
     featuredOnly: boolean;
     newOnly: boolean;
+    sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'featured';
 }
 
 interface ProductFiltersProps {
@@ -56,7 +57,8 @@ export function ProductFilters({
             priceRange: null,
             inStockOnly: false,
             featuredOnly: false,
-            newOnly: false
+            newOnly: false,
+            sortBy: 'recent'
         });
     };
 

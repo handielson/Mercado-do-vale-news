@@ -1,0 +1,49 @@
+﻿components/admin/BannerForm.tsx(88,26): error TS2345: Argument of type '{ title: string; image_url: string; link_type: "category" | "product" | "external" | "none"; link_target: string; is_active: boolean; display_order: number; start_date: string; end_date: string; }' is not assignable to parameter of type 'Partial<Banner>'.
+  Types of property 'start_date' are incompatible.
+    Type 'string' is not assignable to type 'Date'.
+components/catalog/CatalogSection.tsx(90,25): error TS2322: Type '{ children: (string | Element)[]; href: string; className: string; }' is not assignable to type 'IntrinsicAttributes & LinkProps & RefAttributes<HTMLAnchorElement>'.
+  Property 'href' does not exist on type 'IntrinsicAttributes & LinkProps & RefAttributes<HTMLAnchorElement>'. Did you mean 'ref'?
+components/company/CompanyDocumentsSection.tsx(34,35): error TS2322: Type '{ onUploadComplete: () => void; }' is not assignable to type 'IntrinsicAttributes & DocumentUploaderProps'.
+  Property 'onUploadComplete' does not exist on type 'IntrinsicAttributes & DocumentUploaderProps'.
+components/company/CompanyDocumentsSection.tsx(37,21): error TS2322: Type '{ documents: CompanyDocument[]; isLoading: boolean; onDelete: () => void; }' is not assignable to type 'IntrinsicAttributes & DocumentListProps'.
+  Property 'isLoading' does not exist on type 'IntrinsicAttributes & DocumentListProps'.
+components/fields/FieldModal.tsx(3,60): error TS2307: Cannot find module '../../../services/custom-fields' or its corresponding type declarations.
+components/inventory/SerializedUnitsModal.tsx(3,60): error TS2307: Cannot find module '../../../types/inventory' or its corresponding type declarations.
+components/products/CategorySelect.tsx(197,61): error TS2322: Type 'keyof CategoryConfig' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+components/products/CategorySelect.tsx(206,61): error TS2322: Type 'keyof CategoryConfig' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+components/products/CategorySelect.tsx(215,61): error TS2322: Type 'keyof CategoryConfig' is not assignable to type 'string'.
+  Type 'number' is not assignable to type 'string'.
+components/products/entry/components/BatchEntryGrid.tsx(101,9): error TS2322: Type 'string' is not assignable to type 'boolean'.
+components/products/entry/ProductEntryWizard.tsx(88,15): error TS2322: Type '{ model_id: string; brand_id: string; category_id: string; specs: { imei1: string; imei2: string; serial: string; color: string; storage: string; ram: string; }; eans: string[]; active: boolean; status: "DISPONIVEL"; }[]' is not assignable to type 'ProductInput[]'.
+  Type '{ model_id: string; brand_id: string; category_id: string; specs: { imei1: string; imei2: string; serial: string; color: string; storage: string; ram: string; }; eans: string[]; active: boolean; status: "DISPONIVEL"; }' is missing the following properties from type 'ProductInput': name, sku, price_cost, price_retail, and 3 more.
+components/products/ProductEntryForm.tsx(4,30): error TS2305: Module '"../../schemas/product"' has no exported member 'ProductInput'.
+components/products/ProductEntryForm.tsx(166,29): error TS2322: Type '{ value: any; onChange: (value: string[]) => void; error: any; }' is not assignable to type 'IntrinsicAttributes & EANInputProps'.
+  Property 'error' does not exist on type 'IntrinsicAttributes & EANInputProps'.
+components/products/ProductFormNew.tsx(61,13): error TS2353: Object literal may only specify known properties, and 'condition' does not exist in type 'AsyncDefaultValues<ProductInput> | { model_id?: string; model?: string; category_id?: string; brand?: string; name?: string; sku?: string; price_cost?: number; ... 25 more ...; shipping_length?: number; }'.
+components/products/ProductFormNew.tsx(148,38): error TS2345: Argument of type '(data: ProductInput) => Promise<void>' is not assignable to parameter of type 'SubmitHandler<TFieldValues>'.
+  Types of parameters 'data' and 'data' are incompatible.
+    Type 'TFieldValues' is not assignable to type 'ProductInput'.
+      Type 'FieldValues' is missing the following properties from type 'ProductInput': model_id, name, sku, price_cost, and 5 more.
+components/products/ProductFormNew.tsx(164,29): error TS2322: Type '(value: string) => void' is not assignable to type '(value: string[]) => void'.
+  Types of parameters 'value' and 'value' are incompatible.
+    Type 'string[]' is not assignable to type 'string'.
+components/products/ProductFormNew.tsx(249,29): error TS2322: Type 'string | FieldError | Merge<FieldError, FieldErrorsImpl<any>>' is not assignable to type 'string'.
+  Type 'FieldError' is not assignable to type 'string'.
+components/products/ProductFormNew.tsx(308,17): error TS2322: Type '{ setValue: UseFormSetValue<ProductInput>; watch: UseFormWatch<ProductInput>; errors: FieldErrors<ProductInput>; }' is not assignable to type 'IntrinsicAttributes & ProductPricingProps'.
+  Property 'errors' does not exist on type 'IntrinsicAttributes & ProductPricingProps'.
+components/products/sections/ProductSEO.tsx(3,30): error TS2307: Cannot find module '../../types/product' or its corresponding type declarations.
+pages/admin/settings/FieldConfigPage.tsx(317,21): error TS2322: Type '{ value: string; label: string; color: string; }[]' is not assignable to type '{ value: FieldFormat; label: string; color: string; }[]'.
+  Type '{ value: string; label: string; color: string; }' is not assignable to type '{ value: FieldFormat; label: string; color: string; }'.
+    Types of property 'value' are incompatible.
+      Type 'string' is not assignable to type 'FieldFormat'.
+pages/api/ai/generate-seo.ts(1,49): error TS2307: Cannot find module 'next' or its corresponding type declarations.
+pages/api/ai/generate-seo.ts(2,71): error TS2307: Cannot find module '../../../types/ai-provider' or its corresponding type declarations.
+pages/catalog/index.tsx(67,56): error TS2339: Property 'shareProduct' does not exist on type '{ generateCatalogText: (options: ShareOptions) => Promise<string>; shareViaWhatsApp: (options: ShareOptions) => Promise<void>; copyToClipboard: (options: ShareOptions) => Promise<...>; generatePDF: (options: ShareOptions) => Promise<...>; generatePDFHTML: (products: CatalogProduct[], company: any, options: ShareOpti...'.
+pages/customers/CustomerFormPage.tsx(8,10): error TS2305: Module '"../../types"' has no exported member 'CustomField'.
+pages/pdv/PDVPage.tsx(463,29): error TS2322: Type '(installments: number, amount: number, feeAmount: number) => void' is not assignable to type '(installments: number, amount: number) => void'.
+  Target signature provides too few arguments. Expected 3 or more, but got 2.
+routes/index.tsx(513,23): error TS2322: Type '{ children: Element; requiredRole: ClientTypes; }' is not assignable to type 'IntrinsicAttributes & ProtectedRouteProps'.
+  Property 'requiredRole' does not exist on type 'IntrinsicAttributes & ProtectedRouteProps'.
+scripts/create-test-inventory.ts(13,26): error TS2307: Cannot find module './supabase' or its corresponding type declarations.

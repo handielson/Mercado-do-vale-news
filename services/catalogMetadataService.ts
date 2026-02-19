@@ -86,5 +86,24 @@ export const catalogMetadataService = {
         return Array.from(counts.entries())
             .map(([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count); // Ordenar por contagem
+    },
+
+    /**
+     * Buscar faixa de preços (min/max) dos produtos do catálogo
+     */
+    getPriceRange: async (): Promise<{ min: number; max: number } | null> => {
+        const { data, error } = await supabase
+            .from('products')
+            .select('price_retail')
+            .not('price_retail', 'is', null)
+            .gt('price_retail', 0);
+
+        if (error || !data || data.length === 0) return null;
+
+        const prices = data.map(p => p.price_retail as number);
+        return {
+            min: Math.min(...prices),
+            max: Math.max(...prices)
+        };
     }
 };

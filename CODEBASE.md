@@ -128,6 +128,9 @@ mercado-do-vale/
 | `getCategories()` | `(): Promise<string[]>` | Lista categorias disponíveis |
 | `getBrands()` | `(): Promise<string[]>` | Lista marcas disponíveis |
 
+**⚠️ Filtro de busca** usa `name.ilike`, `brand.ilike` e `model.ilike` (OR)
+**⚠️ Cache** não é aplicado quando há `search` ativo — garante resultados frescos ao digitar
+
 **⚠️ Usado por:** `CustomerCatalogPage`, `CatalogSection`, `ProductDetailsModal`
 **⚠️ Retorna `CatalogProduct` (tipo diferente de `Product`)** — ver `types/catalog.ts`
 
@@ -870,18 +873,20 @@ Preview miniatura + informações por card:
   error: string | null,
   filters: FilterState,
   settings: CatalogSettings,
-  categories: string[],
-  brands: string[],
+  filterStats: {
+    categories: { id, name, count }[],
+    brands: { name, count }[],
+    priceRange?: { min: number; max: number }  // em centavos
+  },
   hasMore: boolean,
   total: number,
   setFilters: (filters) => void,
   loadMore: () => void,
   refresh: () => void,
-  metadata: { categories, brands }
 }
 ```
-**Usa:** `catalogService.getProducts()` + `catalogConfigService`
-**⚠️ Usado por:** `CustomerCatalogPage`, `CatalogSection`
+**Usa:** `catalogService.getProducts()` + `catalogConfigService` + `catalogMetadataService`
+**⚠️ Usado por:** `pages/catalog/index.tsx`
 
 ---
 
@@ -1026,16 +1031,16 @@ HelmetProvider → SupabaseAuthProvider → ThemeProvider → RouterProvider
 7. Exibir recibo (ReceiptPreview)
 ```
 
-### Fluxo 3: Catálogo Público (CustomerCatalogPage)
+### Fluxo 3: Catálogo Público (pages/catalog/index.tsx)
 ```
-1. useCatalog() → catalogService.getProducts(filters)
+1. useCatalog() → catalogService.getProducts(filters + searchQuery + sortBy)
 2. catalogConfigService.applyVisibilityRules() → filtra produtos
-3. Agrupamento por model_id + color + ram + storage (CatalogSection)
-4. Cliente seleciona variante → ProductDetailsModal
-5. useEffectiveCustomerType() → determina preço (varejo/revenda/atacado)
-6. Cliente escolhe parcelamento → InstallmentPlan
-7. Cliente escolhe entrega → DeliveryOption
-8. Gera cotação WhatsApp → whatsappMessageGenerator
+3. Agrupamento por model_id + color + ram + storage (productGrouping)
+4. CatalogSectionComponent (seções fixas: Mais Recentes, Destaques etc.)
+   ⚠️ Seções são OCULTADAS quando: searchQuery ≠ '' OU filters.categories.length > 0
+   ⚠️ Seções usam suas próprias queries independentes — NÃO são filtradas pela searchQuery
+5. ProductGroupGrid → exibe productGroups (resultado filtrado do passo 1)
+6. CatalogFilters → botão inline com SearchBar; dropdown com: sortBy, chips de marca, slider de preço
 ```
 
 ---
@@ -1188,6 +1193,36 @@ Gera nome automático do produto baseado em modelo + specs.
 **Usa:** `catalogService.getProducts()` ou `getFeaturedProducts()` etc.
 
 ---
+
+### `components/catalog/CatalogFilters.tsx` ✅ NOVO
+**Props:** `filters: FilterState`, `onFiltersChange: (f: FilterState) => void`, `filterStats: { brands, priceRange? }`
+
+**Funcionalidades:**
+- Painel colapsável via botão "Filtros" (badge com contagem de filtros ativos)
+- **Chips de marca** — clique seleciona/deseleciona; múltiplas marcas suportadas
+- **Slider duplo de preço** — dois handles min/max visuais sobre `input[type=range]` sobrepostos; aplica filtro no `onMouseUp`/`onTouchEnd`; valores calculados de `filterStats.priceRange`
+- **Chips rápidos** de marcas ativas visíveis mesmo com painel fechado
+- Botão "Limpar todos os filtros" (reseta `brands` e `priceRange`)
+
+**⚠️ Usado por:** `pages/catalog/index.tsx`
+**⚠️ Depende de:** `filterStats.priceRange` provido por `useCatalog` (via `catalogMetadataService.getPriceRange`)
+
+---
+
+### `services/catalogMetadataService.ts` ✅ DOCUMENTADO
+**Exporta:** `catalogMetadataService` (objeto)
+**Tabelas:** `categories`, `products`
+
+| Função | O que faz |
+|--------|-----------|
+| `getCategoryNames(ids)` | Busca nomes de categorias por IDs |
+| `getAllCategories()` | Todas as categorias com contagem de produtos |
+| `getAllBrands()` | Marcas únicas com contagem (ordenadas por qtd) |
+| `getPriceRange()` | Faixa de preços dos produtos (`{min, max}` em centavos) |
+
+**⚠️ Usado por:** `useCatalog.ts` (carregado via import dinâmico)
+
+
 
 ## 📐 TYPES — Interfaces Principais
 

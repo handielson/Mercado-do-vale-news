@@ -32,6 +32,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         inStockOnly: false,
         featuredOnly: false,
         newOnly: false,
+        sortBy: 'recent',
         ...initialFilters
     });
 
@@ -87,7 +88,8 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 priceRange: filters.priceRange ? [filters.priceRange.min, filters.priceRange.max] : undefined,
                 inStockOnly: filters.inStockOnly,
                 featuredOnly: filters.featuredOnly,
-                newOnly: filters.newOnly
+                newOnly: filters.newOnly,
+                sortBy: filters.sortBy as 'recent' | 'price_asc' | 'price_desc' | 'featured' | undefined
             }, currentPage, pageSize);
 
             console.log('[useCatalog] Products loaded:', {
@@ -174,6 +176,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     const [filterStats, setFilterStats] = useState<{
         categories: Array<{ id: string; name: string; count: number }>;
         brands: Array<{ name: string; count: number }>;
+        priceRange?: { min: number; max: number };
     }>({
         categories: [],
         brands: []
@@ -184,9 +187,10 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         const loadMetadata = async () => {
             try {
                 const { catalogMetadataService } = await import('@/services/catalogMetadataService');
-                const [allCategories, brands] = await Promise.all([
+                const [allCategories, brands, priceRange] = await Promise.all([
                     catalogMetadataService.getAllCategories(),
-                    catalogMetadataService.getAllBrands()
+                    catalogMetadataService.getAllBrands(),
+                    catalogMetadataService.getPriceRange()
                 ]);
 
                 // Aplicar regras de visibilidade às categorias (hide_empty_categories, hide_categories_no_stock)
@@ -195,7 +199,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                     catalogSettings
                 );
 
-                setFilterStats({ categories: filteredCategories, brands });
+                setFilterStats({ categories: filteredCategories, brands, priceRange: priceRange ?? undefined });
             } catch (error) {
                 console.error('Erro ao carregar metadados:', error);
             }

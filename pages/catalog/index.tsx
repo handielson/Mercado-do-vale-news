@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Grid, List } from 'lucide-react';
 import {
     BannerCarousel,
     ProductFilters,
     SearchBar,
     CategoryNav
 } from '@/components/catalog';
+import { CatalogFilters } from '@/components/catalog/CatalogFilters';
 import { ProductGroupGrid } from '@/components/catalog/ProductGroupGrid';
 import { PublicHeader } from '@/components/PublicHeader';
 import { CatalogSectionComponent } from '@/components/catalog/CatalogSection';
@@ -25,7 +25,6 @@ import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import type { CustomerType } from '@/services/bannerService';
 
 function CatalogContent() {
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [sections, setSections] = useState<CatalogSection[]>([]);
     const [sectionsLoading, setSectionsLoading] = useState(true);
     const [isCartOpen, setIsCartOpen] = useState(false);
@@ -161,43 +160,28 @@ function CatalogContent() {
                         <div className="flex items-center gap-3">
                             {/* Share Catalog Button */}
                             <ShareCatalogButton />
-
-                            {/* Controles de visualização */}
-                            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-1">
-                                <button
-                                    onClick={() => setViewMode('grid')}
-                                    className={`p-2 rounded transition-colors ${viewMode === 'grid'
-                                        ? 'bg-blue-600 text-white'
-                                        : 'text-slate-600 hover:bg-slate-100'
-                                        }`}
-                                    title="Visualização em grade"
-                                >
-                                    <Grid className="w-4 h-4" />
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('list')}
-                                    className={`p-2 rounded transition-colors ${viewMode === 'list'
-                                        ? 'bg-blue-600 text-white'
-                                        : 'text-slate-600 hover:bg-slate-100'
-                                        }`}
-                                    title="Visualização em lista"
-                                >
-                                    <List className="w-4 h-4" />
-                                </button>
-                            </div>
                         </div>
                     </div>
 
-                    {/* Barra de busca */}
-                    <SearchBar
-                        onSearch={setSearchQuery}
-                        initialValue={searchQuery}
-                        placeholder="Buscar por nome, marca ou modelo..."
-                    />
+                    {/* Barra de busca + Filtros na mesma linha */}
+                    <div className="flex items-stretch gap-2">
+                        <div className="flex-1">
+                            <SearchBar
+                                onSearch={setSearchQuery}
+                                initialValue={searchQuery}
+                                placeholder="Buscar por nome ou marca..."
+                            />
+                        </div>
+                        <CatalogFilters
+                            filters={filters}
+                            onFiltersChange={setFilters}
+                            filterStats={filterStats || { brands: [] }}
+                        />
+                    </div>
                 </div>
 
-                {/* Seções do Catálogo - ocultar quando há filtro de categoria ativo */}
-                {!sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && (
+                {/* Seções do Catálogo - ocultar quando há filtro de categoria ativo ou busca */}
+                {!sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !searchQuery && (
                     <div className="mb-12 space-y-12">
                         {sections.map((section) => (
                             <CatalogSectionComponent key={section.id} section={section} />
@@ -206,7 +190,7 @@ function CatalogContent() {
                 )}
 
                 {/* Divisor */}
-                {sections.length > 0 && !filters.categories.length && (
+                {sections.length > 0 && !filters.categories.length && !searchQuery && (
                     <div className="mb-8">
                         <div className="border-t border-slate-200"></div>
                     </div>
@@ -220,7 +204,7 @@ function CatalogContent() {
                     onLoadMore={loadMore}
                     onFavorite={toggleFavorite}
                     favorites={favorites}
-                    variant={viewMode}
+                    variant="grid"
                     columns={{
                         mobile: 1,
                         tablet: 2,
