@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { MapPin, Store, Loader2 } from 'lucide-react';
+import { MapPin, Store, Loader2, Truck, Check } from 'lucide-react';
 import type { Address } from '@/services/addressLookup';
 import { lookupCEP, formatCEP } from '@/services/addressLookup';
+import { shippingService } from '@/services/shippingService';
+import type { ShippingOption } from '@/types/shipping';
 
 export interface DeliveryOption {
     type: 'pickup' | 'delivery';
     address?: Address;
     notes?: string;
+    shippingOption?: ShippingOption;
 }
 
 interface DeliveryOptionsProps {
@@ -18,25 +21,40 @@ export function DeliveryOptions({ selected, onSelect }: DeliveryOptionsProps) {
     const [cep, setCep] = useState('');
     const [isLoadingCEP, setIsLoadingCEP] = useState(false);
     const [cepError, setCepError] = useState('');
+    const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
+    const [isLoadingShipping, setIsLoadingShipping] = useState(false);
 
-    // Handle delivery type toggle
     const handleTypeChange = (type: 'pickup' | 'delivery') => {
         onSelect({ ...selected, type, address: type === 'pickup' ? undefined : selected.address });
     };
 
-    // Handle CEP lookup
     const handleCEPLookup = async () => {
         if (!cep) return;
-
         setIsLoadingCEP(true);
         setCepError('');
-
+        setShippingOptions([]);
         try {
             const address = await lookupCEP(cep);
-            onSelect({
+            const baseOption: DeliveryOption = {
                 ...selected,
-                address: { ...address, number: '', complement: '' }
-            });
+                address: { ...address, number: '', complement: '' },
+                shippingOption: undefined,
+            };
+            onSelect(baseOption);
+
+            // Calculate shipping after address lookup
+            setIsLoadingShipping(true);
+            try {
+                const options = await shippingService.calculate({ to_cep: cep });
+                setShippingOptions(options);
+                if (options.length > 0) {
+                    onSelect({ ...baseOption, shippingOption: options[0] });
+                }
+            } catch {
+                // Shipping calc is optional
+            } finally {
+                setIsLoadingShipping(false);
+            }
         } catch (error) {
             setCepError(error instanceof Error ? error.message : 'Erro ao buscar CEP');
         } finally {
@@ -44,7 +62,6 @@ export function DeliveryOptions({ selected, onSelect }: DeliveryOptionsProps) {
         }
     };
 
-    // Handle address field changes
     const handleAddressChange = (field: keyof Address, value: string) => {
         if (!selected.address) return;
         onSelect({
@@ -210,6 +227,58 @@ export function DeliveryOptions({ selected, onSelect }: DeliveryOptionsProps) {
                                 </div>
                             </div>
                         </>
+                    )}
+
+                    {/* Shipping Options */}
+                    {isLoadingShipping && (
+                        <div className="flex items-center gap-2 text-sm text-slate-500 py-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Calculando frete...
+                        </div>
+                    )}
+                    {!isLoadingShipping && shippingOptions.length > 0 && (
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-2">
+                                🚚 Opções de Frete
+                            </label>
+                            <div className="space-y-2">
+                                {shippingOptions.map((opt) => {
+                                    const isSelected = selected.shippingOption?.id === opt.id;
+                                    return (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => onSelect({ ...selected, shippingOption: opt })}
+                                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border-2 text-left transition-all ${isSelected
+                                                    ? 'border-green-500 bg-green-50'
+                                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Truck className={`w-4 h-4 ${isSelected ? 'text-green-600' : 'text-slate-400'}`} />
+                                                <div>
+                                                    <p className={`text-sm font-medium ${isSelected ? 'text-green-800' : 'text-slate-700'}`}>
+                                                        {opt.name}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">{opt.daysLabel}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-sm font-bold ${opt.isFree ? 'text-green-600' : 'text-slate-800'}`}>
+                                                    {opt.isFree ? 'Grátis' : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
+                                                </span>
+                                                {isSelected && <Check className="w-4 h-4 text-green-600" />}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    {!isLoadingShipping && selected.address && shippingOptions.length === 0 && (
+                        <p className="text-xs text-slate-500 italic">
+                            Nenhuma opção de frete encontrada para este CEP.
+                        </p>
                     )}
 
                     {/* Delivery Notes */}

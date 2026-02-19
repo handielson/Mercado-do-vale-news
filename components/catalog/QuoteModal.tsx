@@ -222,26 +222,16 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
 
     // Add to cart (admin only)
     const handleAddToCart = () => {
-        if (!selectedPlan || !selectedVariant.ram || !selectedVariant.storage) {
+        if (!selectedPlan) return;
+
+        // Only require variant if product has RAM/Storage options
+        if (variants.rams.length > 0 && (!selectedVariant.ram || !selectedVariant.storage)) {
             alert('Por favor, selecione a memória');
             return;
         }
 
         const effectivePrice = getEffectivePrice(product, customer);
         if (!effectivePrice) return;
-
-        // Debug: Log available colors
-        console.log('Adding to cart:', {
-            product: product.name,
-            variant: `${selectedVariant.ram}/${selectedVariant.storage}`,
-            availableColors,
-            colorsCount: availableColors.length
-        });
-
-        // Warning if no colors found
-        if (availableColors.length === 0) {
-            console.warn('⚠️ No colors found for this variant. This might indicate no stock or missing color data.');
-        }
 
         addItem({
             product,
@@ -252,10 +242,9 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             availableColors,
             price: effectivePrice,
             installmentPlan: selectedPlan,
-            paymentOptions // Add payment options
+            paymentOptions
         });
 
-        // Close modal after adding
         onClose();
     };
 
@@ -329,7 +318,6 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                             onSelect={setDelivery}
                         />
 
-
                         {/* Payment Options (Admin Only) */}
                         {isAdmin && (
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
@@ -387,7 +375,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                                 // Admin: Add to cart button
                                 <button
                                     onClick={handleAddToCart}
-                                    disabled={!selectedPlan || !selectedVariant.ram || !selectedVariant.storage}
+                                    disabled={!selectedPlan || (variants.rams.length > 0 && (!selectedVariant.ram || !selectedVariant.storage))}
                                     className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     <Plus className="w-5 h-5" />

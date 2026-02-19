@@ -48,6 +48,7 @@ import DocumentSettingsPage from '../pages/admin/settings/DocumentSettingsPage';
 import WarrantyTemplatesPage from '../pages/admin/settings/WarrantyTemplatesPage';
 import BannerManagementPage from '../pages/admin/settings/BannerManagementPage';
 import CatalogSettingsPage from '../pages/admin/settings/CatalogSettingsPage';
+import ShippingPage from '../pages/admin/settings/ShippingPage';
 import CatalogConfigPage from '../pages/admin/CatalogConfigPage';
 import PermissionsManagementPage from '../pages/admin/settings/PermissionsManagementPage';
 import CatalogEditorPage from '../pages/admin/catalog-editor';
@@ -367,6 +368,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><PaymentFeesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/shipping",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ShippingPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

@@ -2,27 +2,42 @@
 import type { Product } from './product';
 
 
+/**
+ * Espelha exatamente a tabela `catalog_banners` do Supabase.
+ * Campos verificados em 2026-02-19 contra information_schema.
+ */
 export interface Banner {
     id: string;
     title: string;
+    subtitle?: string;   // texto exibido abaixo do título no carrossel
     image_url: string;
+    /** Destino do link — campo canônico da tabela. */
+    link_target?: string;
+    /** Campo legado na tabela — mantido para SELECT; não usar em INSERT/UPDATE. */
     link_url?: string;
     link_type: 'product' | 'category' | 'external' | 'none';
-    link_target?: string;
-    link_value?: string;    // Value for product/category/external links (used by BannerCarousel)
-    subtitle?: string;      // Optional subtitle displayed on banner
     display_order: number;
     is_active: boolean;
+    /** Rascunho — banner não publicado ainda */
+    is_draft?: boolean;
     start_date?: Date;
     end_date?: Date;
+    published_at?: Date;
     clicks_count: number;
     views_count: number;
+    /**
+     * Tipos de cliente que podem visualizar este banner.
+     * Array vazio = visível para todos.
+     * Valores: 'varejo' | 'revenda' | 'atacado'
+     */
+    target_audience: string[];
     created_at: Date;
     updated_at: Date;
 }
 
-/** @alias Banner - Alias for backward compatibility with admin components */
+/** @alias Banner — alias para compatibilidade com componentes admin */
 export type CatalogBanner = Banner;
+
 
 export interface CatalogShare {
     id: string;

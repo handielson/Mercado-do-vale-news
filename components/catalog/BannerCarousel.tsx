@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Banner } from '@/types/catalog';
-import { bannerService } from '@/services/bannerService';
+import { bannerService, type CustomerType } from '@/services/bannerService';
 import { ImageZoomModal } from './ImageZoomModal';
 
 interface BannerCarouselProps {
-    banners?: Banner[]; // Optional: for preview mode
+    banners?: Banner[];       // Modo preview (editor de catálogo)
+    customerType?: CustomerType;   // Filtra por tipo de cliente (varejo/revenda/atacado)
     autoPlayInterval?: number;
     showDots?: boolean;
     showArrows?: boolean;
@@ -13,6 +14,7 @@ interface BannerCarouselProps {
 
 export function BannerCarousel({
     banners: externalBanners,
+    customerType,
     autoPlayInterval = 5000,
     showDots = true,
     showArrows = true
@@ -40,7 +42,7 @@ export function BannerCarousel({
 
     const loadBanners = async () => {
         try {
-            const data = await bannerService.getActiveBanners();
+            const data = await bannerService.getActiveBanners(customerType);
             setBanners(data);
 
             // Registrar views
@@ -53,6 +55,7 @@ export function BannerCarousel({
             setLoading(false);
         }
     };
+
 
     // Auto-play
     useEffect(() => {
@@ -86,15 +89,17 @@ export function BannerCarousel({
         // Registrar clique
         await bannerService.trackBannerClick(banner.id);
 
-        // Se tem link configurado, navegar
-        if (banner.link_type === 'product' && banner.link_value) {
-            window.location.href = `/catalog?product=${banner.link_value}`;
-        } else if (banner.link_type === 'category' && banner.link_value) {
-            window.location.href = `/catalog?category=${banner.link_value}`;
-        } else if (banner.link_type === 'external' && banner.link_value) {
-            window.open(banner.link_value, '_blank');
+        // Bug fix: usar link_target (campo canônico) com fallback para link_url (campo legado real na tabela)
+        const destination = banner.link_target ?? banner.link_url;
+
+        if (banner.link_type === 'product' && destination) {
+            window.location.href = `/catalog?product=${destination}`;
+        } else if (banner.link_type === 'category' && destination) {
+            window.location.href = `/catalog?category=${destination}`;
+        } else if (banner.link_type === 'external' && destination) {
+            window.open(destination, '_blank');
         } else {
-            // Se não tem link, abrir zoom
+            // Sem link → abrir zoom
             setZoomedBanner(banner);
         }
     };

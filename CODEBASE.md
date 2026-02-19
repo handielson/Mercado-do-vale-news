@@ -296,6 +296,145 @@ mercado-do-vale/
 
 ---
 
+### `services/bannerService.ts` — Gerenciamento de Banners v2.0
+**Exporta:** `bannerService`, `CustomerType`, `BannerStats`
+**Tabela:** `catalog_banners` — campos verificados em 2026-02-19:
+
+| Coluna DB | Tipo | Observação |
+|-----------|------|------------|
+| `id` | uuid | PK |
+| `title`, `subtitle` | text | `subtitle` adicionado em v2.0 |
+| `image_url` | text | URL da imagem |
+| `link_type` | text | `none/product/category/external` |
+| `link_target` | text | **Campo canônico para destino do link** |
+| `link_url` | text | Campo legado — não usar em INSERT/UPDATE novos |
+| `is_active`, `is_draft` | boolean | `is_draft` = rascunho não publicado |
+| `start_date`, `end_date`, `published_at` | timestamp | datas de agendamento e publicação |
+| `display_order` | integer | ordem no carrossel |
+| `clicks_count`, `views_count` | integer | analytics |
+| `target_audience` | TEXT[] | **Adicionado em v2.0** — segmentação por tipo de cliente |
+| `created_at`, `updated_at` | timestamp | auditoria |
+
+| Função | O que faz |
+|--------|-----------|
+| `getActiveBanners(customerType?)` | Banners ativos (filtra por `is_active`, datas) + filtra por `target_audience` se `customerType` informado |
+| `getAllBanners()` | Todos os banners sem filtro (admin) |
+| `getBannerById(id)` | Banner por ID — retorna `null` se não existir |
+| `createBanner(data)` | Cria banner |
+| `updateBanner(id, updates)` | Atualiza banner (auto-seta `updated_at`) |
+| `deleteBanner(id)` | Remove banner |
+| `duplicateBanner(id)` | Clona banner com `"(cópia)"` no título, `is_active = false` |
+| `getBannerStats()` | Retorna `BannerStats`: total, ativos, inativos, expirados, totalClicks, totalViews, topByClicks, topByViews |
+| `reorderBanners(updates)` | Atualiza `display_order` em paralelo (`Promise.all`) — **bug fix: era loop sequencial** |
+| `trackBannerClick(id)` | Incrementa `clicks_count` via RPC `increment_banner_clicks` |
+| `trackBannerView(id)` | Incrementa `views_count` via RPC `increment_banner_views` |
+
+**`CustomerType`:** `'varejo' | 'revenda' | 'atacado'`
+
+**Lógica de segmentação em `getActiveBanners`:**
+- Se `target_audience` for array vazio → banner é visível para todos
+- Se `customerType` for informado → só mostra banners onde `target_audience` inclui o tipo OU está vazio
+
+**⚠️ RPCs necessárias:** `increment_banner_clicks` e `increment_banner_views` — SQL comentado no final do arquivo
+**⚠️ Migrations:** `supabase/create_banner_storage.sql`, `fix_banner_rls_policy.sql`, `fix_storage_banners_policy.sql`, **`banner_improvements.sql`** (v2.0)
+**⚠️ Usado por:** `BannerManagementPage` (admin), `BannerCarousel` (catálogo público)
+
+**Interface `BannerStats`:**
+| Campo | Tipo | O que representa |
+|-------|------|------------------|
+| `total` | number | Total de banners cadastrados |
+| `active` | number | Banners com `is_active = true` |
+| `inactive` | number | Banners com `is_active = false` |
+| `expired` | number | Banners onde `end_date < now()` |
+| `totalClicks` | number | Soma de `clicks_count` de todos os banners |
+| `totalViews` | number | Soma de `views_count` de todos os banners |
+| `topByClicks` | `{id, title, clicks_count} \| null` | Banner com mais cliques |
+| `topByViews` | `{id, title, views_count} \| null` | Banner com mais visualizações |
+
+---
+
+### `pages/admin/settings/BannerManagementPage.tsx` — Página de Banners (Admin) v2.0
+**Usa:** `bannerService`, `BannerCard`, `BannerForm`
+- **Painel de stats** no topo: total, cliques, views, expirados
+- Drag & drop para reordenar banners ativos (**bug fix: usa `useRef` para evitar stale closure**)
+- **Duplicar banner** via `handleDuplicate` → `bannerService.duplicateBanner`
+- Seção separada de ativos / inativos
+- Stats e lista carregados em paralelo com `Promise.all`
+
+---
+
+### `components/admin/BannerForm.tsx` — Formulário de Banner v2.0
+**Props:** `banner?: CatalogBanner`, `onSave`, `onClose`
+
+**Bug fixes aplicados:**
+- **Bug 1 corrigido:** `start_date`/`end_date` armazenados como string diretamente (sem dupla conversão `new Date()`)
+- **Bug 2 corrigido:** `handleSubmit` converte strings vazias para `undefined` (Supabase não aceita `''` em campos de data)
+- **Bug 3 corrigido:** unificado `link_target` como campo canônico; fallback `?? link_url` (campo legado real na tabela — `link_value` **não existe no banco**)
+
+**Novos campos:**
+- `subtitle` — subtítulo exibido no carrossel
+- `target_audience` — seleção de público-alvo via pills (varejo/revenda/atacado)
+- Preview ao vivo do carrossel ao clicar "Ver preview"
+
+---
+
+### `components/admin/BannerCard.tsx` — Card de Banner (Lista Admin) v2.0
+Preview miniatura + informações por card:
+- Pills coloridos de `target_audience` (👥 Todos / 🛒 Varejo / 🤝 Revenda / 📦 Atacado)
+- Badge "Expirado" se `end_date` no passado e banner ativo
+- Exibe `subtitle` abaixo do título
+- Stats inline: cliques e views
+- Botão **Duplicar** (ícone `Copy`)
+- **Nova prop:** `onDuplicate: (id: string) => void`
+
+---
+
+### `components/catalog/BannerCarousel.tsx` — Carrossel Público v2.0
+**Props:** `banners?`, `customerType?: CustomerType`, `autoPlayInterval?`, `showDots?`, `showArrows?`
+
+**Bug fix:** navegação usa `banner.link_target` como campo canônico com fallback `?? banner.link_url` para compatibilidade com banners antigos (campo legado real na tabela). `link_value` **não existe no banco**.
+
+**Nova prop `customerType`:** passada para `getActiveBanners(customerType)` → filtra banners por tipo de cliente automaticamente.
+
+- Sem `banners` prop → busca via `getActiveBanners(customerType)` ao montar + registra views
+- Com `banners` prop → modo preview (editor de catálogo)
+- Auto-play pausa ao hover; clique registra via `trackBannerClick`
+- **Não renderiza nada se lista vazia** (`return null`)
+- **⚠️ Usado por:** homepage do catálogo (`CustomerCatalogPage`)
+
+---
+
+### Segmentação de Banners por Tipo de Cliente (nova feature)
+
+**Tabela:** coluna `target_audience TEXT[] DEFAULT '{}'`
+
+| Valor | Tipo de cliente |
+|-------|----------------|
+| (array vazio) | Todos os visitantes |
+| `'varejo'` | Clientes varejo |
+| `'revenda'` | Revendedores |
+| `'atacado'` | Atacadistas |
+
+**Mapeamento `customer_type` do banco → `CustomerType` do banner** (feito em `pages/catalog/index.tsx`):
+
+| `customer.customer_type` (banco) | `CustomerType` (bannerService) | Usuário |
+|----------------------------------|-------------------------------|--------|
+| `'retail'` | `'varejo'` | Cliente comum |
+| `'wholesale'` | `'atacado'` | Atacadista |
+| `'resale'` | `'revenda'` | Revendedor |
+| `'ADMIN'` / `null` / não logado | `undefined` | Só banners sem segmentação |
+
+**Rotas relacionadas ao sistema de banners:**
+
+| Rota | Componente | Acesso | Descrição |
+|------|-----------|--------|-----------|
+| `/admin/settings/banners` | `BannerManagementPage` | Admin | CRUD, reorder, duplicar, stats |
+| `/` (catálogo público) | `BannerCarousel` em `pages/catalog/index.tsx` | Público | Exibe banners filtrados por cliente |
+
+**Migration necessária:** `supabase/banner_improvements.sql` (adiciona `target_audience`, `subtitle`, corrige RLS para anon)
+
+---
+
 ### `services/catalogConfigService.ts` — Configurações do Catálogo
 **Exporta:** `catalogConfigService` (instância de classe)
 **Tabelas:** `catalog_settings`, `category_display_config`
@@ -613,6 +752,94 @@ mercado-do-vale/
 
 ---
 
+### `services/shippingService.ts` — Sistema de Frete ✅ ATIVO
+**Exporta:** `shippingService` (objeto)
+**Tabelas:** `shipping_settings`, `shipping_zones`, `shipping_price_ranges`
+**Arquitetura:** Single-tenant (sem `company_id`) — tabelas acessadas diretamente sem filtro de empresa
+**APIs externas:** ViaCEP (busca de CEP), Melhor Envio (cálculo nacional)
+
+| Função | O que faz |
+|--------|-----------|
+| `getSettings()` | Busca configurações de frete (`.limit(1).maybeSingle()`) |
+| `saveSettings(input)` | Atualiza se existir, insere se não existir |
+| `getZones()` | Lista todas as zonas de entrega com `price_ranges` populados |
+| `createZone(input)` | Cria zona de entrega |
+| `updateZone(id, input)` | Atualiza zona |
+| `deleteZone(id)` | Remove zona e suas faixas de preço |
+| `createPriceRange(input)` | Cria faixa de preço para uma zona |
+| `updatePriceRange(id, input)` | Atualiza faixa |
+| `deletePriceRange(id)` | Remove faixa |
+| `calculate(input)` | Calcula opções de frete para um CEP dado (retorna `ShippingOption[]`) |
+
+**Lógica de cálculo (`calculate`):**
+1. Busca CEP via ViaCEP → obtém cidade e coordenadas
+2. Calcula distância (Haversine) do CEP de origem ao destino
+3. Verifica zonas `local_free`: se cidade/CEP bater → frete grátis
+4. Verifica zonas `local_paid`: aplica `fixed_price` ou `price_per_km`
+5. Fallback: chama Melhor Envio se `melhor_envio_enabled = true`
+
+**RLS:** Leitura pública (`FOR SELECT USING (true)`), escrita requer autenticação
+**Migration:** `supabase/shipping_system.sql` — deve ser executada antes de usar
+**⚠️ Usado por:** `DeliveryOptions.tsx` (cálculo automático ao buscar CEP), `ShippingPage` (admin)
+
+---
+
+### `utils/whatsappMessageGenerator.ts` — Mensagem de Orçamento Individual
+**Exporta:** `generateQuoteMessage`, `generateWhatsAppLink`
+**Usado por:** `QuoteModal.tsx` (botão "Enviar WhatsApp" do cliente)
+
+**Dois formatos:**
+- **Admin/Equipe** (`isAdmin = true`): cabeçalho `📝 ORÇAMENTO DE PRODUTOS` + mensagem promocional `"Garanta o seu agora..."` ao final
+- **Cliente** (`isAdmin = false`): cabeçalho `📱 ORÇAMENTO DE PRODUTOS`, inclui endereço de entrega completo (logradouro, número, complemento, bairro, cidade, estado, CEP), frete selecionado e observações. Encerra com `_Mercado do Vale_`
+
+**Interface `DeliveryOption`:**
+```ts
+{ type: 'pickup' | 'delivery'; address?: Address; notes?: string; shippingOption?: ShippingOption; }
+```
+
+**⚠️ `DeliveryOption` é definido tanto aqui quanto em `DeliveryOptions.tsx`** — devem estar sincronizados
+
+---
+
+### `utils/multiProductQuoteGenerator.ts` — Mensagem de Orçamento Multi-Produto
+**Exporta:** `generateMultiProductQuoteMessage`, `generateMultiProductWhatsAppLink`
+**Usado por:** `QuoteCartSidebar.tsx` (carrinho de orçamentos do admin)
+
+**Lógica de totais (respeita modo de pagamento por item):**
+- Item é `parcelado` se: `showInstallment = true` E `installments > 1`
+- Item é `à vista` em qualquer outro caso
+- **Carrinho homogêneo à vista:** exibe `💰 Total à vista: R$ X`
+- **Carrinho homogêneo parcelado:** exibe `💳 Total parcelado (Nx): R$ X`
+- **Carrinho misto:** exibe subtotal à vista + subtotal parcelado + `📊 Total geral`
+
+**Regras de exibição por item:**
+- RAM/Storage só aparecem se definidos (produtos sem variantes não exibem `undefined/undefined`)
+- Mensagem final: `🎯 Orçamento exclusivo Mercado do Vale! / Garanta o seu agora enquanto está disponível em estoque! 🔥`
+
+---
+
+### `contexts/QuoteCartContext.tsx` — Carrinho de Orçamentos (Admin)
+**Exporta:** `QuoteCartProvider`, `useQuoteCart`, `QuoteCartItem`
+**Persistência:** `localStorage` (chave: `mercado_do_vale_quote_cart`)
+
+**Interface `QuoteCartItem`:**
+```ts
+{
+  id: string;
+  product: CatalogProduct;
+  variant: { ram: string; storage: string };  // pode ser undefined/undefined para produtos sem variantes
+  availableColors: string[];
+  price: number;           // em centavos
+  installmentPlan: InstallmentPlan;
+  paymentOptions: { showCash: boolean; showInstallment: boolean };
+}
+```
+
+**⚠️ `paymentOptions` é usado pelo `multiProductQuoteGenerator` para calcular totais corretos**
+**⚠️ Usado por:** `QuoteCartSidebar`, `QuoteModal` (admin)
+
+---
+
 ## 🪝 HOOKS — Funções Retornadas
 
 ### `hooks/useProducts.ts`
@@ -758,6 +985,7 @@ HelmetProvider → SupabaseAuthProvider → ThemeProvider → RouterProvider
 | `/admin/settings/company` | `CompanyPage` |
 | `/admin/settings/payment-fees` | `PaymentFeesPage` |
 | `/admin/settings/permissions` | `PermissionsManagementPage` |
+| `/admin/settings/shipping` | `ShippingPage` (Sistema de Frete — zonas, faixas, Melhor Envio) |
 | `/admin/migration` | `MigrationPage` |
 
 ### Rotas Cliente (requer autenticação de cliente)

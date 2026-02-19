@@ -2,6 +2,7 @@ import type { CatalogProduct } from '@/types/catalog';
 import type { InstallmentPlan } from '@/services/installmentCalculator';
 import type { Address } from '@/services/addressLookup';
 import type { VariantSpecs } from '@/services/productVariants';
+import type { ShippingOption } from '@/types/shipping';
 import { supabase } from '@/services/supabase';
 
 /**
@@ -11,6 +12,7 @@ export interface DeliveryOption {
     type: 'pickup' | 'delivery';
     address?: Address;
     notes?: string;
+    shippingOption?: ShippingOption;
 }
 
 /**
@@ -81,6 +83,8 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
         }
 
         message += `\n---\n`;
+        message += `🎯 *Orçamento exclusivo Mercado do Vale!*\n`;
+        message += `Garanta o seu agora enquanto está disponível em estoque! 🔥`;
     } else {
         // Customer format (original)
         message = `*📱 ORÇAMENTO DE PRODUTOS*\n`;
@@ -112,6 +116,13 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
             message += `Bairro ${delivery.address.neighborhood}, ${delivery.address.city} - ${delivery.address.state}\n`;
             message += `CEP: ${delivery.address.cep}\n`;
 
+            // Shipping option selected
+            if (delivery.shippingOption) {
+                const s = delivery.shippingOption;
+                const price = s.isFree ? 'Grátis 🎉' : `R$ ${s.price.toFixed(2).replace('.', ',')} — ${s.daysLabel}`;
+                message += `Frete: ${s.name} (${price})\n`;
+            }
+
             if (delivery.notes) {
                 message += `Obs: ${delivery.notes}\n`;
             }
@@ -120,8 +131,7 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
         }
 
         message += `\n---\n`;
-        message += `🎯 *Orçamento exclusivo Mercado do Vale!*\n`;
-        message += `Garanta o seu agora enquanto está disponível em estoque! 🔥`;
+        message += `_Mercado do Vale_`;
     }
 
     return message;

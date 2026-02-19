@@ -25,7 +25,11 @@ export function generateMultiProductQuoteMessage(items: QuoteCartItem[]): string
 
         // Build the product info with name and specs on separate lines
         message += `\n${index + 1}. *${productName}*\n`;
-        message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
+
+        // Only show RAM/Storage if they exist (smartphones)
+        if (item.variant.ram && item.variant.storage) {
+            message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
+        }
 
         // Cash price (if selected OR if paymentOptions doesn't exist - backward compatibility)
         if (item.paymentOptions?.showCash ?? true) {
@@ -45,8 +49,39 @@ export function generateMultiProductQuoteMessage(items: QuoteCartItem[]): string
         }
     });
 
+    // ─── Totals: respect each item's payment mode ───────────────────────────
+    // An item is "parcelado" if: showInstallment is true AND installments > 1
+    // Otherwise it's treated as "à vista" (even if both options are shown)
+    const cashItems = items.filter(i => !((i.paymentOptions?.showInstallment ?? true) && i.installmentPlan.installments > 1));
+    const installmentItems = items.filter(i => (i.paymentOptions?.showInstallment ?? true) && i.installmentPlan.installments > 1);
+
+    const cashSubtotal = cashItems.reduce((s, i) => s + i.price, 0);
+    const installmentSubtotal = installmentItems.reduce((s, i) => s + i.installmentPlan.total, 0);
+    const grandTotal = cashSubtotal + installmentSubtotal;
+
+    const isMixed = cashItems.length > 0 && installmentItems.length > 0;
+    const onlyCash = installmentItems.length === 0;
+    const onlyCredit = cashItems.length === 0;
+
+    message += `\n*━━━ RESUMO DO ORÇAMENTO ━━━*\n`;
+
+    if (onlyCash) {
+        // All items à vista
+        message += `💰 Total à vista: *${formatPrice(grandTotal)}*\n`;
+    } else if (onlyCredit) {
+        // All items parcelado
+        const maxInstallments = Math.max(...installmentItems.map(i => i.installmentPlan.installments));
+        message += `💳 Total parcelado (${maxInstallments}x): *${formatPrice(grandTotal)}*\n`;
+    } else {
+        // Mixed cart
+        message += `💰 Itens à vista: *${formatPrice(cashSubtotal)}*\n`;
+        message += `💳 Itens parcelados: *${formatPrice(installmentSubtotal)}*\n`;
+        message += `📊 Total geral: *${formatPrice(grandTotal)}*\n`;
+    }
+
     message += `\n---\n`;
-    message += `\n📞 *Entre em contato para finalizar seu pedido!*`;
+    message += `🎯 *Orçamento exclusivo Mercado do Vale!*\n`;
+    message += `Garanta o seu agora enquanto está disponível em estoque! 🔥`;
 
     return message;
 }

@@ -21,12 +21,26 @@ import { QuoteCartProvider } from '@/contexts/QuoteCartContext';
 import { generateWhatsAppLink } from '@/utils/whatsappMessageGenerator';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { ShareCatalogButton } from '@/components/catalog/ShareCatalogButton';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import type { CustomerType } from '@/services/bannerService';
 
 function CatalogContent() {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [sections, setSections] = useState<CatalogSection[]>([]);
     const [sectionsLoading, setSectionsLoading] = useState(true);
     const [isCartOpen, setIsCartOpen] = useState(false);
+
+    const { customer } = useSupabaseAuth();
+
+    // Mapeia customer_type do banco (retail/wholesale/resale) → CustomerType do banner (varejo/revenda/atacado)
+    const customerType = ((): CustomerType | undefined => {
+        switch (customer?.customer_type) {
+            case 'wholesale': return 'atacado';
+            case 'resale': return 'revenda';
+            case 'retail': return 'varejo';
+            default: return undefined; // não logado → só banners públicos (target_audience vazio)
+        }
+    })();
 
     const {
         products,
@@ -109,7 +123,7 @@ function CatalogContent() {
             {/* Banner Carousel */}
             <div className="bg-white border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <BannerCarousel />
+                    <BannerCarousel customerType={customerType} />
                 </div>
             </div>
 

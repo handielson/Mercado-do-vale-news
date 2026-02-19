@@ -1,7 +1,24 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, Link as LinkIcon } from 'lucide-react';
+import { X, Upload, Users, Eye, EyeOff } from 'lucide-react';
 import type { CatalogBanner } from '@/types/catalog';
 import { uploadService } from '@/services/uploadService';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const AUDIENCE_OPTIONS = [
+    { value: 'varejo', label: '🛒 Varejo', color: 'border-blue-400 bg-blue-50 text-blue-700' },
+    { value: 'revenda', label: '🤝 Revenda', color: 'border-green-400 bg-green-50 text-green-700' },
+    { value: 'atacado', label: '📦 Atacado', color: 'border-orange-400 bg-orange-50 text-orange-700' },
+] as const;
+
+const LINK_OPTIONS = [
+    { value: 'none', label: '⊘ Sem Link' },
+    { value: 'category', label: '📁 Categoria' },
+    { value: 'product', label: '📦 Produto' },
+    { value: 'external', label: '🔗 URL Externa' },
+] as const;
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface BannerFormProps {
     banner?: CatalogBanner;
@@ -9,83 +26,93 @@ interface BannerFormProps {
     onClose: () => void;
 }
 
-export const BannerForm: React.FC<BannerFormProps> = ({
-    banner,
-    onSave,
-    onClose
-}) => {
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose }) => {
+    // Bug fix: start_date e end_date armazenados como string diretamente
+    // (sem dupla conversão via new Date())
     const [formData, setFormData] = useState({
-        title: banner?.title || '',
-        image_url: banner?.image_url || '',
-        link_type: banner?.link_type || 'none' as const,
-        link_target: banner?.link_target || '',
+        title: banner?.title ?? '',
+        subtitle: banner?.subtitle ?? '',
+        image_url: banner?.image_url ?? '',
+        link_type: (banner?.link_type ?? 'none') as 'none' | 'product' | 'category' | 'external',
+        // Bug fix: unificar link_target e link_value (campo canônico = link_target)
+        link_target: banner?.link_target ?? banner?.link_value ?? '',
         is_active: banner?.is_active ?? true,
         display_order: banner?.display_order ?? 0,
-        start_date: banner?.start_date ? new Date(banner.start_date).toISOString().slice(0, 16) : '' as string,
-        end_date: banner?.end_date ? new Date(banner.end_date).toISOString().slice(0, 16) : '' as string
+        target_audience: banner?.target_audience ?? ([] as string[]),
+        // Bug fix: valor direto do datetime-local — sem conversão no input
+        start_date: banner?.start_date
+            ? new Date(banner.start_date).toISOString().slice(0, 16)
+            : '',
+        end_date: banner?.end_date
+            ? new Date(banner.end_date).toISOString().slice(0, 16)
+            : '',
     });
 
-    const [imagePreview, setImagePreview] = useState(banner?.image_url || '');
+    const [imagePreview, setImagePreview] = useState(banner?.image_url ?? '');
     const [isUploading, setIsUploading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // ── Upload ──────────────────────────────────────────────────────────────
+
     const handleImageUpload = async (file: File) => {
-        // Validar arquivo antes de fazer upload
         const validation = uploadService.validateImageFile(file);
-        if (!validation.valid) {
-            alert(validation.error);
-            return;
-        }
+        if (!validation.valid) { alert(validation.error); return; }
 
         setIsUploading(true);
         try {
-            // Create preview local primeiro para feedback imediato
+            // Preview instantâneo via FileReader
             const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreview(reader.result as string);
-            };
+            reader.onloadend = () => setImagePreview(reader.result as string);
             reader.readAsDataURL(file);
 
-            // Fazer upload real para Supabase Storage
             const imageUrl = await uploadService.uploadBannerImage(file);
-
-            // Atualizar com a URL pública do Supabase
-            setFormData(prev => ({ ...prev, image_url: imageUrl }));
+            setFormData(p => ({ ...p, image_url: imageUrl }));
             setImagePreview(imageUrl);
         } catch (error: any) {
-            console.error('Erro ao fazer upload:', error);
             alert(error.message || 'Erro ao fazer upload da imagem');
-            // Limpar preview em caso de erro
             setImagePreview('');
-            setFormData(prev => ({ ...prev, image_url: '' }));
+            setFormData(p => ({ ...p, image_url: '' }));
         } finally {
             setIsUploading(false);
         }
     };
 
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        const file = e.dataTransfer.files[0];
-        if (file) handleImageUpload(file);
+    const toggleAudience = (value: string) => {
+        setFormData(p => ({
+            ...p,
+            target_audience: p.target_audience.includes(value)
+                ? p.target_audience.filter(a => a !== value)
+                : [...p.target_audience, value],
+        }));
     };
+
+    // ── Submit ──────────────────────────────────────────────────────────────
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!formData.title.trim()) {
-            alert('Por favor, preencha o título do banner');
-            return;
-        }
-
-        if (!formData.image_url.trim()) {
-            alert('Por favor, adicione uma imagem');
-            return;
-        }
+        if (!formData.title.trim()) { alert('Por favor, preencha o título'); return; }
+        if (!formData.image_url.trim()) { alert('Por favor, adicione uma imagem'); return; }
 
         setIsSaving(true);
         try {
-            await onSave(formData as any);
+            // Bug fix: strings vazias → undefined (Supabase espera null/undefined, não '')
+            const payload: Partial<CatalogBanner> = {
+                title: formData.title.trim(),
+                subtitle: formData.subtitle.trim() || undefined,
+                image_url: formData.image_url,
+                link_type: formData.link_type,
+                link_target: formData.link_target.trim() || undefined,
+                is_active: formData.is_active,
+                display_order: formData.display_order,
+                target_audience: formData.target_audience,
+                start_date: formData.start_date ? new Date(formData.start_date) : undefined,
+                end_date: formData.end_date ? new Date(formData.end_date) : undefined,
+            };
+            await onSave(payload);
             onClose();
         } catch (error) {
             console.error('Erro ao salvar banner:', error);
@@ -95,80 +122,100 @@ export const BannerForm: React.FC<BannerFormProps> = ({
         }
     };
 
+    // ── Render ──────────────────────────────────────────────────────────────
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full my-8">
+
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b">
-                    <h2 className="text-xl font-semibold text-gray-900">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                    <h2 className="text-xl font-bold text-gray-900">
                         {banner ? 'Editar Banner' : 'Novo Banner'}
                     </h2>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                {/* Form */}
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
+
+                    {/* Live Preview */}
+                    {imagePreview && (
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-gray-700">Preview do Carrossel</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPreview(p => !p)}
+                                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                                >
+                                    {showPreview ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                    {showPreview ? 'Ocultar' : 'Ver preview'}
+                                </button>
+                            </div>
+                            {showPreview && (
+                                <div className="relative w-full aspect-[21/9] rounded-xl overflow-hidden bg-slate-900">
+                                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
+                                        <div className="absolute bottom-0 left-0 right-0 p-6">
+                                            <h2 className="text-white text-2xl font-bold drop-shadow-lg">
+                                                {formData.title || 'Título do banner'}
+                                            </h2>
+                                            {formData.subtitle && (
+                                                <p className="text-white/90 text-base drop-shadow-lg mt-1">
+                                                    {formData.subtitle}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-black/30 text-white text-xs font-semibold">
+                                        1 / 1
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Image Upload */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Imagem do Banner *
-                        </label>
-                        <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <p className="text-sm text-blue-800 font-medium mb-1">📐 Tamanho Recomendado:</p>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Imagem *</label>
+                        <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                             <p className="text-xs text-blue-700">
-                                • Desktop: 1200x400px (proporção 3:1)<br />
-                                • Mobile: 800x600px (proporção 4:3)<br />
-                                • Formato: PNG, JPG ou WEBP
+                                📐 Recomendado: 1200×400px (21:9) — PNG, JPG ou WEBP, máx 5MB
                             </p>
                         </div>
                         <div
-                            onDrop={handleDrop}
+                            onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImageUpload(f); }}
                             onDragOver={(e) => e.preventDefault()}
-                            className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors cursor-pointer"
                             onClick={() => fileInputRef.current?.click()}
+                            className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors cursor-pointer"
                         >
                             {isUploading ? (
-                                <div className="space-y-3">
-                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                                    <p className="text-blue-600 font-medium">Fazendo upload...</p>
-                                    <p className="text-xs text-gray-500">Aguarde enquanto enviamos sua imagem</p>
+                                <div className="space-y-2">
+                                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto" />
+                                    <p className="text-sm text-blue-600 font-medium">Fazendo upload...</p>
                                 </div>
                             ) : imagePreview ? (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     <img
                                         src={imagePreview}
                                         alt="Preview"
-                                        className="max-h-48 mx-auto rounded-lg"
-                                        onError={(e) => {
-                                            e.currentTarget.src = 'https://via.placeholder.com/800x300/E5E7EB/9CA3AF?text=Erro+ao+Carregar';
-                                        }}
+                                        className="max-h-40 mx-auto rounded-lg"
+                                        onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/800x300?text=Imagem+inválida'; }}
                                     />
                                     <button
                                         type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setImagePreview('');
-                                            setFormData(prev => ({ ...prev, image_url: '' }));
-                                        }}
-                                        className="text-sm text-red-600 hover:text-red-700"
+                                        onClick={(e) => { e.stopPropagation(); setImagePreview(''); setFormData(p => ({ ...p, image_url: '' })); }}
+                                        className="text-sm text-red-600 hover:text-red-700 transition-colors"
                                     >
-                                        Remover Imagem
+                                        Remover imagem
                                     </button>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
-                                    <Upload className="w-12 h-12 mx-auto text-gray-400" />
-                                    <p className="text-gray-600">
-                                        Arraste uma imagem ou clique para selecionar
-                                    </p>
-                                    <p className="text-xs text-gray-500">
-                                        PNG, JPG ou WEBP (recomendado: 1200x400px)
-                                    </p>
+                                    <Upload className="w-10 h-10 mx-auto text-gray-400" />
+                                    <p className="text-sm text-gray-600">Arraste ou clique para selecionar</p>
                                 </div>
                             )}
                             <input
@@ -176,147 +223,150 @@ export const BannerForm: React.FC<BannerFormProps> = ({
                                 type="file"
                                 accept="image/*"
                                 className="hidden"
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handleImageUpload(file);
-                                }}
+                                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
                             />
                         </div>
-
-                        {/* URL Input Alternative */}
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Ou cole a URL da imagem
-                            </label>
-                            <div className="flex gap-2">
-                                <input
-                                    type="url"
-                                    value={formData.image_url}
-                                    onChange={(e) => {
-                                        setFormData(prev => ({ ...prev, image_url: e.target.value }));
-                                        setImagePreview(e.target.value);
-                                    }}
-                                    placeholder="https://exemplo.com/imagem.jpg"
-                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
+                        <div className="mt-3">
+                            <label className="block text-xs text-gray-500 mb-1">Ou cole a URL da imagem</label>
+                            <input
+                                type="url"
+                                value={formData.image_url}
+                                onChange={(e) => { setFormData(p => ({ ...p, image_url: e.target.value })); setImagePreview(e.target.value); }}
+                                placeholder="https://exemplo.com/banner.jpg"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
                         </div>
                     </div>
 
                     {/* Title */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Título *
-                        </label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Título *</label>
                         <input
                             type="text"
                             value={formData.title}
-                            onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                            onChange={(e) => setFormData(p => ({ ...p, title: e.target.value }))}
                             placeholder="Ex: Promoção Xiaomi Redmi Note 15"
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             required
                         />
                     </div>
 
-                    {/* Link Type */}
+                    {/* Subtitle */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Tipo de Link
+                            Subtítulo <span className="text-gray-400 font-normal">(opcional)</span>
                         </label>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                            {[
-                                { value: 'none', label: 'Sem Link' },
-                                { value: 'category', label: 'Categoria' },
-                                { value: 'product', label: 'Produto' },
-                                { value: 'external', label: 'URL Externa' }
-                            ].map((option) => (
+                        <input
+                            type="text"
+                            value={formData.subtitle}
+                            onChange={(e) => setFormData(p => ({ ...p, subtitle: e.target.value }))}
+                            placeholder="Ex: Preços especiais por tempo limitado"
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    </div>
+
+                    {/* Target Audience */}
+                    <div>
+                        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                            <Users className="w-4 h-4" /> Público-Alvo
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                            Deixe sem seleção para exibir para <strong>todos</strong> os visitantes
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            {AUDIENCE_OPTIONS.map(opt => {
+                                const selected = formData.target_audience.includes(opt.value);
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => toggleAudience(opt.value)}
+                                        className={`px-4 py-2 rounded-full border-2 text-sm font-medium transition-all ${selected
+                                                ? opt.color
+                                                : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                                            }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {formData.target_audience.length === 0 && (
+                            <p className="text-xs text-green-600 mt-2">👥 Visível para todos os visitantes</p>
+                        )}
+                    </div>
+
+                    {/* Link Type */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Link</label>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                            {LINK_OPTIONS.map(opt => (
                                 <label
-                                    key={option.value}
-                                    className={`
-                    flex items-center justify-center px-4 py-2 border-2 rounded-lg cursor-pointer transition-all
-                    ${formData.link_type === option.value
+                                    key={opt.value}
+                                    className={`flex items-center justify-center px-3 py-2 border-2 rounded-lg cursor-pointer transition-all text-sm font-medium ${formData.link_type === opt.value
                                             ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                            : 'border-gray-300 hover:border-gray-400'}
-                  `}
+                                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                                        }`}
                                 >
                                     <input
                                         type="radio"
                                         name="link_type"
-                                        value={option.value}
-                                        checked={formData.link_type === option.value}
-                                        onChange={(e) => setFormData(prev => ({
-                                            ...prev,
-                                            link_type: e.target.value as any,
-                                            link_target: ''
+                                        value={opt.value}
+                                        checked={formData.link_type === opt.value}
+                                        onChange={(e) => setFormData(p => ({
+                                            ...p,
+                                            link_type: e.target.value as typeof formData.link_type,
+                                            link_target: '',
                                         }))}
                                         className="sr-only"
                                     />
-                                    <span className="text-sm font-medium">{option.label}</span>
+                                    {opt.label}
                                 </label>
                             ))}
                         </div>
-                        <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
-                            <p className="font-medium mb-1">💡 Como usar os links:</p>
-                            <ul className="space-y-1 ml-4">
-                                <li>• <strong>Categoria:</strong> Digite o slug da categoria (ex: smartphones, tablets)</li>
-                                <li>• <strong>Produto:</strong> Digite o ID do produto para link direto</li>
-                                <li>• <strong>URL Externa:</strong> Cole o link completo (ex: https://exemplo.com)</li>
-                                <li>• <strong>Sem Link:</strong> Banner apenas visual, sem clique</li>
-                            </ul>
-                        </div>
+                        {formData.link_type !== 'none' && (
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    {formData.link_type === 'category' ? 'Slug da Categoria (ex: smartphones)' :
+                                        formData.link_type === 'product' ? 'ID do Produto' :
+                                            'URL Completa'}
+                                </label>
+                                <input
+                                    type={formData.link_type === 'external' ? 'url' : 'text'}
+                                    value={formData.link_target}
+                                    onChange={(e) => setFormData(p => ({ ...p, link_target: e.target.value }))}
+                                    placeholder={
+                                        formData.link_type === 'category' ? 'smartphones' :
+                                            formData.link_type === 'product' ? 'abc123-uuid...' :
+                                                'https://exemplo.com'
+                                    }
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                        )}
                     </div>
 
-                    {/* Link Target */}
-                    {formData.link_type !== 'none' && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                {formData.link_type === 'category' && 'ID da Categoria'}
-                                {formData.link_type === 'product' && 'ID do Produto'}
-                                {formData.link_type === 'external' && 'URL'}
-                            </label>
-                            <input
-                                type="text"
-                                value={formData.link_target}
-                                onChange={(e) => setFormData(prev => ({ ...prev, link_target: e.target.value }))}
-                                placeholder={
-                                    formData.link_type === 'category' ? 'smartphones' :
-                                        formData.link_type === 'product' ? 'abc123' :
-                                            'https://exemplo.com'
-                                }
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                        </div>
-                    )}
-
-                    {/* Schedule Dates */}
+                    {/* Dates — Bug fix: valor direto, sem conversão no input */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                📅 Data de Início (opcional)
-                            </label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">📅 Data de Início</label>
                             <input
                                 type="datetime-local"
-                                value={formData.start_date ? new Date(formData.start_date).toISOString().slice(0, 16) : ''}
-                                onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                value={formData.start_date}
+                                onChange={(e) => setFormData(p => ({ ...p, start_date: e.target.value }))}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Banner será exibido a partir desta data
-                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Vazio = exibe imediatamente</p>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                📅 Data de Término (opcional)
-                            </label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">📅 Data de Término</label>
                             <input
                                 type="datetime-local"
-                                value={formData.end_date ? new Date(formData.end_date).toISOString().slice(0, 16) : ''}
-                                onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                value={formData.end_date}
+                                onChange={(e) => setFormData(p => ({ ...p, end_date: e.target.value }))}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Banner será ocultado após esta data
-                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Vazio = sem expiração</p>
                         </div>
                     </div>
 
@@ -326,7 +376,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({
                             type="checkbox"
                             id="is_active"
                             checked={formData.is_active}
-                            onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                            onChange={(e) => setFormData(p => ({ ...p, is_active: e.target.checked }))}
                             className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                         />
                         <label htmlFor="is_active" className="text-sm font-medium text-gray-700">
@@ -335,7 +385,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({
                     </div>
 
                     {/* Actions */}
-                    <div className="flex justify-end gap-3 pt-4 border-t">
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                         <button
                             type="button"
                             onClick={onClose}
@@ -351,6 +401,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({
                             {isSaving ? 'Salvando...' : banner ? 'Salvar Alterações' : 'Criar Banner'}
                         </button>
                     </div>
+
                 </form>
             </div>
         </div>
