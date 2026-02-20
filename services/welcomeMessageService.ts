@@ -13,7 +13,12 @@ Neste portal exclusivo você poderá:
 (Selecione a opção Cliente)
 
 🔑 Login (CPF): {cpf}
-🔒 Senha: {senha}`;
+🔒 Senha: {senha}
+
+🪙 *Moedas do Vale — Programa de Fidelidade*
+Ao comprar conosco você acumula Moedas do Vale que podem ser trocadas por descontos reais! Faça check-in diário no aplicativo para ganhar ainda mais moedas.
+📋 Regulamento completo: {link}moedas-do-vale`;
+
 
 const PORTAL_LINK = 'https://mv.mercadodovale.com.br/';
 

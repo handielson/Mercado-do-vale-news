@@ -54,8 +54,10 @@ import CatalogConfigPage from '../pages/admin/CatalogConfigPage';
 import PermissionsManagementPage from '../pages/admin/settings/PermissionsManagementPage';
 import CatalogEditorPage from '../pages/admin/catalog-editor';
 import CouponsPage from '../pages/admin/CouponsPage';
+import CashbackPage from '../pages/admin/CashbackPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
+import CoinsInfoPage from '../pages/catalog/CoinsInfoPage';
 import LegacyMigrationPage from '../pages/LegacyMigration';
 import FieldMappingPage from '../pages/FieldMappingPage';
 
@@ -212,6 +214,11 @@ export const router = createBrowserRouter([
     path: "/perfil",
     element: <CustomerProfilePage />
   },
+  // Regulamento Moedas do Vale (página pública)
+  {
+    path: "/moedas-do-vale",
+    element: <CoinsInfoPage />
+  },
   // Admin Dashboard (Supabase Auth)
   {
     path: "/admin/dashboard",
@@ -274,6 +281,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CouponsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/cashback",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><CashbackPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

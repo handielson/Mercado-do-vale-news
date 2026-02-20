@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, MapPin, Lock, ShoppingBag, TrendingUp, ArrowLeft } from 'lucide-react';
+import { User, MapPin, Lock, ShoppingBag, TrendingUp, ArrowLeft, Coins } from 'lucide-react';
 import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,8 +9,9 @@ import { AddressTab } from '../../components/customer/profile/AddressTab';
 import { PasswordChangeTab } from '../../components/customer/profile/PasswordChangeTab';
 import { PurchaseHistoryTab } from '../../components/customer/profile/PurchaseHistoryTab';
 import { TypeUpgradeTab } from '../../components/customer/profile/TypeUpgradeTab';
+import DailyCheckinWidget from '../../components/cashback/DailyCheckinWidget';
 
-type TabType = 'personal' | 'address' | 'password' | 'history' | 'upgrade';
+type TabType = 'personal' | 'address' | 'password' | 'history' | 'upgrade' | 'coins';
 
 /**
  * Customer Profile Page
@@ -51,7 +52,8 @@ export const CustomerProfilePage: React.FC = () => {
         { id: 'address' as TabType, label: 'Endereço', icon: MapPin },
         { id: 'password' as TabType, label: 'Alterar Senha', icon: Lock },
         { id: 'history' as TabType, label: 'Histórico de Compras', icon: ShoppingBag },
-        { id: 'upgrade' as TabType, label: 'Tipo de Conta', icon: TrendingUp }
+        { id: 'upgrade' as TabType, label: 'Tipo de Conta', icon: TrendingUp },
+        { id: 'coins' as TabType, label: 'Moedas do Vale', icon: Coins },
     ];
 
     return (
@@ -99,6 +101,15 @@ export const CustomerProfilePage: React.FC = () => {
                     {activeTab === 'password' && <PasswordChangeTab />}
                     {activeTab === 'history' && <PurchaseHistoryTab />}
                     {activeTab === 'upgrade' && <TypeUpgradeTab />}
+                    {activeTab === 'coins' && (
+                        <div className="space-y-4">
+                            <div>
+                                <h2 className="text-lg font-semibold text-slate-800 mb-1">🪙 Moedas do Vale</h2>
+                                <p className="text-sm text-slate-500">Acumule moedas a cada compra e faça check-in diário para ganhar mais!</p>
+                            </div>
+                            <DailyCheckinWidget customerId={customer.id} />
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

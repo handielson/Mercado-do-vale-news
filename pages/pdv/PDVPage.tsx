@@ -18,6 +18,7 @@ import { replaceWarrantyTags, getWarrantyDeclaration, formatWarrantyDate, format
 import { WarrantyTagData, DeliveryTypeWarranty } from '../../types/warrantyDocument';
 import { toast } from 'sonner';
 import { validateCoupon, applyCoupon, type Coupon } from '../../services/couponService';
+import { earnCoinsForPurchase } from '../../services/cashbackService';
 
 interface Customer {
     id: string;
@@ -276,9 +277,27 @@ export default function PDVPage() {
                 handleClearCoupon();
             }
 
+            // Creditar Moedas do Vale pelo valor final pago
+            try {
+                const totals = calculateSaleTotals(cartItems, promotionalDiscount);
+                const couponDiscount = appliedCoupon
+                    ? (totals.subtotal * ((appliedCoupon as any).discount_percent ?? 0)) / 100
+                    : 0;
+                const finalPaid = Math.max(0, totals.subtotal - couponDiscount + deliveryCostCustomer);
+                const coinsEarned = await earnCoinsForPurchase(selectedCustomer.id, finalPaid, sale.id);
+                if (coinsEarned > 0) {
+                    toast.success(`🪙 +${coinsEarned} Moedas do Vale!`, {
+                        description: `${selectedCustomer.name} acumulou moedas nesta compra.`
+                    });
+                }
+            } catch {
+                // Erro nas moedas não bloqueia a venda
+            }
+
             toast.success('Venda finalizada com sucesso!', {
                 description: `Venda #${sale.id.slice(0, 8)} criada`
             });
+
 
             // Salvar dados para geração do termo
             setLastSaleId(sale.id);

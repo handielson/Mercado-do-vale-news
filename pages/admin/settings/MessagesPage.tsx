@@ -126,7 +126,30 @@ export default function MessagesPage() {
                 </div>
             </div>
 
+            {/* Banner Moedas do Vale */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-4">
+                <span className="text-2xl">🪙</span>
+                <div className="flex-1">
+                    <p className="text-sm font-bold text-amber-800 mb-1">
+                        Programa Moedas do Vale já incluso no template padrão
+                    </p>
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                        O template padrão já apresenta o programa de fidelidade ao novo cliente.
+                        O link do regulamento é gerado automaticamente junto com o link do portal.
+                    </p>
+                    <a
+                        href="/moedas-do-vale"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-2 text-xs font-semibold text-amber-700 underline hover:text-amber-900"
+                    >
+                        Visualizar página de regulamento →
+                    </a>
+                </div>
+            </div>
+
             {/* Editor + Preview */}
+
             <div className="grid grid-cols-2 gap-6">
                 {/* Editor */}
                 <div>

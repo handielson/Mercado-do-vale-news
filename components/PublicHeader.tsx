@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut, ChevronDown, Shield } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 /**
  * PublicHeader - Header for public pages (catalog)
@@ -15,6 +16,7 @@ import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
  */
 export const PublicHeader: React.FC = () => {
     const { user, customer, signOut } = useSupabaseAuth();
+    const { settings: themeSettings } = useTheme();
     const navigate = useNavigate();
     const [showLoginDropdown, setShowLoginDropdown] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
@@ -50,8 +52,16 @@ export const PublicHeader: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
                 {/* Logo */}
                 <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                    <ShoppingBag className="text-blue-600" size={32} />
-                    <h1 className="text-2xl font-bold text-slate-800">Mercado do Vale</h1>
+                    {themeSettings.logo_main ? (
+                        <img
+                            src={themeSettings.logo_main}
+                            alt={themeSettings.company_name}
+                            className="h-9 w-auto object-contain"
+                        />
+                    ) : (
+                        <ShoppingBag className="text-blue-600" size={32} />
+                    )}
+                    <h1 className="text-2xl font-bold text-slate-800">{themeSettings.company_name}</h1>
                 </Link>
 
                 {/* Right Side */}

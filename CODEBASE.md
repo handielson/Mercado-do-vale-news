@@ -5543,3 +5543,777 @@ Renderiza o input correto conforme o `field_type` do campo global:
 | 9 | Logs `[FieldConfigSection]` dentro do `ModelModal` (tag de log errada) | `ModelModal.tsx` L548, L556 | 🟠 Baixo |
 | 10 | Dead code: `ModelModalNew`, `ModelModalExcel`, `ModelModalTemplateValues`, `ModelBasicInfo`, `ModelSpecifications`, `ModelCustomFields`, `ModelEANManager` — não montados | `components/settings/` | 🔵 Info |
 
+---
+
+## 🪙 SISTEMA MOEDAS DO VALE (Fidelidade / Cashback)
+
+> **Implementado em:** 2026-02-19/20. Sistema completo de pontos de fidelidade com check-in diário progressivo, resgate em compras, promoções de bônus e painel administrativo.
+
+### Visão Geral Arquitetural
+
+```
+CLIENTE
+  ├── Catálogo Público → DailyCheckinWidget    → performCheckin()   → add_coins RPC
+  ├── Checkout / Orçamento → CoinRedeemWidget  → validateCoinRedeem() / redeemCoins()
+  └── Regulamento → CoinsInfoPage (/moedas-do-vale)
+
+ADMIN (/admin/cashback)
+  ├── Dashboard  → listAllTransactions() + estatísticas
+  ├── Promoções  → createCoinPromotion() / toggleCoinPromotion()
+  ├── Configurações → updateCashbackSettings() + editor de ciclo diário
+  ├── Transações → listAllTransactions(filters)
+  └── Ajuste Manual → adminAdjustCoins()
+```
+
+---
+
+### Arquivos SQL — Ordem de Execução no Supabase
+
+| Arquivo | O que cria | Depende de |
+|---------|-----------|-----------|
+| `supabase/create_cashback_tables.sql` | `cashback_settings`, `coin_balances`, `coin_transactions`, `checkin_logs` + 3 RPCs | nada |
+| `supabase/add_checkin_daily_values.sql` | Coluna `checkin_daily_values JSONB` + `coins_expire_after_days INTEGER` em `cashback_settings` | `create_cashback_tables.sql` |
+| `supabase/create_coin_promotions.sql` | `coin_promotions` + RPC `increment_coin_promo_uses` | `create_cashback_tables.sql` |
+
+---
+
+### Tabelas do Banco de Dados
+
+#### `cashback_settings` — Configurações Globais (1 linha única)
+
+| Campo | Tipo | Default | Descrição |
+|-------|------|---------|-----------|
+| `id` | UUID | — | Chave primária |
+| `coins_per_real` | NUMERIC | `1` | Moedas ganhas por R$ 1,00 pago (ex: `2` = dobro) |
+| `min_purchase_for_coins` | NUMERIC | `0` | Valor mínimo em R$ para qualquer moeda ser creditada |
+| `coins_to_brl_rate` | NUMERIC | `100` | Quantas moedas equivalem a R$ 1,00 de desconto |
+| `max_redeem_percent` | INTEGER | `20` | % máximo do valor do pedido que pode ser pago com moedas |
+| `min_coins_to_redeem` | INTEGER | `100` | Saldo mínimo para habilitar resgate |
+| `checkin_base_coins` | INTEGER | `5` | Fallback se `checkin_daily_values` estiver vazio |
+| `checkin_streak_milestones` | JSONB | `[]` | Array `{day, bonus}` — milestones legados (substituído por `checkin_daily_values`) |
+| `checkin_daily_values` | JSONB | `[5,10,15,20,25,30,50]` | Array de moedas por dia do ciclo (índice 0 = dia 1) |
+| `coins_expire_after_days` | INTEGER \| NULL | `null` | Dias sem atividade até expirar. `null` = nunca expira |
+| `active` | BOOLEAN | `true` | Se `false`, todo o sistema de moedas fica inativo |
+| `updated_at` | TIMESTAMPTZ | — | Última atualização |
+
+#### `coin_balances` — Saldo por Cliente
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `id` | UUID | PK |
+| `customer_id` | UUID | FK → `customers.id` (UNIQUE) |
+| `balance` | INTEGER | Saldo atual disponível |
+| `lifetime_earned` | INTEGER | Total histórico ganho (nunca decresce) |
+| `lifetime_spent` | INTEGER | Total histórico gasto |
+| `updated_at` | TIMESTAMPTZ | Atualizado automaticamente pelas RPCs |
+
+#### `coin_transactions` — Extrato Completo
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `id` | UUID | PK |
+| `customer_id` | UUID | FK → `customers.id` |
+| `amount` | INTEGER | Positivo = ganhou, negativo = gastou |
+| `type` | TEXT | Ver `CoinTransactionType` abaixo |
+| `description` | TEXT \| NULL | Texto descritivo para o cliente |
+| `reference_id` | UUID \| NULL | ID do objeto relacionado (venda, check-in) |
+| `reference_type` | TEXT \| NULL | `'sale'`, `'quote'`, `'checkin'`, `'admin'` |
+| `created_at` | TIMESTAMPTZ | Imutável após insert |
+
+#### `checkin_logs` — Registro Diário (UNIQUE por cliente+data)
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `id` | UUID | PK |
+| `customer_id` | UUID | FK → `customers.id` |
+| `checkin_date` | DATE | Formato `YYYY-MM-DD` — UNIQUE constraint com `customer_id` |
+| `coins_earned` | INTEGER | Moedas creditadas neste check-in |
+| `streak_day` | INTEGER | Dia absoluto do streak (não reinicia ao mudar de ciclo) |
+| `created_at` | TIMESTAMPTZ | Timestamp do check-in |
+
+#### `coin_promotions` — Promoções de Bônus
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `id` | UUID | PK |
+| `name` | TEXT | Nome da promoção (ex: "Semana do iPhone") |
+| `description` | TEXT \| NULL | Descrição opcional |
+| `product_id` | UUID \| NULL | Se preenchido, aplica só neste produto |
+| `category_id` | UUID \| NULL | Se preenchido, aplica nesta categoria |
+| `min_purchase` | NUMERIC | Valor mínimo em R$ (usado quando sem product/category) |
+| `bonus_coins` | INTEGER | Moedas extras a creditar |
+| `starts_at` | TIMESTAMPTZ | Início da promoção |
+| `expires_at` | TIMESTAMPTZ \| NULL | Fim. `null` = sem expiração |
+| `max_uses` | INTEGER \| NULL | Limite de usos totais. `null` = ilimitado |
+| `uses_count` | INTEGER | Contador atômico via RPC |
+| `active` | BOOLEAN | Toggle rápido |
+| `created_at` | TIMESTAMPTZ | — |
+
+**Lógica de match em `getApplicablePromotions()`:**
+1. `product_id` preenchido → verifica se o produto está na compra
+2. `category_id` preenchido → verifica se algum produto comprado é dessa categoria
+3. Sem product/category → verifica `purchaseTotal >= min_purchase` (promoção por valor mínimo)
+
+---
+
+### RPCs Atômicas no Supabase
+
+```sql
+-- Credita moedas e registra extrato numa única transação
+add_coins(
+  p_customer_id   UUID,
+  p_amount        INTEGER,            -- sempre positivo
+  p_type          TEXT,               -- CoinTransactionType
+  p_description   TEXT DEFAULT NULL,
+  p_reference_id  UUID DEFAULT NULL,
+  p_reference_type TEXT DEFAULT NULL
+)
+-- Incrementa coin_balances.balance, lifetime_earned
+-- INSERT em coin_transactions
+
+-- Debita moedas com verificação de saldo
+spend_coins(
+  p_customer_id   UUID,
+  p_amount        INTEGER,
+  p_type          TEXT,
+  p_description   TEXT DEFAULT NULL,
+  p_reference_id  UUID DEFAULT NULL,
+  p_reference_type TEXT DEFAULT NULL
+)
+-- RAISE EXCEPTION se balance < p_amount
+-- Decrementa balance, incrementa lifetime_spent
+-- INSERT em coin_transactions
+
+-- Estorna moedas (cancela uma spend anterior)
+refund_coins(
+  p_customer_id   UUID,
+  p_amount        INTEGER,
+  p_reference_id  UUID  -- ID da venda cancelada
+)
+-- Credita de volta com type='refund_cancel'
+
+-- Contador de usos de promoção (evita race condition)
+increment_coin_promo_uses(promo_id UUID)
+-- UPDATE coin_promotions SET uses_count = uses_count + 1
+```
+
+### RLS por Tabela
+
+| Tabela | Anônimos | Cliente autenticado | Admin (`authenticated + company`) |
+|--------|----------|--------------------|------------------------------------|
+| `cashback_settings` | SELECT (leitura livre — regulamento público) | SELECT | INSERT, UPDATE, DELETE |
+| `coin_balances` | ❌ bloqueado | SELECT/UPDATE apenas `customer_id = auth.uid()` | Tudo |
+| `coin_transactions` | ❌ bloqueado | SELECT apenas `customer_id = auth.uid()` | Tudo |
+| `checkin_logs` | ❌ bloqueado | SELECT/INSERT apenas `customer_id = auth.uid()` | Tudo |
+| `coin_promotions` | SELECT onde `active=true AND starts_at<=now() AND (expires_at IS NULL OR expires_at>now())` | SELECT | Tudo |
+
+---
+
+### `types/cashback.ts` — Tipos TypeScript Completos
+
+```ts
+// Configurações do sistema
+interface CashbackSettings {
+    id: string;
+    coins_per_real: number;              // moedas por R$ gasto
+    min_purchase_for_coins: number;      // pedido mínimo em R$
+    coins_to_brl_rate: number;           // moedas = R$ 1,00
+    max_redeem_percent: number;          // % máx do pedido
+    min_coins_to_redeem: number;         // saldo mínimo
+    checkin_base_coins: number;          // fallback
+    checkin_streak_milestones: CheckinMilestone[]; // legado
+    coins_expire_after_days: number | null;
+    active: boolean;
+    updated_at: string;
+    // Adicionado via migration:
+    checkin_daily_values?: number[];     // array JSONB do ciclo
+}
+
+// Milestone de streak (legado, substituído por checkin_daily_values)
+interface CheckinMilestone { day: number; bonus: number; }
+
+// Saldo do cliente
+interface CoinBalance {
+    id: string;
+    customer_id: string;
+    balance: number;           // saldo atual (pode ser consultado diretamente)
+    lifetime_earned: number;   // acumulado total histórico
+    lifetime_spent: number;    // gasto total histórico
+    updated_at: string;
+}
+
+// Tipos de transação
+type CoinTransactionType =
+    | 'earn_purchase'   // compra confirmada
+    | 'earn_checkin'    // check-in (dia não-final do ciclo)
+    | 'earn_streak'     // check-in do último dia do ciclo (bônus)
+    | 'earn_manual'     // promoção especial
+    | 'spend_discount'  // resgate em compra
+    | 'refund_cancel'   // estorno por cancelamento
+    | 'expire'          // expiração (futuro)
+    | 'admin_adjust';   // ajuste manual pelo admin
+
+type CoinReferenceType = 'sale' | 'quote' | 'checkin' | 'admin';
+
+// Extrato
+interface CoinTransaction {
+    id: string;
+    customer_id: string;
+    amount: number;           // positivo = ganhou, negativo = gastou
+    type: CoinTransactionType;
+    description: string | null;
+    reference_id: string | null;
+    reference_type: CoinReferenceType | null;
+    created_at: string;
+}
+
+// Registro de check-in
+interface CheckinLog {
+    id: string;
+    customer_id: string;
+    checkin_date: string;   // DATE 'YYYY-MM-DD'
+    coins_earned: number;
+    streak_day: number;     // dia absoluto (ex: dia 8 = primeiro dia do segundo ciclo)
+    created_at: string;
+}
+
+// Resultado de performCheckin()
+interface CheckinResult {
+    success: boolean;
+    alreadyCheckedIn: boolean;
+    coins_earned: number;
+    streak_day: number;
+    next_milestone?: CheckinMilestone;  // próximo marco (legado)
+    is_cycle_complete?: boolean;        // true no último dia do array
+    error?: string;
+}
+
+// Resultado de validateCoinRedeem()
+interface RedeemValidation {
+    valid: boolean;
+    error?: string;          // mensagem amigável em PT-BR
+    coins_to_use: number;    // moedas efetivas após cap
+    discount_brl: number;    // desconto em R$ (nunca > max_redeem_percent%)
+    final_price: number;     // preço após desconto
+}
+```
+
+---
+
+### `services/cashbackService.ts` — Núcleo do Sistema
+
+**Exporta:** funções individuais (não objeto)
+**Tabelas:** `cashback_settings`, `coin_balances`, `coin_transactions`
+
+#### Configurações
+
+```ts
+getCashbackSettings(): Promise<CashbackSettings>
+// Lê único registro. Lança erro se tabela não existir.
+
+updateCashbackSettings(updates: Partial<CashbackSettings>): Promise<CashbackSettings>
+// Atualiza única linha via .neq('id', '00000000-...') — sem depender do ID real
+// Atualiza updated_at automaticamente
+```
+
+#### Saldo
+
+```ts
+getCoinBalance(customerId: string): Promise<CoinBalance | null>
+// Retorna null se cliente nunca teve moedas (PGRST116 tratado silenciosamente)
+
+getOrCreateBalance(customerId: string): Promise<CoinBalance>
+// Se não existe → INSERT com balance=0, lifetime_earned=0, lifetime_spent=0
+```
+
+#### Histórico
+
+```ts
+getCoinTransactions(customerId, limit = 20): Promise<CoinTransaction[]>
+// Ordena por created_at DESC
+
+listAllTransactions(filters?: { type?, from?, to?, limit? }): Promise<CoinTransaction[]>
+// Admin: JOIN com customers(name) para exibir nome
+// limit padrão = 100
+```
+
+#### Acúmulo pós-compra
+
+```ts
+earnCoinsForPurchase(customerId, finalPaidBrl, saleId): Promise<number>
+// Retorna 0 se: sistema inativo, finalPaidBrl < 0.01, abaixo de min_purchase_for_coins
+// coinsEarned = Math.floor(finalPaidBrl × coins_per_real)
+// Chama add_coins RPC com type='earn_purchase', reference_id=saleId, reference_type='sale'
+// ⚠️ finalPaidBrl DEVE ser após todos os descontos (cupom + moedas)
+```
+
+#### Validação de Resgate
+
+```ts
+validateCoinRedeem(customerId, coinsToUse, orderValueBrl): Promise<RedeemValidation>
+// Verificações (em ordem):
+// 1. settings.active === false → erro
+// 2. balance < min_coins_to_redeem → erro
+// 3. coinsToUse > balance → erro
+// 4. Cap máximo = (orderValueBrl × max_redeem_percent) / 100
+// 5. rawDiscountBrl = coinsToUse / coins_to_brl_rate
+// 6. discountBrl = min(rawDiscountBrl, maxDiscountBrl)
+// 7. effectiveCoins = ceil(discountBrl × coins_to_brl_rate) — reconverte para garantir consistência
+// Não debita — apenas calcula e valida
+```
+
+#### Execução de Resgate
+
+```ts
+redeemCoins(customerId, coinsToUse, description, referenceId?, referenceType = 'quote'): Promise<void>
+// Chama spend_coins RPC com type='spend_discount'
+// ⚠️ Chamar APENAS na confirmação final da compra (não antes)
+```
+
+#### Estorno e Ajuste
+
+```ts
+refundCoinsOnCancel(customerId, coinsToRefund, saleId): Promise<void>
+// Chama refund_coins RPC — credita de volta com type='refund_cancel'
+
+adminAdjustCoins(customerId, amount, reason): Promise<void>
+// amount positivo → add_coins (type='admin_adjust')
+// amount negativo → spend_coins com Math.abs(amount)
+```
+
+#### Helpers Síncronos
+
+```ts
+coinsToReais(coins: number, rate: number): number
+// Retorna parseFloat((coins / rate).toFixed(2))
+// Ex: coinsToReais(500, 100) → 5.00
+
+reaisToCoins(brl: number, coinsPerReal: number): number
+// Retorna Math.floor(brl × coinsPerReal)
+// Ex: reaisToCoins(150, 1) → 150
+```
+
+---
+
+### `services/checkinService.ts` — Check-in Diário Progressivo
+
+**Exporta:** funções individuais
+**Tabelas:** `checkin_logs`, usa `getCashbackSettings()` de `cashbackService`
+
+#### Lógica do Ciclo Progressivo
+
+```ts
+// Ciclo padrão: [5, 10, 15, 20, 25, 30, 50]
+// Dia 1 → índice 0 → 5 moedas
+// Dia 7 → índice 6 → 50 moedas (tipo 'earn_streak' = bônus de ciclo)
+// Dia 8 → índice (8-1)%7 = 0 → 5 moedas (reinício)
+// Dia 14 → índice 6 → 50 moedas (novamente)
+
+function getCoinsForStreakDay(settings, streakDay): number
+// Interno. Usa checkin_daily_values ?? [checkin_base_coins]
+// Índice = (streakDay - 1) % values.length
+
+export function getDailyValues(settings): number[]
+// Exportado para uso nos componentes de UI
+```
+
+#### `performCheckin(customerId)` — Fluxo Detalhado
+
+```
+1. Verificar se já fez check-in hoje (checkin_logs WHERE checkin_date = today)
+   → Se sim: return { success: false, alreadyCheckedIn: true, coins_earned: <anterior> }
+
+2. Buscar settings + calcular streak:
+   a. getYesterdayStreak(customerId):
+      → checkin_logs WHERE checkin_date = ontem
+      → Se não existe → streak = 0 (reinício)
+   b. newStreakDay = previousStreak + 1
+
+3. Calcular moedas: getCoinsForStreakDay(settings, newStreakDay)
+
+4. INSERT checkin_logs { customer_id, checkin_date, coins_earned, streak_day }
+   → Erro 23505 (UNIQUE violation = race condition) → return alreadyCheckedIn: true
+
+5. Determinar tipo:
+   → isLastCycleDay = newStreakDay % dailyValues.length === 0
+   → type = 'earn_streak' se último dia, senão 'earn_checkin'
+   → description inclui "Bônus de ciclo!" se último dia
+
+6. add_coins RPC → credita moedas + registra extrato
+
+7. return { success: true, coins_earned, streak_day: newStreakDay, is_cycle_complete }
+```
+
+#### `getStreakStatus(customerId)` — Retorno Completo
+
+```ts
+{
+  streak: number;          // streak_day do último checkin_logs (ou 0)
+  lastCheckin: string | null;  // data do último check-in ('YYYY-MM-DD')
+  checkedInToday: boolean; // lastCheckin === hoje
+  todayCoins: number;      // moedas do dia de hoje (se não fez) ou do dia atual (se fez)
+  nextCoins: number;       // moedas do próximo dia
+  dailyValues: number[];   // array completo (para o mini-calendário)
+  cyclePosition: number;   // 1-based: onde está no ciclo (1 a length)
+}
+```
+
+---
+
+### `services/coinPromotionService.ts` — Promoções de Bônus
+
+#### Tipos
+
+```ts
+interface CoinPromotion {
+    id: string;
+    name: string;
+    description: string | null;
+    product_id: string | null;    // specifica produto — null = categoria ou valor mínimo
+    category_id: string | null;   // especifica categoria
+    min_purchase: number;         // R$ mínimo (usado quando sem product/category)
+    bonus_coins: number;          // moedas extras a creditar
+    starts_at: string;            // ISO timestamp
+    expires_at: string | null;    // null = sem expiração
+    max_uses: number | null;      // null = ilimitado
+    uses_count: number;           // contador atômico
+    active: boolean;
+    created_at: string;
+    products?: { name: string } | null;     // JOIN opcional (admin)
+    categories?: { name: string } | null;  // JOIN opcional (admin)
+}
+
+interface CoinPromoMatch {
+    promo: CoinPromotion;
+    bonus: number;     // = promo.bonus_coins
+}
+```
+
+#### Funções CRUD (Admin)
+
+```ts
+listCoinPromotions(): Promise<CoinPromotion[]>
+// SELECT com JOIN products(name), categories(name) — ORDER BY created_at DESC
+
+createCoinPromotion(promo): Promise<CoinPromotion>
+// Omite id, uses_count, created_at, products, categories no input
+
+updateCoinPromotion(id, updates): Promise<void>
+// UPDATE parcial
+
+deleteCoinPromotion(id): Promise<void>
+// DELETE físico
+
+toggleCoinPromotion(id, active): Promise<void>
+// Wrapper: updateCoinPromotion(id, { active })
+```
+
+#### Lógica de Aplicação (pós-venda)
+
+```ts
+getApplicablePromotions(productIds, categoryIds, purchaseTotal): Promise<CoinPromoMatch[]>
+// Busca todas promoções: active=true, starts_at <= now, expires_at IS NULL OR > now
+// Para cada promoção:
+//   - Filtra: uses_count < max_uses (ou max_uses IS NULL)
+//   - Match: product_id in productIds
+//          OU category_id in categoryIds
+//          OU (sem product/category AND purchaseTotal >= min_purchase)
+// Retorna lista de matches com bonus calculado
+
+applyPromotions(customerId, matches, saleId): Promise<number>
+// Para cada match:
+//   1. add_coins RPC (type='earn_manual', description='Promoção: {name}')
+//   2. increment_coin_promo_uses RPC (atômico)
+// Erros individuais são logados mas não interrompem os demais
+// Retorna totalBonus creditado
+```
+
+---
+
+### `pages/admin/CashbackPage.tsx` — Painel Admin (844 linhas)
+
+**Rota:** `/admin/cashback` · **Protegida:** `requireAdmin={true}`
+**Ícones:** `Lucide` (Coins, BarChart2, Gift, History, UserCog, Settings...)
+
+#### Constante de Badges de Transação
+
+```ts
+const TX_LABELS: Record<CoinTransactionType, { label: string; color: string }> = {
+    earn_purchase:  { label: 'Compra',       color: 'bg-green-100 text-green-800' },
+    earn_checkin:   { label: 'Check-in',     color: 'bg-blue-100 text-blue-800' },
+    earn_streak:    { label: 'Bônus Streak', color: 'bg-purple-100 text-purple-800' },
+    earn_manual:    { label: 'Promoção',     color: 'bg-yellow-100 text-yellow-800' },
+    spend_discount: { label: 'Resgate',      color: 'bg-red-100 text-red-800' },
+    refund_cancel:  { label: 'Estorno',      color: 'bg-orange-100 text-orange-800' },
+    expire:         { label: 'Expirado',     color: 'bg-gray-200 text-gray-600' },
+    admin_adjust:   { label: 'Ajuste Admin', color: 'bg-gray-100 text-gray-800' },
+};
+```
+
+#### Aba 1: Dashboard (`DashboardTab`)
+
+- Busca `listAllTransactions({ limit: 500 })` para calcular estatísticas do dia
+- **Cards de estatísticas** (filtrando pelo dia atual):
+  - Moedas distribuídas hoje (earn_*)
+  - Moedas resgatadas hoje (spend_*)
+  - Check-ins hoje (earn_checkin + earn_streak)
+  - Total em circulação (soma de todos os balances — query direta ao Supabase)
+- **Tabela de últimas transações** (10 mais recentes) com badge colorido por tipo
+
+#### Aba 2: Promoções (`PromotionsTab`)
+
+- Lista promoções com JOIN em products e categories
+- **Formulário de criação** (`NewPromoForm`):
+  ```ts
+  { name, description, product_id, category_id, min_purchase, bonus_coins,
+    expires_at, max_uses, active }
+  // Campos product_id e category_id são mutuamente exclusivos na UX
+  ```
+- `handleCreate()`: valida → `createCoinPromotion()` → recarrega lista
+- `handleToggle(id, active)`: toggle otimista + `toggleCoinPromotion()`
+- `handleDelete(id)`: confirm nativo → `deleteCoinPromotion()`
+- Exibe: nome, produto/categoria/valor mínimo, bônus, usos, status, datas
+
+#### Aba 3: Configurações (`SettingsTab`)
+
+- Carrega `getCashbackSettings()` ao montar
+- **Editor de campos numéricos** via helper interno `field(label, key, hint, type)`:
+  - `coins_per_real`: Moedas por R$ 1,00 gasto
+  - `min_purchase_for_coins`: Pedido mínimo para ganhar
+  - `coins_to_brl_rate`: Moedas para R$ 1,00 de desconto
+  - `max_redeem_percent`: % máximo de desconto
+  - `min_coins_to_redeem`: Saldo mínimo para resgatar
+  - `coins_expire_after_days`: Dias de expiração (0 = nunca)
+  - `active`: Checkbox liga/desliga todo o sistema
+- **Editor de ciclo progressivo** (componente inline):
+  ```
+  Cells: [5] [10] [15] [20] [25] [30] [🎁50]
+         Dia1 Dia2 Dia3 Dia4 Dia5 Dia6  Dia7
+  ```
+  - Cada célula tem um `<input type="number">` editável
+  - Última célula destacada em âmbar com 🎁
+  - Botão "+ Adicionar dia" → push(0)
+  - Botão "- Remover último" → pop() (mínimo 1 célula)
+  - `setVals(updated)` atualiza estado local imediatamente
+- `handleSave()`: `updateCashbackSettings({ ...settings, checkin_daily_values: vals })`
+- Link destacado para `/moedas-do-vale` (opens in new tab)
+
+#### Aba 4: Transações (`TransactionsTab`)
+
+- Estado: `typeFilter: CoinTransactionType | 'all'`
+- Dropdown para filtrar por tipo
+- Carrega `listAllTransactions({ type: filter, limit: 200 })`
+- Exibe: data/hora, cliente (nome via JOIN), tipo (badge), valor (+/-), descrição, referência
+
+#### Aba 5: Ajuste Manual (`ManualAdjustTab`)
+
+- **Campos:** busca de cliente (por nome/CPF), quantidade de moedas, motivo
+- `handleAdjust(sign: 1 | -1)`:
+  - sign=1 → `adminAdjustCoins(customerId, +amount, reason)` — soma
+  - sign=-1 → `adminAdjustCoins(customerId, -amount, reason)` — subtrai
+- Toast de confirmação com valor e nome do cliente
+- Busca cliente via query `customers.ilike('name', '%term%')`
+
+---
+
+### `pages/catalog/CoinsInfoPage.tsx` — Regulamento Público (268 linhas)
+
+**Rota:** `/moedas-do-vale` · **Acesso:** Público, sem autenticação
+**Lê:** `getCashbackSettings()` ao montar → `useState<CashbackSettings | null>`
+
+**Seções do Regulamento (renderizadas dinamicamente com os valores reais do banco):**
+
+| Seção | Conteúdo |
+|-------|----------|
+| Header sticky | Ícone 🪙 + "Regulamento — Moedas do Vale" + botão voltar |
+| Banner dourado | "O que são as Moedas do Vale?" — explicação introdutória |
+| 1. Como Ganhar | Card verde (compras): `coinsPerReal` moedas por R$ + exemplo calculado |
+| | Card azul (check-in): descrição + bônus do último dia do ciclo |
+| | Card âmbar (promoções): explicação das promoções especiais |
+| 2. Ciclo Progressivo | Grid de células por dia (`Dia 1 → +5`, `Dia 7 → 🎁 +50`) — `dailyValues.map()` |
+| | Aviso laranja: "Se pular um dia, o streak reseta para o Dia 1" |
+| 3. Como Resgatar | Passo a passo numerado (1→4) + cards de taxa e % máximo |
+| | Info box: "Saldo mínimo para resgatar: `minRedeem` moedas" |
+| 4. Validade | Se `expiryDays > 0`: aviso de expiração; senão: ✅ "Suas moedas não expiram!" |
+| 5. Regras Gerais | Lista de 6 regras fixas (pessoal, não monetizável, estorno automático, etc.) |
+| Footer | "Mercado do Vale · Programa Moedas do Vale" + WhatsApp |
+
+**⚠️ Variáveis lidas das settings (fallbacks se settings === null):**
+```ts
+const dailyValues  = settings?.checkin_daily_values ?? [5,10,15,20,25,30,50]
+const coinsPerReal = settings?.coins_per_real        ?? 1
+const coinsToReais = settings?.coins_to_brl_rate     ?? 100
+const minRedeem    = settings?.min_coins_to_redeem   ?? 100
+const maxRedeemPct = settings?.max_redeem_percent    ?? 20
+const expiryDays   = settings?.coins_expire_after_days ?? 0
+```
+
+---
+
+### `components/cashback/` — Widgets de UI para o Cliente
+
+#### `DailyCheckinWidget.tsx` — Widget de Check-in (137 linhas)
+
+**Props:** `{ customerId: string; onCoinsEarned?: (amount: number) => void }`
+**Carrega (parallel):** `getCoinBalance()` + `getStreakStatus()` + `getCashbackSettings()`
+
+**Layout:**
+```
+┌─────────────────────────────────────────────┐
+│ 🪙 Moedas do Vale        🔥 X dias            │
+│    [saldo em moedas]     streak               │
+│    ≈ R$ X,XX em descontos                    │
+├─────────────────────────────────────────────┤
+│  Se checkedInToday:                          │
+│  ✅ "Check-in feito hoje! Volte amanhã..."   │
+│                                              │
+│  Se não fez:                                 │
+│  [🎁 Fazer Check-in Diário  →]              │
+├─────────────────────────────────────────────┤
+│  Progress bar do streak (% do ciclo de 7d)   │
+│  "Próximo bônus: dia X"                      │
+└─────────────────────────────────────────────┘
+```
+
+**`handleCheckin()`:**
+1. `performCheckin(customerId)`
+2. Se `alreadyCheckedIn`: `toast.info("Você já fez check-in hoje!")`
+3. Se `success`: `toast.success("🪙 +X Moedas! Streak: dia Y")` + `onCoinsEarned?.(coins_earned)` + reload
+4. Erro inesperado: `toast.error(e.message)`
+
+**Progress bar:** `width = ((streak % 7) / 7) * 100%` — reinicia a cada 7 dias
+
+#### `CoinRedeemWidget.tsx` — Widget de Resgate em Compra (188 linhas)
+
+**Props:**
+```ts
+{
+  customerId: string;
+  orderValueBrl: number;           // valor atual do pedido em R$
+  onDiscountApplied: (discountBrl, coinsUsed) => void;  // callback ao aplicar
+  onDiscountCleared: () => void;    // callback ao remover desconto
+  appliedDiscount?: number;         // desconto já aplicado (externo)
+  disabled?: boolean;               // desabilita durante processamento
+}
+```
+
+**Estados internos:** `expanded`, `coinsToUse`, `preview { discount, final }`, `applied`, `applying`
+
+**Regra de visibilidade:** Retorna `null` (invisível) se:
+- `loading`, ou
+- `!settings?.active`, ou
+- `!balance || balance.balance < settings.min_coins_to_redeem`
+
+**Cálculo de `maxCoinsUsable`:**
+```ts
+Math.min(
+    balance.balance,
+    Math.ceil((orderValueBrl × max_redeem_percent / 100) × coins_to_brl_rate)
+)
+// Ex: pedido R$ 200, max 20%, rate 100 → maxCoins = min(saldo, ceil(200×0.2×100)) = min(saldo, 4000)
+```
+
+**Preview (reativo):** Recalcula enquanto o cliente arrasta o slider
+```ts
+const maxDiscount = (orderValueBrl × max_redeem_percent) / 100
+const raw         = coinsToUse / coins_to_brl_rate
+const discount    = min(raw, maxDiscount)
+```
+
+**Layout expandido:**
+```
+[🪙 Moedas do Vale] [500 moedas]          [▼]
+────────────────────────────────────────────
+100 moedas = R$ 1,00 • Máx. 20% do pedido
+
+  [-] ━━━━━━━━━━━━━━━━━━━━━━━━ [+]
+  0 moedas   [300 moedas selecionadas]  Usar tudo (2000)
+
+  Desconto: -R$ 3,00 → Total: R$ 197,00
+
+  [        Aplicar Moedas        ]
+```
+
+**`handleApply()`:**
+1. `validateCoinRedeem()` → valida no servidor
+2. Se inválido → `alert(validation.error)` — não debita
+3. Se válido → `onDiscountApplied(discount_brl, coins_to_use)` — **NÃO DEBITA AINDA**
+4. Estado `applied = true` — bloqueia novos ajustes
+
+**⚠️ Importante:** O widget valida mas NÃO debita. O debit (`redeemCoins()`) deve ser chamado externamente na confirmação final da compra.
+
+#### `CoinsInfoModal.tsx` — Modal Explicativo (11kb)
+
+- Bottom sheet no mobile / modal centrado no desktop
+- Conteúdo: resumo do programa (como ganhar, como usar, taxa de conversão)
+- Aberto via botão ⓘ em outros componentes (ex: `DailyCheckinWidget`, `ProductCard`)
+
+---
+
+### Modificações em Arquivos Existentes
+
+| Arquivo | O que mudou | Detalhes |
+|---------|-------------|---------|
+| `components/catalog/CategoryNav.tsx` | Integrou `DailyCheckinWidget` | Aparece ao lado das categorias quando cliente está logado |
+| `layouts/AdminLayout.tsx` | Link "Moedas do Vale" no sidebar admin | Ícone `Coins`, rota `/admin/cashback` |
+| `routes/index.tsx` | 2 novas rotas | `/moedas-do-vale` → `CoinsInfoPage` (público); `/admin/cashback` → `CashbackPage` (admin) |
+| `components/PublicHeader.tsx` | Link "Moedas do Vale" no header público | Redireciona para `/moedas-do-vale` |
+| `pages/auth/ClienteRegisterPage.tsx` | Ajustes de compatibilidade | — |
+| `pages/auth/CompletarCadastroPage.tsx` | Ajustes de compatibilidade | — |
+| `pages/customer/CustomerProfilePage.tsx` | Preparado (sem UI ativa ainda) | Importa `getCoinBalance` mas não renderiza ainda |
+| `services/welcomeMessageService.ts` | Ajustes de compatibilidade | — |
+
+---
+
+### Fluxos de Negócio Detalhados
+
+#### Fluxo de Acúmulo (Compra)
+
+```
+PDV / Checkout
+  → createSale(saleInput)
+  → [pendente] earnCoinsForPurchase(customerId, finalValuePaid, sale.id)
+     ↳ finalValuePaid = totalBrl - couponDiscount - coinDiscount
+     ↳ coinsEarned = floor(finalValuePaid × coins_per_real)
+     ↳ add_coins RPC (type='earn_purchase')
+  → [pendente] applyPromotions(customerId, matches, sale.id)
+     ↳ Para cada promoção aplicável: add_coins + increment_coin_promo_uses
+```
+
+#### Fluxo de Resgate (Checkout)
+
+```
+Cliente no carrinho/orçamento
+  1. CoinRedeemWidget carrega saldo + settings
+  2. Cliente arrasta slider → preview instantâneo (sem chamada ao servidor)
+  3. Clica "Aplicar" → validateCoinRedeem() → onDiscountApplied(discount, coinsUsed)
+  4. [Componente pai ajusta total exibido]
+  5. Cliente confirma compra → createSale() → redeemCoins(customerId, coinsUsed, ...)
+  6. [Só aqui as moedas são realmente debitadas]
+```
+
+#### Fluxo de Cancelamento
+
+```
+Admin cancela venda
+  → cancelSale(saleId)
+  → [pendente] refundCoinsOnCancel(customerId, coinsSpent, saleId)
+     ↳ Estorna moedas gastas no pedido
+  → [pendente] Remover moedas ganhas (earn_purchase) da venda cancelada
+     ↳ adminAdjustCoins(customerId, -coinsEarned, 'Cancelamento da venda X')
+```
+
+---
+
+### ⚠️ Pontos Críticos e Integrações Pendentes
+
+| # | Item | Status | Arquivo alvo |
+|---|------|--------|-------------|
+| 1 | `earnCoinsForPurchase` integrado ao checkout do cliente (QuoteModal/carrinho) | 🔴 **Pendente** | `QuoteModal.tsx`, `PDVPage.tsx` |
+| 2 | `redeemCoins` chamado na confirmação final de orçamento | 🔴 Pendente | `QuoteModal.tsx` |
+| 3 | `CoinRedeemWidget` montado no QuoteModal e PDVPage | 🔴 Pendente | integração |
+| 4 | Saldo de moedas exibido em `CustomerProfilePage` | 🟡 Preparado | `CustomerProfilePage.tsx` |
+| 5 | Histórico de transações na página do cliente | 🔴 Pendente | novo componente |
+| 6 | `applyPromotions` integrado ao pós-venda | 🔴 Pendente | `PDVPage.tsx` |
+| 7 | Expiração periódica de moedas (`coins_expire_after_days`) | 🔴 Pendente | cron job / Edge Function |
+

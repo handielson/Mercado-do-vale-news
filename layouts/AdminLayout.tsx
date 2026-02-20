@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -87,6 +87,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<Ticket size={18} />}
             label="Cupons"
             active={location.pathname.startsWith('/admin/coupons')}
+          />
+          <NavItem
+            to="/admin/cashback"
+            icon={<Coins size={18} />}
+            label="Moedas do Vale"
+            active={location.pathname.startsWith('/admin/cashback')}
           />
           <NavItem
             to="/admin/migration"

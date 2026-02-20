@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, Copy, Check, Plus } from 'lucide-react';
+import { X, Send, Copy, Check, Plus, Coins } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import type { VariantSpecs, ProductVariants } from '@/services/productVariants';
 import type { InstallmentPlan } from '@/services/installmentCalculator';
@@ -13,6 +13,7 @@ import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { useCoupon } from '@/hooks/useCoupon';
 import { formatPrice } from '@/services/installmentCalculator';
+import { getCoinBalance, getCashbackSettings, coinsToReais, validateCoinRedeem } from '@/services/cashbackService';
 
 interface QuoteModalProps {
     product: CatalogProduct;
@@ -36,6 +37,13 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
     });
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Moedas do Vale
+    const [coinBalance, setCoinBalance] = useState(0);
+    const [coinRate, setCoinRate] = useState(100);
+    const [useCoins, setUseCoins] = useState(false);
+    const [coinDiscount, setCoinDiscount] = useState(0);
+    const [coinsToSpend, setCoinsToSpend] = useState(0);
+
     // Cleanup timeout on unmount
     useEffect(() => {
         return () => {
@@ -54,6 +62,38 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
     // Effective price + coupon
     const effectivePrice = getEffectivePrice(product, customer) ?? 0;
     const coupon = useCoupon(effectivePrice, customer?.customer_type);
+
+    // Carregar saldo de moedas do cliente
+    useEffect(() => {
+        if (!customer || isAdmin) return;
+        Promise.all([getCoinBalance(customer.id), getCashbackSettings()])
+            .then(([bal, settings]) => {
+                setCoinBalance(bal?.balance ?? 0);
+                setCoinRate(settings.coins_to_brl_rate);
+            })
+            .catch(() => { });
+    }, [customer, isAdmin]);
+
+    // Recalcular desconto de moedas quando ativado
+    useEffect(() => {
+        if (!useCoins || !customer || coinBalance <= 0) {
+            setCoinDiscount(0);
+            setCoinsToSpend(0);
+            return;
+        }
+        const base = coupon.finalPrice > 0 ? coupon.finalPrice : effectivePrice - coupon.discount;
+        validateCoinRedeem(customer.id, coinBalance, base)
+            .then(v => {
+                if (v.valid) {
+                    setCoinDiscount(v.discount_brl);
+                    setCoinsToSpend(v.coins_to_use);
+                } else {
+                    setCoinDiscount(0);
+                    setCoinsToSpend(0);
+                }
+            })
+            .catch(() => { });
+    }, [useCoins, coinBalance, coupon.finalPrice, effectivePrice, coupon.discount, customer]);
 
     // Update selected variant when initialVariant changes (when modal opens with pre-selected variant)
     useEffect(() => {
@@ -409,20 +449,56 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                             </div>
                         )}
 
-                        {/* Discount summary */}
-                        {coupon.discount > 0 && (
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                        {/* Moedas do Vale */}
+                        {!isAdmin && customer && coinBalance > 0 && (
+                            <div className="space-y-2">
+                                <label className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 cursor-pointer hover:bg-amber-100 transition-colors">
+                                    <div className="flex items-center gap-2">
+                                        <Coins className="w-4 h-4 text-amber-600" />
+                                        <span className="text-sm font-medium text-amber-800">
+                                            Usar Moedas do Vale
+                                        </span>
+                                        <span className="text-xs text-amber-600">
+                                            ({coinBalance} moedas ≈ R$ {coinsToReais(coinBalance, coinRate).toFixed(2).replace('.', ',')})
+                                        </span>
+                                    </div>
+                                    <input
+                                        type="checkbox"
+                                        checked={useCoins}
+                                        onChange={e => setUseCoins(e.target.checked)}
+                                        className="w-4 h-4 text-amber-500 rounded"
+                                    />
+                                </label>
+                                {useCoins && coinDiscount > 0 && (
+                                    <p className="text-xs text-amber-700 px-1">
+                                        🪙 -{coinsToSpend} moedas = <strong>-R$ {coinDiscount.toFixed(2).replace('.', ',')}</strong> de desconto
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Resumo de descontos */}
+                        {(coupon.discount > 0 || coinDiscount > 0) && (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm space-y-1">
                                 <div className="flex justify-between text-slate-600">
                                     <span>Subtotal:</span>
                                     <span>{formatPrice(effectivePrice * 100)}</span>
                                 </div>
-                                <div className="flex justify-between text-green-700 font-medium">
-                                    <span>Desconto ({coupon.appliedCoupon?.code}):</span>
-                                    <span>- {formatPrice(coupon.discount * 100)}</span>
-                                </div>
-                                <div className="flex justify-between text-slate-900 font-bold border-t border-green-200 pt-1 mt-1">
+                                {coupon.discount > 0 && (
+                                    <div className="flex justify-between text-green-700">
+                                        <span>Cupom ({coupon.appliedCoupon?.code}):</span>
+                                        <span>- {formatPrice(coupon.discount * 100)}</span>
+                                    </div>
+                                )}
+                                {coinDiscount > 0 && (
+                                    <div className="flex justify-between text-amber-700">
+                                        <span>Moedas ({coinsToSpend} 🪙):</span>
+                                        <span>- R$ {coinDiscount.toFixed(2).replace('.', ',')}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-slate-900 font-bold border-t border-green-200 pt-1">
                                     <span>Total:</span>
-                                    <span>{formatPrice(coupon.finalPrice * 100)}</span>
+                                    <span>{formatPrice((effectivePrice - coupon.discount - coinDiscount) * 100)}</span>
                                 </div>
                             </div>
                         )}

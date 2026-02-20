@@ -77,7 +77,9 @@ export const CompletarCadastroPage: React.FC = () => {
                 email: user?.email || ''
             });
 
-            toast.success('Cadastro completado com sucesso!');
+            toast.success('Bem-vindo ao Mercado do Vale! 🎉', {
+                description: 'Cadastro completo. Comece a acumular Moedas do Vale agora!'
+            });
             navigate('/catalog');
         } catch (error: any) {
             console.error('[CompletarCadastro] Error:', error);
@@ -118,6 +120,23 @@ export const CompletarCadastroPage: React.FC = () => {
                 <p className="text-sm text-slate-600">
                     Para completar seu cadastro, precisamos de mais algumas informações:
                 </p>
+
+                {/* Propaganda Moedas do Vale */}
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <p className="text-sm font-bold text-amber-800 mb-1">🪙 Bem-vindo ao programa Moedas do Vale!</p>
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                        A cada compra e check-in diário você acumula <strong>Moedas do Vale</strong> que podem
+                        ser trocadas por descontos reais. Quanto mais você compra, mais moedas acumula!
+                    </p>
+                    <a
+                        href="/moedas-do-vale"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-2 text-xs font-semibold text-amber-700 underline hover:text-amber-900"
+                    >
+                        Ver regulamento completo →
+                    </a>
+                </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {/* CPF/CNPJ */}

@@ -92,7 +92,9 @@ export const ClienteRegisterPage: React.FC = () => {
                 cpf_cnpj: formData.cpf_cnpj.replace(/\D/g, ''),
                 customer_type: 'retail' // Always retail on self-registration
             });
-            toast.success('Conta criada com sucesso! Faça login para continuar.');
+            toast.success('Bem-vindo ao Mercado do Vale! 🎉', {
+                description: 'Sua conta foi criada. Faça login e comece a acumular Moedas do Vale!'
+            });
             navigate('/cliente/login');
         } catch (error: any) {
             toast.error(error.message || 'Erro ao criar conta');
@@ -237,6 +239,23 @@ export const ClienteRegisterPage: React.FC = () => {
                         <p className="text-sm text-blue-800">
                             💡 Você poderá completar seus dados (telefone, endereço, etc.) após o login.
                         </p>
+                    </div>
+
+                    {/* Propaganda Moedas do Vale */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <p className="text-sm font-bold text-amber-800 mb-1">🪙 Ganhe Moedas do Vale ao se cadastrar!</p>
+                        <p className="text-xs text-amber-700 leading-relaxed">
+                            Ao criar sua conta, você passa a acumular <strong>Moedas do Vale</strong> a cada compra
+                            e check-in diário. Troque por descontos reais na próxima compra!
+                        </p>
+                        <a
+                            href="/moedas-do-vale"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block mt-2 text-xs font-semibold text-amber-700 underline hover:text-amber-900"
+                        >
+                            Ver regulamento completo →
+                        </a>
                     </div>
 
                     {/* Submit Button */}

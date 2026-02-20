@@ -21,6 +21,10 @@ CREATE INDEX IF NOT EXISTS coupons_code_idx ON coupons (UPPER(code));
 -- RLS: apenas usuários autenticados (admins) acessam
 ALTER TABLE coupons ENABLE ROW LEVEL SECURITY;
 
+-- Remover policies existentes para evitar conflito ao re-executar
+DROP POLICY IF EXISTS "authenticated_all" ON coupons;
+DROP POLICY IF EXISTS "anon_read_active" ON coupons;
+
 -- Admins podem ler e escrever
 CREATE POLICY "authenticated_all" ON coupons
     FOR ALL
