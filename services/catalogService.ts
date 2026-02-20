@@ -38,7 +38,7 @@ export const catalogService = {
         // Construir query
         let query = supabase
             .from('products')
-            .select('*, categories(slug)', { count: 'exact' });
+            .select('*', { count: 'exact' });
 
         // Aplicar filtros
         if (filters?.search) {
@@ -108,11 +108,25 @@ export const catalogService = {
 
         if (error) throw error;
 
-        let products = ((data || []) as any[]).map(p => ({
-            ...p,
-            category_slug: p.categories?.slug || undefined,
-            categories: undefined, // remove o objeto aninhado
-        })) as CatalogProduct[];
+        let products = (data || []) as CatalogProduct[];
+
+        // Resolve category slugs via separate query (FK join unreliable without formal constraint)
+        const categoryIds = [...new Set(products.filter(p => p.category_id).map(p => p.category_id!))];
+        if (categoryIds.length > 0) {
+            const { data: catData } = await supabase
+                .from('categories')
+                .select('id, slug')
+                .in('id', categoryIds);
+            if (catData && catData.length > 0) {
+                const catSlugMap = new Map<string, string>(
+                    (catData as any[]).map((c: any) => [c.id, c.slug])
+                );
+                products = products.map(p => ({
+                    ...p,
+                    category_slug: catSlugMap.get(p.category_id!) || undefined,
+                }));
+            }
+        }
 
         // Enrich products with model images if they have no custom images
         const productsNeedingImages = products.filter(
@@ -121,32 +135,78 @@ export const catalogService = {
 
         if (productsNeedingImages.length > 0) {
             const modelIds = [...new Set(productsNeedingImages.map(p => p.model_id))];
-            console.log('🖼️ [catalogService] Products needing images:', productsNeedingImages.length);
-            console.log('🖼️ [catalogService] Model IDs to fetch:', modelIds);
 
-            const { data: modelImages, error: imgError } = await supabase
-                .from('model_color_images')
-                .select('model_id, color_id, images')
-                .in('model_id', modelIds);
+            // Collect unique color names to resolve to IDs
+            const colorNames = [...new Set(
+                productsNeedingImages
+                    .map(p => p.specs?.color)
+                    .filter(Boolean) as string[]
+            )];
 
-            console.log('🖼️ [catalogService] model_color_images result:', { modelImages, imgError });
+            // Buscar imagens dos modelos e cores (se houver)
+            const [{ data: modelImages }, { data: colorRows }] = await Promise.all([
+                supabase
+                    .from('model_color_images')
+                    .select('model_id, color_id, images')
+                    .in('model_id', modelIds),
+                colorNames.length > 0
+                    ? supabase.from('colors').select('id, name').in('name', colorNames)
+                    : Promise.resolve({ data: [] })
+            ]);
 
             if (modelImages && modelImages.length > 0) {
+                // Build color name → id map
+                const colorNameToId = new Map<string, string>(
+                    (colorRows || []).map(c => [c.name, c.id])
+                );
+
                 products = products.map(product => {
                     if (product.images && product.images.length > 0) return product;
                     if (!product.model_id) return product;
 
-                    // Find any image entry for this model
-                    const modelImgEntry = modelImages.find(mi => mi.model_id === product.model_id);
-                    console.log(`🖼️ [catalogService] Product "${product.name}" model_id=${product.model_id}, found entry:`, modelImgEntry);
+                    const entriesForModel = modelImages.filter(mi => mi.model_id === product.model_id);
+                    if (entriesForModel.length === 0) return product;
 
-                    if (modelImgEntry && modelImgEntry.images?.length > 0) {
-                        return { ...product, images: modelImgEntry.images };
+                    // Try to find the entry matching the product's color
+                    const colorName = product.specs?.color;
+                    const colorId = colorName ? colorNameToId.get(colorName) : undefined;
+
+                    let chosen = colorId
+                        ? entriesForModel.find(mi => mi.color_id === colorId)
+                        : undefined;
+
+                    // Fallback: use first available entry for the model
+                    if (!chosen) chosen = entriesForModel[0];
+
+                    if (chosen?.images?.length > 0) {
+                        return { ...product, images: chosen.images };
                     }
                     return product;
                 });
-            } else {
-                console.log('🖼️ [catalogService] No model images found! Error:', imgError);
+            }
+        }
+
+        // Enrich product.specs with model template_values (for badge fields like NFC, 5G etc.)
+        // Only fills in fields missing from product.specs — product.specs always wins.
+        const modelIdsForSpecs = [...new Set(products.filter(p => p.model_id).map(p => p.model_id!))];
+        if (modelIdsForSpecs.length > 0) {
+            const { data: modelTemplates } = await supabase
+                .from('models')
+                .select('id, template_values')
+                .in('id', modelIdsForSpecs);
+
+            if (modelTemplates && modelTemplates.length > 0) {
+                const templateMap = new Map<string, Record<string, any>>(
+                    modelTemplates.map((m: any) => [m.id, m.template_values || {}])
+                );
+                products = products.map(product => {
+                    if (!product.model_id) return product;
+                    const tmpl = templateMap.get(product.model_id);
+                    if (!tmpl || Object.keys(tmpl).length === 0) return product;
+                    // Template fills missing fields; product.specs overrides
+                    const mergedSpecs = { ...tmpl, ...(product.specs || {}) };
+                    return { ...product, specs: mergedSpecs };
+                });
             }
         }
 

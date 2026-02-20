@@ -4,7 +4,7 @@ import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { ProductVariants } from '@/services/productVariants';
 import { extractVariants } from '@/services/productVariants';
 import { calculateInstallments, formatPrice } from '@/services/installmentCalculator';
-import { getBadgesForCategory, shouldShowBadge } from '@/config/category-badges';
+import { getBadgesForCategory, getAllBadges, shouldShowBadge } from '@/config/category-badges';
 import { ProductDetailsModal } from './ProductDetailsModal';
 import { QuoteModal } from './QuoteModal';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
@@ -165,19 +165,19 @@ export function ModernProductCard({
         loadVariantInstallments();
     }, [productGroup]);
 
-    // Get primary image
+    // Get primary image — uses currentProduct (selected variant/color) not the representative product
     const getImageUrl = () => {
         // Handle images as string array (from Product type)
-        if (Array.isArray(product.images) && product.images.length > 0) {
+        if (Array.isArray(currentProduct.images) && currentProduct.images.length > 0) {
             // Ensure it's actually a string, not an object
-            const firstImage = product.images[0];
+            const firstImage = currentProduct.images[0];
             if (typeof firstImage === 'string' && firstImage.length > 0) {
                 return firstImage;
             }
         }
 
         // Fallback to placeholder with brand name
-        const brandName = product.brand || 'Produto';
+        const brandName = currentProduct.brand || product.brand || 'Produto';
         return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%233B82F6'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>${encodeURIComponent(brandName)}</text></svg>`;
     };
 
@@ -315,7 +315,10 @@ export function ModernProductCard({
                         )}
 
                         {/* Dynamic Spec Badges - based on category config */}
-                        {getBadgesForCategory(product.category_slug || product.category_id || '')
+                        {(product.category_slug
+                            ? getBadgesForCategory(product.category_slug)
+                            : getAllBadges()
+                        )
                             .filter(badge => shouldShowBadge(product, badge))
                             .map(badge => (
                                 <span

@@ -133,10 +133,73 @@ mercado-do-vale/
 **⚠️ Filtro de busca** usa `name.ilike`, `brand.ilike` e `model.ilike` (OR)
 **⚠️ Cache** não é aplicado quando há `search` ativo — garante resultados frescos ao digitar
 
-**⚠️ Usado por:** `CustomerCatalogPage`, `CatalogSection`, `ProductDetailsModal`
+**⚠️ Usado por:** `CustomerCatalogPage`, `CatalogSection`, `ProductDetailsModal`, `useCatalog`
 **⚠️ Retorna `CatalogProduct` (tipo diferente de `Product`)** — ver `types/catalog.ts`
 
+#### 🔧 Enriquecimento Pós-Fetch em `getProducts`
+
+Após buscar os produtos da tabela `products`, `getProducts` executa **3 etapas adicionais** antes de cachear:
+
+1. **Resolve `category_slug`** — busca separada em `categories` pelo `category_id` de cada produto:
+   ```ts
+   from('categories').select('id, slug').in('id', categoryIds)
+   ```
+   > ⚠️ **Por que busca separada?** O join `categories(slug)` via PostgREST só funciona quando a FK está declarada formalmente no banco. No Supabase deste projeto, a FK não está declarada — o join sempre retorna `null`. Além disso, a tabela `categories` tem RLS que bloqueia leitura para usuários anônimos. A busca separada é feita dentro do service (chave de serviço), contornando o RLS.
+
+2. **Enriquece `product.specs` com `template_values` do modelo** — busca separada em `models`:
+   ```ts
+   from('models').select('id, template_values').in('id', modelIds)
+   ```
+   Mescla como `{ ...template_values, ...(product.specs || {}) }` — **specs do produto sempre prevalecem**. Garante que campos do modelo (ex: `nfc = 'Sim'`, `5g = 'Sim'`) sejam herdados por todos os produtos do modelo, mesmo sem preenchimento manual.
+
+3. **Enriquece imagens** (preexistente) — busca imagens do modelo em `model_color_images` para produtos sem imagem própria.
+
 ---
+
+### `config/category-badges.ts` — Badges Dinâmicos por Especificação
+
+**Exporta:** `CATEGORY_BADGES`, `getBadgesForCategory`, `getAllBadges`, `shouldShowBadge`, `BadgeConfig`
+
+Define quais badges de especificação aparecem nos cards de produto do catálogo. Cada badge mapeia um campo de `product.specs` para um selo visual no card.
+
+#### Tipo `BadgeConfig`
+
+```ts
+interface BadgeConfig {
+    spec: string;                       // Chave em product.specs (ex: 'nfc', '5g')
+    value: string | boolean | number;   // Valor esperado
+    label: string;                      // Texto exibido (ex: 'NFC')
+    icon: string;                       // Emoji/ícone
+    color: string;                      // Classes Tailwind do gradiente
+}
+```
+
+#### `CATEGORY_BADGES`
+
+Mapa `{ [categorySlug: string]: BadgeConfig[] }`. Configurações atuais:
+- **`'celulares'`** → badges `nfc`, `5g`, `dual_sim` (quando presentes em `product.specs`)
+
+#### Funções
+
+| Função | O que faz |
+|--------|-----------|
+| `getBadgesForCategory(slug)` | Retorna badges da categoria. Match exato primeiro; se falhar, match parcial de substring (ex: `'celulares-e-smartphones'` → encontra `'celulares'`). Retorna `[]` se nenhum match. |
+| `getAllBadges()` | Retorna todos os badges de todas as categorias, deduplicados por `spec`. Fallback quando `category_slug` não está disponível. |
+| `shouldShowBadge(product, badge)` | Verifica se `product.specs[badge.spec]` tem o valor esperado. Trata `'Sim'`, `'sim'`, `true`, `1`, `'true'`, `'yes'` como equivalentes para badges booleanos. |
+
+#### ⚠️ Por que `getAllBadges()` como fallback no `ModernProductCard`?
+
+A tabela `categories` tem RLS que bloqueia leitura para **usuários anônimos/públicos**. Isso impede resolver `category_slug` no cliente. Com `getAllBadges()`, o card tenta todos os badges possíveis e `shouldShowBadge` filtra naturalmente — specs como `nfc` só existem em celulares (herdadas via `template_values` dos modelos de celular), então não há falsos positivos.
+
+**⚠️ Fluxo de dados:**
+1. `catalogService.getProducts` → enriquece `specs` com `template_values` do modelo
+2. `ModernProductCard` → se `category_slug` disponível: `getBadgesForCategory(slug)`, senão: `getAllBadges()`
+3. `shouldShowBadge(product, badge)` → filtra pelos specs reais do produto
+
+**⚠️ Usado por:** `ModernProductCard`
+
+---
+
 
 ### `services/saleService.ts` — Vendas (PDV)
 **Exporta:** `createSale`, `getSaleById`, `getSales`, `cancelSale`, `refundSale`, `getSalesSummary`
@@ -1831,8 +1894,9 @@ Gera nome automático do produto baseado em modelo + specs.
 ---
 
 ### `config/category-badges.ts`
-Mapeamento de categorias para badges visuais no catálogo (ícones, cores, labels).
-**⚠️ Usado por:** `CatalogSection`, `ProductCard` (catálogo público)
+> 📖 **Ver documentação completa** na seção de services acima (`config/category-badges.ts — Badges Dinâmicos por Especificação`).
+> Inclui: `CATEGORY_BADGES`, `getBadgesForCategory`, `getAllBadges`, `shouldShowBadge`, fluxo de dados e notas de RLS anônimo.
+**⚠️ Usado por:** `ModernProductCard` (catálogo público)
 
 ### `config/product-fields.ts`
 Configuração de campos visíveis por categoria no `ProductForm`.
@@ -6317,3 +6381,131 @@ Admin cancela venda
 | 6 | `applyPromotions` integrado ao pós-venda | 🔴 Pendente | `PDVPage.tsx` |
 | 7 | Expiração periódica de moedas (`coins_expire_after_days`) | 🔴 Pendente | cron job / Edge Function |
 
+
+---
+
+##  SISTEMA DE CADASTRO DE PRODUTOS (ProductForm)
+
+> **Atualizado em:** 2026-02-20
+> **Rota:** `/admin/products/new` (criação) e `/admin/products/:id/edit` (edição)
+
+---
+
+### Arquitetura Geral
+
+```
+ProductFormPage (page)
+   ProductForm (componente principal)
+         ProductBasicInfo       EAN, Categoria, Marca, Modelo, SKU, Nome
+         ProductSpecifications  IMEI, Serial, Cor, RAM, Storage, Versão
+         ProductPricing         Preços (custo, varejo, revenda, atacado)
+         ProductImages          Upload de até 5 imagens
+         ProductWarranty        Tipo de garantia
+         BatchEntryGrid         Lista de itens para entrada em massa
+```
+
+---
+
+### `components/products/ProductForm.tsx`  Formulário Principal
+**Props:** `{ initialData?: Product; onSubmit; onCancel; isLoading? }`
+
+#### Modos de Operação
+| Modo | Trigger | Comportamento |
+|------|---------|---------------|
+| **Criação** | `initialData` ausente | Template do modelo aplicado automaticamente, nome gerado automaticamente |
+| **Edição** | `initialData` presente | Template NÃO sobrescreve dados existentes, nome preservado |
+
+#### Interface BatchItem (cadastro em massa)
+```ts
+interface BatchItem {
+    imei1?: string;
+    imei2?: string;
+    serial?: string;
+    color?: string;
+    storage?: string;
+    ram?: string;
+}
+```
+
+#### Auto-geração de Nome
+- Ativado somente em modo criação (`if (initialData) return` como guarda)
+- Requer `categoryConfig.auto_name_enabled === true`
+- Requer `nameManuallyEdited === false`
+
+#### Cadastro em Massa (`serialList`)
+- **"Adicionar à Lista"** captura todos os campos únicos de uma vez
+- No submit: verifica unicidade de TODOS os itens no banco antes de salvar qualquer um
+
+#### Verificação de Unicidade no Submit (produto único)
+- Verifica `serial`, `imei1`, `imei2` no banco
+- **Em modo edição:** `.neq('id', initialData.id)` evita bloquear o próprio produto
+
+---
+
+### `hooks/useModelTemplate.ts`
+**Parâmetros:** `(selectedModel, setValue, skipApply = false)`
+
+- `skipApply = false` (criação): aplica brand, category_id, description e template_values (exceto UNIQUE_FIELDS)
+- `skipApply = true` (edição): retorna imediatamente, **sem sobrescrever nada**
+
+** Chamado com `skipApply = !!initialData` em `ProductForm.tsx`**
+
+---
+
+### `components/products/sections/ProductSpecifications.tsx`
+**Props inclui `currentProductId?`**
+
+#### `checkUniqueInDb(field, value)`  Validação em Tempo Real
+- Chamada no `onBlur` dos campos IMEI/Serial
+- **Em modo edição:** `.neq('id', currentProductId)`  não bloqueia o próprio produto
+- Exibe erro inline se duplicata encontrada
+
+#### Campos Renderizados  `PRODUCT_LEVEL_FIELDS`
+```ts
+['imei1', 'imei2', 'serial', 'color', 'storage', 'ram', 'version', 'battery_health']
+```
+**Campos excluídos do produto** (pertencem ao template do modelo): `battery_mah`, `display`
+
+---
+
+### `components/products/sections/fieldMetadata.ts`
+
+| Chave | Tipo de Renderização | Nível |
+|-------|---------------------|-------|
+| `imei1`, `imei2` | `imei` (IMEIInput, 15 dígitos) | Produto |
+| `serial` | `text` | Produto |
+| `color` | `color-select` | Produto |
+| `storage`, `ram` | `capacity-select` | Produto |
+| `version` | `version-select` | Produto |
+| `battery_health` | `battery-health-select` | Produto |
+| `battery_mah` | `number` | **Modelo (template only)** |
+| `display` | `text` | **Modelo (template only)** |
+
+---
+
+### `components/products/sections/ProductBasicInfo.tsx`
+- Preview de `template_values` do modelo em card azul
+- **UUIDs em `template_values`** são resolvidos para nomes via `versionService.getById()` (dados legados)
+- Estado `resolvedTemplateValues` armazena valores já resolvidos
+
+---
+
+### `pages/admin/products/ProductDetailPage.tsx`
+**Rota:** `/admin/products/:id`
+- Carrega produto via `productService.getById(id)`  passa como `initialData` para `ProductForm`
+- `onSubmit`  `productService.update(id, data)`
+
+---
+
+###  Regras Críticas
+
+| # | Regra | Arquivo:Linha |
+|---|-------|--------------|
+| 1 | `useModelTemplate` com `skipApply=!!initialData`  não aplica em edição | `ProductForm.tsx:218` |
+| 2 | Nome auto-gerado bloqueado em edição (`if (initialData) return`) | `ProductForm.tsx:292` |
+| 3 | `loadModelData` usa `listActive()`  não depende de `selectedBrandId` | `ProductForm.tsx:206` |
+| 4 | Submit produto único: `.neq('id', initialData.id)` em modo edição | `ProductForm.tsx:569` |
+| 5 | `ProductSpecifications` recebe `currentProductId={initialData?.id}` | `ProductForm.tsx:650` |
+| 6 | `battery_mah` e `display` filtrados pelo `PRODUCT_LEVEL_FIELDS` | `fieldMetadata.ts` |
+| 7 | UUIDs em `template_values` resolvidos via `versionService.getById()` | `ProductBasicInfo.tsx` |
+| 8 | Cadastro em massa: unicidade verificada para TODOS antes de salvar qualquer item | `ProductForm.tsx:507` |

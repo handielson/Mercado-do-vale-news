@@ -150,13 +150,49 @@ export const CATEGORY_BADGES: Record<string, BadgeConfig[]> = {
 
 /**
  * Get badge configurations for a specific category
+ * Supports exact match AND partial match (slug may contain the key as substring)
  */
 export function getBadgesForCategory(categorySlug: string): BadgeConfig[] {
-    return CATEGORY_BADGES[categorySlug] || [];
+    if (!categorySlug) return [];
+
+    // 1. Exact match first (fastest path)
+    if (CATEGORY_BADGES[categorySlug]) {
+        return CATEGORY_BADGES[categorySlug];
+    }
+
+    // 2. Partial match: check if any key is a substring of the slug, or vice-versa
+    const normalized = categorySlug.toLowerCase();
+    for (const key of Object.keys(CATEGORY_BADGES)) {
+        if (normalized.includes(key) || key.includes(normalized)) {
+            return CATEGORY_BADGES[key];
+        }
+    }
+
+    return [];
+}
+
+/**
+ * Get all badge configurations across all categories, deduplicated by spec.
+ * Use when category_slug is unavailable (e.g., anonymous users blocked by RLS).
+ * shouldShowBadge naturally filters by specs — no false positives.
+ */
+export function getAllBadges(): BadgeConfig[] {
+    const seen = new Set<string>();
+    const result: BadgeConfig[] = [];
+    for (const badges of Object.values(CATEGORY_BADGES)) {
+        for (const badge of badges) {
+            if (!seen.has(badge.spec)) {
+                seen.add(badge.spec);
+                result.push(badge);
+            }
+        }
+    }
+    return result;
 }
 
 /**
  * Check if a product should display a specific badge
+ * Accepts 'Sim', true, 1 as equivalent truthy values for boolean badges
  */
 export function shouldShowBadge(
     product: { specs?: Record<string, any> },
@@ -165,11 +201,21 @@ export function shouldShowBadge(
     if (!product.specs) return false;
 
     const specValue = product.specs[badge.spec];
+    if (specValue === undefined || specValue === null) return false;
 
-    // Handle different value types
-    if (typeof badge.value === 'boolean') {
-        return specValue === badge.value;
+    // Normalize: treat 'Sim', true, 1, 'true', 'yes' as equivalent
+    const TRUTHY = new Set(['sim', 'true', 'yes', '1', 1, true]);
+
+    const expectedIsTruthy = typeof badge.value === 'string'
+        ? TRUTHY.has(badge.value.toLowerCase())
+        : TRUTHY.has(badge.value as any);
+
+    if (expectedIsTruthy) {
+        return typeof specValue === 'string'
+            ? TRUTHY.has(specValue.toLowerCase())
+            : TRUTHY.has(specValue);
     }
 
+    // Non-truthy: exact match
     return specValue === badge.value;
 }
