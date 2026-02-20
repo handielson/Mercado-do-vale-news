@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     BannerCarousel,
     ProductFilters,
@@ -12,7 +13,7 @@ import { CatalogSectionComponent } from '@/components/catalog/CatalogSection';
 import { FloatingCartButton } from '@/components/catalog/FloatingCartButton';
 import { QuoteCartSidebar } from '@/components/catalog/QuoteCartSidebar';
 import { useCatalog } from '@/hooks/useCatalog';
-import { catalogShareService } from '@/services/catalogShareService';
+
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import { groupProductsByVariants } from '@/services/productGrouping';
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
@@ -41,6 +42,10 @@ function CatalogContent() {
         }
     })();
 
+    // Ler ?search= da URL para suportar links de produto compartilhados
+    const [searchParams] = useSearchParams();
+    const initialSearchQuery = searchParams.get('search') ?? '';
+
     const {
         products,
         loading,
@@ -55,7 +60,8 @@ function CatalogContent() {
         hasMore,
         filterStats
     } = useCatalog({
-        pageSize: 12
+        pageSize: 12,
+        initialSearchQuery
     });
 
     // Carregar seções ativas
@@ -76,15 +82,31 @@ function CatalogContent() {
     };
 
     const handleShare = async (product: CatalogProduct) => {
+        const productName = product.name;
+        // Link com busca pré-preenchida para que o destinatário veja o produto direto
+        const shareUrl = `${window.location.origin}/?search=${encodeURIComponent(productName)}`;
+
+        // Web Share API (funciona em mobile e browsers modernos)
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: productName,
+                    text: product.description || productName,
+                    url: shareUrl
+                });
+                return;
+            } catch (_) {
+                // Usuário cancelou ou erro — cai no fallback
+            }
+        }
+
+        // Fallback: copiar link para área de transferência
         try {
-            await catalogShareService.shareViaWhatsApp({
-                type: 'whatsapp',
-                scope: 'product',
-                scopeValue: product.id
-            });
-        } catch (error) {
-            console.error('Erro ao compartilhar:', error);
-            alert('Erro ao compartilhar produto');
+            await navigator.clipboard.writeText(shareUrl);
+            const { toast } = await import('sonner');
+            toast.success('Link copiado!', { description: productName, duration: 2500 });
+        } catch {
+            window.prompt('Copie o link do produto:', shareUrl);
         }
     };
 
@@ -184,7 +206,13 @@ function CatalogContent() {
                 {!sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !searchQuery && (
                     <div className="mb-12 space-y-12">
                         {sections.map((section) => (
-                            <CatalogSectionComponent key={section.id} section={section} />
+                            <CatalogSectionComponent
+                                key={section.id}
+                                section={section}
+                                onFavorite={toggleFavorite}
+                                onShare={handleShare}
+                                favorites={favorites}
+                            />
                         ))}
                     </div>
                 )}
@@ -203,6 +231,7 @@ function CatalogContent() {
                     hasMore={hasMore}
                     onLoadMore={loadMore}
                     onFavorite={toggleFavorite}
+                    onShare={handleShare}
                     favorites={favorites}
                     variant="grid"
                     columns={{

@@ -5,6 +5,8 @@ import { generateMultiProductWhatsAppLink, generateMultiProductQuoteMessage } fr
 import { useEffect, useState } from 'react';
 import type { QuoteCartItem } from '@/contexts/QuoteCartContext';
 import toast from 'react-hot-toast';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useCoupon } from '@/hooks/useCoupon';
 
 interface QuoteCartSidebarProps {
     isOpen: boolean;
@@ -14,9 +16,14 @@ interface QuoteCartSidebarProps {
 
 export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     const { items, removeItem, clear } = useQuoteCart();
+    const { customer } = useSupabaseAuth();
     const [whatsappNumber, setWhatsappNumber] = useState('');
-    const [customNumber, setCustomNumber] = useState(''); // User-entered number
+    const [customNumber, setCustomNumber] = useState('');
     const [isCopied, setIsCopied] = useState(false);
+
+    // Calculate total cart value in R$ (prices are in centavos)
+    const totalCart = items.reduce((sum, item) => sum + (item.price / 100), 0);
+    const coupon = useCoupon(totalCart, customer?.customer_type);
 
     // Load WhatsApp number from company settings
     useEffect(() => {
@@ -47,8 +54,14 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
             return;
         }
 
-        const whatsappLink = generateMultiProductWhatsAppLink(items); // No number = open without recipient
-        window.location.href = whatsappLink; // Use location.href for better mobile compatibility
+        const whatsappLink = generateMultiProductWhatsAppLink(
+            items,
+            undefined,
+            coupon.appliedCoupon?.code,
+            coupon.discount > 0 ? coupon.discount : undefined
+        );
+        window.location.href = whatsappLink;
+        coupon.confirm();
         toast.success('Abrindo WhatsApp...');
     };
 
@@ -91,8 +104,14 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
             return;
         }
 
-        const whatsappLink = generateMultiProductWhatsAppLink(items, numberToUse);
+        const whatsappLink = generateMultiProductWhatsAppLink(
+            items,
+            numberToUse,
+            coupon.appliedCoupon?.code,
+            coupon.discount > 0 ? coupon.discount : undefined
+        );
         window.open(whatsappLink, '_blank');
+        coupon.confirm();
         toast.success(`Enviando para ${numberToUse}...`);
     };
 
@@ -103,12 +122,14 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
         }
 
         try {
-            const message = generateMultiProductQuoteMessage(items);
+            const message = generateMultiProductQuoteMessage(
+                items,
+                coupon.appliedCoupon?.code,
+                coupon.discount > 0 ? coupon.discount : undefined
+            );
             await navigator.clipboard.writeText(message);
             setIsCopied(true);
             toast.success('Mensagem copiada!');
-
-            // Reset copied state after 2 seconds
             setTimeout(() => setIsCopied(false), 2000);
         } catch (error) {
             console.error('Error copying to clipboard:', error);
@@ -165,7 +186,57 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
 
                 {/* Footer */}
                 {items.length > 0 && (
-                    <div className="p-4 border-t border-slate-200 space-y-2 bg-slate-50">
+                    <div className="p-4 border-t border-slate-200 space-y-3 bg-slate-50">
+
+                        {/* Coupon Field */}
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">🎟️ Cupom de desconto</label>
+                            {coupon.appliedCoupon ? (
+                                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                    <span className="text-xs text-green-800 font-medium">
+                                        ✅ <strong>{coupon.appliedCoupon.code}</strong> — {formatPrice(coupon.discount * 100)} de desconto
+                                    </span>
+                                    <button onClick={coupon.clear} className="text-green-600 hover:text-green-800 text-xs underline">Remover</button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <input
+                                        value={coupon.code}
+                                        onChange={e => coupon.setCode(e.target.value.toUpperCase())}
+                                        onKeyDown={e => e.key === 'Enter' && coupon.apply()}
+                                        placeholder="CÓDIGO DO CUPOM"
+                                        className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none font-mono uppercase text-xs"
+                                    />
+                                    <button
+                                        onClick={coupon.apply}
+                                        disabled={coupon.isLoading || !coupon.code}
+                                        className="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                    >
+                                        {coupon.isLoading ? '...' : 'Aplicar'}
+                                    </button>
+                                </div>
+                            )}
+                            {coupon.error && <p className="text-xs text-red-600">{coupon.error}</p>}
+                        </div>
+
+                        {/* Discount summary */}
+                        {coupon.discount > 0 && (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-2 text-xs">
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Subtotal:</span>
+                                    <span>{formatPrice(totalCart * 100)}</span>
+                                </div>
+                                <div className="flex justify-between text-green-700 font-medium">
+                                    <span>Desconto:</span>
+                                    <span>- {formatPrice(coupon.discount * 100)}</span>
+                                </div>
+                                <div className="flex justify-between font-bold text-slate-900 border-t border-green-200 pt-1 mt-1">
+                                    <span>Total:</span>
+                                    <span>{formatPrice(coupon.finalPrice * 100)}</span>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Main button: Open WhatsApp (user chooses recipient) */}
                         <button
                             onClick={handleSendQuote}

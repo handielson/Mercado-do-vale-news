@@ -23,15 +23,17 @@ export interface QuoteRequest {
     variant: VariantSpecs;
     installmentPlan: InstallmentPlan;
     delivery: DeliveryOption;
-    userType?: 'ADMIN' | 'retail' | 'resale' | 'wholesale'; // User type for conditional formatting
-    availableColors?: string[]; // Available colors in stock (for admin/staff)
+    userType?: 'ADMIN' | 'retail' | 'resale' | 'wholesale';
+    availableColors?: string[];
+    couponCode?: string;
+    couponDiscount?: number; // valor em R$
 }
 
 /**
  * Generate formatted WhatsApp quote message
  */
 export function generateQuoteMessage(quote: QuoteRequest): string {
-    const { product, variant, installmentPlan, delivery, userType, availableColors } = quote;
+    const { product, variant, installmentPlan, delivery, userType, availableColors, couponCode, couponDiscount } = quote;
 
     // Check if user is admin (ADMIN type indicates admin/staff)
     const isAdmin = userType === 'ADMIN';
@@ -132,6 +134,16 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
 
         message += `\n---\n`;
         message += `_Mercado do Vale_`;
+    }
+
+    // Coupon discount line (both admin and customer formats)
+    if (couponCode && couponDiscount && couponDiscount > 0) {
+        const discountFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(couponDiscount);
+        const finalFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+            Math.max(0, installmentPlan.total / 100 - couponDiscount)
+        );
+        message += `\n🎟️ Cupom *${couponCode}*: -${discountFormatted}\n`;
+        message += `✅ *Total com desconto: ${finalFormatted}*\n`;
     }
 
     return message;

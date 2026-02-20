@@ -186,10 +186,10 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                 {/* Requirement Selector */}
                                 <div className="flex items-center gap-1">
                                     <button
-                                        onClick={() => handleRequirementChange(field.id, 'hidden')}
-                                        className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${field.requirement === 'hidden'
-                                                ? 'bg-slate-200 text-slate-900 font-medium'
-                                                : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                        onClick={() => handleRequirementChange(field.id, 'off')}
+                                        className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${field.requirement === 'off'
+                                            ? 'bg-slate-200 text-slate-900 font-medium'
+                                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                                             }`}
                                         title="Campo não aparece no formulário"
                                     >
@@ -198,8 +198,8 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                     <button
                                         onClick={() => handleRequirementChange(field.id, 'optional')}
                                         className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${field.requirement === 'optional'
-                                                ? 'bg-yellow-100 text-yellow-900 font-medium'
-                                                : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                            ? 'bg-yellow-100 text-yellow-900 font-medium'
+                                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                                             }`}
                                         title="Campo pode ser vazio"
                                     >
@@ -208,8 +208,8 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                     <button
                                         onClick={() => handleRequirementChange(field.id, 'required')}
                                         className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${field.requirement === 'required'
-                                                ? 'bg-green-100 text-green-900 font-medium'
-                                                : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                            ? 'bg-green-100 text-green-900 font-medium'
+                                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                                             }`}
                                         title="Campo deve ser preenchido"
                                     >
@@ -266,8 +266,8 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                             onClick={() => !isAdded && handleAddField(globalField)}
                                             disabled={isAdded}
                                             className={`w-full text-left p-3 border rounded-lg transition-colors ${isAdded
-                                                    ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-50'
-                                                    : 'bg-white border-slate-200 hover:border-blue-500 hover:bg-blue-50'
+                                                ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-50'
+                                                : 'bg-white border-slate-200 hover:border-blue-500 hover:bg-blue-50'
                                                 }`}
                                         >
                                             <div className="flex items-center justify-between">

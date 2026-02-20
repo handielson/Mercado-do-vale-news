@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check } from 'lucide-react';
+import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check, GitCompare } from 'lucide-react';
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { ProductVariants } from '@/services/productVariants';
 import { extractVariants } from '@/services/productVariants';
@@ -10,6 +10,7 @@ import { QuoteModal } from './QuoteModal';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
+import { useCompare } from '@/contexts/CompareContext';
 
 interface ModernProductCardProps {
     product: CatalogProduct;
@@ -18,6 +19,7 @@ interface ModernProductCardProps {
     onFavorite?: (productId: string) => void;
     onShare?: (product: CatalogProduct) => void;
     isFavorite?: boolean;
+    onCompareToast?: (msg: string) => void; // callback for error toasts
 }
 
 export function ModernProductCard({
@@ -26,7 +28,8 @@ export function ModernProductCard({
     relatedProducts = [],
     onFavorite,
     onShare,
-    isFavorite = false
+    isFavorite = false,
+    onCompareToast,
 }: ModernProductCardProps) {
     const [imageError, setImageError] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
@@ -206,6 +209,19 @@ export function ModernProductCard({
         onShare?.(product);
     };
 
+    const { add: addToCompare, remove: removeFromCompare, isSelected: isComparing } = useCompare();
+    const isInCompare = isComparing(product.id);
+
+    const handleCompare = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isInCompare) {
+            removeFromCompare(product.id);
+        } else {
+            const error = addToCompare(product);
+            if (error) onCompareToast?.(error);
+        }
+    };
+
     // Carousel: Get images for each color
     const colorImages = useMemo(() => {
         if (!selectedVariant || !variants) return [imageUrl];
@@ -333,6 +349,16 @@ export function ModernProductCard({
                             title="Compartilhar"
                         >
                             <Share2 className="w-4 h-4" />
+                        </button>
+                        <button
+                            onClick={handleCompare}
+                            className={`p-2.5 rounded-full backdrop-blur-md transition-all shadow-lg ${isInCompare
+                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'bg-white/90 text-slate-700 hover:bg-white'
+                                }`}
+                            title={isInCompare ? 'Remover da comparação' : 'Comparar produto'}
+                        >
+                            <GitCompare className="w-4 h-4" />
                         </button>
                     </div>
 
@@ -500,7 +526,7 @@ export function ModernProductCard({
                                     Adicionado
                                 </>
                             ) : (
-                                'Enviar'
+                                'Comprar'
                             )}
                         </button>
                         <button

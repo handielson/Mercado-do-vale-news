@@ -35,8 +35,8 @@ export function SearchBar({
         <div className="relative">
             <div
                 className={`relative flex items-center transition-all ${isFocused
-                        ? 'ring-2 ring-blue-500 shadow-lg'
-                        : 'ring-1 ring-slate-300 shadow-sm'
+                    ? 'ring-2 ring-blue-500 shadow-lg'
+                    : 'ring-1 ring-slate-300 shadow-sm'
                     } rounded-lg bg-white`}
             >
                 {/* Ícone de busca */}
@@ -70,12 +70,7 @@ export function SearchBar({
                 )}
             </div>
 
-            {/* Indicador de busca ativa */}
-            {value && (
-                <div className="absolute top-full mt-2 left-0 right-0 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                    Buscando por: <span className="font-semibold">"{value}"</span>
-                </div>
-            )}
+
         </div>
     );
 }

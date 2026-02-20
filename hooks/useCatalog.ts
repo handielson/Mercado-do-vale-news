@@ -9,16 +9,17 @@ import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
 
 interface UseCatalogOptions {
     initialFilters?: Partial<FilterState>;
+    initialSearchQuery?: string;
     pageSize?: number;
 }
 
 export function useCatalog(options: UseCatalogOptions = {}) {
-    const { initialFilters = {}, pageSize = 12 } = options;
+    const { initialFilters = {}, initialSearchQuery = '', pageSize = 12 } = options;
 
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [favorites, setFavorites] = useState<Set<string>>(new Set());

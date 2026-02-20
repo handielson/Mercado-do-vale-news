@@ -259,6 +259,29 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
                     </div>
                 </div>
             </div>
+            {/* Integrações */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mt-6">
+                <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    <Building2 size={16} />
+                    Integrações
+                </h3>
+                <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        Google Analytics — ID de Medição
+                    </label>
+                    <input
+                        type="text"
+                        value={form.googleAnalyticsId || ''}
+                        onChange={(e) => onChange({ googleAnalyticsId: e.target.value })}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="G-XXXXXXXXXX"
+                        maxLength={20}
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                        Obtenha o ID em <a href="https://analytics.google.com" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">analytics.google.com</a> → Admin → Fluxos de dados → ID de Medição
+                    </p>
+                </div>
+            </div>
         </div>
     );
 };

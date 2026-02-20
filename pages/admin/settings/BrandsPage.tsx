@@ -19,6 +19,7 @@ export function BrandsPage() {
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
     const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     const loadBrands = async () => {
         try {
@@ -50,12 +51,18 @@ export function BrandsPage() {
             return;
         }
 
+        setDeleteError(null);
         try {
             await brandService.delete(brand.id);
             await loadBrands();
         } catch (error) {
             console.error('Error deleting brand:', error);
-            alert('Erro ao excluir marca');
+            const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+            if (msg.includes('not-null') || msg.includes('foreign key') || msg.includes('violates')) {
+                setDeleteError(`Não é possível excluir "${brand.name}" pois ela possui modelos ou produtos vinculados. Remova os vínculos primeiro.`);
+            } else {
+                setDeleteError(`Erro ao excluir marca: ${msg}`);
+            }
         }
     };
 
@@ -92,6 +99,14 @@ export function BrandsPage() {
                     Nova Marca
                 </button>
             </div>
+
+            {/* Error Banner */}
+            {deleteError && (
+                <div className="flex items-center justify-between p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    <span>{deleteError}</span>
+                    <button onClick={() => setDeleteError(null)} className="ml-4 text-red-500 hover:text-red-700 font-bold">✕</button>
+                </div>
+            )}
 
             {/* Brands Table */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

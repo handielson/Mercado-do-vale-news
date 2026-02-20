@@ -124,10 +124,6 @@ async function getById(id: string): Promise<Category | null> {
 async function update(id: string, input: CategoryInput): Promise<Category> {
     const companyId = await getCompanyId();
 
-    console.log('💾 [CategoryService] Updating category:', id);
-    console.log('📝 [CategoryService] Input config:', JSON.stringify(input.config, null, 2));
-    console.log('🔢 [CategoryService] Custom fields count:', input.config?.custom_fields?.length || 0);
-
     const slug = input.name
         .toLowerCase()
         .normalize('NFD')
@@ -135,7 +131,8 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
 
-    const { data, error } = await supabase
+    // UPDATE sem .select() para evitar bloqueio de RLS (mesmo fix de brands.ts)
+    const { error } = await supabase
         .from('categories')
         .update({
             name: input.name,
@@ -144,24 +141,14 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
             warranty_days: input.warranty_days || 90
         })
         .eq('id', id)
-        .eq('company_id', companyId)
-        .select()
-        .single();
+        .eq('company_id', companyId);
 
     if (error) throw new Error(`Failed to update category: ${error.message}`);
 
-    console.log('✅ [CategoryService] Saved config:', JSON.stringify(data.config, null, 2));
-    console.log('✅ [CategoryService] Saved custom fields:', data.config?.custom_fields?.length || 0);
-
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        config: data.config,
-        warranty_days: data.warranty_days || 90,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    // SELECT separado após UPDATE (tem permissão de leitura)
+    const updated = await getById(id);
+    if (!updated) throw new Error('Category not found after update.');
+    return updated;
 }
 
 /**

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -81,6 +81,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<ShoppingCart size={18} />}
             label="PDV"
             active={location.pathname.startsWith('/admin/pdv')}
+          />
+          <NavItem
+            to="/admin/coupons"
+            icon={<Ticket size={18} />}
+            label="Cupons"
+            active={location.pathname.startsWith('/admin/coupons')}
           />
           <NavItem
             to="/admin/migration"
@@ -172,6 +178,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<Shield size={18} />}
             label="Garantias"
             active={location.pathname.startsWith('/admin/settings/warranty-templates')}
+          />
+          <NavItem
+            to="/admin/settings/messages"
+            icon={<MessageCircle size={18} />}
+            label="Mensagens"
+            active={location.pathname.startsWith('/admin/settings/messages')}
           />
           <NavItem
             to="/admin/settings/banners"

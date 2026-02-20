@@ -57,6 +57,9 @@ export interface Company {
     businessHours?: string;
     description?: string;
     internalNotes?: string;
+
+    // Integrations
+    googleAnalyticsId?: string; // Google Analytics Measurement ID (ex: G-XXXXXXXXXX)
 }
 
 export const defaultCompany: Company = {

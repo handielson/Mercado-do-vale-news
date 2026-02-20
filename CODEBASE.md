@@ -1,4 +1,4 @@
-# CODEBASE.md — Planta Completa: Mercado do Vale
+﻿# CODEBASE.md — Planta Completa: Mercado do Vale
 
 > **LEITURA OBRIGATÓRIA antes de qualquer modificação.**
 > Fonte de verdade sobre dependências, funções e zonas de risco.
@@ -21,6 +21,8 @@
 | 7 | ~~`rams.ts` usa localStorage~~ ✅ **RESOLVIDO** — `RamSelect` importa de `rams-supabase.ts` | `services/rams-supabase.ts` | — | — |
 | 8 | ~~`field-dictionary.ts` runtime usava localStorage~~ ✅ **RESOLVIDO** — código morto removido; `getFieldDefinitionRuntime` agora delega ao dicionário estático | `config/field-dictionary.ts` | — | — |
 | 9 | ~~`storages.ts` usa localStorage~~ ✅ **RESOLVIDO** — `CapacitySelect` importa de `storages-supabase.ts` | `services/storages-supabase.ts` | — | — |
+| 10 | ~~Dead code excluído em 2026-02-19: `AutoNamingSection.tsx`, `EANAutofillSection.tsx`, `CustomFieldsEditor.tsx` (legado), `FieldDialog.tsx`~~ ✅ **REMOVIDO** — nenhum componente ativo os importava. `AutoNamingSection` e `EANAutofillSection` não estavam montados na `CategoryEditPage`. `CustomFieldsEditor` foi substituído por `CustomFieldsEditorNew`. `FieldDialog` era dependência exclusiva do legado. | `components/categories/` | — | — |
+| 11 | ~~Dead code excluído em 2026-02-19: `ModelModalNew.tsx`, `ModelModalExcel.tsx`, `ModelModalTemplateValues.tsx`, `ModelBasicInfo.tsx`, `ModelSpecifications.tsx`, `ModelCustomFields.tsx`, `ModelEANManager.tsx`~~ ✅ **REMOVIDO** — nenhum componente ativo os importava. `ModelModalNew` era modal alternativo não montado na `ModelsPage`. Os demais eram dependências exclusivas do `ModelModalNew`. O modal ativo é `ModelModal.tsx`. | `components/settings/` | — | — |
 
 ---
 
@@ -154,6 +156,244 @@ mercado-do-vale/
 
 ---
 
+### `services/couponService.ts` — Cupons de Desconto
+**Exporta:** `validateCoupon`, `applyCoupon`, `listCoupons`, `createCoupon`, `updateCoupon`, `deleteCoupon`, tipos `Coupon` e `CouponValidation`
+**Tabela:** `coupons`
+**RPC Supabase:** `increment_coupon_uses(coupon_id UUID)`
+
+#### Tipos exportados
+
+```ts
+interface Coupon {
+    id: string;
+    code: string;               // Código único, sempre UPPERCASE
+    type: 'percent' | 'fixed';  // Percentual ou valor fixo
+    value: number;              // % (0-100) ou R$ — nunca centavos
+    description?: string | null;
+    min_order: number;          // Pedido mínimo em R$ para ativar
+    max_uses: number | null;    // null = ilimitado
+    uses_count: number;         // Contador de usos realizados
+    expires_at: string | null;  // ISO date ou null
+    active: boolean;
+    target_type: 'all' | 'retail' | 'resale' | 'wholesale';
+    created_at: string;
+}
+
+interface CouponValidation {
+    valid: boolean;
+    error?: string;        // Mensagem de erro em PT-BR
+    coupon?: Coupon;
+    discount?: number;     // Desconto em R$ (nunca centavos)
+    finalPrice?: number;   // Preço final em R$ após desconto
+}
+```
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `validateCoupon(code, totalPrice, customerType?)` | `(code: string, totalPrice: number, customerType?: string): Promise<CouponValidation>` | Valida cupom e calcula desconto |
+| `applyCoupon(couponId)` | `(couponId: string): Promise<void>` | Incrementa `uses_count` via RPC atômica |
+| `listCoupons()` | `(): Promise<Coupon[]>` | Lista todos os cupons (somente admin) |
+| `createCoupon(data)` | `(data): Promise<Coupon>` | Cria novo cupom |
+| `updateCoupon(id, data)` | `(id: string, data: Partial<Coupon>): Promise<Coupon>` | Atualiza cupom existente |
+| `deleteCoupon(id)` | `(id: string): Promise<void>` | Remove cupom permanentemente |
+
+**Regras de validação em `validateCoupon` (ordem de verificação):**
+1. Cupom não existe → `"Cupom não encontrado"`
+2. `active === false` → `"Cupom inativo"`
+3. `target_type !== 'all'` e não bate com `customerType` → `"Cupom exclusivo para [tipo]"`
+4. `expires_at` é no passado → `"Cupom expirado"`
+5. `max_uses !== null` e `uses_count >= max_uses` → `"Cupom esgotado"`
+6. `totalPrice < min_order` → `"Pedido mínimo de R$ X para usar este cupom"`
+7. Cálculo:
+   - `percent`: `(totalPrice × value) / 100`
+   - `fixed`: `value`
+   - **Cap:** `discount = Math.min(rawDiscount, totalPrice)` — garante preço final ≥ 0
+
+**⚠️ Todos os valores de preço em R$ (não centavos)** — diferente de `installmentCalculator` que usa centavos
+**⚠️ RLS:**
+- Admin (`authenticated`): leitura + escrita total na tabela `coupons`
+- Anônimo: somente `SELECT` de cupons com `active = true`
+**⚠️ `applyCoupon` usa RPC** (`increment_coupon_uses`) para garantir atomicidade e evitar race conditions
+**⚠️ Requer SQL:** `supabase/create_coupons_table.sql` + `supabase/create_increment_coupon_rpc.sql`
+**⚠️ A busca de cupão é case-insensitive** via índice `CREATE INDEX ON coupons (UPPER(code))`
+**⚠️ Usado por:** `useCoupon` (hook), `PDVPage` (direto com `validateCoupon` + `applyCoupon`)
+
+---
+
+### `hooks/useCoupon.ts` — Hook de Cupom para Frontend
+**Exporta:** `useCoupon`
+**Depende de:** `couponService`
+
+```ts
+// Assinatura
+function useCoupon(totalPrice: number, customerType?: string): {
+    code: string;
+    setCode: (code: string) => void;
+    isLoading: boolean;
+    error: string | null;
+    discount: number;          // Desconto em R$
+    finalPrice: number;        // Preço final em R$ após desconto
+    appliedCoupon: Coupon | null;
+    apply: () => Promise<void>;   // Valida e aplica localmente
+    confirm: () => Promise<void>; // Registra uso no banco (chamar após confirmação de compra)
+    clear: () => void;            // Reseta todo o estado do cupom
+}
+```
+
+**Parâmetros:**
+- `totalPrice`: preço base em **R$** (não centavos) — é reativo a mudanças do carrinho
+- `customerType`: tipo do cliente (`'retail'`, `'resale'`, `'wholesale'`, `'ADMIN'`)
+
+**Fluxo de uso:**
+1. Usuário digita código → `setCode(code.toUpperCase())`
+2. Clica "Aplicar" ou pressiona Enter → `apply()` → chama `validateCoupon` → atualiza `discount` e `finalPrice`
+3. Usuário confirma compra/envia orçamento → `confirm()` → chama `applyCoupon(coupon.id)` no banco
+4. `clear()` reseta tudo para o estado inicial
+
+**⚠️ `confirm()` é no-op se `appliedCoupon === null`** — seguro chamar sempre após envio
+**⚠️ `finalPrice` é inicializado com `totalPrice`** e atualizado só após `apply()` bem-sucedido
+**⚠️ Usado por:** `QuoteModal`, `QuoteCartSidebar`
+
+---
+
+### `pages/admin/CouponsPage.tsx` — Gestão de Cupons (Admin)
+**Rota:** `/admin/coupons`
+**Protegida por:** `ProtectedRoute requireAdmin={true}`
+**Depende de:** `couponService`, `CouponFormModal`
+
+**Funcionalidades:**
+- Lista todos os cupons com status dinâmico visual
+- Botão "Novo Cupom" → abre `CouponFormModal` vazio
+- Ativar/Desativar toggle → chama `updateCoupon(id, { active: !c.active })`
+- Editar → abre `CouponFormModal` com dados preenchidos
+- Excluir → confirmação + `deleteCoupon(id)`
+
+**Status dinâmico `getCouponStatus(coupon)` (prioridade decrescente):**
+1. `active === false` → **Inativo** (cinza)
+2. `expires_at` no passado → **Expirado** (vermelho)
+3. `uses_count >= max_uses` → **Esgotado** (laranja)
+4. Padrão → **Ativo** (verde)
+
+**⚠️ Requer tabela `coupons` criada no Supabase**
+
+---
+
+### `components/admin/CouponFormModal.tsx` — Formulário de Cupom (Admin)
+**Props:** `{ isOpen, onClose, onSaved, initial?: Coupon }`
+**Depende de:** `couponService.createCoupon`, `couponService.updateCoupon`
+
+**Campos do formulário:**
+| Campo | Tipo | Validação |
+|-------|------|-----------|
+| `code` | text (uppercase automático) | Obrigatório |
+| `type` | select (`percent` / `fixed`) | — |
+| `value` | number | > 0; se `percent`, ≤ 100 |
+| `description` | text | Opcional |
+| `target_type` | select (`all`, `retail`, `resale`, `wholesale`) | — |
+| `min_order` | number (R$) | ≥ 0 |
+| `max_uses` | number | 0 = ilimitado |
+| `expires_at` | date | Opcional |
+| `active` | checkbox | — |
+
+**Preview dinâmico:** calculates desconto sobre R$ 1.000 de pedido exemplo para visualização instantânea.
+
+**Comportamento ao salvar:**
+- `initial` definido → `updateCoupon` → toast "Cupom atualizado!"
+- `initial` ausente → `createCoupon` → toast "Cupom criado!"
+- Erro `unique` → toast "Código já existe"
+
+---
+
+### Integrações do Sistema de Cupons nos Componentes
+
+#### `components/catalog/QuoteModal.tsx`
+- Usa `useCoupon(effectivePrice, customer?.customer_type)`
+- Campo de cupom visível somente para **não-admins**
+- Ao aplicar: mostra resumo (subtotal / desconto / total)
+- Ao enviar WhatsApp: passa `couponCode` e `couponDiscount` para `generateQuoteMessage`
+- Após envio: chama `coupon.confirm()` para registrar uso
+
+#### `components/catalog/QuoteCartSidebar.tsx`
+- Usa `useCoupon(totalCart, customer?.customer_type)`
+- `totalCart = items.reduce((sum, item) => sum + item.price / 100, 0)` — soma em R$
+- Campo de cupom no footer (antes dos botões de ação)
+- Repassa `couponCode` + `couponDiscount` para `generateMultiProductWhatsAppLink` e `generateMultiProductQuoteMessage`
+
+#### `pages/pdv/PDVPage.tsx`
+- Usa `validateCoupon` e `applyCoupon` diretamente (sem o hook)
+- Estado: `couponCode`, `couponLoading`, `appliedCoupon`, `couponError`
+- Campo de cupom renderizado entre `DeliverySection` e `PaymentSection`
+- Desconto: popula `promotionalDiscount` (centavos) — já integrado ao cálculo do `total`
+- Após `createSale`: chama `applyCoupon(appliedCoupon.id)` e limpa o estado
+- `customerType` passado como `'ADMIN'` para que todos os cupons (inclusive segmentados) sejam aceitos no PDV
+
+---
+
+### `utils/whatsappMessageGenerator.ts` — Mensagem de Orçamento (Produto Único)
+**Função:** `generateQuoteMessage(quote: QuoteRequest): string`
+**Parâmetros adicionados ao `QuoteRequest`:**
+- `couponCode?: string` — código do cupom aplicado
+- `couponDiscount?: number` — desconto em R$
+
+Se ambos forem definidos, adiciona ao fim da mensagem:
+```
+🎟️ Cupom *CÓDIGO*: -R$ X,XX
+✅ *Total com desconto: R$ Y,YY*
+```
+
+---
+
+### `utils/multiProductQuoteGenerator.ts` — Mensagem Multi-Produto
+**Funções:** `generateMultiProductQuoteMessage`, `generateMultiProductWhatsAppLink`
+**Parâmetros adicionados:**
+- `couponCode?: string`
+- `couponDiscount?: number` — desconto em R$
+
+Se cupom aplicado, adiciona ao resumo:
+```
+🎟️ Cupom *CÓDIGO*: -R$ X,XX
+✅ *Total com desconto: R$ Y,YY*
+```
+
+---
+
+### SQL: Tabela e RPC de Cupons
+
+**`supabase/create_coupons_table.sql`**
+```sql
+-- Cria tabela `coupons` com:
+-- code TEXT UNIQUE NOT NULL
+-- type TEXT CHECK ('percent', 'fixed')
+-- value NUMERIC NOT NULL
+-- description TEXT
+-- min_order NUMERIC DEFAULT 0
+-- max_uses INTEGER
+-- uses_count INTEGER DEFAULT 0
+-- expires_at TIMESTAMPTZ
+-- active BOOLEAN DEFAULT true
+-- target_type TEXT DEFAULT 'all'
+-- created_at TIMESTAMPTZ DEFAULT now()
+-- RLS: admin full access, anon read-only (active = true)
+-- Index: UPPER(code) para busca case-insensitive
+```
+
+**`supabase/create_increment_coupon_rpc.sql`**
+```sql
+-- Cria função RPC `increment_coupon_uses(coupon_id UUID)`
+-- Incrementa atomicamente uses_count += 1
+-- Evita race conditions em uso simultâneo
+```
+
+**⚠️ AÇÃO NECESSÁRIA:** Ambos os SQLs devem ser executados no **SQL Editor do Supabase** antes de usar o sistema de cupons.
+
+---
+
+### Rota Admin e Menu
+- **Rota:** `/admin/coupons` → `CouponsPage` dentro de `AdminLayout` (protegida por `requireAdmin`)
+- **Menu sidebar:** Link "Cupons" com ícone `Ticket` (lucide-react), posicionado entre "PDV" e "Migração" no `AdminLayout`
+
+---
+
 ### `services/averagePriceService.ts` — Preço Médio
 **Exporta:** `averagePriceService`, `updateAveragePrices`
 **Tabela:** `products` (update em massa)
@@ -233,20 +473,256 @@ mercado-do-vale/
 ### `services/brands.ts` — Marcas
 **Exporta:** `brandService`
 **Tabela:** `brands`
+**Requer:** `company_id` via `getCompanyId()` (slug: `mercado-do-vale`)
 
 | Função | Assinatura | O que faz |
 |--------|-----------|-----------|
-| `list()` | `(): Promise<Brand[]>` | Lista todas as marcas |
+| `list()` | `(): Promise<Brand[]>` | Lista todas as marcas ordenadas por `name` |
 | `getById(id)` | `(id: string): Promise<Brand \| null>` | Marca por ID |
-| `create(input)` | `(input: BrandInput): Promise<Brand>` | Cria marca |
-| `update(id, input)` | `(id, input): Promise<Brand>` | Atualiza marca |
+| `create(input)` | `(input: BrandInput): Promise<Brand>` | Cria marca, gera slug automático |
+| `update(id, input)` | `(id, input): Promise<Brand>` | Atualiza marca e regenera slug |
 | `delete(id)` | `(id: string): Promise<void>` | Remove marca |
-| `listActive()` | `(): Promise<Brand[]>` | Marcas ativas (alias de `list()`) |
+| `listActive()` | `(): Promise<Brand[]>` | Lista apenas marcas com `active = true` |
 
-**⚠️ Campo `active` não existe no banco ainda** — sempre retorna `true`
-**⚠️ Usado por:** `BrandSelect`, `BrandsPage`, `ModelModal`
+**Slug:** gerado via `generateSlug(name)`  lowercase, sem acentos, hífens no lugar de espaços
+** Usado por:** `BrandSelect` (dropdown no ProductForm), `BrandsPage` (admin CRUD), `ModelModal`
 
 ---
+
+### `services/customers.ts` — Clientes
+**Exporta:** `customerService`
+**Tabela:** `customers`
+**Cache:** 5 minutos em memória
+**Requer:** `company_id` via `getCompanyId()`
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `list(filters)` | `(filters?: CustomerFilters): Promise<Customer[]>` | Lista clientes com filtros (search, is_active, created_after, created_before) |
+| `getById(id)` | `(id: string): Promise<Customer \| null>` | Cliente por UUID |
+| `getByCpfCnpj(cpf)` | `(cpf: string): Promise<Customer \| null>` | Cliente por CPF/CNPJ |
+| `create(input)` | `(input: CustomerInput): Promise<Customer>` | Cria cliente, limpa cache |
+| `update(id, input)` | `(id, input: Partial<CustomerInput>): Promise<Customer>` | Atualiza campos do cliente |
+| `delete(id)` | `(id: string): Promise<void>` | Soft delete (is_active = false) |
+| `hardDelete(id)` | `(id: string): Promise<void>` | Exclusão física |
+| `search(query)` | `(query: string): Promise<Customer[]>` | Busca por nome, CPF ou email |
+| `count()` | `(): Promise<number>` | Total de clientes ativos |
+
+**⚠️ Constraint única:** `unique_customer_per_company` impede CPF/CNPJ duplicado na mesma empresa
+**⚠️ Usado por:** `CustomerListPage`, `CustomerFormPage`, `CustomerDetailsPage`
+
+---
+
+### `services/welcomeMessageService.ts` — Mensagem de Boas-Vindas (WhatsApp)
+**Exporta:** `welcomeMessageService`, `buildMessage()`, `buildWhatsAppUrl()`, `getDefaultPassword()`
+**Armazena template em:** `catalog_settings.welcome_message_template` (TEXT) — por `user_id`
+**Fallback:** template padrão hardcoded se não houver registro no banco
+
+| Função/Método | Assinatura | O que faz |
+|--------------|-----------|-----------|
+| `welcomeMessageService.getTemplate()` | `(): Promise<string>` | Busca template salvo no Supabase (retorna padrão se não existir) |
+| `welcomeMessageService.saveTemplate(t)` | `(text: string): Promise<void>` | Salva template via upsert em `catalog_settings` |
+| `welcomeMessageService.getDefaultTemplate()` | `(): string` | Retorna o template padrão (sem chamada ao banco) |
+| `buildMessage(template, customer)` | `(template: string, customer: Customer): string` | Substitui variáveis `{nome}`, `{cpf}`, `{senha}`, `{link}` |
+| `buildWhatsAppUrl(phone, message)` | `(phone: string, message: string): string` | Monta URL `https://wa.me/55{phone}?text={encoded}` |
+| `getDefaultPassword(cpf_cnpj)` | `(cpf: string): string` | Retorna primeiros 5 dígitos do CPF (sem pontuação) |
+
+**Variáveis do template:**
+
+| Variável | Substituída por |
+|----------|----------------|
+| `{nome}` | `customer.name` |
+| `{cpf}` | CPF **mascarado** — últimos 3 dígitos visíveis. Ex: `543.050.559-53` → `***.***.**9-53` (via `maskCpf()`) |
+| `{senha}` | 5 primeiros dígitos do CPF (ex: `123.456.789-00` → `12345`) |
+| `{link}` | `https://mv.mercadodovale.com.br/` |
+
+**⚠️ Usado por:** `CustomerListPage` (botão WhatsApp), `MessagesPage` (editor de template)
+**⚠️ Requer SQL aplicado:** `supabase/add_welcome_message_template.sql`
+**⚠️ CPF mascarado:** `maskCpf()` mascara os 8 primeiros dígitos; CNPJs (14 dígitos) não são mascarados
+**⚠️ Logo da empresa no preview:** carregar via `getCompanyData().logo` — **NÃO** usar `useTheme().settings.logo_main` (campo inexistente)
+
+---
+
+### `hooks/useGoogleAnalytics.ts` — Integração Google Analytics (GA4)
+**Exporta:** `useGoogleAnalytics()`
+**Chamado em:** `App.tsx` (raiz da aplicação, ao lado de `useFavicon()`)
+**Depende de:** `services/companyService.ts` (campo `googleAnalyticsId`) e `routes/index.tsx` (subscriber)
+
+#### O que faz
+
+1. **Injeta o script `gtag.js`** dinamicamente no `<head>` se `company_settings.google_analytics_id` estiver preenchido e começar com `G-`
+2. **Rastreia navegação SPA** via `router.subscribe()` — essencial para React Router, onde não há reload entre páginas
+
+#### Por que o subscriber é obrigatório
+
+Em SPAs o GA4 só registra a primeira página. O `router.subscribe()` dispara `page_view` a cada troca de rota (`state === 'idle'`), garantindo que toda navegação seja rastreada.
+
+#### Campo no banco
+
+| Tabela | Coluna | Tipo | Descrição |
+|--------|--------|------|-----------|
+| `company_settings` | `google_analytics_id` | `TEXT` | ID de medição GA4. Ex: `G-XXXXXXXXXX` |
+
+**⚠️ Requer SQL aplicado:** `supabase/add_google_analytics_id.sql`
+**⚠️ Campo na UI:** `components/company/CompanyIdentitySection.tsx` → seção **Integrações** (final da página Dados da Empresa)
+**⚠️ Se `googleAnalyticsId` for vazio ou não começar com `G-`, o hook não faz nada**
+
+---
+
+### Feature: Comparativo de Produtos
+
+Permite que o cliente compare até 3 produtos lado a lado em um modal fullscreen, com destaque automático para o melhor valor em cada especificação.
+
+#### Arquivos envolvidos
+
+| Arquivo | Papel |
+|---------|-------|
+| `contexts/CompareContext.tsx` | Estado global de produtos selecionados |
+| `components/catalog/CompareBar.tsx` | Barra flutuante no rodapé |
+| `components/catalog/CompareModal.tsx` | Modal fullscreen com tabela comparativa |
+| `components/catalog/ModernProductCard.tsx` | Botão ⚖️ GitCompare no hover |
+| `App.tsx` | Monta `<CompareProvider>` + `<CompareBar>` globalmente |
+
+---
+
+### `contexts/CompareContext.tsx` — Estado de Comparação
+
+**Exporta:** `CompareProvider`, `useCompare()`
+
+**`useCompare()` retorna:**
+```ts
+{
+  selected: CatalogProduct[];       // produtos selecionados (máx 3)
+  add: (p) => string | null;        // null = sucesso, string = mensagem de erro
+  remove: (id: string) => void;
+  clear: () => void;
+  isSelected: (id: string) => boolean;
+}
+```
+
+**Regras de negócio no `add()`:**
+1. Produto já selecionado → ignora silenciosamente
+2. `selected.length >= 3` → retorna `"Limite de 3 produtos atingido"`
+3. Mesmo `model_id` → retorna `"Este modelo já está na comparação"`
+4. `category_id` diferente do primeiro produto → retorna `"Compare apenas produtos da mesma categoria"`
+
+**⚠️ Valor padrão no-op:** `useCompare()` funciona fora do `CompareProvider` (retorna no-ops), evitando crashes em páginas que usam `ModernProductCard` mas não precisam de comparação.
+
+**⚠️ Provider em:** `App.tsx` — envolve toda a aplicação.
+
+---
+
+### `components/catalog/CompareBar.tsx` — Barra Flutuante
+
+- Aparece em `fixed bottom-0` quando `selected.length > 0` (slide-up via `translate-y`)
+- Exibe slots dos produtos selecionados (com thumbnail + `product.model`) + slots vazios
+- Botão "Comparar" habilitado só com 2+ produtos
+- Botão lixeira limpa toda a seleção
+- Abre `<CompareModal>` via estado local `showModal`
+
+**⚠️ Montado em:** `App.tsx` (nível global, após `<RouterProvider>`)
+
+---
+
+### `components/catalog/CompareModal.tsx` — Modal de Comparação
+
+- Modal fullscreen (z-index 60) com tabela sticky header/footer
+- **Cabeçalho de coluna:** imagem + `cleanModelName(product)` (nome limpo, sem sufixo de RAM/storage) + marca
+- **Linha de Preço (PIX):** destaca em verde o menor preço com label "✓ Melhor preço"
+- **Linhas de specs:** busca `template_values` da tabela `models` via Supabase para cada produto
+- **Destaque de melhor spec:** valores numéricos são comparados; maior = verde (exceto `weight_*` onde menor = melhor)
+- **Linha de Descrição:** exibida apenas se algum produto tiver `description`
+- **Footer sticky:** botão "Enviar Orçamento" por coluna (abre WhatsApp com `cleanModelName(product)`)
+
+**`SPEC_LABELS`:** mesmo mapeamento de `ProductDetailsModal.tsx` — chaves técnicas → rótulos em PT-BR.
+
+**`cleanModelName(p)`:** helper compartilhado com `CompareBar`. Retorna `p.model || p.name` com sufixo de memória removido via regex `/,?\s*\d+[GT]B\/\d+[GT]B.*/i`. Ex: `"Redmi Note 15, 8GB/256GB"` → `"Redmi Note 15"`.
+
+**⚠️ Exige:** produtos com `model_id` preenchido para carregar specs. Sem `model_id` → exibe "Especificações não disponíveis".
+
+---
+
+### Modificações em `ModernProductCard.tsx` (comparativo)
+
+- Importa `useCompare` de `../../contexts/CompareContext`
+- Prop opcional `onCompareToast?: (msg: string) => void` — callback para exibir erros de comparação
+- Botão `<GitCompare>` adicionado na área de hover (ao lado de ❤️ e 🔗)
+  - Azul sólido = produto já selecionado; transparente = não selecionado
+  - Clique = toggle (add → `addToCompare(product)` / remove → `removeFromCompare(product.id)`)
+  - `e.stopPropagation()` evita abrir QuoteModal ao clicar no botão
+- **Botão principal:** texto `'Comprar'` (substituído de `'Enviar'` em fev/2026)
+
+---
+
+
+```ts
+interface Brand {
+    id: string;
+    name: string;
+    slug: string;          // auto-gerado pelo service
+    active: boolean;
+    logo_url?: string;     // preparado para upload futuro (não exposto na UI)
+    warranty_days: number; // padrão: 90
+    created: string;
+    updated: string;
+}
+
+interface BrandInput {
+    name: string;
+    active?: boolean;
+    logo_url?: string;
+    warranty_days?: number;
+}
+```
+
+---
+
+### `pages/admin/settings/BrandsPage.tsx`  Página de Marcas (Admin)
+**Rota:** `/admin/settings/brands`
+**Usa:** `brandService`, `BrandModal`
+**Padrão:** segue o mesmo padrão de `CategorySettings` (tabela + modal)
+
+**Funcionalidades:**
+- Tabela com colunas: Nome, Slug (`<code>`), Garantia (badge azul em dias), Status (Ativa/Inativa)
+- Botão **Nova Marca**  abre `BrandModal` em modo criação
+- Botão **Editar** (lápis)  abre `BrandModal` em modo edição
+- Botão **Excluir** (lixeira)  `confirm()` nativo  `brandService.delete`
+- Stats no rodapé: Total de Marcas / Marcas Ativas / Marcas Inativas
+- Loading spinner enquanto carrega
+
+**Estado local:**
+
+| Estado | Tipo | Descrição |
+|--------|------|----------|
+| `brands` | `Brand[]` | Lista de marcas |
+| `loading` | `boolean` | Spinner inicial |
+| `modalOpen` | `boolean` | Controla visibilidade do modal |
+| `editingBrand` | `Brand \| null` | `null` = criação, `Brand` = edição |
+
+---
+
+### `components/settings/BrandModal.tsx`  Modal de Criação/Edição de Marca
+**Props:** `isOpen`, `onClose`, `onSave`, `brand?: Brand | null`
+**Modo:** detectado automaticamente  `brand` preenchido = edição, `null` = criação
+
+**Campos do formulário:**
+
+| Campo | Tipo | Validação |
+|-------|------|----------|
+| Nome da Marca | `text` | Obrigatório, mín. 2 caracteres |
+| Garantia Padrão | `number` | Em dias, padrão: 90 |
+| Marca Ativa | `checkbox` | Visível no cadastro de produtos |
+
+**Fluxo:**
+1. `useEffect` preenche campos quando `brand` ou `isOpen` muda
+2. `handleSave` valida  monta `BrandInput`  `brandService.create` ou `brandService.update`
+3. Chama `onSave()` + `onClose()` ao salvar com sucesso
+4. Exibe erro inline (bloco vermelho) se falhar
+
+** Slug gerado no service**  o modal não expõe o campo slug ao usuário
+** `logo_url` não tem UI de upload**  campo preparado no tipo mas sem implementação
+
+---
+
 
 ### `services/colors.ts` — Cores
 **Exporta:** `colorService`, `COLOR_MAP`
@@ -947,7 +1423,7 @@ Wrapper mínimo sobre `SupabaseAuthContext`.
 
 ### Providers (App.tsx)
 ```
-HelmetProvider → SupabaseAuthProvider → ThemeProvider → RouterProvider
+HelmetProvider → SupabaseAuthProvider → ThemeProvider → CompareProvider → RouterProvider + CompareBar (global)
 ```
 
 ### Rotas Públicas
@@ -4316,4 +4792,754 @@ Objeto com 20+ campos pré-definidos: `name`, `sku`, `description`, `brand`, `mo
 | `socialMediaHelpers.ts` | Helpers de redes sociais | ⚠️ Básico |
 | `urlHelpers.ts` | Helpers de URL para compartilhamento | ⚠️ Básico |
 | `warrantyTagReplacement.ts` | Substituição de `{{tags}}` em templates | ✅ |
+| `warrantyTagReplacement.ts` | Substituição de `{{tags}}` em templates | ✅ |
 | `whatsappMessageGenerator.ts` | Gerador de mensagem de orçamento | ✅ |
+
+---
+
+## 📂 MÓDULO: Gerenciamento de Categorias
+
+> Rota: `/admin/settings/categories` e `/admin/settings/categories/:id/edit`
+
+### Arquitetura Geral
+
+```
+pages/admin/settings/categories/
+├── index.tsx                        # Lista de categorias
+├── new.tsx                          # Redirect para CategoryEditPage sem categoryId
+└── [id]/edit.tsx                    # Wrapper de rota → CategoryEditPage
+
+components/categories/
+├── CategoryEditPage.tsx             # Orquestrador principal (CREATE + EDIT)
+├── CustomFieldsEditorNew.tsx        # Editor de campos globais (usado como CustomFieldsEditor)
+├── CustomFieldsEditor.tsx           # LEGADO — não usado ativamente
+├── FieldDialog.tsx                  # Dialog inline de campo (pode estar legado)
+└── sections/
+    ├── BasicInfoSection.tsx         # Nome + slug + garantia padrão
+    ├── UniqueFieldsSection.tsx      # IMEI1, IMEI2, Serial, Cor — unicidade
+    ├── FieldConfigSection.tsx       # Tabela de campos: oculto/opcional/obrigatório + EAN + auto-name
+    ├── CustomFieldsSection.tsx      # Wrapper de CustomFieldsEditorNew
+    ├── AutoNamingSection.tsx        # (existe mas NÃO está montado no CategoryEditPage)
+    └── EANAutofillSection.tsx       # (existe mas NÃO está montado no CategoryEditPage — lógica embutida no FieldConfigSection)
+
+services/
+└── categories.ts                    # CRUD de categorias (Supabase)
+```
+
+---
+
+### `pages/admin/settings/categories/index.tsx` — Lista de Categorias
+
+**Responsabilidade:** Exibe tabela com todas as categorias da empresa. Sem modal — edição redireciona para rota dedicada.
+
+| Elemento | Detalhe |
+|----------|---------|
+| Estado | `categories: Category[]`, `isLoading: boolean` |
+| Carregamento | `categoryService.list()` no mount |
+| Ação Editar | Navega para `/admin/settings/categories/:id/edit` |
+| Ação Nova | Navega para `/admin/settings/categories/new` |
+| Helper | `getConfigSummary(category)` — conta campos `required / optional / off` |
+
+**⚠️ Sem delete:** A listagem **não tem botão de excluir categoria**. Apenas editar.
+
+---
+
+### `components/categories/CategoryEditPage.tsx` — Orquestrador Principal
+
+**Responsabilidade:** Estado centralizado + orquestração de 4 seções + save/cancel.
+
+**Props:**
+```ts
+interface CategoryEditPageProps {
+    categoryId?: string; // undefined = criar nova
+}
+```
+
+**Estado:**
+| Estado | Tipo | Default |
+|--------|------|---------|
+| `name` | `string` | `''` |
+| `warrantyDays` | `number` | `90` |
+| `config` | `CategoryConfig` | Todos campos `'optional'`, `custom_fields: []` |
+| `uniqueFields` | `string[]` | `[]` |
+| `isLoading` | `boolean` | `true` se editando |
+| `isSaving` | `boolean` | `false` |
+
+**Fluxo de carregamento (modo edição):**
+1. `loadCategory(categoryId)` chama `categoryService.getById(id)`
+2. Popula `name`, `warrantyDays`, `config` via spread operator (`...category.config`)
+3. `unique_fields` é carregado separadamente de `category.config.unique_fields`
+
+**⚠️ Risco:** `config` usa spread — qualquer campo não listado no default mas existente no banco é preservado. Campos inesperados no JSON sobrevivem ao save.
+
+**Handlers:**
+| Handler | O que faz |
+|---------|-----------|
+| `updateFieldConfig(field, value)` | Atualiza um campo da `config` (estado de visibilidade) |
+| `updateCustomFields(fields)` | Substitui `config.custom_fields` |
+| `updateEANExcludedFields(fields)` | Atualiza `config.ean_autofill_config.exclude_fields` |
+| `updateAutoNamingFields(fields)` | Atualiza `config.auto_name_fields` |
+| `updateUniqueFields(fields)` | Atualiza `uniqueFields` state + `config.unique_fields` |
+| `handleSave(e)` | Chama `categoryService.update()` ou `create()` → navega de volta |
+| `handleCancel()` | Navega de volta para `/admin/settings/categories` |
+
+**Seções montadas (em ordem):**
+1. `<BasicInfoSection>` — nome + garantia
+2. `<UniqueFieldsSection>` — unicidade de IMEI/serial/cor
+3. `<FieldConfigSection>` — tabela de campos + EAN + auto-name
+4. `<CustomFieldsSection>` — campos personalizados globais
+
+**⚠️ NÃO montado:** `AutoNamingSection` e `EANAutofillSection` existem nos arquivos mas **não aparecem no JSX do `CategoryEditPage`**. A lógica de EAN Autofill está embutida no `FieldConfigSection` via props.
+
+---
+
+### `sections/BasicInfoSection.tsx`
+
+**Props:** `name`, `onChange`, `warrantyDays`, `onWarrantyDaysChange`, `isEditing?`
+
+**Comportamento:**
+- Gera slug em tempo real a partir do nome (NFD, lowercase, hífens)
+- Slug é **readonly** (apenas exibição)
+- `autoFocus` no input de nome apenas em modo de criação
+
+---
+
+### `sections/UniqueFieldsSection.tsx`
+
+**Props:** `config: Record<string, FieldRequirement>`, `onChange`
+
+**Campos fixos** (hardcoded no componente):
+```ts
+const UNIQUE_FIELD_OPTIONS = [
+    { key: 'imei1', label: 'IMEI 1' },
+    { key: 'imei2', label: 'IMEI 2' },
+    { key: 'serial', label: 'Serial' },
+    { key: 'color', label: 'Cor' }
+];
+```
+
+**Estados por campo:** `off` (oculto) | `optional` | `required`
+
+**Salvos em:** `config.unique_fields` (array de strings com os campos ativados) + cada campo como chave direta no config.
+
+---
+
+### `sections/FieldConfigSection.tsx` ⭐ Componente central
+
+**Responsabilidade:** Tabela unificada de configuração. Carrega campos dinamicamente do Supabase via `customFieldsService.list()`.
+
+**Props:**
+```ts
+config: CategoryConfig
+onChange: (field: keyof CategoryConfig, value: FieldRequirement) => void
+eanExcludedFields: string[]
+onEANExclusionChange: (fields: string[]) => void
+autoNamingFields: string[]
+onAutoNamingFieldsChange: (fields: string[]) => void
+```
+
+**Carregamento de campos:**
+- Chama `customFieldsService.list()` no mount
+- Filtra apenas `category === 'basic'` ou `category === 'spec'`
+- Ordena alfabeticamente por label
+
+**Colunas da tabela:**
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| Campo | — | Nome do campo + tipo (Básico/Especificação) |
+| 🔴 Oculto | Radio | `value = 'off'` |
+| 🟡 Opcional | Radio | `value = 'optional'` |
+| 🟢 Obrigatório | Radio | `value = 'required'` |
+| 📦 Excluir EAN | Checkbox | Não preencher via código de barras |
+| 🏷️ Gerar Nome | Checkbox | Usar na geração automática do nome do produto |
+
+**⚠️ Risco de tipo:** O acesso ao config usa cast explícito:
+```ts
+const currentValue = (config[field.key] as FieldRequirement) || 'optional';
+```
+Se `field.key` não existe no `CategoryConfig`, cai em `'optional'` sem aviso.
+
+**Logs de debug ativos:** Há `console.log` para o campo `display` — código de diagnóstico que deve ser removido.
+
+---
+
+### `sections/CustomFieldsSection.tsx`
+
+Wrapper fino que envolve `CustomFieldsEditorNew` com título e descrição padronizados.
+
+**⚠️ Import confuso:**
+```ts
+import { CustomFieldsEditor } from '../CustomFieldsEditorNew';
+```
+O arquivo se chama `CustomFieldsEditorNew.tsx` mas exporta `CustomFieldsEditor`. O import funciona corretamente.
+
+---
+
+### `components/categories/CustomFieldsEditorNew.tsx` (exportado como `CustomFieldsEditor`)
+
+**Responsabilidade:** Permite selecionar campos globais da tabela `custom_fields` e definir se são `hidden | optional | required` nesta categoria.
+
+**Props:**
+```ts
+fields: CustomField[]   // campos já adicionados à categoria
+onChange: (fields: CustomField[]) => void
+```
+
+**Tipo `CustomField` (categoria):**
+```ts
+interface CustomField {
+    id: string;          // ID local (formato: "custom-{timestamp}")
+    field_id?: string;   // FK para custom_fields.id (campo global)
+    requirement: FieldRequirement; // 'hidden' | 'optional' | 'required'
+}
+```
+
+**⚠️ DIVERGÊNCIA:** `FieldRequirement` no `CustomFieldsEditorNew` usa `'hidden'` mas no `FieldConfigSection` usa `'off'`. São tipos diferentes para o mesmo conceito em partes diferentes da UI.
+
+**Funções principais:**
+| Função | O que faz |
+|--------|-----------|
+| `handleAddField(globalField)` | Cria `CustomField` com `requirement: 'optional'` e `field_id` do campo global |
+| `handleRemoveField(fieldId)` | Remove campo da lista |
+| `handleRequirementChange(fieldId, req)` | Atualiza requirement de um campo |
+| `handleAddAllFields()` | Adiciona todos os campos globais não ainda presentes |
+| `getGlobalField(fieldId)` | Resolve o globalField pelo `field_id` |
+| `getFieldTypeLabel(field)` | Retorna label com emoji por tipo |
+
+**Dialog de adição:** Modal com lista de todos os campos globais. Campos já adicionados aparecem com `opacity-50` e `disabled`.
+
+---
+
+### `services/categories.ts`
+
+**Tabela:** `categories`
+
+**Funções exportadas via `categoryService`:**
+| Função | Descrição |
+|--------|-----------|
+| `list()` | Lista todas as categorias da empresa, ordenadas por `sort_order` e `name` |
+| `create(input)` | Cria nova categoria com slug gerado do nome |
+| `getById(id)` | Busca por ID + `company_id`. Retorna `null` se `PGRST116` |
+| `update(id, input)` | Atualiza nome, slug, config, warranty_days. USA `.select().single()` |
+| `remove(id)` | Deleta por ID + `company_id` |
+| `updateSortOrder(orders[])` | Atualiza `sort_order` de múltiplas categorias via `Promise.all` |
+
+**⚠️ DIFERENÇA em relação ao `brands.ts`:** O `update` de categorias usa `.select().single()` após o UPDATE — o mesmo padrão que causava erro silencioso nas marcas. Funciona porque a tabela `categories` **tem** policy de UPDATE configurada corretamente no Supabase.
+
+**Logs de debug ativos na função `update`:**
+```ts
+console.log('💾 [CategoryService] Updating category:', id);
+console.log('📝 [CategoryService] Input config:', JSON.stringify(input.config, null, 2));
+console.log('✅ [CategoryService] Saved config:', JSON.stringify(data.config, null, 2));
+```
+→ Podem ser removidos em produção.
+
+---
+
+### 🗄️ Schema da Tabela `categories`
+
+| Coluna | Tipo | Notas |
+|--------|------|-------|
+| `id` | UUID | PK |
+| `company_id` | UUID | FK → companies |
+| `name` | text | Nome exibido |
+| `slug` | text | Gerado do nome, unique por company |
+| `config` | JSONB | `CategoryConfig` serializado |
+| `warranty_days` | int | Default 90 |
+| `sort_order` | int | Ordem na listagem |
+| `created_at` | timestamp | Auto |
+| `updated_at` | timestamp | Auto |
+
+**Estrutura do `config` (JSONB):**
+```ts
+interface CategoryConfig {
+    // Campos de entrada — FieldRequirement: 'required' | 'optional' | 'off'
+    imei1?: FieldRequirement;
+    imei2?: FieldRequirement;
+    serial?: FieldRequirement;
+    color?: FieldRequirement;
+    storage?: FieldRequirement;
+    ram?: FieldRequirement;
+    version?: FieldRequirement;
+    battery_health?: FieldRequirement;
+
+    // Campos dinâmicos do Supabase (chave = field.key)
+    [dynamicField: string]: FieldRequirement | any;
+
+    // Sub-objetos
+    custom_fields?: CustomField[];        // Campos globais adicionados à categoria
+    unique_fields?: string[];             // Lista de field.keys com unicidade
+    ean_autofill_config?: {
+        enabled: boolean;
+        exclude_fields: string[];         // Fields excluídos do preenchimento por EAN
+    };
+    auto_name_fields?: string[];          // Fields usados na geração automática de nome
+}
+```
+
+---
+
+### ⚠️ Pontos de Atenção / Bugs Conhecidos
+
+
+| # | Problema | Localização | Status |
+|---|---------|-------------|--------|
+| 1 | ~~`'hidden'` vs `'off'`~~ ✅ **CORRIGIDO** — `CustomFieldsEditorNew` agora usa `'off'` igual ao resto do sistema | `CustomFieldsEditorNew.tsx` L189-190 | Corrigido |
+| 2 | ~~Logs de debug ativos (campo `display`)~~ ✅ **REMOVIDOS** | `FieldConfigSection.tsx` | Corrigido |
+| 3 | ~~Logs de debug em `categories.ts` `update()`~~ ✅ **REMOVIDOS** | `services/categories.ts` | Corrigido (junto com fix do save) |
+| 4 | ~~`alert()` em `FieldConfigSection`~~ ✅ **SUBSTITUÍDO** por estado de erro inline + botão "Tentar novamente" | `FieldConfigSection.tsx` | Corrigido |
+| 5 | `AutoNamingSection.tsx` e `EANAutofillSection.tsx` existem mas NÃO estão montados | `CategoryEditPage.tsx` | ⚠️ Dead code — documentado abaixo |
+| 6 | `CustomFieldsEditor.tsx` (legado) ainda no diretório | `components/categories/` | ⚠️ Dead code — documentado abaixo |
+
+---
+
+### 📄 Arquivo: `components/categories/sections/AutoNamingSection.tsx`
+
+**Status:** ⚠️ DEAD CODE — Componente completo, funcional, mas **NÃO montado** em `CategoryEditPage.tsx`.
+
+**Responsabilidade:** Interface para configurar geração automática de nome de produto via template com placeholders.
+
+**Props:**
+
+| Prop | Tipo | Descrição |
+|------|------|-----------|
+| `config` | `{ enabled?, template?, separator? }` | Configuração atual de auto-naming |
+| `onChange` | `(config) => void` | Callback ao alterar configuração |
+
+**Funcionalidades implementadas no componente (aguardando integração):**
+
+- Toggle para ativar/desativar geração automática
+- Campo de template com placeholders clicáveis, agrupados em:
+  - Básicos: `{marca}`, `{modelo}`, `{sku}`
+  - Especificações: `{ram}`, `{armazenamento}`, `{cor}`, `{versao}`, `{bateria}`
+  - Identificadores: `{serial}`, `{imei1}`, `{imei2}`, `{ncm}`, `{cest}`, `{peso}`
+- 3 modelos prontos (presets) com exemplos visuais
+- Preview ao vivo do nome gerado usando dados de exemplo (`Xiaomi Redmi Note 14`)
+
+**Função `generatePreview(template)`:**
+Substitui todos os placeholders por valores de exemplo estáticos para exibição em tempo real.
+
+**Observação:** A lógica de `auto_name_template` e `auto_name_enabled` existe no tipo `CategoryConfig` (`types/category.ts`) mas o componente que a edita não está montado na página.
+
+---
+
+### 📄 Arquivo: `components/categories/sections/EANAutofillSection.tsx`
+
+**Status:** ⚠️ DEAD CODE — Componente completo, funcional, mas **NÃO montado** em `CategoryEditPage.tsx`.  
+A funcionalidade equivalente está parcialmente integrada via props no `FieldConfigSection` (coluna "Excluir EAN").
+
+**Responsabilidade:** Interface dedicada para configurar o preenchimento automático de campos via leitura de código de barras EAN.
+
+**Props:**
+
+| Prop | Tipo | Descrição |
+|------|------|-----------|
+| `config` | `{ enabled, exclude_fields: string[] }` | Configuração atual de autofill |
+| `customFields` | `CustomField[]` | Campos personalizados da categoria |
+| `onChange` | `(config) => void` | Callback ao alterar configuração |
+
+**Dependências externas:**
+- `config/product-fields` → `getBasicFields()`, `getSpecFields()`, `getPriceFields()`
+
+**Funcionalidades implementadas (aguardando integração):**
+- Toggle para ativar/desativar auto-fill por EAN
+- Lista de **todos os campos** do sistema organizados por grupo, com checkbox para excluir do auto-fill:
+  - **Básicos:** via `getBasicFields()`
+  - **Especificações:** via `getSpecFields()`
+  - **Preços:** via `getPriceFields()`
+  - **Fiscal:** NCM, CEST, Origem (hardcoded)
+  - **Logística:** Peso, Dimensões, Estoque (hardcoded)
+  - **Personalizados:** campos dinâmicos da categoria (prefixo `specs.`)
+- Nota explicativa sobre IMEI/Serial como exemplo
+
+**Diferença em relação ao `FieldConfigSection`:**  
+O `FieldConfigSection` tem uma coluna "Excluir EAN" por campo, mas apenas para campos dinâmicos do Supabase. O `EANAutofillSection` cobriria **todos** os grupos de campo inclusive fiscais e logísticos — uma interface mais completa e separada.
+
+---
+
+### 📄 Arquivo: `components/categories/CustomFieldsEditor.tsx` *(LEGADO)*
+
+**Status:** ⚠️ LEGADO — Versão anterior do editor de campos personalizados. **NÃO montado** em lugar nenhum. Substituído por `CustomFieldsEditorNew.tsx`.
+
+**Diferenças em relação ao `CustomFieldsEditorNew`:**
+
+| Característica | CustomFieldsEditor (legado) | CustomFieldsEditorNew (ativo) |
+|---|---|---|
+| Fonte dos campos | Busca campos de **todas as categorias** (`categoryService.list()`) | Busca da tabela global `custom_fields` (`customFieldsService.list()`) |
+| Criação de campo | Via `FieldDialog` modal | Sem criação — apenas seleção de campos globais |
+| Edição inline | ✅ Botão de lápis para editar cada campo | ❌ Não tem edição |
+| Logs de debug | ✅ Múltiplos `console.log` ativos | ❌ Removidos |
+| Requisito "Oculto" | Usa `'off'` ✅ | Usava `'hidden'` ❌ → ✅ **Corrigido** nesta sessão |
+| Interface | Tabela com radio buttons | Botões inline (Oculto / Opcional / Obrigatório) |
+
+**Problema arquitetural do legado:**  
+Buscava campos de `categories.config.custom_fields` de todas as categorias para montar a "biblioteca". Isso era ineficiente e impreciso — a nova abordagem usa a tabela `custom_fields` no Supabase, que é a fonte de verdade global.
+
+**Dependências:**
+- `FieldDialog` — modal de criação/edição de campos inline (pode também ser dead code se o legado for removido)
+
+---
+
+### 📄 Arquivo: `components/categories/FieldDialog.tsx`
+
+> **Nota:** Dependência do `CustomFieldsEditor.tsx` legado. Verificar se é referenciado em outro lugar antes de remover o legado.
+
+```
+
+---
+
+## 📦 Módulo: Gestão de Modelos (`/admin/settings/models`)
+
+Gerenciamento completo de modelos de produto com suporte a templates de campos, fotos por cor e associação a marcas e categorias.
+
+### Estrutura de Arquivos
+
+```
+pages/admin/settings/ModelsPage.tsx         ← Página principal (listagem)
+components/settings/
+  ModelModal.tsx                            ← Modal ativo (principal)
+  ModelModalNew.tsx                         ← ⚠️ Modal alternativo (não montado)
+  ModelModalExcel.tsx                       ← ⚠️ Modal estilo Excel (não montado)
+  ModelModalTemplateValues.tsx              ← ⚠️ Modal de template values (não montado)
+  ModelBasicInfo.tsx                        ← ⚠️ Seção (usada só em ModelModalNew)
+  ModelSpecifications.tsx                   ← ⚠️ Seção (usada só em ModelModalNew)
+  ModelLogistics.tsx                        ← Seção de logística
+  ModelCustomFields.tsx                     ← ⚠️ Seção (usada só em ModelModalNew)
+  ModelEANManager.tsx                       ← ⚠️ Gerenciador EAN avançado (não montado)
+  ModelTemplateEditor.tsx                   ← Editor de template
+  VariantManager.tsx                        ← Gerenciador de variantes por cor
+  VariantImageGallery.tsx                   ← Galeria de imagens por variante
+  ColorImageManager.tsx                     ← Gerenciador de fotos por cor (ativo)
+  BrandModal.tsx                            ← Modal de criação/edição de marca
+  ColorModal.tsx                            ← Modal de criação/edição de cor
+  RamModal.tsx                              ← Modal de RAM
+  StorageModal.tsx                          ← Modal de armazenamento
+  VersionModal.tsx                          ← Modal de versão
+  BatteryHealthModal.tsx                    ← Modal de saúde da bateria
+  CustomFieldModal.tsx                      ← Modal de criação de campo personalizado
+  WarrantyTemplateModal.tsx                 ← Modal de template de garantia
+  WarrantyTemplateEditor.tsx                ← Editor de template de garantia
+  FieldsTable.tsx                           ← Tabela de campos com formatação
+  FieldStats.tsx                            ← Cards de estatísticas de campos
+  FormatLegend.tsx                          ← Legenda de tipos de formatação
+  FormatTester.tsx                          ← Testador de formatação de campos
+services/models.ts                          ← CRUD no Supabase
+```
+
+---
+
+### 📄 Arquivo: `pages/admin/settings/ModelsPage.tsx`
+
+**Responsabilidade:** Listagem de todos os modelos cadastrados, com ações de criar, editar e excluir.
+
+**Estado:**
+| Estado | Tipo | Descrição |
+|--------|------|-----------|
+| `models` | `Model[]` | Lista completa de modelos |
+| `brands` | `Brand[]` | Lista de marcas (para exibir nome na tabela) |
+| `loading` | `boolean` | Spinner inicial de carregamento |
+| `modalOpen` | `boolean` | Controla exibição do `ModelModal` |
+| `editingModel` | `Model \| null` | Modelo sendo editado (null = criação) |
+
+**Carregamento paralelo:** `modelService.list()` + `brandService.list()` em `Promise.all`.
+
+**Tabela:** Colunas — Marca, Modelo, Slug (`<code>`), Status (badge Ativo/Inativo), Ações (Editar/Excluir).
+
+**Footer stats (cards):** Total de Modelos / Modelos Ativos / Marcas com Modelos.
+
+**Bugs/Atenção:**
+- `handleDelete` usa `confirm()` nativo — mesmo padrão problemático já corrigido em outros módulos.
+- `handleDelete` usa `alert()` em caso de erro — mesmo problema corrigido em `FieldConfigSection`.
+
+---
+
+### 📄 Arquivo: `services/models.ts`
+
+**Responsabilidade:** CRUD do Supabase para a tabela `models`. Multi-tenant via `company_id`.
+
+**Funções exportadas via `modelService`:**
+
+| Função | Descrição |
+|--------|-----------|
+| `list()` | Lista todos os modelos da empresa, ordenados por nome |
+| `getById(id)` | Busca modelo por ID |
+| `listByBrand(brandId)` | Lista modelos de uma marca específica |
+| `create(input)` | Cria modelo com slug gerado automaticamente |
+| `update(id, input)` | Atualiza modelo (⚠️ **BUG: usa `.select().single()` após UPDATE**) |
+| `delete(id)` | Remove modelo |
+| `listActive()` | Alias de `list()` (não filtra `active` de fato) |
+| `listActiveByBrand(brandId)` | Alias de `listByBrand()` |
+
+**`generateSlug(name)`:** Normaliza NFD, remove acentos, converte para kebab-case.
+
+**Campos mapeados do Supabase:**
+`id`, `name`, `slug`, `brand_id`, `category_id`, `description`, `template_values` (JSONB), `eans` (array), `created_at`, `updated_at`.
+
+**⚠️ BUGS IDENTIFICADOS:**
+1. **Logs de debug ativos** (L186-188, L210): `console.log` com emoji ativos na função `update()`.
+2. **RLS idêntico ao brands** (L190-206): `update()` usa `.select().single()` após UPDATE → causa erro `406 Not Acceptable` igual ao que foi corrigido em `categories.ts` e `brands.ts`. Precisa separar UPDATE de `getById()`.
+3. **`listActive()` não filtra** (L247-249): retorna todos os modelos, não só ativos. O campo `active` não é persistido no banco (sempre hardcoded `true` no map).
+4. **Campo `active` hardcoded** (L57, L92, L124, L167, etc.): sempre `true` no retorno — o campo `active` do tipo `Model` não tem correspondência real na tabela `models` do Supabase.
+
+---
+
+### 📄 Arquivo: `components/settings/ModelModal.tsx` *(Modal Principal — Ativo)*
+
+**Responsabilidade:** Modal completo para criar/editar modelos. Interface com 3 abas.
+
+**Abas:**
+| Aba | Ícone | Descrição |
+|-----|-------|-----------|
+| `basic` | ⚙️ Básico | Nome, Marca, EANs de referência, status Ativo |
+| `template` | 📄 Template | Categoria padrão, Descrição, Valores padrão por campo, Logística |
+| `photos` | 📸 Fotos por Cor | `ColorImageManager` — desativada para novos modelos |
+
+**Sub-componente interno `TemplateFieldInput`:**
+Renderiza o input correto conforme o `field_type` do campo global:
+- `table_relation` → `<select>` carregando opções via `tableDataService.loadOptions()`
+- `select` com `options[]` → `<select>` estático
+- `text` / `number` → `<input>` simples
+
+**Carregamento paralelo em `loadData()`:** `brandService.listActive()` + `categoryService.list()` + `customFieldsService.list()`.
+
+**Lógica de filtro de campos na aba Template:**
+- Filtra campos com `category === 'spec'`
+- Exclui campos presentes em `UNIQUE_FIELDS` (Cor, IMEI, Serial, EAN, SKU)
+- Se categoria selecionada: exclui campos com `configValue === 'off'` no `categoryConfig`
+
+**`handleSave()`:**
+- Captura EAN pendente no input (`eanInputRef.current?.value`) antes de salvar
+- Valida nome (obrigatório, mínimo 2 chars) e marca (obrigatória)
+- Chama `modelService.update()` ou `modelService.create()`
+- Redireciona erro de validação para aba `basic`
+
+**Estados:**
+`name`, `brandId`, `active`, `categoryId`, `description`, `templateValues` (Record), `eans` (string[]), `brands`, `categories`, `customFields`, `categoryConfig`, `saving`, `loading`, `error`, `activeTab`.
+
+**⚠️ BUGS IDENTIFICADOS:**
+1. **Logs de debug ativos** (L40, L157-158, L208, L259-261, L273): múltiplos `console.log` com emoji.
+2. **Logs de FieldConfigSection no componente errado** (L548, L556): `console.log` com tag `[FieldConfigSection]` dentro do `ModelModal` — confuso para debug.
+3. **Classe CSS com espaços inválidos** (L312): `className={\`flex - 1 px - 6 py - 3 font - medium...\`}` — espaços dentro dos utilitários Tailwind fazem a aba "Básico" não ter o estilo esperado. Aba "Template" e "Fotos" estão corretas.
+4. **Aba Fotos renderiza `ColorImageManager` duas vezes** (L663-687 e L685-687): há duas condicionais `{activeTab === 'photos' && model && ...}` consecutivas — a segunda renderiza `<ColorImageManager>`.
+
+---
+
+### 📄 Arquivo: `components/settings/BrandModal.tsx`
+
+**Responsabilidade:** Modal simples para criar/editar marcas.
+
+**Campos:** Nome* (mínimo 2 chars), Garantia Padrão (dias, default 90), Ativo.
+
+**Dependências:** `brandService` (create/update), tipos `Brand`, `BrandInput`.
+
+**Padrão:** Mesmo padrão de todos os modais simples — reset via `useEffect([brand, isOpen])`, erro inline.
+
+---
+
+### 📄 Arquivo: `components/settings/ColorModal.tsx`
+
+**Responsabilidade:** Modal para criar/editar cores com preview visual de hex.
+
+**Campos:** Nome* (formatado via `applyFieldFormat`/`field-dictionary`), Hex Code (picker + input), Ativo.
+
+**Funcionalidade especial:** `selectKnownColor(colorName)` — seleciona cor conhecida do mapa `COLOR_MAP` de `services/colors`.
+
+**Dependências:** `colorService` (create/update), `COLOR_MAP`, `applyFieldFormat`, `getFieldDefinition`.
+
+---
+
+### 📄 Arquivo: `components/settings/RamModal.tsx`
+
+**Responsabilidade:** Modal para criar/editar capacidades de RAM.
+
+**Campos:** Nome* (formato padrão: `8GB`, `16GB`), Ativo.
+
+**Dependências:** `ramService` (create/update), tipos `Ram`, `RamInput`.
+
+---
+
+### 📄 Arquivo: `components/settings/StorageModal.tsx`
+
+**Responsabilidade:** Modal para criar/editar capacidades de armazenamento.
+
+**Campos:** Nome* (formato padrão: `64GB`, `256GB`, `1TB`), Ativo.
+
+**Dependências:** `storageService` (create/update), tipos `Storage`, `StorageInput`.
+
+---
+
+### 📄 Arquivo: `components/settings/VersionModal.tsx`
+
+**Responsabilidade:** Modal para criar/editar versões regionais ou de software.
+
+**Campos:** Nome* (ex: `Global`, `China`, `iOS 17`), Ativo.
+
+**Dependências:** `versionService` (create/update), tipos `Version`, `VersionInput`.
+
+---
+
+### 📄 Arquivo: `components/settings/BatteryHealthModal.tsx`
+
+**Responsabilidade:** Modal para criar/editar estados de saúde de bateria.
+
+**Campos:** Nome* (formato padrão: `100%`, `95%`, `90%`), Ativo.
+
+**Dependências:** `batteryHealthService` (create/update), tipos `BatteryHealth`, `BatteryHealthInput`.
+
+---
+
+### 📄 Arquivo: `components/settings/CustomFieldModal.tsx`
+
+**Responsabilidade:** Modal completo para criar/editar campos personalizados globais.
+
+**Props:**
+| Prop | Tipo | Descrição |
+|------|------|-----------|
+| `isOpen` | `boolean` | Controle de exibição |
+| `onClose` | `() => void` | Fechar modal |
+| `onCreate` | `(formData) => void` | Callback ao criar/salvar |
+| `formatOptions` | `{ value, label, color }[]` | Opções de formatação disponíveis |
+| `editingField` | `any?` | Campo sendo editado (opcional) |
+
+**`CustomFieldFormData`:**
+`key`, `label`, `placeholder`, `format` (FieldFormat), `required`, `description`, `minLength?`, `maxLength?`.
+
+**`handleSubmit()`:** Valida key (obrigatório, sem espaços), label (obrigatório), chama `onCreate`.
+
+---
+
+### 📄 Arquivo: `components/settings/WarrantyTemplateModal.tsx`
+
+**Responsabilidade:** Modal para criar/editar templates de garantia.
+
+**`WarrantyTemplateInput`:** `name`, `description?`, `duration_days`, `terms` (texto do termo), `active`.
+
+**Funcionalidades:**
+- Preview em tempo real das variáveis do template (`{produto}`, `{marca}`, etc.)
+- Validação: nome obrigatório, termos obrigatórios, prazo > 0 dias
+
+**Dependências:** `types/warranty` (`WarrantyTemplateInput`).
+
+---
+
+### 📄 Arquivo: `components/settings/ColorImageManager.tsx`
+
+**Responsabilidade:** Gerencia imagens por cor para um modelo específico. Componente da aba "Fotos por Cor" do `ModelModal`.
+
+**Props:** `modelId: string`
+
+**Tipos internos:**
+- `ColorWithImages`: `{ color: Color, images: string[], loading: boolean, uploading: boolean }`
+
+**Funções principais:**
+| Função | Descrição |
+|--------|-----------|
+| `loadAllColors()` | Carrega todas as cores + imagens de cada cor via `modelColorImagesService` |
+| `toggleColor(colorId)` | Abre/fecha seção de imagens para uma cor |
+| `handleImageUpload(colorId, e)` | Upload de imagem com compressão via `compressImage()` |
+| `handleRemoveImage(colorId, idx)` | Remove imagem pelo índice |
+| `handleReorderImage(colorId, from, to)` | Reordena imagens (drag-free, via botões) |
+
+**Dependências:** `modelColorImagesService`, `colorService`, `compressImage` (utils), `toast` (sonner).
+
+**Nota:** Imagens salvas automaticamente por cor sem fechar modal.
+
+---
+
+### 📄 Arquivo: `components/settings/VariantManager.tsx`
+
+**Responsabilidade:** Modal para gerenciar variantes (combinações Cor) de um modelo.
+
+**Props:** `{ isOpen, onClose, modelId, modelName }`
+
+**Funções:**
+| Função | Descrição |
+|--------|-----------|
+| `loadData()` | Carrega variantes + cores disponíveis via `modelVariantsService` |
+| `handleAddColor(colorId)` | Adiciona nova variante de cor |
+| `handleRemoveVariant(variantId)` | Remove variante |
+| `handleOpenGallery(variant)` | Abre `VariantImageGallery` para upload de fotos |
+
+**Dependências:** `modelVariantsService`, `VariantImageGallery`, tipos de `model-architecture`.
+
+**Status de uso:** ⚠️ Não há referência visível ao `VariantManager` no `ModelModal` ativo — verificar se é montado em outra página.
+
+---
+
+### 📄 Arquivo: `components/settings/ModelEANManager.tsx`
+
+**Responsabilidade:** Gerenciador avançado de EANs com validação de checksum EAN-13 e suporte a código de país.
+
+**Props:** `{ eans: ModelEAN[], modelId?, onEANsChange, onError }`
+
+**Funcionalidades:**
+- Input numérico limitado a 13 dígitos
+- Seletor de país (`BR`, `CN`, `IN`, `US`)
+- Validação de checksum via `modelEANsService.validateEAN13(ean)`
+- Lógica de EAN temporário (`temp-{Date.now()}`) para novos modelos sem ID
+- Botão de estrela para definir EAN principal (`is_primary`)
+
+**Dependências:** `modelEANsService`, `types/model-architecture` (`ModelEAN`).
+
+**Status:** ⚠️ Somente usado em `ModelModalNew` (não montado). O `ModelModal` ativo usa campo simples de texto para EANs (sem validação de checksum).
+
+---
+
+### 📄 Arquivo: `components/settings/FieldsTable.tsx`
+
+**Responsabilidade:** Tabela de campos do dicionário global (`field-dictionary`) com seletor de formatação e ação de deletar.
+
+**Props:**
+| Prop | Tipo | Descrição |
+|------|------|-----------|
+| `fields` | `[string, FieldDefinition][]` | Entradas do dicionário de campos |
+| `formatOptions` | `{ value, label, color }[]` | Opções de formato disponíveis |
+| `onFormatChange` | `(key, format) => void` | Callback ao mudar formatação |
+| `onDeleteField` | `(key) => void` | Callback ao deletar campo customizado |
+| `isCustomField` | `(key) => boolean` | Determina se campo pode ser deletado |
+
+**Colunas:** Chave, Label Padrão, Placeholder, Formatação (select), Obrigatório (checkmark), Ações.
+
+---
+
+### 📄 Arquivo: `components/settings/FieldStats.tsx`
+
+**Responsabilidade:** Cards de estatísticas sobre os campos do dicionário.
+
+**Props:** `fields: [string, FieldDefinition][]`
+
+**Cards:** Total de Campos | Capitalize | Uppercase | Obrigatórios.
+
+**Sub-componente:** `StatCard({ label, value, color })` — card simples com label + número.
+
+---
+
+### Componentes Adicionais (outlines)
+
+**`ModelBasicInfo.tsx`** — Seção de informações básicas (Marca, Categoria, Nome, Descrição com contador de palavras para SEO). Contador visual: ✅ ótimo (300-350 palavras), ⚠️ aceitável (250-299), ❌ curto (<250), ⚠️ longo (>350). **⚠️ Usado somente no `ModelModalNew` (não montado).**
+
+**`ModelSpecifications.tsx`** — Seção de especificações fixas: Processador, Chipset, Bateria (mAh), Display (pol), Câmera Principal/Frontal, NFC, Rede (4G/5G), Resistência, Antutu. **⚠️ Usado somente no `ModelModalNew` (não montado).** Dados gerenciados por struct `SpecsData` local, não por `custom_fields`.
+
+**`ModelModalNew.tsx`** — Modal alternativo que usa `modelsService` (de `services/models-new`) e monta `ModelBasicInfo` + `ModelSpecifications` + `ModelEANManager` + `ModelLogistics` + `ModelCustomFields`. **⚠️ NÃO montado na `ModelsPage`.**
+
+**`ModelModalExcel.tsx`** — Modal estilo planilha para edição de modelos. Campos layout grid. **⚠️ NÃO montado na `ModelsPage`.**
+
+**`ModelModalTemplateValues.tsx`** — Modal específico para editar `template_values` de um modelo. Separado do fluxo principal. **⚠️ NÃO montado em nenhuma página identificada.**
+
+---
+
+### ⚠️ Pontos de Atenção / Bugs Conhecidos
+
+| # | Problema | Localização | Severidade |
+|---|---------|-------------|------------|
+| 1 | `services/models.ts` `update()` usa `.select().single()` após UPDATE → erro `406` igual ao `brands.ts` corrigido | `services/models.ts` L190-206 | 🔴 **CRÍTICO** |
+| 2 | Campo `active` hardcoded como `true` em todos os retornos do service — não persiste no banco | `services/models.ts` L57, L92, L124, L167, L218 | 🟡 Médio |
+| 3 | `listActive()` não filtra modelos ativos — retorna todos | `services/models.ts` L247-249 | 🟡 Médio |
+| 4 | Logs de debug ativos com emoji em `update()` | `services/models.ts` L186-188, L210 | 🟠 Baixo |
+| 5 | Logs de debug ativos com emoji no `ModelModal` (`handleSave`, `loadData`, etc.) | `ModelModal.tsx` L40, L157-158, L208, L259-261, L273 | 🟠 Baixo |
+| 6 | Classe CSS com espaços inválidos na aba "Básico": `flex - 1 px - 6 py - 3` | `ModelModal.tsx` L312 | 🟡 Médio (visual) |
+| 7 | `ColorImageManager` renderizado duas vezes na aba "Fotos" | `ModelModal.tsx` L663-687 | 🟡 Médio |
+| 8 | `ModelsPage.handleDelete` usa `confirm()` e `alert()` | `ModelsPage.tsx` L57, L66 | 🟠 Baixo |
+| 9 | Logs `[FieldConfigSection]` dentro do `ModelModal` (tag de log errada) | `ModelModal.tsx` L548, L556 | 🟠 Baixo |
+| 10 | Dead code: `ModelModalNew`, `ModelModalExcel`, `ModelModalTemplateValues`, `ModelBasicInfo`, `ModelSpecifications`, `ModelCustomFields`, `ModelEANManager` — não montados | `components/settings/` | 🔵 Info |
+

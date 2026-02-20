@@ -10,9 +10,12 @@ import type { CatalogProduct } from '@/types/catalog';
 
 interface CatalogSectionProps {
     section: CatalogSection;
+    onFavorite?: (productId: string) => void;
+    onShare?: (product: CatalogProduct) => void;
+    favorites?: Set<string>;
 }
 
-export function CatalogSectionComponent({ section }: CatalogSectionProps) {
+export function CatalogSectionComponent({ section, onFavorite, onShare, favorites = new Set() }: CatalogSectionProps) {
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const { customer } = useSupabaseAuth();
@@ -100,7 +103,13 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
             {section.layout_style === 'grid' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {groupedProducts.map((product) => (
-                        <ModernProductCard key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`} product={product} />
+                        <ModernProductCard
+                            key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`}
+                            product={product}
+                            onFavorite={onFavorite}
+                            onShare={onShare}
+                            isFavorite={favorites.has(product.id)}
+                        />
                     ))}
                 </div>
             )}
@@ -110,7 +119,12 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
                     <div className="flex gap-4 pb-4">
                         {groupedProducts.map((product) => (
                             <div key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`} className="flex-shrink-0 w-80">
-                                <ModernProductCard product={product} />
+                                <ModernProductCard
+                                    product={product}
+                                    onFavorite={onFavorite}
+                                    onShare={onShare}
+                                    isFavorite={favorites.has(product.id)}
+                                />
                             </div>
                         ))}
                     </div>
@@ -120,7 +134,13 @@ export function CatalogSectionComponent({ section }: CatalogSectionProps) {
             {section.layout_style === 'list' && (
                 <div className="space-y-4">
                     {groupedProducts.map((product) => (
-                        <ModernProductCard key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`} product={product} />
+                        <ModernProductCard
+                            key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`}
+                            product={product}
+                            onFavorite={onFavorite}
+                            onShare={onShare}
+                            isFavorite={favorites.has(product.id)}
+                        />
                     ))}
                 </div>
             )}

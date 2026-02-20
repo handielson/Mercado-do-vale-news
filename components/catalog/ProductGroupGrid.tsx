@@ -1,5 +1,5 @@
 import { ModernProductCard } from './ModernProductCard';
-import type { ProductGroup } from '@/types/catalog';
+import type { ProductGroup, CatalogProduct } from '@/types/catalog';
 
 interface ProductGroupGridProps {
     groups: ProductGroup[];
@@ -7,7 +7,7 @@ interface ProductGroupGridProps {
     hasMore?: boolean;
     onLoadMore?: () => void;
     onFavorite?: (productId: string) => void;
-    onShare?: (groupKey: string) => void;
+    onShare?: (product: CatalogProduct) => void;
     favorites?: Set<string>;
     variant?: 'grid' | 'list';
     columns?: {
@@ -95,7 +95,7 @@ export function ProductGroupGrid({
                         product={group.representativeProduct}
                         productGroup={group}
                         onFavorite={onFavorite}
-                        onShare={() => onShare?.(group.groupKey)}
+                        onShare={onShare ? () => onShare(group.representativeProduct) : undefined}
                         isFavorite={favorites.has(group.representativeProduct.id)}
                     />
                 ))}

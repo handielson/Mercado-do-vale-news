@@ -46,12 +46,14 @@ import PDVPage from '../pages/pdv/PDVPage';
 import { CompanyDataPage } from '../pages/admin/settings/CompanyDataPage';
 import DocumentSettingsPage from '../pages/admin/settings/DocumentSettingsPage';
 import WarrantyTemplatesPage from '../pages/admin/settings/WarrantyTemplatesPage';
+import MessagesPage from '../pages/admin/settings/MessagesPage';
 import BannerManagementPage from '../pages/admin/settings/BannerManagementPage';
 import CatalogSettingsPage from '../pages/admin/settings/CatalogSettingsPage';
 import ShippingPage from '../pages/admin/settings/ShippingPage';
 import CatalogConfigPage from '../pages/admin/CatalogConfigPage';
 import PermissionsManagementPage from '../pages/admin/settings/PermissionsManagementPage';
 import CatalogEditorPage from '../pages/admin/catalog-editor';
+import CouponsPage from '../pages/admin/CouponsPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
 import LegacyMigrationPage from '../pages/LegacyMigration';
@@ -268,6 +270,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/admin/coupons",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><CouponsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
     path: "/admin/settings/categories",
     element: (
       <ProtectedRoute requireAdmin={true}>
@@ -400,6 +410,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><WarrantyTemplatesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/messages",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><MessagesPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

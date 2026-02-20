@@ -46,6 +46,7 @@ interface CompanySettingsRow {
     business_hours: string | null;
     description: string | null;
     internal_notes: string | null;
+    google_analytics_id: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -93,7 +94,8 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     bankAccount: row.bank_account || '',
     businessHours: row.business_hours || '',
     description: row.description || '',
-    internalNotes: row.internal_notes || ''
+    internalNotes: row.internal_notes || '',
+    googleAnalyticsId: row.google_analytics_id || '',
 });
 
 /**
@@ -134,7 +136,8 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     bank_account: company.bankAccount || null,
     business_hours: company.businessHours || null,
     description: company.description || null,
-    internal_notes: company.internalNotes || null
+    internal_notes: company.internalNotes || null,
+    google_analytics_id: company.googleAnalyticsId || null,
 });
 
 /**

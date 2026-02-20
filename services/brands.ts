@@ -122,52 +122,68 @@ async function create(input: BrandInput): Promise<Brand> {
 }
 
 /**
- * Update existing brand
+ * Update existing brand + cascade: sync brand name in products table
  */
 async function update(id: string, input: BrandInput): Promise<Brand> {
     const companyId = await getCompanyId();
     const slug = generateSlug(input.name);
 
-    const { data, error } = await supabase
+    // 1. Fetch current name before updating (needed for cascading)
+    const { data: current, error: fetchError } = await supabase
         .from('brands')
-        .update({
-            name: input.name,
-            slug,
-            warranty_days: input.warranty_days || 90,
-            active: input.active !== undefined ? input.active : undefined
-        })
+        .select('name')
         .eq('id', id)
         .eq('company_id', companyId)
-        .select()
-        .single();
+        .maybeSingle();
+
+    if (fetchError) throw new Error(`Failed to fetch brand: ${fetchError.message}`);
+
+    const oldName = current?.name;
+
+    // 2. Update — no .select() to avoid RLS blocking returned rows
+    const updatePayload: Record<string, unknown> = {
+        name: input.name,
+        slug,
+        warranty_days: input.warranty_days || 90,
+    };
+    if (input.active !== undefined) {
+        updatePayload.active = input.active;
+    }
+
+    const { error } = await supabase
+        .from('brands')
+        .update(updatePayload)
+        .eq('id', id);
 
     if (error) throw new Error(`Failed to update brand: ${error.message}`);
 
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        active: data.active ?? true,
-        warranty_days: data.warranty_days || 90,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    // 3. Cascade: update brand name in products table
+    if (oldName && oldName !== input.name) {
+        await supabase
+            .from('products')
+            .update({ brand: input.name })
+            .eq('brand', oldName);
+    }
+
+    // 4. Fetch updated brand via separate SELECT
+    const updated = await getById(id);
+    if (!updated) throw new Error('Brand not found after update.');
+    return updated;
 }
+
 
 /**
  * Delete brand
  */
 async function deleteBrand(id: string): Promise<void> {
-    const companyId = await getCompanyId();
-
     const { error } = await supabase
         .from('brands')
         .delete()
-        .eq('id', id)
-        .eq('company_id', companyId);
+        .eq('id', id);
 
     if (error) throw new Error(`Failed to delete brand: ${error.message}`);
 }
+
 
 /**
  * Get only active brands (all brands for now since we don't have active field)

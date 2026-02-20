@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, ArrowLeft } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, Ticket, X as XIcon } from 'lucide-react';
 import { Product } from '../../types/product';
 import { SaleItem, PaymentMethod, SaleInput, DeliveryType } from '../../types/sale';
-import { calculateSaleTotals, calculateTotalPaid, calculateDeliveryTotal } from '../../utils/saleCalculations';
+import { calculateSaleTotals, calculateTotalPaid } from '../../utils/saleCalculations';
 import ProductSearchSection from '../../components/pdv/ProductSearchSection';
 import CustomerSection from '../../components/pdv/CustomerSection';
 import PaymentSection from '../../components/pdv/PaymentSection';
@@ -17,6 +17,7 @@ import { companySettingsService } from '../../services/companySettingsService';
 import { replaceWarrantyTags, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
 import { WarrantyTagData, DeliveryTypeWarranty } from '../../types/warrantyDocument';
 import { toast } from 'sonner';
+import { validateCoupon, applyCoupon, type Coupon } from '../../services/couponService';
 
 interface Customer {
     id: string;
@@ -44,8 +45,14 @@ export default function PDVPage() {
     const [deliveryCostStore, setDeliveryCostStore] = useState(0);
     const [deliveryCostCustomer, setDeliveryCostCustomer] = useState(0);
 
-    // Estado do desconto promocional
+    // Estado do desconto promocional (inclui desconto de cupom)
     const [promotionalDiscount, setPromotionalDiscount] = useState(0);
+
+    // Estado do cupom
+    const [couponCode, setCouponCode] = useState('');
+    const [couponLoading, setCouponLoading] = useState(false);
+    const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+    const [couponError, setCouponError] = useState<string | null>(null);
 
     // Estado do termo de garantia
     const [showWarrantyModal, setShowWarrantyModal] = useState(false);
@@ -80,27 +87,40 @@ export default function PDVPage() {
         fetchPaymentFees();
     }, []);
 
-    // Calcular totais
+    // Total em centavos dos itens (sem brindes)
     const { total: itemsTotal } = calculateSaleTotals(cartItems);
-
-    // Calcular desconto de brindes (valor integral dos produtos marcados como brinde)
-    const giftDiscount = cartItems.reduce((sum, item) => {
-        if (item.is_gift) {
-            return sum + (item.unit_price * item.quantity);
-        }
-        return sum;
-    }, 0);
-
-    // Calcular total de juros/taxas dos pagamentos
-    const totalFees = payments.reduce((sum, p) => {
-        const fee = (p.fee_amount || 0);
-        return sum + fee;
-    }, 0);
-
-    // Total = Produtos - Brindes - Desconto Promocional + Entrega Cliente + Juros
+    const giftDiscount = cartItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
+    const totalFees = payments.reduce((sum, p) => sum + (p.fee_amount || 0), 0);
     const total = itemsTotal - giftDiscount - promotionalDiscount + deliveryCostCustomer + totalFees;
     const totalPaid = calculateTotalPaid(payments);
     const remainingBalance = total - totalPaid;
+
+    // Total do carrinho em R$ para o cupom (sem taxas, sem entrega)
+    const cartTotalForCoupon = (itemsTotal - giftDiscount) / 100;
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        setCouponLoading(true);
+        setCouponError(null);
+        const result = await validateCoupon(couponCode, cartTotalForCoupon, 'ADMIN');
+        if (!result.valid || !result.coupon) {
+            setCouponError(result.error ?? 'Cupão inválido');
+            setAppliedCoupon(null);
+        } else {
+            setAppliedCoupon(result.coupon);
+            // discount em R$ → converter para centavos para o promotionalDiscount
+            setPromotionalDiscount(Math.round((result.discount ?? 0) * 100));
+            toast.success(`Cupom ${result.coupon.code} aplicado!`);
+        }
+        setCouponLoading(false);
+    };
+
+    const handleClearCoupon = () => {
+        setAppliedCoupon(null);
+        setCouponCode('');
+        setCouponError(null);
+        setPromotionalDiscount(0);
+    };
 
     // Adicionar produto ao carrinho
     const handleAddToCart = (product: Product, quantity: number) => {
@@ -250,6 +270,11 @@ export default function PDVPage() {
 
         try {
             const sale = await createSale(saleInput);
+            // Registrar uso do cupom se houver
+            if (appliedCoupon) {
+                await applyCoupon(appliedCoupon.id);
+                handleClearCoupon();
+            }
 
             toast.success('Venda finalizada com sucesso!', {
                 description: `Venda #${sale.id.slice(0, 8)} criada`
@@ -453,6 +478,42 @@ export default function PDVPage() {
                             deliveryPersons={deliveryPersons}
                             onDeliveryChange={handleDeliveryChange}
                         />
+
+                        {/* Cupom de desconto */}
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Ticket className="w-4 h-4 text-blue-600" />
+                                <span className="text-sm font-semibold text-slate-700">Cupom de Desconto</span>
+                            </div>
+                            {appliedCoupon ? (
+                                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                    <span className="text-sm text-green-800 font-medium">
+                                        ✅ <strong>{appliedCoupon.code}</strong> — R$ {(promotionalDiscount / 100).toFixed(2).replace('.', ',')} de desconto
+                                    </span>
+                                    <button onClick={handleClearCoupon} className="p-1 hover:bg-green-100 rounded text-green-700">
+                                        <XIcon className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <input
+                                        value={couponCode}
+                                        onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                                        onKeyDown={e => e.key === 'Enter' && handleApplyCoupon()}
+                                        placeholder="CÓDIGO DO CUPOM"
+                                        className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none font-mono uppercase text-sm"
+                                    />
+                                    <button
+                                        onClick={handleApplyCoupon}
+                                        disabled={couponLoading || !couponCode.trim()}
+                                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                    >
+                                        {couponLoading ? '...' : 'Aplicar'}
+                                    </button>
+                                </div>
+                            )}
+                            {couponError && <p className="text-xs text-red-600">{couponError}</p>}
+                        </div>
 
                         <PaymentSection
                             total={total}

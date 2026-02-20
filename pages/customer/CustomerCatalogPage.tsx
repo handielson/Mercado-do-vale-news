@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, User, LogOut, Grid, List, Search, Filter } from 'lucide-react';
+import { ShoppingBag, User, LogOut, Grid, List, Search } from 'lucide-react';
 import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
 import { catalogService } from '../../services/catalogService';
 import type { CatalogProduct } from '../../types/catalog';
 import { ModernProductCard } from '../../components/catalog/ModernProductCard';
 import { ProductCard } from '../../components/catalog/ProductCard';
 import { ShareCatalogButton } from '../../components/catalog/ShareCatalogButton';
+import { CompareProvider } from '../../contexts/CompareContext';
+import { CompareBar } from '../../components/catalog/CompareBar';
 
 export const CustomerCatalogPage: React.FC = () => {
     const { user, customer, signOut } = useAuth();
@@ -18,6 +20,12 @@ export const CustomerCatalogPage: React.FC = () => {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchQuery, setSearchQuery] = useState('');
     const [favorites, setFavorites] = useState<string[]>([]);
+    const [compareToast, setCompareToast] = useState<string | null>(null);
+
+    const showCompareToast = (msg: string) => {
+        setCompareToast(msg);
+        setTimeout(() => setCompareToast(null), 3000);
+    };
 
     // Note: Admins can now access this catalog page to preview pricing
     // They can access the admin panel via the header link
@@ -250,6 +258,7 @@ export const CustomerCatalogPage: React.FC = () => {
                                 onFavorite={handleFavorite}
                                 onShare={handleShare}
                                 isFavorite={favorites.includes(product.id)}
+                                onCompareToast={showCompareToast}
                             />
                         ))}
                     </div>
@@ -265,6 +274,13 @@ export const CustomerCatalogPage: React.FC = () => {
                     </div>
                 )}
             </main>
+
+            {/* Compare Toast */}
+            {compareToast && (
+                <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[70] bg-red-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-xl animate-fade-in">
+                    {compareToast}
+                </div>
+            )}
         </div>
     );
 };

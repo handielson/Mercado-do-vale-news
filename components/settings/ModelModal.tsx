@@ -36,8 +36,6 @@ const TemplateFieldInput: React.FC<TemplateFieldInputProps> = ({ field, value, o
     const [options, setOptions] = useState<TableOption[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // Debug log
-    console.log(`🔍[TemplateFieldInput] Field: ${field.key}, Type: ${field.field_type}, Has table_config: ${!!field.table_config} `);
 
     useEffect(() => {
         if (field.field_type === 'table_relation' && field.table_config) {
@@ -154,8 +152,6 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
 
     useEffect(() => {
         if (model) {
-            console.log('🔍 [ModelModal] Loading model:', model.name);
-            console.log('📋 [ModelModal] Template values:', model.template_values);
             setName(model.name);
             setBrandId(model.brand_id);
             setActive(model.active);
@@ -205,7 +201,6 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
             try {
                 const category = await categoryService.getById(categoryId);
                 if (category) {
-                    console.log('🔍 [ModelModal] Loaded category config:', category.name, category.config);
                     setCategoryConfig(category.config);
                 }
             } catch (error) {
@@ -256,10 +251,6 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                 eanInputRef.current.value = '';
             }
 
-            console.log('💾 [ModelModal] Saving template values:', templateValues);
-            console.log('📊 [ModelModal] Template values keys:', Object.keys(templateValues));
-            console.log('🏷️ [ModelModal] EANs to save:', finalEans);
-
             const input: ModelInput = {
                 name: name.trim(),
                 brand_id: brandId,
@@ -269,8 +260,6 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                 template_values: Object.keys(templateValues).length > 0 ? templateValues : undefined,
                 eans: finalEans.length > 0 ? finalEans : undefined
             };
-
-            console.log('📤 [ModelModal] Final input:', JSON.stringify(input, null, 2));
 
             if (model) {
                 await modelService.update(model.id, input);
@@ -309,10 +298,10 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                 <div className="flex border-b border-slate-200">
                     <button
                         onClick={() => setActiveTab('basic')}
-                        className={`flex - 1 px - 6 py - 3 font - medium transition - colors ${activeTab === 'basic'
+                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'basic'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
-                            } `}
+                            }`}
                     >
                         <div className="flex items-center justify-center gap-2">
                             <Settings size={18} />
@@ -545,15 +534,12 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                                         .filter(field => {
                                             // If no category selected, show all fields
                                             if (!categoryId || !categoryConfig) {
-                                                console.log(`🔍 [FieldConfigSection] ${field.key} field: No category, showing all`);
                                                 return true;
                                             }
 
                                             // Check if field is configured in category
                                             const fieldKey = field.key;
                                             const configValue = categoryConfig[fieldKey];
-
-                                            console.log(`🔍 [FieldConfigSection] ${fieldKey} field: {fieldKey: ${fieldKey}, currentValue: ${configValue}, configValue: ${configValue}}`);
 
                                             // If field is explicitly set to 'off', hide it
                                             if (configValue === 'off') {

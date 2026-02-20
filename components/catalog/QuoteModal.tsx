@@ -11,6 +11,8 @@ import { generateQuoteMessage, generateWhatsAppLink } from '@/utils/whatsappMess
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
+import { useCoupon } from '@/hooks/useCoupon';
+import { formatPrice } from '@/services/installmentCalculator';
 
 interface QuoteModalProps {
     product: CatalogProduct;
@@ -47,9 +49,11 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
     // Get customer context for pricing
     const { customer } = useSupabaseAuth();
     const { addItem } = useQuoteCart();
-
-    // More robust admin detection
     const isAdmin = customer?.customer_type === 'ADMIN';
+
+    // Effective price + coupon
+    const effectivePrice = getEffectivePrice(product, customer) ?? 0;
+    const coupon = useCoupon(effectivePrice, customer?.customer_type);
 
     // Update selected variant when initialVariant changes (when modal opens with pre-selected variant)
     useEffect(() => {
@@ -181,12 +185,15 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                 installmentPlan: selectedPlan,
                 delivery,
                 userType: customer?.customer_type,
-                availableColors: availableColors
+                availableColors,
+                couponCode: coupon.appliedCoupon?.code,
+                couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
             });
 
             const link = await generateWhatsAppLink(message);
-            // Use window.location.href for better mobile compatibility
             window.location.href = link;
+            // Confirm coupon usage after sending
+            await coupon.confirm();
         } catch (error) {
             console.error('Error generating WhatsApp link:', error);
             const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -365,6 +372,57 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                                             💳 Preço parcelado
                                         </span>
                                     </label>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Coupon Field */}
+                        {!isAdmin && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-700">🎟️ Cupom de desconto</label>
+                                {coupon.appliedCoupon ? (
+                                    <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                        <span className="text-sm text-green-800 font-medium">
+                                            ✅ <strong>{coupon.appliedCoupon.code}</strong> — {formatPrice(coupon.discount * 100)} de desconto
+                                        </span>
+                                        <button onClick={coupon.clear} className="text-green-600 hover:text-green-800 text-xs underline">Remover</button>
+                                    </div>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={coupon.code}
+                                            onChange={e => coupon.setCode(e.target.value.toUpperCase())}
+                                            onKeyDown={e => e.key === 'Enter' && coupon.apply()}
+                                            placeholder="CÓDIGO DO CUPOM"
+                                            className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none font-mono uppercase text-sm"
+                                        />
+                                        <button
+                                            onClick={coupon.apply}
+                                            disabled={coupon.isLoading || !coupon.code}
+                                            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                        >
+                                            {coupon.isLoading ? '...' : 'Aplicar'}
+                                        </button>
+                                    </div>
+                                )}
+                                {coupon.error && <p className="text-xs text-red-600">{coupon.error}</p>}
+                            </div>
+                        )}
+
+                        {/* Discount summary */}
+                        {coupon.discount > 0 && (
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Subtotal:</span>
+                                    <span>{formatPrice(effectivePrice * 100)}</span>
+                                </div>
+                                <div className="flex justify-between text-green-700 font-medium">
+                                    <span>Desconto ({coupon.appliedCoupon?.code}):</span>
+                                    <span>- {formatPrice(coupon.discount * 100)}</span>
+                                </div>
+                                <div className="flex justify-between text-slate-900 font-bold border-t border-green-200 pt-1 mt-1">
+                                    <span>Total:</span>
+                                    <span>{formatPrice(coupon.finalPrice * 100)}</span>
                                 </div>
                             </div>
                         )}

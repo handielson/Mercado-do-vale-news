@@ -39,6 +39,7 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
 }) => {
     const [availableFields, setAvailableFields] = useState<DynamicField[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     useEffect(() => {
         loadAvailableFields();
@@ -46,14 +47,10 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
 
     const loadAvailableFields = async () => {
         setIsRefreshing(true);
+        setLoadError(null);
         try {
-            // Load fields from Supabase (Database-First Architecture)
             const fields = await customFieldsService.list();
 
-            console.log('🔍 [FieldConfigSection] All fields from Supabase:', fields.length);
-            console.log('🔍 [FieldConfigSection] Display field:', fields.find(f => f.key === 'display'));
-
-            // Map to DynamicField format
             const allFields: DynamicField[] = fields
                 .filter(f => f.category === 'basic' || f.category === 'spec')
                 .map(f => ({
@@ -62,17 +59,11 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                     category: f.category === 'basic' ? 'basic' : 'specs'
                 }));
 
-            console.log('🔍 [FieldConfigSection] Filtered fields:', allFields.length);
-            console.log('🔍 [FieldConfigSection] Display in filtered:', allFields.find(f => f.key === 'display'));
-
-            // Sort alphabetically by label
             allFields.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-
             setAvailableFields(allFields);
         } catch (error) {
             console.error('Error loading custom fields:', error);
-            // Show user-friendly error
-            alert('Erro ao carregar campos customizados. Verifique sua conexão.');
+            setLoadError('Erro ao carregar campos. Verifique sua conexão e tente novamente.');
         } finally {
             setIsRefreshing(false);
         }
@@ -114,7 +105,12 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                 Configure visibilidade, obrigatoriedade, exclusão do EAN e uso na geração automática de nome
             </p>
 
-            {availableFields.length === 0 ? (
+            {loadError ? (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    ⚠️ {loadError}
+                    <button onClick={loadAvailableFields} className="ml-2 underline font-medium">Tentar novamente</button>
+                </div>
+            ) : availableFields.length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
                     Carregando campos disponíveis...
                 </div>
@@ -161,20 +157,9 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                             </thead>
                             <tbody className="divide-y divide-slate-200">
                                 {availableFields.map((field) => {
-                                    // Access config directly without TypeScript cast issues
                                     const currentValue = (config[field.key] as FieldRequirement) || 'optional';
                                     const isEANExcluded = eanExcludedFields.includes(field.key);
                                     const isInAutoNaming = autoNamingFields.includes(field.key);
-
-                                    // Debug: Log field config
-                                    if (field.key === 'display') {
-                                        console.log(`🔍 [FieldConfigSection] display field:`, {
-                                            fieldKey: field.key,
-                                            currentValue,
-                                            configValue: config[field.key],
-                                            fullConfig: config
-                                        });
-                                    }
 
                                     return (
                                         <tr key={field.key} className="hover:bg-slate-50 transition-colors">

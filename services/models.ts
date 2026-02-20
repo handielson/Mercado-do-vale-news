@@ -183,47 +183,25 @@ async function update(id: string, input: ModelInput): Promise<Model> {
     const companyId = await getCompanyId();
     const slug = generateSlug(input.name);
 
-    console.log('💾 [ModelService] Updating model:', id);
-    console.log('📝 [ModelService] Input template_values:', input.template_values);
-    console.log('📊 [ModelService] Template values type:', typeof input.template_values);
-
-    const { data, error } = await supabase
+    const { error } = await supabase
         .from('models')
         .update({
             name: input.name,
             slug,
             brand_id: input.brand_id,
-            // Template fields
             category_id: input.category_id,
             description: input.description,
             template_values: input.template_values,
-            // EAN codes
             eans: input.eans
         })
         .eq('id', id)
-        .eq('company_id', companyId)
-        .select()
-        .single();
+        .eq('company_id', companyId);
 
     if (error) throw new Error(`Failed to update model: ${error.message}`);
 
-    console.log('✅ [ModelService] Saved template_values:', data.template_values);
-
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        brand_id: data.brand_id,
-        active: true,
-        created: data.created_at,
-        updated: data.updated_at,
-        // Template fields
-        category_id: data.category_id,
-        description: data.description,
-        template_values: data.template_values,
-        // EAN codes
-        eans: data.eans
-    };
+    const updated = await getById(id);
+    if (!updated) throw new Error('Model not found after update.');
+    return updated;
 }
 
 /**

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Users, Plus, Search, Filter, Edit, Trash2, Eye, UserCheck, UserX } from 'lucide-react';
+import { Users, Plus, Search, Filter, Edit, Trash2, Eye, UserCheck, UserX, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer, CustomerFilters } from '../../types/customer';
+import { welcomeMessageService, buildMessage, buildWhatsAppUrl } from '../../services/welcomeMessageService';
 
 /**
  * Customer List Page
@@ -25,11 +26,16 @@ export default function CustomerListPage() {
     const [showFilters, setShowFilters] = useState(false);
     const [filters, setFilters] = useState<CustomerFilters>({});
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+    const [welcomeTemplate, setWelcomeTemplate] = useState('');
 
     // Load customers
     useEffect(() => {
         loadCustomers();
     }, [filters]);
+
+    useEffect(() => {
+        welcomeMessageService.getTemplate().then(setWelcomeTemplate);
+    }, []);
 
     const loadCustomers = async () => {
         try {
@@ -60,6 +66,16 @@ export default function CustomerListPage() {
             console.error('Error deleting customer:', err);
             toast.error('Erro ao deletar cliente');
         }
+    };
+
+    const handleSendWelcome = (customer: Customer) => {
+        if (!customer.phone) {
+            toast.error('Cliente sem telefone cadastrado');
+            return;
+        }
+        const message = buildMessage(welcomeTemplate, customer);
+        const url = buildWhatsAppUrl(customer.phone, message);
+        window.open(url, '_blank');
     };
 
     // Format CPF/CNPJ
@@ -285,6 +301,17 @@ export default function CustomerListPage() {
                                                 title="Visualizar"
                                             >
                                                 <Eye className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleSendWelcome(customer)}
+                                                className={`p-2 rounded-lg transition-colors ${customer.phone
+                                                        ? 'text-green-600 hover:bg-green-50'
+                                                        : 'text-slate-300 cursor-not-allowed'
+                                                    }`}
+                                                title={customer.phone ? 'Enviar boas-vindas via WhatsApp' : 'Cliente sem telefone'}
+                                                disabled={!customer.phone}
+                                            >
+                                                <MessageCircle className="w-4 h-4" />
                                             </button>
                                             <button
                                                 onClick={() => navigate(`/admin/customers/${customer.id}/edit`)}

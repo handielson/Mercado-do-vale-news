@@ -23,6 +23,7 @@ export function ModelsPage() {
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
     const [editingModel, setEditingModel] = useState<Model | null>(null);
+    const [deleteError, setDeleteError] = useState('');
 
     const loadData = async () => {
         try {
@@ -59,11 +60,12 @@ export function ModelsPage() {
         }
 
         try {
+            setDeleteError('');
             await modelService.delete(model.id);
             await loadData();
         } catch (error) {
             console.error('Error deleting model:', error);
-            alert('Erro ao excluir modelo');
+            setDeleteError('Erro ao excluir modelo. Tente novamente.');
         }
     };
 
@@ -105,6 +107,14 @@ export function ModelsPage() {
                     Novo Modelo
                 </button>
             </div>
+
+            {/* Delete Error */}
+            {deleteError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center justify-between">
+                    {deleteError}
+                    <button onClick={() => setDeleteError('')} className="text-red-500 hover:text-red-700 font-bold ml-4">×</button>
+                </div>
+            )}
 
             {/* Models Table */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

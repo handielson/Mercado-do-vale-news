@@ -5,53 +5,44 @@ import { formatPrice } from '@/services/installmentCalculator';
  * Generate WhatsApp quote message for multiple products
  * Respects payment options selected for each item
  */
-export function generateMultiProductQuoteMessage(items: QuoteCartItem[]): string {
+export function generateMultiProductQuoteMessage(
+    items: QuoteCartItem[],
+    couponCode?: string,
+    couponDiscount?: number
+): string {
     if (items.length === 0) {
         return '';
     }
 
-    let message = `*📝 ORÇAMENTO DE PRODUTOS*\n`;
-    message += `📅 Data: ${new Date().toLocaleDateString('pt-BR')}\n\n`;
+    let message = `*\ud83d\udcdd OR\u00c7AMENTO DE PRODUTOS*\n`;
+    message += `\ud83d\udcc5 Data: ${new Date().toLocaleDateString('pt-BR')}\n\n`;
     message += `*ITENS:*\n`;
 
     items.forEach((item, index) => {
-        // Extract base product name without specs (if they exist)
-        // Product name might be like "Redmi note 15 pró 4g, 256GB/8GB" or just "Redmi note 15 pró 4g"
         let productName = item.product.name;
-
-        // Remove any existing RAM/Storage pattern from the name
-        // Patterns: "256GB/8GB", "8GB/256GB", "12GB/512GB", etc.
         productName = productName.replace(/,?\s*\d+GB\/\d+GB\s*$/i, '').trim();
 
-        // Build the product info with name and specs on separate lines
         message += `\n${index + 1}. *${productName}*\n`;
 
-        // Only show RAM/Storage if they exist (smartphones)
         if (item.variant.ram && item.variant.storage) {
-            message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
+            message += `   \ud83d\udcf1 ${item.variant.ram}/${item.variant.storage}\n`;
         }
 
-        // Cash price (if selected OR if paymentOptions doesn't exist - backward compatibility)
         if (item.paymentOptions?.showCash ?? true) {
-            message += `   💰 ${formatPrice(item.price)} à vista\n`;
+            message += `   \ud83d\udcb0 ${formatPrice(item.price)} \u00e0 vista\n`;
         }
 
-        // Installment price (if selected OR if paymentOptions doesn't exist - backward compatibility)
         if ((item.paymentOptions?.showInstallment ?? true) && item.installmentPlan.installments > 1) {
             const { installments, value, total } = item.installmentPlan;
-            message += `   💳 ${installments}x de ${formatPrice(value)}\n`;
+            message += `   \ud83d\udcb3 ${installments}x de ${formatPrice(value)}\n`;
             message += `      Total: ${formatPrice(total)}\n`;
         }
 
-        // Available colors
         if (item.availableColors.length > 0) {
-            message += `   🎨 Cores: ${item.availableColors.join(', ')}\n`;
+            message += `   \ud83c\udfa8 Cores: ${item.availableColors.join(', ')}\n`;
         }
     });
 
-    // ─── Totals: respect each item's payment mode ───────────────────────────
-    // An item is "parcelado" if: showInstallment is true AND installments > 1
-    // Otherwise it's treated as "à vista" (even if both options are shown)
     const cashItems = items.filter(i => !((i.paymentOptions?.showInstallment ?? true) && i.installmentPlan.installments > 1));
     const installmentItems = items.filter(i => (i.paymentOptions?.showInstallment ?? true) && i.installmentPlan.installments > 1);
 
@@ -61,27 +52,32 @@ export function generateMultiProductQuoteMessage(items: QuoteCartItem[]): string
 
     const isMixed = cashItems.length > 0 && installmentItems.length > 0;
     const onlyCash = installmentItems.length === 0;
-    const onlyCredit = cashItems.length === 0;
 
-    message += `\n*━━━ RESUMO DO ORÇAMENTO ━━━*\n`;
+    message += `\n*\u2501\u2501\u2501 RESUMO DO OR\u00c7AMENTO \u2501\u2501\u2501*\n`;
 
+    // Subtotal
     if (onlyCash) {
-        // All items à vista
-        message += `💰 Total à vista: *${formatPrice(grandTotal)}*\n`;
-    } else if (onlyCredit) {
-        // All items parcelado
+        message += `\ud83d\udcb0 Total \u00e0 vista: *${formatPrice(grandTotal)}*\n`;
+    } else if (!isMixed) {
         const maxInstallments = Math.max(...installmentItems.map(i => i.installmentPlan.installments));
-        message += `💳 Total parcelado (${maxInstallments}x): *${formatPrice(grandTotal)}*\n`;
+        message += `\ud83d\udcb3 Total parcelado (${maxInstallments}x): *${formatPrice(grandTotal)}*\n`;
     } else {
-        // Mixed cart
-        message += `💰 Itens à vista: *${formatPrice(cashSubtotal)}*\n`;
-        message += `💳 Itens parcelados: *${formatPrice(installmentSubtotal)}*\n`;
-        message += `📊 Total geral: *${formatPrice(grandTotal)}*\n`;
+        message += `\ud83d\udcb0 Itens \u00e0 vista: *${formatPrice(cashSubtotal)}*\n`;
+        message += `\ud83d\udcb3 Itens parcelados: *${formatPrice(installmentSubtotal)}*\n`;
+        message += `\ud83d\udcca Total geral: *${formatPrice(grandTotal)}*\n`;
+    }
+
+    // Coupon discount line
+    if (couponCode && couponDiscount && couponDiscount > 0) {
+        const discountCents = Math.round(couponDiscount * 100);
+        const finalTotal = grandTotal - discountCents;
+        message += `\ud83c\udf9f\ufe0f Cupom *${couponCode}*: -${formatPrice(discountCents)}\n`;
+        message += `\u2705 *Total com desconto: ${formatPrice(Math.max(0, finalTotal))}*\n`;
     }
 
     message += `\n---\n`;
-    message += `🎯 *Orçamento exclusivo Mercado do Vale!*\n`;
-    message += `Garanta o seu agora enquanto está disponível em estoque! 🔥`;
+    message += `\ud83c\udfaf *Or\u00e7amento exclusivo Mercado do Vale!*\n`;
+    message += `Garanta o seu agora enquanto est\u00e1 dispon\u00edvel em estoque! \ud83d\udd25`;
 
     return message;
 }
@@ -94,17 +90,17 @@ export function generateMultiProductQuoteMessage(items: QuoteCartItem[]): string
  */
 export function generateMultiProductWhatsAppLink(
     items: QuoteCartItem[],
-    whatsappNumber?: string
+    whatsappNumber?: string,
+    couponCode?: string,
+    couponDiscount?: number
 ): string {
-    const message = generateMultiProductQuoteMessage(items);
+    const message = generateMultiProductQuoteMessage(items, couponCode, couponDiscount);
     const encodedMessage = encodeURIComponent(message);
 
-    // If no number provided, open WhatsApp with message ready (user chooses recipient)
     if (!whatsappNumber) {
         return `whatsapp://send?text=${encodedMessage}`;
     }
 
-    // If number provided, send to specific contact
     const cleanNumber = whatsappNumber.replace(/\D/g, '');
     return `https://wa.me/${cleanNumber}?text=${encodedMessage}`;
 }
