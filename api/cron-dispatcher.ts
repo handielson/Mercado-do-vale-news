@@ -6,24 +6,40 @@ export default async function handler(req: any, res: any) {
     // Para fins de teste/dispatch simples, permitimos GET/POST.
 
     const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
         return res.status(500).json({ error: 'Supabase credentials missing from environment' });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+        }
+    });
 
     try {
         // 1. Fetch Telegram settings
-        const { data: settings, error } = await supabase
+        const { data: rows, error } = await supabase
             .from('telegram_settings')
             .select('*')
-            .limit(1)
-            .single();
+            .limit(1);
+
+        const settings = rows?.[0];
 
         if (error || !settings || !settings.active || !settings.bot_token || !settings.chat_id) {
-            return res.status(200).json({ message: 'Telegram integration inactive or not fully configured' });
+            return res.status(200).json({
+                message: 'Telegram integration inactive or not fully configured',
+                debug: {
+                    error: error?.message || null,
+                    errorDetails: error,
+                    hasSettings: !!settings,
+                    isActive: settings?.active || false,
+                    hasToken: !!settings?.bot_token,
+                    hasChatId: !!settings?.chat_id
+                }
+            });
         }
 
         if (!settings.templates || !Array.isArray(settings.templates)) {
@@ -32,27 +48,37 @@ export default async function handler(req: any, res: any) {
 
         // 2. Discover the current hour in Brazil timezone
         const now = new Date();
-        const formatter = new Intl.DateTimeFormat('pt-BR', {
+        const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
             hour: '2-digit',
             minute: '2-digit',
             timeZone: 'America/Sao_Paulo'
         });
 
+        const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            timeZone: 'America/Sao_Paulo'
+        });
+
         // Convert current time to "HH:00" mapping (crons are executed hourly)
-        const parts = formatter.formatToParts(now);
+        const parts = timeFormatter.formatToParts(now);
         const hour = parts.find(p => p.type === 'hour')?.value || '00';
         // Se a cron rodou, ela quer processar quem agendou pra "19:00" às 19:xx
         const currentHourPrefix = `${hour}:`;
 
-        // 3. Find templates scheduled for this specific hour
-        const scheduledTemplates = settings.templates.filter((t: any) =>
-            t.type === 'scheduled' &&
-            t.schedule_time &&
-            t.schedule_time.startsWith(currentHourPrefix)
-        );
+        const forceTemplateId = req.query?.forceTemplateId;
+
+        // 3. Find templates scheduled for this specific hour (or forced)
+        const scheduledTemplates = settings.templates.filter((t: any) => {
+            if (forceTemplateId) {
+                return t.id === forceTemplateId;
+            }
+            return t.type === 'scheduled' && t.schedule_time && t.schedule_time.startsWith(currentHourPrefix);
+        });
 
         if (scheduledTemplates.length === 0) {
-            return res.status(200).json({ message: `No templates scheduled for hour ${hour}` });
+            return res.status(200).json({ message: forceTemplateId ? 'Template não encontrado.' : `No templates scheduled for hour ${hour}` });
         }
 
         // 4. Gather Data for Context Variables
@@ -79,16 +105,16 @@ export default async function handler(req: any, res: any) {
             lucro_total = sales.reduce((sum, s) => sum + (s.profit || 0), 0);
         }
 
-        const { data: dateResult } = await supabase.rpc('now'); // Pegando tempo real do banco
+        const { data: dateResult } = await supabase.rpc('now');
 
         const fmtMoney = (val: number) => `R$ ${val.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 
         // 4.2 Estoque Global
         const { data: products, error: productsError } = await supabase
             .from('products')
-            .select('name, stock, specs, category_id')
-            .eq('is_active', true)
-            .gt('stock', 0);
+            .select('name, stock_quantity, specs, category_id, model_id')
+            .eq('status', 'active')
+            .gt('stock_quantity', 0);
 
         let estoqueCelularesTotal = 0;
         let estoqueGeralTotal = 0;
@@ -98,7 +124,7 @@ export default async function handler(req: any, res: any) {
             const celularesMap = new Map<string, number>();
 
             products.forEach(p => {
-                const qtd = p.stock || 0;
+                const qtd = p.stock_quantity || 0;
                 estoqueGeralTotal += qtd;
 
                 // Heurística segura: assumindo que Celulares/Smartphones contem certas keywords na categoria ou nome (ex: iPhone, Galaxy, Xiaomi)
@@ -108,9 +134,13 @@ export default async function handler(req: any, res: any) {
 
                 if (isCelular) {
                     estoqueCelularesTotal += qtd;
-                    // Tenta pegar a cor pra evitar agrupar "Azul" com "Vermelho"
+                    // Agrupa por nome + cor + memória para diferenciar variantes
                     const color = p.specs?.color || p.specs?.cor || '';
-                    const groupingKey = color ? `${p.name} - ${color}` : p.name;
+                    const ram = p.specs?.ram || '';
+                    const storage = p.specs?.storage || '';
+                    const memory = ram && storage ? `${ram}/${storage}` : (ram || storage);
+                    const variant = [color, memory].filter(Boolean).join(' - ');
+                    const groupingKey = variant ? `${p.name} - ${variant}` : p.name;
 
                     celularesMap.set(groupingKey, (celularesMap.get(groupingKey) || 0) + qtd);
                 }
@@ -128,7 +158,7 @@ export default async function handler(req: any, res: any) {
             '{qtd_vendas}': qtd_vendas.toString(),
             '{faturamento}': fmtMoney(faturamento),
             '{lucro_total}': fmtMoney(lucro_total),
-            '{data}': formatter.format(now).split(',')[0],
+            '{data}': dateFormatter.format(now),
             '{estoque_celulares}': estoqueCelularesTotal.toString(),
             '{estoque_geral_loja}': estoqueGeralTotal.toString(),
             '{estoque_lista_celulares}': celularListStr,
@@ -140,8 +170,7 @@ export default async function handler(req: any, res: any) {
         for (const template of scheduledTemplates) {
             let msg = template.content;
             Object.keys(dict).forEach(key => {
-                const regex = new RegExp(key, 'g');
-                msg = msg.replace(regex, dict[key]);
+                msg = msg.split(key).join(dict[key] || '');
             });
 
             // Enviar requisição HTTPS pro Telegram
