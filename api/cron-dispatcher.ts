@@ -201,15 +201,20 @@ export default async function handler(req: any, res: any) {
         let agendaSemanaTxt = '';
         try {
             const nlDb = (s: string | null) => (s || '').replace(/\\n/g, '\n');
-            const { data: allSlots } = await supabase
+            // Escapa chars que quebram Markdown v1 nos campos dinâmicos
+            const safe = (s: string | null) => nlDb(s).replace(/[*_`[\]]/g, (c) => c === '_' ? ' ' : '');
+
+            const { data: allSlots, error: slotsErr } = await supabase
                 .from('instagram_schedule')
                 .select('*')
                 .eq('active', true)
                 .order('day_of_week')
                 .order('scheduled_time');
 
+            if (slotsErr) console.error('instagram_schedule RLS/error:', slotsErr.message);
+
             if (allSlots && allSlots.length > 0) {
-                agendaSemanaTxt = `📅 *PROGRAMAÇÃO INSTAGRAM DA SEMANA*\n${'═'.repeat(30)}\n\n`;
+                agendaSemanaTxt = `📅 *PROGRAMAÇÃO INSTAGRAM DA SEMANA*\n${'═'.repeat(28)}\n\n`;
 
                 const byDay = new Map<number, typeof allSlots>();
                 for (const slot of allSlots) {
@@ -218,27 +223,32 @@ export default async function handler(req: any, res: any) {
                 }
 
                 for (const [day, slots] of Array.from(byDay.entries()).sort((a, b) => a[0] - b[0])) {
-                    agendaSemanaTxt += `📆 *${DAY_NAMES[day]}*\n${'─'.repeat(25)}\n`;
+                    agendaSemanaTxt += `📆 *${DAY_NAMES[day]}*\n${'─'.repeat(22)}\n`;
                     for (const slot of slots) {
                         const time = slot.scheduled_time?.slice(0, 5) || '??:??';
                         const emoji = CONTENT_EMOJI[slot.content_type] || '📱';
                         const label = CONTENT_LABEL[slot.content_type] || slot.content_type;
                         agendaSemanaTxt += `\n${emoji} *${time} — ${label}*\n`;
-                        if (slot.hook) agendaSemanaTxt += `🎣 _${nlDb(slot.hook)}_\n`;
-                        if (slot.caption) agendaSemanaTxt += `📝 ${nlDb(slot.caption)}\n`;
-                        if (slot.cta) agendaSemanaTxt += `👉 ${nlDb(slot.cta)}\n`;
-                        if (slot.hashtags) agendaSemanaTxt += `🏷️ ${slot.hashtags}\n`;
-                        if (slot.visual_notes) agendaSemanaTxt += `🎨 _${nlDb(slot.visual_notes)}_\n`;
+                        if (slot.hook) agendaSemanaTxt += `🎣 ${safe(slot.hook)}\n`;
+                        if (slot.caption) agendaSemanaTxt += `📝 ${safe(slot.caption)}\n`;
+                        if (slot.cta) agendaSemanaTxt += `👉 ${safe(slot.cta)}\n`;
+                        if (slot.hashtags) agendaSemanaTxt += `🏷 ${safe(slot.hashtags)}\n`;
+                        if (slot.visual_notes) agendaSemanaTxt += `🎨 ${safe(slot.visual_notes)}\n`;
                     }
                     agendaSemanaTxt += '\n';
                 }
 
-                agendaSemanaTxt += `✅ _Total: ${allSlots.length} posts planejados para a semana._`;
+                // Garantir que não ultrapassa 3800 chars (limite Telegram = 4096)
+                if (agendaSemanaTxt.length > 3800) {
+                    agendaSemanaTxt = agendaSemanaTxt.substring(0, 3700) + `\n\n... [+${allSlots.length} posts. Ver agenda completa no admin]`;
+                } else {
+                    agendaSemanaTxt += `✅ Total: ${allSlots.length} posts planejados para a semana.`;
+                }
             } else {
-                agendaSemanaTxt = '_Nenhum slot de Instagram cadastrado para a semana._';
+                agendaSemanaTxt = 'Nenhum slot de Instagram cadastrado para a semana.';
             }
         } catch {
-            agendaSemanaTxt = '_Erro ao carregar agenda Instagram._';
+            agendaSemanaTxt = 'Erro ao carregar agenda Instagram.';
         }
 
         const builtinDict: Record<string, string> = {
@@ -285,14 +295,25 @@ export default async function handler(req: any, res: any) {
                 msg = msg.split(key).join(dict[key] || '');
             });
 
+            // Truncar se ultrapassar o limite do Telegram (4096 chars)
+            if (msg.length > 4000) msg = msg.substring(0, 3900) + '\n\n... [mensagem truncada]';
+
             // Enviar requisição HTTPS pro Telegram
             const url = `https://api.telegram.org/bot${settings.bot_token}/sendMessage`;
             try {
-                await fetch(url, {
+                const tgRes = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ chat_id: settings.chat_id, text: msg, parse_mode: 'Markdown' }),
                 });
+                if (!tgRes.ok) {
+                    // Tentar sem Markdown se falhar
+                    await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chat_id: settings.chat_id, text: msg }),
+                    });
+                }
                 disparosSuccess++;
             } catch (e) {
                 console.error('Falha ao enviar disparo:', template.name);
