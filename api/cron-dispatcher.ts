@@ -209,6 +209,96 @@ export default async function handler(req: any, res: any) {
             }
         }
 
+        // ── 7. Instagram Content Schedule (todo dia às 8h de Brasília) ──────────
+        if (hour === '08') {
+            try {
+                const dayOfWeekParts = new Intl.DateTimeFormat('pt-BR', {
+                    weekday: 'long',
+                    timeZone: 'America/Sao_Paulo'
+                }).formatToParts(now);
+                const dayNameFull = dayOfWeekParts.find(p => p.type === 'weekday')?.value || '';
+
+                // Mapear nome do dia para número 0-6 (Dom=0)
+                const dayMap: Record<string, number> = {
+                    'domingo': 0, 'segunda-feira': 1, 'terça-feira': 2,
+                    'quarta-feira': 3, 'quinta-feira': 4, 'sexta-feira': 5, 'sábado': 6
+                };
+                const dayOfWeek = dayMap[dayNameFull.toLowerCase()];
+
+                if (dayOfWeek !== undefined) {
+                    const { data: instagramSlots } = await supabase
+                        .from('instagram_schedule')
+                        .select('*')
+                        .eq('day_of_week', dayOfWeek)
+                        .eq('active', true)
+                        .eq('send_telegram_reminder', true)
+                        .order('scheduled_time');
+
+                    if (instagramSlots && instagramSlots.length > 0) {
+                        const dayCapitalized = dayNameFull.charAt(0).toUpperCase() + dayNameFull.slice(1);
+                        const contentEmoji: Record<string, string> = {
+                            story: '📸', reels: '🎬', carrossel: '🎴', post: '📷'
+                        };
+                        const contentLabel: Record<string, string> = {
+                            story: 'Story', reels: 'Reels', carrossel: 'Carrossel', post: 'Post Feed'
+                        };
+
+                        let instaMsg = `📅 *Cronograma Instagram — ${dayCapitalized}*\n`;
+                        instaMsg += `_Seu guia completo de conteúdo para hoje. Copie e poste!_ 🚀\n`;
+                        instaMsg += `${'─'.repeat(30)}\n\n`;
+
+                        for (const slot of instagramSlots) {
+                            const time = slot.scheduled_time?.slice(0, 5) || '??:??';
+                            const emoji = contentEmoji[slot.content_type] || '📱';
+                            const label = contentLabel[slot.content_type] || slot.content_type;
+
+                            instaMsg += `${emoji} *${time} — ${label}*\n`;
+
+                            if (slot.hook) {
+                                instaMsg += `🎣 *Hook:* _${slot.hook}_\n\n`;
+                            }
+
+                            if (slot.caption) {
+                                instaMsg += `📝 *Legenda pronta:*\n${slot.caption}\n\n`;
+                            }
+
+                            if (slot.cta) {
+                                instaMsg += `👉 *CTA:* ${slot.cta}\n`;
+                            }
+
+                            if (slot.hashtags) {
+                                instaMsg += `🏷️ ${slot.hashtags}\n`;
+                            }
+
+                            if (slot.visual_notes) {
+                                instaMsg += `🎨 *Visual:* ${slot.visual_notes}\n`;
+                            }
+
+                            instaMsg += `\n${'─'.repeat(30)}\n\n`;
+                        }
+
+                        instaMsg += `✅ _${instagramSlots.length} post(s) planejado(s) para hoje._\n`;
+                        instaMsg += `💡 _Acesse o Estúdio de Marketing para gerar as artes!_`;
+
+                        const instaUrl = `https://api.telegram.org/bot${settings.bot_token}/sendMessage`;
+                        await fetch(instaUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                chat_id: settings.chat_id,
+                                text: instaMsg,
+                                parse_mode: 'Markdown'
+                            }),
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('Falha ao enviar cronograma Instagram:', e);
+                // Não bloqueia o retorno principal
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────────
+
         return res.status(200).json({
             success: true,
             message: `Cron ran successfully. Dispatched ${disparosSuccess} templates.`

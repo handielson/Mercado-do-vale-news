@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, Heart, MessageCircle, Send, Bookmark, MoreHorizontal, CheckCircle2 } from 'lucide-react';
+import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, Heart, MessageCircle, Send, Bookmark, MoreHorizontal, CheckCircle2, Calendar, Trash2, Clock, ToggleLeft, ToggleRight, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
@@ -9,6 +9,7 @@ import { formatCurrency } from '../../../utils/saleCalculations';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getCompanyData } from '../../../services/companyService';
 import { Company } from '../../../types/company';
+import { instagramScheduleService, InstagramSlot, CONTENT_TYPE_LABELS, DAY_LABELS, ContentType } from '../../../services/instagramScheduleService';
 
 const BACKGROUND_OPTIONS = [
     { id: 'dark', label: 'Dark Premium', class: 'bg-gradient-to-br from-slate-900 to-black' },
@@ -46,6 +47,27 @@ export default function MarketingPage() {
     const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
     const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
     const [format, setFormat] = useState<'feed' | 'status'>('feed');
+    const [activeTab, setActiveTab] = useState<'studio' | 'agenda'>('studio');
+
+    // Agenda Instagram
+    const [scheduleSlots, setScheduleSlots] = useState<InstagramSlot[]>([]);
+    const [scheduleLoading, setScheduleLoading] = useState(false);
+    const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay());
+    const [editingSlot, setEditingSlot] = useState<InstagramSlot | null>(null);
+    const [showSlotForm, setShowSlotForm] = useState(false);
+    const [slotForm, setSlotForm] = useState<Partial<InstagramSlot & { id?: string }>>({
+        day_of_week: new Date().getDay(),
+        scheduled_time: '09:00',
+        content_type: 'story' as ContentType,
+        hook: '',
+        caption: '',
+        cta: '',
+        hashtags: '',
+        visual_notes: '',
+        send_telegram_reminder: true,
+        active: true,
+        sort_order: 0
+    });
 
     // Carregar dados reais da empresa (Telefone, Instagram, Watermark)
     const loadCompanyData = async () => {
@@ -73,6 +95,72 @@ export default function MarketingPage() {
             window.removeEventListener('company_settings_updated', handleSettingsUpdate);
         };
     }, []);
+
+    // Carregar agenda
+    const loadSchedule = async () => {
+        setScheduleLoading(true);
+        try {
+            const data = await instagramScheduleService.list();
+            setScheduleSlots(data);
+        } catch {
+            toast.error('Erro ao carregar agenda');
+        } finally {
+            setScheduleLoading(false);
+        }
+    };
+
+    useEffect(() => { loadSchedule(); }, []);
+
+    const handleToggleSlotActive = async (slot: InstagramSlot) => {
+        try {
+            await instagramScheduleService.toggleActive(slot.id, !slot.active);
+            setScheduleSlots(prev => prev.map(s => s.id === slot.id ? { ...s, active: !s.active } : s));
+        } catch { toast.error('Erro ao atualizar slot'); }
+    };
+
+    const handleDeleteSlot = async (id: string) => {
+        if (!window.confirm('Excluir este slot?')) return;
+        try {
+            await instagramScheduleService.delete(id);
+            setScheduleSlots(prev => prev.filter(s => s.id !== id));
+            toast.success('Slot excluído!');
+        } catch { toast.error('Erro ao excluir slot'); }
+    };
+
+    const handleOpenNewSlot = () => {
+        setEditingSlot(null);
+        setSlotForm({
+            day_of_week: selectedDay,
+            scheduled_time: '09:00',
+            content_type: 'story' as ContentType,
+            hook: '', caption: '', cta: '', hashtags: '', visual_notes: '',
+            send_telegram_reminder: true, active: true, sort_order: scheduleSlots.filter(s => s.day_of_week === selectedDay).length
+        });
+        setShowSlotForm(true);
+    };
+
+    const handleOpenEditSlot = (slot: InstagramSlot) => {
+        setEditingSlot(slot);
+        setSlotForm({ ...slot, scheduled_time: slot.scheduled_time?.slice(0, 5) });
+        setShowSlotForm(true);
+    };
+
+    const handleSaveSlot = async () => {
+        try {
+            const payload: any = { ...slotForm };
+            if (editingSlot) {
+                const updated = await instagramScheduleService.update(editingSlot.id, payload);
+                setScheduleSlots(prev => prev.map(s => s.id === editingSlot.id ? updated : s));
+                toast.success('Slot atualizado!');
+            } else {
+                const created = await instagramScheduleService.create(payload);
+                setScheduleSlots(prev => [...prev, created]);
+                toast.success('Slot criado!');
+            }
+            setShowSlotForm(false);
+            setEditingSlot(null);
+        } catch { toast.error('Erro ao salvar slot'); }
+    };
 
     // Produto Logic
     const [searchQuery, setSearchQuery] = useState('');
@@ -332,8 +420,25 @@ export default function MarketingPage() {
                         Estúdio de Marketing
                     </h1>
                     <p className="text-slate-500 mt-1">
-                        Crie e baixe artes instantâneas para o Feed e WhatsApp puxando os preços vivos do catálogo.
+                        Crie artes, baixe em lote e gerencie o cronograma semanal do Instagram.
                     </p>
+                    {/* Tab Switcher */}
+                    <div className="flex gap-1 mt-3 bg-slate-100 p-1 rounded-lg w-fit border border-slate-200">
+                        <button
+                            onClick={() => setActiveTab('studio')}
+                            className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all flex items-center gap-1.5 ${activeTab === 'studio' ? 'bg-white shadow text-pink-600' : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            <Sparkles className="w-3.5 h-3.5" /> Gerador de Arte
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('agenda')}
+                            className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all flex items-center gap-1.5 ${activeTab === 'agenda' ? 'bg-white shadow text-pink-600' : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            <Calendar className="w-3.5 h-3.5" /> Agenda Semanal
+                        </button>
+                    </div>
                 </div>
                 <div className="flex items-center gap-4">
 
@@ -903,6 +1008,301 @@ export default function MarketingPage() {
                 </div>
 
             </div>
+
+            {/* ═══════════ AGENDA SEMANAL ═══════════ */}
+            {activeTab === 'agenda' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+
+                    {/* Day Selector */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                        <div className="flex gap-1 overflow-x-auto pb-1">
+                            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d, i) => {
+                                const count = scheduleSlots.filter(s => s.day_of_week === i && s.active).length;
+                                return (
+                                    <button
+                                        key={i}
+                                        onClick={() => setSelectedDay(i)}
+                                        className={`flex flex-col items-center px-4 py-2.5 rounded-lg text-sm font-bold transition-all min-w-[60px] ${selectedDay === i
+                                                ? 'bg-pink-600 text-white shadow-md'
+                                                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                                            }`}
+                                    >
+                                        <span>{d}</span>
+                                        {count > 0 && (
+                                            <span className={`text-[10px] mt-0.5 font-semibold ${selectedDay === i ? 'text-pink-100' : 'text-pink-500'}`}>
+                                                {count} post{count > 1 ? 's' : ''}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Slots do Dia + Botão Adicionar */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+                            <h2 className="font-bold text-slate-800 flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-pink-500" />
+                                {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][selectedDay]}
+                                <span className="text-sm font-normal text-slate-400">
+                                    — {scheduleSlots.filter(s => s.day_of_week === selectedDay).length} slot(s)
+                                </span>
+                            </h2>
+                            <button
+                                onClick={handleOpenNewSlot}
+                                className="flex items-center gap-1.5 bg-pink-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-pink-700 transition-colors"
+                            >
+                                <Plus className="w-4 h-4" /> Adicionar Slot
+                            </button>
+                        </div>
+
+                        {scheduleLoading ? (
+                            <div className="p-8 text-center text-slate-400">Carregando...</div>
+                        ) : (
+                            <div className="divide-y divide-slate-100">
+                                {scheduleSlots
+                                    .filter(s => s.day_of_week === selectedDay)
+                                    .sort((a, b) => a.scheduled_time.localeCompare(b.scheduled_time))
+                                    .map(slot => (
+                                        <div key={slot.id} className={`p-4 transition-colors ${slot.active ? '' : 'opacity-50 bg-slate-50'}`}>
+                                            <div className="flex items-start gap-3">
+                                                {/* Toggle ativo */}
+                                                <button onClick={() => handleToggleSlotActive(slot)} className="mt-1 shrink-0" title={slot.active ? 'Desativar' : 'Ativar'}>
+                                                    {slot.active
+                                                        ? <ToggleRight className="w-6 h-6 text-green-500" />
+                                                        : <ToggleLeft className="w-6 h-6 text-slate-300" />}
+                                                </button>
+
+                                                <div className="flex-1 min-w-0">
+                                                    {/* Horário + tipo */}
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="flex items-center gap-1 text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                                            <Clock className="w-3 h-3" />
+                                                            {slot.scheduled_time?.slice(0, 5)}
+                                                        </span>
+                                                        <span className="text-xs font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded">
+                                                            {CONTENT_TYPE_LABELS[slot.content_type as ContentType]}
+                                                        </span>
+                                                        {slot.send_telegram_reminder && (
+                                                            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-semibold">📲 Telegram</span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Hook */}
+                                                    {slot.hook && (
+                                                        <p className="text-sm font-semibold text-slate-800 mb-1">🎣 {slot.hook}</p>
+                                                    )}
+
+                                                    {/* Caption (truncada) */}
+                                                    {slot.caption && (
+                                                        <p className="text-xs text-slate-600 line-clamp-2 mb-1">{slot.caption}</p>
+                                                    )}
+
+                                                    {/* CTA */}
+                                                    {slot.cta && (
+                                                        <p className="text-xs text-emerald-700 font-medium">👉 {slot.cta}</p>
+                                                    )}
+
+                                                    {/* Hashtags */}
+                                                    {slot.hashtags && (
+                                                        <p className="text-[11px] text-blue-500 mt-1 truncate">{slot.hashtags}</p>
+                                                    )}
+
+                                                    {/* Notas visuais */}
+                                                    {slot.visual_notes && (
+                                                        <p className="text-[11px] text-amber-600 mt-1">🎨 {slot.visual_notes}</p>
+                                                    )}
+                                                </div>
+
+                                                {/* Ações */}
+                                                <div className="flex gap-1 shrink-0">
+                                                    <button
+                                                        onClick={() => handleOpenEditSlot(slot)}
+                                                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                        title="Editar"
+                                                    >
+                                                        <PenTool className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteSlot(slot.id)}
+                                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                        title="Excluir"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                }
+                                {scheduleSlots.filter(s => s.day_of_week === selectedDay).length === 0 && (
+                                    <div className="p-8 text-center">
+                                        <Calendar className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                                        <p className="text-sm text-slate-400">Nenhum slot neste dia.</p>
+                                        <p className="text-xs text-slate-300">Clique em "Adicionar Slot" para começar.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Modal / Form de Edição */}
+                    {showSlotForm && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowSlotForm(false); }}>
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                                <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                                    <h3 className="font-bold text-slate-800 text-lg">
+                                        {editingSlot ? 'Editar Slot' : 'Novo Slot de Conteúdo'}
+                                    </h3>
+                                    <button onClick={() => setShowSlotForm(false)} className="p-1.5 hover:bg-slate-100 rounded-lg">
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                <div className="p-6 space-y-4">
+                                    {/* Dia da semana */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Dia da Semana</label>
+                                        <select
+                                            value={slotForm.day_of_week}
+                                            onChange={e => setSlotForm(f => ({ ...f, day_of_week: Number(e.target.value) }))}
+                                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                                        >
+                                            {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((d, i) => (
+                                                <option key={i} value={i}>{d}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Horário + Tipo */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Horário</label>
+                                            <input
+                                                type="time"
+                                                value={slotForm.scheduled_time || '09:00'}
+                                                onChange={e => setSlotForm(f => ({ ...f, scheduled_time: e.target.value }))}
+                                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo</label>
+                                            <select
+                                                value={slotForm.content_type}
+                                                onChange={e => setSlotForm(f => ({ ...f, content_type: e.target.value as ContentType }))}
+                                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                                            >
+                                                <option value="story">📸 Story</option>
+                                                <option value="reels">🎬 Reels</option>
+                                                <option value="carrossel">🎴 Carrossel</option>
+                                                <option value="post">📷 Post Feed</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Hook */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">🎣 Hook (primeiros 3 segundos)</label>
+                                        <input
+                                            type="text"
+                                            value={slotForm.hook || ''}
+                                            onChange={e => setSlotForm(f => ({ ...f, hook: e.target.value }))}
+                                            placeholder="Ex: Você sabia que esse celular tem esse preço? 😱"
+                                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                                        />
+                                    </div>
+
+                                    {/* Legenda */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">📝 Legenda completa (pronta pra copiar)</label>
+                                        <textarea
+                                            value={slotForm.caption || ''}
+                                            onChange={e => setSlotForm(f => ({ ...f, caption: e.target.value }))}
+                                            placeholder="Escreva a legenda completa do post..."
+                                            rows={5}
+                                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500 resize-none"
+                                        />
+                                    </div>
+
+                                    {/* CTA */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">👉 CTA (Call-to-Action)</label>
+                                        <input
+                                            type="text"
+                                            value={slotForm.cta || ''}
+                                            onChange={e => setSlotForm(f => ({ ...f, cta: e.target.value }))}
+                                            placeholder="Ex: Manda 'QUERO' nos comentários!"
+                                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                                        />
+                                    </div>
+
+                                    {/* Hashtags */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">🏷️ Hashtags</label>
+                                        <input
+                                            type="text"
+                                            value={slotForm.hashtags || ''}
+                                            onChange={e => setSlotForm(f => ({ ...f, hashtags: e.target.value }))}
+                                            placeholder="#celular #iphone #oferta #MercadoDoVale"
+                                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                                        />
+                                    </div>
+
+                                    {/* Notas Visuais */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">🎨 Notas Visuais</label>
+                                        <input
+                                            type="text"
+                                            value={slotForm.visual_notes || ''}
+                                            onChange={e => setSlotForm(f => ({ ...f, visual_notes: e.target.value }))}
+                                            placeholder="Ex: Produto na mão, fundo branco, luz natural"
+                                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                                        />
+                                    </div>
+
+                                    {/* Toggles */}
+                                    <div className="flex gap-4">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={slotForm.send_telegram_reminder ?? true}
+                                                onChange={e => setSlotForm(f => ({ ...f, send_telegram_reminder: e.target.checked }))}
+                                                className="w-4 h-4 text-pink-600 rounded border-slate-300 focus:ring-pink-500"
+                                            />
+                                            <span className="text-sm font-medium text-slate-700">📲 Enviar no Telegram</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={slotForm.active ?? true}
+                                                onChange={e => setSlotForm(f => ({ ...f, active: e.target.checked }))}
+                                                className="w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500"
+                                            />
+                                            <span className="text-sm font-medium text-slate-700">✅ Ativo</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="sticky bottom-0 bg-white border-t border-slate-100 px-6 py-4 flex gap-3 justify-end rounded-b-2xl">
+                                    <button
+                                        onClick={() => setShowSlotForm(false)}
+                                        className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleSaveSlot}
+                                        className="px-6 py-2 text-sm font-bold bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors"
+                                    >
+                                        {editingSlot ? 'Salvar Alterações' : 'Criar Slot'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
