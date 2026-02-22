@@ -144,7 +144,7 @@ export default async function handler(req: any, res: any) {
         // 4.2 Estoque Global
         const { data: products, error: productsError } = await supabase
             .from('products')
-            .select('name, stock_quantity, specs, category_id, model_id')
+            .select('name, stock_quantity, specs, category_id, model_id, price_cost')
             .eq('status', 'active')
             .gt('stock_quantity', 0);
 
@@ -153,20 +153,18 @@ export default async function handler(req: any, res: any) {
         let celularListStr = '';
 
         if (!productsError && products) {
-            const celularesMap = new Map<string, number>();
+            // Map: groupingKey -> { qtd: number, costTotal: number }
+            const celularesMap = new Map<string, { qtd: number; costTotal: number }>();
 
             products.forEach(p => {
                 const qtd = p.stock_quantity || 0;
                 estoqueGeralTotal += qtd;
 
-                // Heurística segura: assumindo que Celulares/Smartphones contem certas keywords na categoria ou nome (ex: iPhone, Galaxy, Xiaomi)
-                // Caso sua tabela tenha um group fixo, você ajusta aqui. Vou agrupar por nome robusto.
                 const nameLower = p.name.toLowerCase();
-                const isCelular = nameLower.includes('iphone') || nameLower.includes('samsung') || nameLower.includes('xiaomi') || nameLower.includes('motorola') || nameLower.includes('smartphone') || nameLower.includes('galaxy') || nameLower.includes('poco') || nameLower.includes('redmi');
+                const isCelular = nameLower.includes('iphone') || nameLower.includes('samsung') || nameLower.includes('xiaomi') || nameLower.includes('motorola') || nameLower.includes('smartphone') || nameLower.includes('galaxy') || nameLower.includes('poco') || nameLower.includes('redmi') || nameLower.includes('realme');
 
                 if (isCelular) {
                     estoqueCelularesTotal += qtd;
-                    // Agrupa por nome + cor + memória para diferenciar variantes
                     const color = p.specs?.color || p.specs?.cor || '';
                     const ram = p.specs?.ram || '';
                     const storage = p.specs?.storage || '';
@@ -174,13 +172,21 @@ export default async function handler(req: any, res: any) {
                     const variant = [color, memory].filter(Boolean).join(' - ');
                     const groupingKey = variant ? `${p.name} - ${variant}` : p.name;
 
-                    celularesMap.set(groupingKey, (celularesMap.get(groupingKey) || 0) + qtd);
+                    const existing = celularesMap.get(groupingKey) || { qtd: 0, costTotal: 0 };
+                    celularesMap.set(groupingKey, {
+                        qtd: existing.qtd + qtd,
+                        costTotal: existing.costTotal + ((p.price_cost || 0) * qtd),
+                    });
                 }
             });
 
             const sortedList = Array.from(celularesMap.entries())
-                .sort((a, b) => b[1] - a[1]) // Ordernar por quem tem mais estoque primeiro
-                .map(([itemName, qtd]) => `• ${qtd}x - ${itemName}`);
+                .sort((a, b) => b[1].qtd - a[1].qtd)
+                .map(([itemName, data]) => {
+                    const avgCost = data.qtd > 0 ? data.costTotal / data.qtd : 0;
+                    const costStr = avgCost > 0 ? ` (custo: ${fmtMoney(avgCost / 100)})` : '';
+                    return `• ${data.qtd}x - ${itemName}${costStr}`;
+                });
 
             celularListStr = sortedList.length > 0 ? sortedList.join('\n') : 'Nenhum celular em estoque.';
         }
