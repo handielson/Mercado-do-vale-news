@@ -8,6 +8,7 @@ import { CategorySelect } from '../CategorySelect';
 import { Package } from 'lucide-react';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
+import { versionService } from '../../../services/versions-supabase';
 import { FIELD_DICTIONARY } from '../../../config/field-dictionary';
 
 // Tradução de chaves técnicas do template_values para labels em português
@@ -68,6 +69,7 @@ export function ProductBasicInfo({
     const [selectedModel, setSelectedModel] = useState<Model | null>(null);
     const [isLoadingModel, setIsLoadingModel] = useState(false);
     const [brandName, setBrandName] = useState<string>('');
+    const [resolvedTemplateValues, setResolvedTemplateValues] = useState<Record<string, string>>({});
 
     const selectedModelName = watch('model');
 
@@ -87,6 +89,28 @@ export function ProductBasicInfo({
             const model = models.find(m => m.name === modelName);
             if (model) {
                 setSelectedModel(model);
+
+                // Resolve UUIDs nos template_values para nomes legíveis
+                if (model.template_values) {
+                    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    const resolved: Record<string, string> = {};
+                    for (const [key, value] of Object.entries(model.template_values)) {
+                        const strVal = String(value);
+                        if (UUID_REGEX.test(strVal)) {
+                            try {
+                                const version = await versionService.getById(strVal);
+                                resolved[key] = version?.name ?? strVal;
+                            } catch {
+                                resolved[key] = strVal;
+                            }
+                        } else {
+                            resolved[key] = strVal;
+                        }
+                    }
+                    setResolvedTemplateValues(resolved);
+                } else {
+                    setResolvedTemplateValues({});
+                }
             }
         } catch (error) {
             console.error('Error loading model:', error);
@@ -258,12 +282,23 @@ export function ProductBasicInfo({
                                 <span className="ml-2 text-blue-900">{brandName}</span>
                             </div>
                         )}
-                        {Object.entries(selectedModel.template_values).map(([key, value]) => (
-                            <div key={key}>
-                                <span className="text-blue-700 font-medium">{getTemplateLabel(key)}:</span>
-                                <span className="ml-2 text-blue-900">{String(value)}</span>
-                            </div>
-                        ))}
+                        {(() => {
+                            // Deduplica por label — quando dois campos têm o mesmo label, mostra o primeiro
+                            const seenLabels = new Set<string>();
+                            return Object.entries(resolvedTemplateValues)
+                                .filter(([key]) => {
+                                    const label = getTemplateLabel(key);
+                                    if (seenLabels.has(label)) return false;
+                                    seenLabels.add(label);
+                                    return true;
+                                })
+                                .map(([key, value]) => (
+                                    <div key={key}>
+                                        <span className="text-blue-700 font-medium">{getTemplateLabel(key)}:</span>
+                                        <span className="ml-2 text-blue-900">{value}</span>
+                                    </div>
+                                ));
+                        })()}
                     </div>
                     <p className="text-xs text-blue-600 mt-3">
                         💡 Estes valores serão aplicados automaticamente ao produto

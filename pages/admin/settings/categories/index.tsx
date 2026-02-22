@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Edit2, Plus } from 'lucide-react';
 import { Category } from '../../../../types/category';
 import { categoryService } from '../../../../services/categories';
+import { NextStepBanner } from '../../../../components/ui/NextStepBanner';
 
 /**
  * CategorySettings Page (List View)
@@ -155,6 +156,17 @@ export default function CategorySettingsPage() {
                     </div>
                 </div>
             </div>
+
+            <NextStepBanner
+                steps={[
+                    { label: 'Categoria', path: '/admin/settings/categories' },
+                    { label: 'Marca', path: '/admin/settings/brands' },
+                    { label: 'Modelo', path: '/admin/settings/models' },
+                    { label: 'Produto', path: '/admin/products/new' },
+                ]}
+                currentStep={0}
+                message="Categorias configuradas?"
+            />
         </div>
     );
 }

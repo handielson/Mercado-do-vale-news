@@ -4,7 +4,7 @@ import type { CatalogProduct } from '@/types/catalog';
 import type { VariantSpecs, ProductVariants } from '@/services/productVariants';
 import type { InstallmentPlan } from '@/services/installmentCalculator';
 import { VariantSelector } from './VariantSelector';
-import { InstallmentSimulator } from './InstallmentSimulator';
+import { MixedPaymentSimulator } from './MixedPaymentSimulator';
 import { DeliveryOptions, type DeliveryOption } from './DeliveryOptions';
 import { calculateInstallments } from '@/services/installmentCalculator';
 import { generateQuoteMessage, generateWhatsAppLink } from '@/utils/whatsappMessageGenerator';
@@ -350,13 +350,9 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                             </div>
                         )}
 
-                        {/* Installment Simulator */}
-                        {installmentPlans.length > 0 && selectedPlan && (
-                            <InstallmentSimulator
-                                plans={installmentPlans}
-                                selected={selectedPlan}
-                                onSelect={setSelectedPlan}
-                            />
+                        {/* Simulador de Pagamento Combinado (Pix + Cartão) */}
+                        {installmentPlans.length > 0 && (
+                            <MixedPaymentSimulator totalPrice={effectivePrice} />
                         )}
 
                         {/* Delivery Options */}

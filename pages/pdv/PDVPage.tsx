@@ -19,6 +19,7 @@ import { WarrantyTagData, DeliveryTypeWarranty } from '../../types/warrantyDocum
 import { toast } from 'sonner';
 import { validateCoupon, applyCoupon, type Coupon } from '../../services/couponService';
 import { earnCoinsForPurchase } from '../../services/cashbackService';
+import { telegramBotService } from '../../services/telegramBot';
 
 interface Customer {
     id: string;
@@ -298,6 +299,45 @@ export default function PDVPage() {
                 description: `Venda #${sale.id.slice(0, 8)} criada`
             });
 
+            // Disparo silencioso para o Telegram
+            try {
+                const isMultiple = cartItems.length > 1;
+                const firstItem = cartItems[0];
+                const newStock = firstItem.track_inventory && firstItem.stock_quantity !== undefined
+                    ? firstItem.stock_quantity - firstItem.quantity
+                    : 0;
+
+                // Cálculo do Lucro (Subtotal final cobrado - Custo total dos itens)
+                const totalCost = cartItems.reduce((acc, item) => acc + (item.unit_cost * item.quantity), 0);
+                const grossProfit = total - totalCost; // 'total' já embute descontos promocionais e subtrai frete do cliente, mas frete do admin/loja tb tira? Não, vamos ser simples
+                // Lucro limpo
+                const profitMargin = grossProfit > 0 ? grossProfit : 0;
+
+                // Formas de Pagamento
+                const paymentMethodsList = payments.map(p => {
+                    if (p.method === 'cash') return 'Dinheiro';
+                    if (p.method === 'pix') return 'Pix';
+                    if (p.method === 'credit') return `Cartão de Crédito (${p.installments}x)`;
+                    if (p.method === 'debit') return 'Cartão de Débito';
+                    if (p.method === 'store_credit') return 'Crediário';
+                    return p.method;
+                }).join(', ') || 'Não informado';
+
+                telegramBotService.notifySale({
+                    id_venda: sale.id.slice(0, 8).toUpperCase(),
+                    cliente: selectedCustomer.name,
+                    telefone: selectedCustomer.phone || 'Não informado',
+                    produto: isMultiple ? `${cartItems.length} itens diversificados` : firstItem.product_name,
+                    modelo: isMultiple ? '-' : (firstItem.product_name.split(',')[0] || firstItem.product_name),
+                    valor: `R$ ${(total / 100).toFixed(2).replace('.', ',')}`,
+                    lucro: `R$ ${(profitMargin / 100).toFixed(2).replace('.', ',')}`,
+                    pagamento: paymentMethodsList,
+                    desconto: promotionalDiscount > 0 ? `R$ ${(promotionalDiscount / 100).toFixed(2).replace('.', ',')}` : 'Nenhum',
+                    estoque: isMultiple ? '-' : String(newStock)
+                });
+            } catch (e) {
+                // Ignore silent error
+            }
 
             // Salvar dados para geração do termo
             setLastSaleId(sale.id);

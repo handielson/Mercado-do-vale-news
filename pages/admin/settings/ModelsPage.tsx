@@ -6,6 +6,7 @@ import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
+import { NextStepBanner } from '../../../components/ui/NextStepBanner';
 
 /**
  * Models Management Page
@@ -214,6 +215,17 @@ export function ModelsPage() {
                     </p>
                 </div>
             </div>
+
+            <NextStepBanner
+                steps={[
+                    { label: 'Categoria', path: '/admin/settings/categories' },
+                    { label: 'Marca', path: '/admin/settings/brands' },
+                    { label: 'Modelo', path: '/admin/settings/models' },
+                    { label: 'Produto', path: '/admin/products/new' },
+                ]}
+                currentStep={2}
+                message="Modelos cadastrados?"
+            />
 
             {/* Modal */}
             <ModelModal

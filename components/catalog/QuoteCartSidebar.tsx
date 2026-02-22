@@ -7,6 +7,7 @@ import type { QuoteCartItem } from '@/contexts/QuoteCartContext';
 import toast from 'react-hot-toast';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useCoupon } from '@/hooks/useCoupon';
+import { MixedPaymentSimulator } from './MixedPaymentSimulator';
 
 interface QuoteCartSidebarProps {
     isOpen: boolean;
@@ -236,6 +237,9 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                                 </div>
                             </div>
                         )}
+
+                        {/* Simulador de Pagamento Combinado (Pix + Cartão) */}
+                        <MixedPaymentSimulator totalPrice={Math.round(totalCart * 100)} />
 
                         {/* Main button: Open WhatsApp (user chooses recipient) */}
                         <button

@@ -15,10 +15,12 @@ import { toast } from 'sonner';
 export function useModelTemplate(
     selectedModel: Model | undefined,
     setValue: UseFormSetValue<any>,
-    skipToast = false
+    skipApply = false
 ) {
     useEffect(() => {
         if (!selectedModel) return;
+        // Em modo de edição, não sobrescrever os dados do produto
+        if (skipApply) return;
 
         // Use async IIFE to handle async operations
         (async () => {
@@ -97,8 +99,8 @@ export function useModelTemplate(
                     fieldsFilledCount++;
                 });
 
-                // Mostrar toast apenas se preencheu algum campo
-                if (fieldsFilledCount > 0 && !skipToast) {
+                // Mostrar toast ao aplicar template
+                if (fieldsFilledCount > 0) {
                     toast.success(`📋 ${fieldsFilledCount} campos preenchidos do template!`);
                 }
 
@@ -108,5 +110,5 @@ export function useModelTemplate(
             // Show summary log
             console.log(`✅ useModelTemplate completed: ${fieldsFilledCount} total fields filled`);
         })();
-    }, [selectedModel, setValue, skipToast]);
+    }, [selectedModel, setValue, skipApply]);
 }

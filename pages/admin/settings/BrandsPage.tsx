@@ -4,6 +4,7 @@ import { BadgeCheck, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Brand } from '../../../types/brand';
 import { brandService } from '../../../services/brands';
 import { BrandModal } from '../../../components/settings/BrandModal';
+import { NextStepBanner } from '../../../components/ui/NextStepBanner';
 
 /**
  * Brands Management Page
@@ -208,6 +209,17 @@ export function BrandsPage() {
                     </p>
                 </div>
             </div>
+
+            <NextStepBanner
+                steps={[
+                    { label: 'Categoria', path: '/admin/settings/categories' },
+                    { label: 'Marca', path: '/admin/settings/brands' },
+                    { label: 'Modelo', path: '/admin/settings/models' },
+                    { label: 'Produto', path: '/admin/products/new' },
+                ]}
+                currentStep={1}
+                message="Marcas cadastradas?"
+            />
 
             {/* Modal */}
             <BrandModal

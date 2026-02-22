@@ -64,12 +64,17 @@ function normalizeRAMAndStorage(ram?: string, storage?: string): { ram: string; 
 }
 
 /**
- * Generate group key from product specs (Brand + Model only)
+ * Generate group key from product specs
+ * Uses model_id (UUID FK) as primary key — reliable and unique per model.
+ * Falls back to brand + model name for products without model_id.
  */
 function generateGroupKey(product: CatalogProduct): string {
-    const brand = product.brand || 'unknown';
-    const model = product.model || 'unknown';
+    // Use model_id (UUID) as the grouping key — most reliable
+    if (product.model_id) return product.model_id;
 
+    // Fallback: brand + model name (desnormalized text, may not exist)
+    const brand = product.brand || 'unknown';
+    const model = product.model || product.name || 'unknown';
     return `${brand}_${model}`.toLowerCase().replace(/\s+/g, '-');
 }
 

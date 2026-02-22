@@ -132,6 +132,8 @@ export function ProductDetailsModal({
     const [loadingTemplate, setLoadingTemplate] = useState(false);
     const [installment12x, setInstallment12x] = useState<string>('');
     const [warrantyDays, setWarrantyDays] = useState<number | null>(null);
+    // UUID → name map for version resolution
+    const [versionsMap, setVersionsMap] = useState<Map<string, string>>(new Map());
 
     // Calculate 12x installment when modal opens (not for wholesale)
     useEffect(() => {
@@ -169,32 +171,27 @@ export function ProductDetailsModal({
         const fetchModelTemplate = async () => {
             try {
                 setLoadingTemplate(true);
-                console.log('[ProductDetailsModal] Fetching template for model_id:', product.model_id);
 
-                const { data, error } = await supabase
-                    .from('models')
-                    .select('template_values')
-                    .eq('id', product.model_id)
-                    .single();
+                const [{ data, error }, { data: versionsData }] = await Promise.all([
+                    supabase.from('models').select('template_values').eq('id', product.model_id).single(),
+                    supabase.from('versions').select('id, name')
+                ]);
 
                 if (cancelled) return;
 
-                if (error) {
-                    console.error('[ProductDetailsModal] Error fetching model template:', error);
-                    setTemplateValues(null);
+                if (!error && data?.template_values) {
+                    setTemplateValues(data.template_values);
                 } else {
-                    console.log('[ProductDetailsModal] Template values:', data?.template_values);
-                    setTemplateValues(data?.template_values || null);
+                    setTemplateValues(null);
+                }
+
+                if (versionsData) {
+                    setVersionsMap(new Map(versionsData.map((v: any) => [v.id, v.name])));
                 }
             } catch (error) {
-                if (!cancelled) {
-                    console.error('[ProductDetailsModal] Exception fetching model template:', error);
-                    setTemplateValues(null);
-                }
+                if (!cancelled) setTemplateValues(null);
             } finally {
-                if (!cancelled) {
-                    setLoadingTemplate(false);
-                }
+                if (!cancelled) setLoadingTemplate(false);
             }
         };
 
@@ -337,16 +334,23 @@ export function ProductDetailsModal({
                                             if (idxB === -1) return -1;
                                             return idxA - idxB;
                                         })
-                                        .map(([key, value]) => (
-                                            <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                                                <span className="text-sm font-medium text-slate-600">
-                                                    {formatFieldKey(key)}:
-                                                </span>
-                                                <span className="text-sm text-slate-900 font-semibold">
-                                                    {String(value)}
-                                                </span>
-                                            </div>
-                                        ))}
+                                        .map(([key, value]) => {
+                                            // Resolve UUID → version name for versao/version fields
+                                            const isVersionField = key.toLowerCase() === 'versao' || key.toLowerCase() === 'version';
+                                            const displayValue = isVersionField && typeof value === 'string' && versionsMap.has(value)
+                                                ? versionsMap.get(value)!
+                                                : String(value);
+                                            return (
+                                                <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                                                    <span className="text-sm font-medium text-slate-600">
+                                                        {formatFieldKey(key)}:
+                                                    </span>
+                                                    <span className="text-sm text-slate-900 font-semibold">
+                                                        {displayValue}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
                                 </div>
                             </div>
                         ) : (

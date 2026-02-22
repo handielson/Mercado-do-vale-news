@@ -1,345 +1,277 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
 import { ProductInput } from '../../../types/product';
 import { CurrencyInput } from '../../ui/CurrencyInput';
+import { DollarSign, ShoppingCart, Users, Package, BarChart2 } from 'lucide-react';
+import { supabase } from '../../../services/supabase';
 
 interface ProductPricingProps {
     watch: UseFormWatch<ProductInput>;
     setValue: UseFormSetValue<ProductInput>;
+    modelId?: string;  // Para buscar médias do estoque atual
 }
 
-export function ProductPricing({ watch, setValue }: ProductPricingProps) {
-    // Estado para controlar qual aba da calculadora de margem está ativa
-    const [activeMarginTab, setActiveMarginTab] = useState<'retail' | 'reseller' | 'wholesale'>('retail');
+interface StockAverages {
+    totalUnits: number;
+    avg_cost: number;
+    avg_retail: number;
+    avg_reseller: number;
+    avg_wholesale: number;
+}
+
+interface PriceRowConfig {
+    key: keyof ProductInput;
+    label: string;
+    audience: string;
+    color: string;
+    borderColor: string;
+    bgColor: string;
+    textColor: string;
+    ringColor: string;
+    quickPercents: number[];
+    icon: React.ReactNode;
+}
+
+function formatCurrency(cents: number): string {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+}
+
+function calcMargin(cost: number, price: number) {
+    const marginCents = price - cost;
+    const marginPct = cost > 0 ? ((price - cost) / cost) * 100 : 0;
+    const markup = cost > 0 ? price / cost : 0;
+    return { marginCents, marginPct, markup };
+}
+
+export function ProductPricing({ watch, setValue, modelId }: ProductPricingProps) {
+    const cost = watch('price_cost') || 0;
+    const priceRetail = watch('price_retail') || 0;
+    const priceReseller = watch('price_reseller') || 0;
+    const priceWholesale = watch('price_wholesale') || 0;
+
+    // --- Médias do estoque atual ---
+    const [stockAverages, setStockAverages] = useState<StockAverages | null>(null);
+    const [loadingAverages, setLoadingAverages] = useState(false);
+
+    useEffect(() => {
+        if (!modelId) { setStockAverages(null); return; }
+        let cancelled = false;
+        const fetch = async () => {
+            setLoadingAverages(true);
+            try {
+                const { data } = await supabase
+                    .from('products')
+                    .select('price_cost, price_retail, price_reseller, price_wholesale, stock_quantity')
+                    .eq('model_id', modelId)
+                    .eq('status', 'active');
+                if (cancelled || !data || data.length === 0) { setStockAverages(null); return; }
+                const totalUnits = data.reduce((s, p) => s + (p.stock_quantity || 0), 0);
+                if (totalUnits === 0) { setStockAverages(null); return; }
+                const wavg = (field: keyof typeof data[0]) =>
+                    Math.round(data.reduce((s, p) => s + ((p[field] as number) * (p.stock_quantity || 0)), 0) / totalUnits);
+                if (!cancelled) setStockAverages({
+                    totalUnits,
+                    avg_cost: wavg('price_cost'),
+                    avg_retail: wavg('price_retail'),
+                    avg_reseller: wavg('price_reseller'),
+                    avg_wholesale: wavg('price_wholesale'),
+                });
+            } finally {
+                if (!cancelled) setLoadingAverages(false);
+            }
+        };
+        fetch();
+        return () => { cancelled = true; };
+    }, [modelId]);
+    // --- fim médias ---
+
+    const rows: PriceRowConfig[] = [
+        {
+            key: 'price_retail',
+            label: 'Preço Varejo',
+            audience: 'Clientes finais (consumidor direto)',
+            color: 'green',
+            borderColor: 'border-green-200',
+            bgColor: 'bg-green-50',
+            textColor: 'text-green-700',
+            ringColor: 'focus:ring-green-500',
+            quickPercents: [10, 20, 30, 50, 100],
+            icon: <ShoppingCart size={15} className="text-green-600" />,
+        },
+        {
+            key: 'price_reseller',
+            label: 'Preço Revenda',
+            audience: 'Revendedores cadastrados',
+            color: 'blue',
+            borderColor: 'border-blue-200',
+            bgColor: 'bg-blue-50',
+            textColor: 'text-blue-700',
+            ringColor: 'focus:ring-blue-500',
+            quickPercents: [10, 15, 20, 25, 30],
+            icon: <Users size={15} className="text-blue-600" />,
+        },
+        {
+            key: 'price_wholesale',
+            label: 'Preço Atacado',
+            audience: 'Compras em grande volume (Pix/Dinheiro)',
+            color: 'orange',
+            borderColor: 'border-orange-200',
+            bgColor: 'bg-orange-50',
+            textColor: 'text-orange-700',
+            ringColor: 'focus:ring-orange-500',
+            quickPercents: [5, 10, 15, 20, 25],
+            icon: <Package size={15} className="text-orange-600" />,
+        },
+    ];
+
+    const priceValues: Record<string, number> = {
+        price_retail: priceRetail,
+        price_reseller: priceReseller,
+        price_wholesale: priceWholesale,
+    };
 
     return (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-            <h3 className="font-semibold text-slate-800 mb-4">Precificação</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Preço de Custo *
-                        <span className="ml-2 text-xs text-slate-400 font-mono">price_cost</span>
-                    </label>
-                    <CurrencyInput value={watch('price_cost') || 0} onChange={(val) => setValue('price_cost', val)} />
-                    <p className="text-xs text-slate-500 mt-1">💰 Preço de compra</p>
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
+            <div className="flex items-center gap-2 mb-2">
+                <DollarSign size={18} className="text-slate-600" />
+                <h3 className="font-semibold text-slate-800">Precificação</h3>
+            </div>
+
+            {/* Painel de Médias do Estoque Atual */}
+            {modelId && (
+                <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                    <div className="flex items-center gap-2 mb-3">
+                        <BarChart2 size={15} className="text-amber-600" />
+                        <span className="text-sm font-semibold text-amber-800">Médias do Estoque Atual</span>
+                        {loadingAverages && <span className="text-xs text-amber-500 ml-auto">carregando...</span>}
+                        {stockAverages && !loadingAverages && (
+                            <span className="text-xs text-amber-600 ml-auto">{stockAverages.totalUnits} unidade{stockAverages.totalUnits !== 1 ? 's' : ''} em estoque</span>
+                        )}
+                    </div>
+                    {!loadingAverages && !stockAverages && (
+                        <p className="text-xs text-amber-600">Nenhum produto em estoque para este modelo.</p>
+                    )}
+                    {stockAverages && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {([
+                                { label: '💰 Custo', value: stockAverages.avg_cost, color: 'text-slate-700' },
+                                { label: '🛒 Varejo', value: stockAverages.avg_retail, color: 'text-green-700' },
+                                { label: '👥 Revenda', value: stockAverages.avg_reseller, color: 'text-blue-700' },
+                                { label: '📦 Atacado', value: stockAverages.avg_wholesale, color: 'text-orange-700' },
+                            ]).map(({ label, value, color }) => (
+                                <div key={label} className="bg-white rounded-lg p-3 border border-amber-100 text-center">
+                                    <p className="text-xs text-slate-500 mb-1">{label}</p>
+                                    <p className={`text-sm font-bold ${color}`}>{formatCurrency(value)}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Margem Varejo *
-                        <span className="ml-2 text-xs text-slate-400 font-mono">price_retail</span>
-                    </label>
-                    <CurrencyInput value={watch('price_retail')} onChange={(val) => setValue('price_retail', val)} />
-                    <p className="text-xs text-slate-500 mt-1">💰 Lucro desejado para vendas no varejo</p>
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Margem Revenda *
-                        <span className="ml-2 text-xs text-slate-400 font-mono">price_reseller</span>
-                    </label>
-                    <CurrencyInput value={watch('price_reseller')} onChange={(val) => setValue('price_reseller', val)} />
-                    <p className="text-xs text-slate-500 mt-1">💼 Lucro desejado para revendedores</p>
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Margem Atacado *
-                        <span className="ml-2 text-xs text-slate-400 font-mono">price_wholesale</span>
-                    </label>
-                    <CurrencyInput value={watch('price_wholesale')} onChange={(val) => setValue('price_wholesale', val)} />
-                    <p className="text-xs text-slate-500 mt-1">📦 Lucro desejado para vendas no atacado</p>
+            )}
+
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <p className="text-sm font-semibold text-slate-800">💰 Preço de Custo</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Valor pago na compra do produto</p>
+                    </div>
+                    <div className="w-full sm:w-52">
+                        <CurrencyInput
+                            value={cost}
+                            onChange={(val) => setValue('price_cost', val)}
+                        />
+                    </div>
                 </div>
             </div>
 
+            {/* Linhas de preço por canal */}
+            <div className="space-y-3">
+                {rows.map((row) => {
+                    const price = priceValues[row.key as string] || 0;
+                    const { marginCents, marginPct, markup } = calcMargin(cost, price);
+                    const hasPrice = price > 0 && cost > 0;
+                    const isNegative = marginCents < 0;
 
-            {/* Calculadora de Margem Unificada com Abas */}
-            <div className="mt-4 p-4 bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg border border-slate-200">
-                <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-slate-800">
-                        💹 Calculadora de Margem de Lucro
-                        <span className="ml-2 text-xs text-slate-400 font-mono font-normal">→ price_retail | price_reseller | price_wholesale</span>
-                    </h4>
-                </div>
+                    return (
+                        <div
+                            key={row.key}
+                            className={`rounded-xl border ${row.borderColor} ${row.bgColor} p-4`}
+                        >
+                            {/* Header da linha */}
+                            <div className="flex items-center gap-2 mb-3">
+                                {row.icon}
+                                <div>
+                                    <span className="text-sm font-semibold text-slate-800">{row.label}</span>
+                                    <span className="ml-2 text-xs text-slate-400">{row.audience}</span>
+                                </div>
+                            </div>
 
-                {/* Tabs */}
-                <div className="flex gap-2 mb-4">
-                    <button
-                        type="button"
-                        onClick={() => setActiveMarginTab('retail')}
-                        className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeMarginTab === 'retail'
-                            ? 'bg-green-600 text-white shadow-md'
-                            : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
-                            }`}
-                    >
-                        🟢 Varejo
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveMarginTab('reseller')}
-                        className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeMarginTab === 'reseller'
-                            ? 'bg-blue-600 text-white shadow-md'
-                            : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
-                            }`}
-                    >
-                        🔵 Revenda
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveMarginTab('wholesale')}
-                        className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeMarginTab === 'wholesale'
-                            ? 'bg-purple-600 text-white shadow-md'
-                            : 'bg-white text-slate-600 border border-slate-300 hover:bg-slate-50'
-                            }`}
-                    >
-                        🟣 Atacado
-                    </button>
-                </div>
+                            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                                {/* Campo de preço */}
+                                <div className="w-full lg:w-52 shrink-0">
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                                        Preço de Venda (R$)
+                                    </label>
+                                    <CurrencyInput
+                                        value={price}
+                                        onChange={(val) => setValue(row.key, val)}
+                                    />
+                                </div>
 
-                {/* Conteúdo da Tab Ativa */}
-                {activeMarginTab === 'retail' && (
-                    <div className="space-y-3">
-                        {/* Métricas */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="bg-white p-3 rounded-lg border border-green-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Margem (R$)</label>
-                                <div className="text-lg font-bold text-green-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const retail = watch('price_retail') || 0;
-                                        const marginCents = retail - cost;
-                                        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(marginCents / 100);
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Lucro por unidade</p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border border-green-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Margem (%)</label>
-                                <div className="text-lg font-bold text-green-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const retail = watch('price_retail') || 0;
-                                        if (cost === 0) return '0%';
-                                        return `${(((retail - cost) / cost) * 100).toFixed(2)}%`;
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Percentual de lucro</p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border border-green-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Markup</label>
-                                <div className="text-lg font-bold text-blue-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const retail = watch('price_retail') || 0;
-                                        if (cost === 0) return '0x';
-                                        return `${(retail / cost).toFixed(2)}x`;
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Multiplicador</p>
-                            </div>
-                        </div>
-                        {/* Inputs */}
-                        <div className="p-3 bg-white rounded-lg border border-green-200">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                                        Margem em R$
-                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_retail</span>
-                                    </label>
-                                    <CurrencyInput value={0} onChange={(marginCents) => {
-                                        const cost = watch('price_cost') || 0;
-                                        if (marginCents > 0 && cost > 0) setValue('price_retail', cost + marginCents);
-                                    }} />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                                        Margem em %
-                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_retail</span>
-                                    </label>
-                                    <input type="number" step="0.01" placeholder="Ex: 50" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" onChange={(e) => {
-                                        const marginPercent = parseFloat(e.target.value) || 0;
-                                        const cost = watch('price_cost') || 0;
-                                        if (marginPercent > 0 && cost > 0) setValue('price_retail', Math.round(cost * (1 + marginPercent / 100)));
-                                    }} />
-                                </div>
-                            </div>
-                        </div>
-                        {/* Botões Rápidos */}
-                        <div className="flex flex-wrap gap-2">
-                            <span className="text-xs font-medium text-slate-600">Margem rápida:</span>
-                            {[10, 20, 30, 50, 100].map(percent => (
-                                <button key={percent} type="button" onClick={() => {
-                                    const cost = watch('price_cost') || 0;
-                                    if (cost > 0) setValue('price_retail', Math.round(cost * (1 + percent / 100)));
-                                }} className="px-2 py-1 text-xs font-medium bg-white border border-green-300 text-green-700 rounded hover:bg-green-100 transition-colors">
-                                    +{percent}%
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                                {/* Indicadores de margem */}
+                                {hasPrice && (
+                                    <div className="flex flex-wrap gap-3 flex-1">
+                                        <div className="flex flex-col items-center bg-white rounded-lg px-4 py-2 border border-slate-200 min-w-[80px]">
+                                            <span className="text-xs text-slate-500 mb-0.5">Lucro</span>
+                                            <span className={`text-sm font-bold ${isNegative ? 'text-red-600' : row.textColor}`}>
+                                                {formatCurrency(marginCents)}
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-col items-center bg-white rounded-lg px-4 py-2 border border-slate-200 min-w-[70px]">
+                                            <span className="text-xs text-slate-500 mb-0.5">Margem</span>
+                                            <span className={`text-sm font-bold ${isNegative ? 'text-red-600' : row.textColor}`}>
+                                                {marginPct.toFixed(1)}%
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-col items-center bg-white rounded-lg px-4 py-2 border border-slate-200 min-w-[70px]">
+                                            <span className="text-xs text-slate-500 mb-0.5">Markup</span>
+                                            <span className={`text-sm font-bold ${isNegative ? 'text-red-600' : 'text-slate-700'}`}>
+                                                {markup.toFixed(2)}x
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
 
-                {activeMarginTab === 'reseller' && (
-                    <div className="space-y-3">
-                        {/* Métricas */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="bg-white p-3 rounded-lg border border-blue-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Margem (R$)</label>
-                                <div className="text-lg font-bold text-blue-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const reseller = watch('price_reseller') || 0;
-                                        const marginCents = reseller - cost;
-                                        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(marginCents / 100);
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Lucro por unidade</p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border border-blue-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Margem (%)</label>
-                                <div className="text-lg font-bold text-blue-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const reseller = watch('price_reseller') || 0;
-                                        if (cost === 0) return '0%';
-                                        return `${(((reseller - cost) / cost) * 100).toFixed(2)}%`;
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Percentual de lucro</p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border border-blue-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Markup</label>
-                                <div className="text-lg font-bold text-blue-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const reseller = watch('price_reseller') || 0;
-                                        if (cost === 0) return '0x';
-                                        return `${(reseller / cost).toFixed(2)}x`;
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Multiplicador</p>
-                            </div>
-                        </div>
-                        {/* Inputs */}
-                        <div className="p-3 bg-white rounded-lg border border-blue-200">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                                        Margem em R$
-                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_reseller</span>
-                                    </label>
-                                    <CurrencyInput value={0} onChange={(marginCents) => {
-                                        const cost = watch('price_cost') || 0;
-                                        if (marginCents > 0 && cost > 0) setValue('price_reseller', cost + marginCents);
-                                    }} />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                                        Margem em %
-                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_reseller</span>
-                                    </label>
-                                    <input type="number" step="0.01" placeholder="Ex: 40" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" onChange={(e) => {
-                                        const marginPercent = parseFloat(e.target.value) || 0;
-                                        const cost = watch('price_cost') || 0;
-                                        if (marginPercent > 0 && cost > 0) setValue('price_reseller', Math.round(cost * (1 + marginPercent / 100)));
-                                    }} />
+                                {/* Botões rápidos de % */}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs text-slate-500 whitespace-nowrap">Aplicar margem:</span>
+                                    {row.quickPercents.map((pct) => (
+                                        <button
+                                            key={pct}
+                                            type="button"
+                                            disabled={cost === 0}
+                                            onClick={() => setValue(row.key, Math.round(cost * (1 + pct / 100)))}
+                                            className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors
+                                                ${cost === 0
+                                                    ? 'border-slate-200 text-slate-300 cursor-not-allowed'
+                                                    : `border-${row.color}-300 ${row.textColor} bg-white hover:${row.bgColor}`
+                                                }`}
+                                        >
+                                            +{pct}%
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
-                        </div>
-                        {/* Botões Rápidos */}
-                        <div className="flex flex-wrap gap-2">
-                            <span className="text-xs font-medium text-slate-600">Margem rápida:</span>
-                            {[10, 15, 20, 25, 30].map(percent => (
-                                <button key={percent} type="button" onClick={() => {
-                                    const cost = watch('price_cost') || 0;
-                                    if (cost > 0) setValue('price_reseller', Math.round(cost * (1 + percent / 100)));
-                                }} className="px-2 py-1 text-xs font-medium bg-white border border-blue-300 text-blue-700 rounded hover:bg-blue-100 transition-colors">
-                                    +{percent}%
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
 
-                {activeMarginTab === 'wholesale' && (
-                    <div className="space-y-3">
-                        {/* Métricas */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="bg-white p-3 rounded-lg border border-purple-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Margem (R$)</label>
-                                <div className="text-lg font-bold text-purple-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const wholesale = watch('price_wholesale') || 0;
-                                        const marginCents = wholesale - cost;
-                                        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(marginCents / 100);
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Lucro por unidade</p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border border-purple-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Margem (%)</label>
-                                <div className="text-lg font-bold text-purple-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const wholesale = watch('price_wholesale') || 0;
-                                        if (cost === 0) return '0%';
-                                        return `${(((wholesale - cost) / cost) * 100).toFixed(2)}%`;
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Percentual de lucro</p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border border-purple-200">
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Markup</label>
-                                <div className="text-lg font-bold text-purple-700">
-                                    {(() => {
-                                        const cost = watch('price_cost') || 0;
-                                        const wholesale = watch('price_wholesale') || 0;
-                                        if (cost === 0) return '0x';
-                                        return `${(wholesale / cost).toFixed(2)}x`;
-                                    })()}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1">Multiplicador</p>
-                            </div>
+                            {/* Aviso de margem negativa */}
+                            {hasPrice && isNegative && (
+                                <p className="text-xs text-red-600 mt-2 font-medium">
+                                    ⚠️ Preço abaixo do custo — prejuízo de {formatCurrency(Math.abs(marginCents))} por unidade
+                                </p>
+                            )}
                         </div>
-                        {/* Inputs */}
-                        <div className="p-3 bg-white rounded-lg border border-purple-200">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                                        Margem em R$
-                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_wholesale</span>
-                                    </label>
-                                    <CurrencyInput value={0} onChange={(marginCents) => {
-                                        const cost = watch('price_cost') || 0;
-                                        if (marginCents > 0 && cost > 0) setValue('price_wholesale', cost + marginCents);
-                                    }} />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">
-                                        Margem em %
-                                        <span className="ml-2 text-xs text-slate-400 font-mono">→ price_wholesale</span>
-                                    </label>
-                                    <input type="number" step="0.01" placeholder="Ex: 15" className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" onChange={(e) => {
-                                        const marginPercent = parseFloat(e.target.value) || 0;
-                                        const cost = watch('price_cost') || 0;
-                                        if (marginPercent > 0 && cost > 0) setValue('price_wholesale', Math.round(cost * (1 + marginPercent / 100)));
-                                    }} />
-                                </div>
-                            </div>
-                        </div>
-                        {/* Botões Rápidos */}
-                        <div className="flex flex-wrap gap-2">
-                            <span className="text-xs font-medium text-slate-600">Margem rápida:</span>
-                            {[5, 10, 15, 20, 25].map(percent => (
-                                <button key={percent} type="button" onClick={() => {
-                                    const cost = watch('price_cost') || 0;
-                                    if (cost > 0) setValue('price_wholesale', Math.round(cost * (1 + percent / 100)));
-                                }} className="px-2 py-1 text-xs font-medium bg-white border border-purple-300 text-purple-700 rounded hover:bg-purple-100 transition-colors">
-                                    +{percent}%
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                    );
+                })}
             </div>
         </div>
     );

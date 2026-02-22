@@ -80,11 +80,24 @@ export const isSpecialField = (key: string): boolean => {
 };
 
 /**
- * Check if a field should be rendered
- * (i.e., it's not 'off' and has metadata)
+ * Fields that are specific to a product unit (vary per unit or variation).
+ * Only these fields are shown in the product entry form.
+ * Fields NOT listed here (e.g., battery_mah, display) belong to the model template.
+ */
+const PRODUCT_LEVEL_FIELDS = [
+    'imei1', 'imei2', 'serial',
+    'color', 'storage', 'ram',
+    'version', 'battery_health'
+];
+
+/**
+ * Check if a field should be rendered in the product form.
+ * Only product-level fields (unique per unit/variation) are rendered.
+ * Model-level fields (battery_mah, display, etc.) are excluded.
  */
 export const shouldRenderField = (key: string, requirement: FieldRequirement | undefined): boolean => {
     if (!requirement || requirement === 'off') return false;
     if (!FIELD_METADATA[key]) return false;
+    if (!PRODUCT_LEVEL_FIELDS.includes(key)) return false;
     return true;
 };

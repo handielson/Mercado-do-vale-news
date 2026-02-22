@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Customer, CustomerInput, CustomerFilters } from '../types/customer';
+import { telegramBotService } from './telegramBot';
 
 /**
  * Customer Service
@@ -144,6 +145,18 @@ class CustomerService {
         if (error) throw error;
 
         this.clearCache();
+
+        // Disparo assíncrono para o Telegram (Falha silenciosamente para não travar a UI)
+        try {
+            telegramBotService.notifyNewCustomer({
+                nome_cliente: data.name,
+                telefone_cliente: data.phone || 'Não informado',
+                tipo_cliente: data.customer_type || 'Varejo'
+            });
+        } catch (e) {
+            console.error('Falha ao disparar notification Telegram de cliente novo', e);
+        }
+
         return data;
     }
 

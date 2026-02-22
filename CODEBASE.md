@@ -457,6 +457,34 @@ Se cupom aplicado, adiciona ao resumo:
 
 ---
 
+### Feature: Simulador de Pagamento Misto
+Permite que o cliente simule o pagamento de um produto ou do carrinho inteiro combinando um valor de entrada em **Pix/Dinheiro** e o restante **Parcelado no Cartão de Crédito**.
+
+#### Arquivos envolvidos
+| Arquivo | Papel |
+|---------|-------|
+| `services/payment-fees.ts` | Serviço que busca e atualiza as taxas de juros cadastradas no banco (1x a 12x). |
+| `services/installmentCalculator.ts` | Funções puras (`calculateInstallments` e `calculateMixedPayment`) para calcular planos de parcelamento baseados num valor e tabela de taxas. |
+| `components/catalog/MixedPaymentSimulator.tsx` | Componente UI interativo de simulação. Substituiu o antigo `InstallmentSimulator`. |
+| `components/catalog/QuoteModal.tsx` | Modal de checkout de 1 produto que embute o Simulador e usa seus dados para compor o orçamento WhatsApp. |
+| `components/catalog/QuoteCartSidebar.tsx` | Sidebar do carrinho que usa o Simulador para o valor total do carrinho. |
+
+#### `services/payment-fees.ts` — Taxas de Parcelamento
+**Tabela:** `payment_fees`
+Gerencia os percentuais de acréscimo cobrados por parcela.
+- `list()`: Busca as taxas para `'credit'` e `'debit'`.
+- `update(id, fee)`: Atualiza a taxa de juros aplicada a uma parcela específica.
+- `seed()`: Inicializa a tabela com juros compostos padrão (ex: `2%` am).
+
+#### `components/catalog/MixedPaymentSimulator.tsx` — O Simulador
+- **Props:** `{ totalPrice: number }` (em centavos).
+- **Auto-cálculo:** O cliente pode preencher um valor em dinheiro/Pix. O restante (`totalPrice - cashCents`) vira a base de cálculo para a grade de cartões.
+- **Botão Pix:** Um botão "À Vista (PIX)" de acessoápido preenche automaticamente 100% do valor no Pix.
+- **Exibição:** A renderização das parcelas de cartão acontece em um **layout grid** (2 ou 3 colunas), eliminando listas compridas ocultas, otimizado para não ofuscar modais curtos.
+- **Ocultamento de Juros:** A taxa percentual transparente não é mais exibida ao cliente; apenas os valores (mensalidade e total bruto).
+
+---
+
 ### `services/averagePriceService.ts` — Preço Médio
 **Exporta:** `averagePriceService`, `updateAveragePrices`
 **Tabela:** `products` (update em massa)
@@ -612,6 +640,39 @@ Se cupom aplicado, adiciona ao resumo:
 
 #### O que faz
 
+---
+
+### 🤖 Sistema Avançado de Automações (Telegram Bots)
+**Arquivos Principais:** `services/telegramSettings.ts`, `services/telegramBot.ts`, `pages/admin/settings/TelegramPage.tsx`, `api/cron-dispatcher.ts`, `vercel.json`
+
+Sistema de envio de mensagens parametrizáveis ao Telegram. Em vez de hardcodar gatilhos, o sistema utiliza uma arquitetura guiada por **Templates Ativos (JSONB)** salvos na tabela `telegram_settings`.
+
+#### 1. Tipos de Gatilho
+- **`action` (Gatilhos de Evento Manual)**: Acionados via código (ex: `notifySale`, `notifyNewCustomer`). Eles disparam de forma **fire-and-forget** (não travam a thread de UI) rodando por debaixo dos panos após ações como finalizar PDV ou salvar novo cliente.
+- **`scheduled` (Gatilhos Cron/Agendados)**: Lidos pelo motor servidor Vercel a cada hora. Eles comparam a hora do disparo `schedule_time` e enviam resumos autônomos.
+
+#### 2. Dicionário de Tags Dinâmicas Inteligentes
+O sistema aceita variáveis que são injetadas em tempo-real na string enviada.
+| Contexto | Tags | O que Faz |
+|----------|------|-----------|
+| **Venda (PDV)** | `{id_venda}`, `{cliente}`, `{produto}`, `{lucro}`, `{estoque}`, etc. | Substitui pelos dados da venda recém criada. |
+| **Cliente Novo** | `{nome_cliente}`, `{telefone_cliente}`, `{tipo_cliente}` | Puxa os dados direto do form do cliente salvo. |
+| **Relatórios Diários** | `{qtd_vendas}`, `{faturamento}`, `{lucro_total}`, `{data}` | Somatória global diária rodada pelo Cron Vercel diretamente no banco. |
+| **Estoque Global** | `{estoque_celulares}`, `{estoque_geral_loja}`, `{estoque_lista_celulares}` | Aggregation inteligente: Lê todos os ativos, agrupa por NOME+COR com estoque > 0. |
+
+#### 3. Motor Assíncrono - Vercel Cron (`api/cron-dispatcher.ts`)
+Para garantir 100% de autonomia e não sugar o desempenho do navegador de quem está vendendo, a checagem de relatórios agendados é feita na infra de Backend.
+O arquivo `vercel.json` invoca o `api/cron-dispatcher.ts` todo início de hora (`0 * * * *`). Ele:
+1. Puxa os templates onde `type === 'scheduled'`.
+2. Verifica se a hora bate (ex: Template agendado pra `19:xx`).
+3. Se sim, roda Queries pesadas (Soma de Lucro do dia, Varredura de Estoque de todos os produtos ativos agrupando por cor).
+4. Substitui e envia HTTP puro pra API Rest do Telegram.
+
+**⚠️ Usado por:** Administradores montando templates livremente no Frontend. `PDVPage` e `CustomerService` consomem os Wrappers de "Action".
+
+---
+
+### `company_settings.google_analytics_id` — Google Analytics GA4
 1. **Injeta o script `gtag.js`** dinamicamente no `<head>` se `company_settings.google_analytics_id` estiver preenchido e começar com `G-`
 2. **Rastreia navegação SPA** via `router.subscribe()` — essencial para React Router, onde não há reload entre páginas
 

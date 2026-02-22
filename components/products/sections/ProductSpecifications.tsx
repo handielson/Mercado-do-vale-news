@@ -19,7 +19,7 @@ interface ProductSpecificationsProps {
     errors: FieldErrors<ProductInput>;
     onRefresh?: () => void;
     templateValues?: Record<string, any>;
-    onSerialConfirm?: (type: 'serial' | 'imei1' | 'imei2', value: string) => void;
+    currentProductId?: string; // ID do produto atual (modo edição)
 }
 
 // Fields that must be unique per product
@@ -32,7 +32,7 @@ export function ProductSpecifications({
     errors,
     onRefresh,
     templateValues,
-    onSerialConfirm
+    currentProductId
 }: ProductSpecificationsProps) {
     // ANTIGRAVITY PROTOCOL: Custom Fields Synchronization
     const { fields: customFields, loading: fieldsLoading } = useEnrichedCustomFields(
@@ -47,11 +47,17 @@ export function ProductSpecifications({
         if (!value || !DB_UNIQUE_FIELDS.includes(field)) return;
         setCheckingField(field);
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('products')
                 .select('id')
-                .eq(`specs->>${field}`, value)
-                .limit(1);
+                .eq(`specs->>${field}`, value);
+
+            // Em modo edição, exclui o próprio produto da verificação
+            if (currentProductId) {
+                query = query.neq('id', currentProductId);
+            }
+
+            const { data, error } = await query.limit(1);
             if (error) throw error;
             setUniqueErrors(prev => ({
                 ...prev,
@@ -62,7 +68,7 @@ export function ProductSpecifications({
         } finally {
             setCheckingField(null);
         }
-    }, []);
+    }, [currentProductId]);
 
     if (!categoryConfig) return null;
 

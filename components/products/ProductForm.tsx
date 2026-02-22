@@ -30,15 +30,17 @@ import { Model } from '../../types/model';
 import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
+import { colorService } from '../../services/colors';
 
 interface ProductFormProps {
     initialData?: Product;
     onSubmit: (data: ProductInput) => Promise<void>;
     onCancel: () => void;
+    onBatchComplete?: () => void;
     isLoading?: boolean;
 }
 
-export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: ProductFormProps) {
+export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, isLoading }: ProductFormProps) {
     const [imagePreviews, setImagePreviews] = useState<string[]>(initialData?.images || []);
     const [isCompressing, setIsCompressing] = useState(false);
 
@@ -48,16 +50,52 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
     // Estado para rastrear se o nome foi editado manualmente
     const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
 
-    // Lista de seriais/IMEIs para entrada em massa
-    const [serialList, setSerialList] = useState<{ type: 'serial' | 'imei1' | 'imei2'; value: string }[]>([]);
+    // Lista de produtos para entrada em massa
+    interface BatchItem {
+        imei1?: string;
+        imei2?: string;
+        serial?: string;
+        color?: string;
+        storage?: string;
+        ram?: string;
+    }
+    const [serialList, setSerialList] = useState<BatchItem[]>([]);
 
-    const handleSerialConfirm = (type: 'serial' | 'imei1' | 'imei2', value: string) => {
-        // Evita duplicatas na lista
-        if (serialList.some(item => item.type === type && item.value === value)) {
-            toast.warning(`${value} já está na lista`);
+    const handleAddToBatchList = () => {
+        const item: BatchItem = {
+            imei1: watch('specs.imei1') || undefined,
+            imei2: watch('specs.imei2') || undefined,
+            serial: watch('specs.serial') || undefined,
+            color: watch('specs.color') || undefined,
+            storage: watch('specs.storage') || undefined,
+            ram: watch('specs.ram') || undefined,
+        };
+
+        // Precisa ao menos de IMEI1 ou Serial
+        if (!item.imei1 && !item.serial) {
+            toast.warning('Preencha ao menos o IMEI 1 ou o Serial antes de adicionar.');
             return;
         }
-        setSerialList(prev => [...prev, { type, value }]);
+
+        // Evita duplicatas por IMEI1 ou Serial
+        const isDuplicate = serialList.some(existing =>
+            (item.imei1 && existing.imei1 === item.imei1) ||
+            (item.serial && existing.serial === item.serial)
+        );
+        if (isDuplicate) {
+            toast.warning('Este produto (IMEI/Serial) já está na lista.');
+            return;
+        }
+
+        // Adiciona à lista e limpa os campos únicos
+        setSerialList(prev => [...prev, item]);
+        setValue('specs.imei1', '');
+        setValue('specs.imei2', '');
+        setValue('specs.serial', '');
+        setValue('specs.color', '');
+        setValue('specs.storage', '');
+        setValue('specs.ram', '');
+        toast.success('Produto adicionado à lista!');
     };
 
     const removeFromSerialList = (index: number) => {
@@ -114,6 +152,18 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             console.log('📦 specs keys:', initialData.specs ? Object.keys(initialData.specs) : 'NO SPECS');
             console.log('🔄 Resetting form with initialData...');
             reset(initialData);
+
+            // Em modo edição, carregar o modelo explicitamente para que templateValues
+            // esteja disponível e ocultando campos que vêm do modelo (battery_mah, display, etc.)
+            if (initialData.model) {
+                modelService.listActive().then(models => {
+                    const model = models.find(m => m.name === initialData.model);
+                    if (model) {
+                        setSelectedModel(model);
+                        console.log('🎯 [edit mode] Model pre-loaded:', model.name);
+                    }
+                }).catch(() => {/* silently ignore */ });
+            }
         }
     }, [initialData, reset]);
 
@@ -162,12 +212,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
     // Load model data and template when model changes
     useEffect(() => {
         const loadModelData = async () => {
-            if (!selectedModelName || !selectedBrandId) {
+            if (!selectedModelName) {
                 setSelectedModel(undefined);
                 return;
             }
             try {
-                const models = await modelService.listByBrand(selectedBrandId);
+                const models = await modelService.listActive();
                 const model = models.find(m => m.name === selectedModelName);
                 setSelectedModel(model);
                 console.log('🎯 Model selected:', model);
@@ -176,10 +226,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             }
         };
         loadModelData();
-    }, [selectedModelName, selectedBrandId]);
+    }, [selectedModelName]);
 
-    // Apply model template when model is selected
-    useModelTemplate(selectedModel, setValue);
+    // Apply model template when model is selected (skip in edit mode to avoid overwriting existing data)
+    useModelTemplate(selectedModel, setValue, !!initialData);
 
     // Auto-load default images when model + color are selected
     const selectedColor = watch('specs.color');
@@ -252,6 +302,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
 
     // Auto-generate product name based on category configuration
     useEffect(() => {
+        // Em modo de edição, nunca sobrescrever o nome existente
+        if (initialData) return;
         if (!categoryConfig?.auto_name_enabled || nameManuallyEdited) return;
 
         const formData = {
@@ -469,13 +521,22 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 const duplicates: string[] = [];
 
                 for (const item of serialList) {
-                    const { data: existing } = await supabase
-                        .from('products')
-                        .select('id')
-                        .eq(`specs->>${item.type}`, item.value)
-                        .limit(1);
-                    if (existing && existing.length > 0) {
-                        duplicates.push(`${item.type === 'imei1' ? 'IMEI 1' : item.type === 'imei2' ? 'IMEI 2' : 'Serial'}: ${item.value}`);
+                    const fieldsToCheck: { key: 'imei1' | 'imei2' | 'serial'; label: string }[] = [
+                        { key: 'imei1', label: 'IMEI 1' },
+                        { key: 'imei2', label: 'IMEI 2' },
+                        { key: 'serial', label: 'Serial' },
+                    ];
+                    for (const { key, label } of fieldsToCheck) {
+                        const val = item[key];
+                        if (!val) continue;
+                        const { data: existing } = await supabase
+                            .from('products')
+                            .select('id')
+                            .eq(`specs->>${key}`, val)
+                            .limit(1);
+                        if (existing && existing.length > 0) {
+                            duplicates.push(`${label}: ${val}`);
+                        }
                     }
                 }
 
@@ -487,16 +548,45 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                     return;
                 }
 
+                // Carregar cores uma vez antes do loop para resolver nome → UUID
+                const allColors = await colorService.listActive().catch(() => []);
+
                 // Todos únicos — salvar um por um
                 for (const item of serialList) {
+                    // Resolver imagens da cor específica do item
+                    let itemImages = mergedData.images || [];
+                    if (item.color && mergedData.model_id) {
+                        const colorEntry = allColors.find(c => c.name === item.color);
+                        if (colorEntry) {
+                            try {
+                                const colorImgs = await modelColorImagesService.get(mergedData.model_id, colorEntry.id);
+                                if (colorImgs && colorImgs.images.length > 0) {
+                                    itemImages = colorImgs.images;
+                                }
+                            } catch {
+                                // Fallback: mantém imagens do formulário
+                            }
+                        }
+                    }
+
                     const itemData = {
                         ...mergedData,
-                        specs: { ...mergedData.specs, [item.type]: item.value }
+                        images: itemImages,
+                        specs: {
+                            ...mergedData.specs,
+                            imei1: item.imei1,
+                            imei2: item.imei2,
+                            serial: item.serial,
+                            color: item.color,
+                            storage: item.storage,
+                            ram: item.ram,
+                        }
                     };
                     await onSubmit(itemData);
                 }
                 toast.success(`${serialList.length} produto(s) cadastrado(s) com sucesso!`);
                 setSerialList([]);
+                onBatchComplete?.();
             } else {
                 // Produto único — verificar serial/IMEI do campo se preenchido
                 const { supabase } = await import('../../services/supabase');
@@ -504,11 +594,17 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 for (const field of uniqueFields) {
                     const val = mergedData.specs?.[field];
                     if (val) {
-                        const { data: existing } = await supabase
+                        let query = supabase
                             .from('products')
                             .select('id')
-                            .eq(`specs->>${field}`, val)
-                            .limit(1);
+                            .eq(`specs->>${field}`, val);
+
+                        // Em modo edição, exclui o próprio produto da verificação
+                        if (initialData?.id) {
+                            query = query.neq('id', initialData.id);
+                        }
+
+                        const { data: existing } = await query.limit(1);
                         if (existing && existing.length > 0) {
                             toast.error(`${field === 'imei1' ? 'IMEI 1' : field === 'imei2' ? 'IMEI 2' : 'Serial'} já cadastrado no sistema: ${val}`);
                             return;
@@ -592,36 +688,57 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
                 errors={errors}
                 onRefresh={loadCategoryConfig}
                 templateValues={selectedModel?.template_values}
-                onSerialConfirm={!initialData ? handleSerialConfirm : undefined}
+                currentProductId={initialData?.id}
             />
 
-            {/* LISTA DE SERIAIS PARA ENTRADA EM MASSA */}
-            {serialList.length > 0 && (
+            {/* BOTÃO ADICIONAR À LISTA + LISTA DE CADASTRO EM MASSA */}
+            {!initialData && (
                 <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-sm space-y-3">
                     <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                         <ListOrdered size={18} className="text-blue-600" />
                         Lista para Cadastro em Massa
                         <span className="ml-auto text-sm font-normal text-slate-500">{serialList.length} {serialList.length === 1 ? 'item' : 'itens'}</span>
                     </h3>
-                    <div className="space-y-2">
-                        {serialList.map((item, index) => (
-                            <div key={index} className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
-                                <CheckCircle2 size={16} className="text-green-500 shrink-0" />
-                                <span className="text-xs text-slate-500 font-medium uppercase w-12 shrink-0">{item.type === 'imei1' ? 'IMEI 1' : item.type === 'imei2' ? 'IMEI 2' : 'Serial'}</span>
-                                <span className="font-mono text-sm text-slate-800 flex-1">{item.value}</span>
-                                <button
-                                    type="button"
-                                    onClick={() => removeFromSerialList(index)}
-                                    className="text-slate-400 hover:text-red-500 transition-colors"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                    <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
-                        💡 Ao clicar em <strong>Salvar Produto</strong>, serão criados <strong>{serialList.length} produto(s)</strong> com os dados acima, um para cada item da lista.
-                    </p>
+
+                    {serialList.length > 0 && (
+                        <div className="space-y-2">
+                            {serialList.map((item, index) => (
+                                <div key={index} className="flex items-start gap-3 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                                    <CheckCircle2 size={16} className="text-green-500 shrink-0 mt-0.5" />
+                                    <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                                        {item.imei1 && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">IMEI 1</span><span className="font-mono text-slate-800">{item.imei1}</span></span>}
+                                        {item.imei2 && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">IMEI 2</span><span className="font-mono text-slate-800">{item.imei2}</span></span>}
+                                        {item.serial && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">SERIAL</span><span className="font-mono text-slate-800">{item.serial}</span></span>}
+                                        {item.color && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">COR</span><span className="text-slate-800">{item.color}</span></span>}
+                                        {item.ram && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">RAM</span><span className="text-slate-800">{item.ram}</span></span>}
+                                        {item.storage && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">STORAGE</span><span className="text-slate-800">{item.storage}</span></span>}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeFromSerialList(index)}
+                                        className="text-slate-400 hover:text-red-500 transition-colors shrink-0"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={handleAddToBatchList}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors"
+                    >
+                        <CheckCircle2 size={16} />
+                        Adicionar à Lista
+                    </button>
+
+                    {serialList.length > 0 && (
+                        <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
+                            💡 Ao clicar em <strong>Salvar Produto</strong>, serão criados <strong>{serialList.length} produto(s)</strong> com os dados acima, um para cada item da lista.
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -714,7 +831,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isLoading }: Prod
             </div>
 
             {/* 6. PRECIFICAÇÃO */}
-            <ProductPricing watch={watch} setValue={setValue} />
+            <ProductPricing watch={watch} setValue={setValue} modelId={watch('model_id') || undefined} />
 
             {/* 6. FISCAL & AUTOMAÇÃO */}
             < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >

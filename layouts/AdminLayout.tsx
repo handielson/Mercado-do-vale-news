@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -190,6 +190,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             icon={<MessageCircle size={18} />}
             label="Mensagens"
             active={location.pathname.startsWith('/admin/settings/messages')}
+          />
+          <NavItem
+            to="/admin/settings/telegram"
+            icon={<Bot size={18} />}
+            label="Automações Bot"
+            active={location.pathname.startsWith('/admin/settings/telegram')}
           />
           <NavItem
             to="/admin/settings/banners"

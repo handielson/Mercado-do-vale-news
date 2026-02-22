@@ -55,6 +55,7 @@ import PermissionsManagementPage from '../pages/admin/settings/PermissionsManage
 import CatalogEditorPage from '../pages/admin/catalog-editor';
 import CouponsPage from '../pages/admin/CouponsPage';
 import CashbackPage from '../pages/admin/CashbackPage';
+import TelegramPage from '../pages/admin/settings/TelegramPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
 import CoinsInfoPage from '../pages/catalog/CoinsInfoPage';
@@ -433,6 +434,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><MessagesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/telegram",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><TelegramPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

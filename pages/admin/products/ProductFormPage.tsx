@@ -58,14 +58,13 @@ export const ProductFormPage: React.FC = () => {
                 // Update existing product
                 await productService.update(id, data);
                 toast.success('Produto atualizado com sucesso!');
+                // Navegar após edição (produto único)
+                navigate('/admin/products');
             } else {
-                // Create new product
+                // Create new product (pode ser chamado várias vezes no batch)
                 await productService.create(data);
-                toast.success('Produto criado com sucesso!');
+                // Navegação controlada pelo ProductForm após concluir o batch
             }
-
-            // Redirect to products list
-            navigate('/admin/products');
         } catch (error) {
             console.error('Error saving product:', error);
             const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar produto';
@@ -73,6 +72,10 @@ export const ProductFormPage: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleBatchComplete = () => {
+        navigate('/admin/products');
     };
 
     const handleCancel = () => {
@@ -118,6 +121,7 @@ export const ProductFormPage: React.FC = () => {
                 initialData={product}
                 onSubmit={handleSubmit}
                 onCancel={handleCancel}
+                onBatchComplete={handleBatchComplete}
                 isLoading={isLoading}
             />
         </div>

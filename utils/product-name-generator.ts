@@ -114,8 +114,11 @@ function generateFromTemplate(
         .replace(/\/\s*\//g, '/')         // Remove double slashes
         .replace(/-\s*-/g, '-')           // Remove double hyphens
         .replace(/\(\s*\)/g, '')          // Remove empty parentheses
+        .replace(/,\s*\/\s*$/g, '')       // Remove trailing ", /" (ex: "Modelo, /" quando ram e storage estão vazios)
+        .replace(/,\s*\/\s*(?=[,\-\s]|$)/g, '') // Remove ", /" no meio quando o próximo char é separador
         .replace(/,\s*$/g, '')            // Remove trailing comma
         .replace(/^\s*,/g, '')            // Remove leading comma
+        .replace(/\/\s*$/g, '')           // Remove trailing slash
         .replace(/,\s*-/g, ' -')          // Clean up ", -" to " -"
         .replace(/-\s*,/g, ',')           // Clean up "- ," to ","
         .replace(/\/\s*-/g, ' -')         // Clean up "/ -" to " -"
