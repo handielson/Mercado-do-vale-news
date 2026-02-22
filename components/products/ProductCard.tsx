@@ -18,6 +18,7 @@ interface ProductCardProps {
  */
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
     const [modelImageUrl, setModelImageUrl] = useState<string | null>(null);
+    const [units, setUnits] = useState<{ imei_1: string; imei_2?: string; serial_number?: string }[]>([]);
 
     // Buscar foto do modelo como fallback quando produto não tem imagem própria
     useEffect(() => {
@@ -48,6 +49,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
         fetchModelImage();
     }, [product.model_id]);
+
+    // Buscar unidades (IMEI / Serial) deste produto
+    useEffect(() => {
+        if (!product.id || !product.track_inventory) return;
+        supabase
+            .from('units')
+            .select('imei_1, imei_2, serial_number')
+            .eq('product_id', product.id)
+            .eq('status', 'available')
+            .then(({ data }) => { if (data) setUnits(data); });
+    }, [product.id]);
 
 
     const coverImage = (product.images && product.images.length > 0)
@@ -159,6 +171,32 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         {getStatusLabel(product.status)}
                     </span>
                 </div>
+
+                {/* Unique Identifiers (IMEI / Serial) */}
+                {units.length > 0 && (
+                    <div className="border-t border-slate-100 pt-2 space-y-1">
+                        <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">Identificadores</p>
+                        {units.map((u, i) => (
+                            <div key={i} className="flex flex-wrap gap-x-2 gap-y-0.5">
+                                {u.imei_1 && (
+                                    <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                        IMEI1 {u.imei_1}
+                                    </span>
+                                )}
+                                {u.imei_2 && (
+                                    <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                        IMEI2 {u.imei_2}
+                                    </span>
+                                )}
+                                {!u.imei_1 && u.serial_number && (
+                                    <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                        Serial {u.serial_number}
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Prices */}
                 <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
