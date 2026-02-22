@@ -255,15 +255,15 @@ export default async function handler(req: any, res: any) {
                             instaMsg += `${emoji} *${time} — ${label}*\n`;
 
                             if (slot.hook) {
-                                instaMsg += `🎣 *Hook:* _${slot.hook}_\n\n`;
+                                instaMsg += `🎣 *Hook:* _${slot.hook.replace(/\\n/g, '\n')}_\n\n`;
                             }
 
                             if (slot.caption) {
-                                instaMsg += `📝 *Legenda pronta:*\n${slot.caption}\n\n`;
+                                instaMsg += `📝 *Legenda pronta:*\n${slot.caption.replace(/\\n/g, '\n')}\n\n`;
                             }
 
                             if (slot.cta) {
-                                instaMsg += `👉 *CTA:* ${slot.cta}\n`;
+                                instaMsg += `👉 *CTA:* ${slot.cta.replace(/\\n/g, '\n')}\n`;
                             }
 
                             if (slot.hashtags) {
