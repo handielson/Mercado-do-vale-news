@@ -82,7 +82,39 @@ export default async function handler(req: any, res: any) {
         }
 
         // 4. Gather Data for Context Variables
+
+        // 4.0 Dados da Empresa
+        let companyData: Record<string, string> = {};
+        try {
+            const { data: companyRow } = await supabase
+                .from('company_settings')
+                .select('name, phone, email, social_instagram, business_hours, address_street, address_city, address_state, address_number, address_neighborhood')
+                .limit(1)
+                .single();
+
+            if (companyRow) {
+                const addr = [
+                    companyRow.address_street,
+                    companyRow.address_number,
+                    companyRow.address_neighborhood,
+                    companyRow.address_city,
+                    companyRow.address_state
+                ].filter(Boolean).join(', ');
+
+                companyData = {
+                    '{empresa_nome}': companyRow.name || '',
+                    '{empresa_telefone}': companyRow.phone || '',
+                    '{empresa_whatsapp}': companyRow.phone || '',
+                    '{empresa_email}': companyRow.email || '',
+                    '{empresa_instagram}': companyRow.social_instagram ? `@${companyRow.social_instagram.replace(/^@/, '')}` : '',
+                    '{empresa_horario}': companyRow.business_hours || '',
+                    '{empresa_endereco}': addr,
+                };
+            }
+        } catch { /* sem dados da empresa — continua sem as tags */ }
+
         // 4.1 Faturamento do Dia
+
         const startOfDay = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(startOfDay);
@@ -233,8 +265,9 @@ export default async function handler(req: any, res: any) {
             }
         } catch { /* ignora falha na busca — usa só o built-in */ }
 
-        // Custom tags sobrescrevem built-in se nomes coincidirem
-        const dict = { ...builtinDict, ...customDict };
+        // Custom tags sobrescrevem built-in se nomes coincidirem. Dados da empresa disponíveis em todos.
+        const dict = { ...companyData, ...builtinDict, ...customDict };
+
 
         // 6. Fazer os disparos para todos os templates agendados para este momento
         let disparosSuccess = 0;
