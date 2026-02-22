@@ -214,7 +214,7 @@ export default async function handler(req: any, res: any) {
             if (slotsErr) console.error('instagram_schedule RLS/error:', slotsErr.message);
 
             if (allSlots && allSlots.length > 0) {
-                agendaSemanaTxt = `📅 *PROGRAMAÇÃO INSTAGRAM DA SEMANA*\n${'═'.repeat(28)}\n\n`;
+                agendaSemanaTxt = `📅 PROGRAMAÇÃO INSTAGRAM DA SEMANA\n${'═'.repeat(28)}\n\n`;
 
                 const byDay = new Map<number, typeof allSlots>();
                 for (const slot of allSlots) {
@@ -223,12 +223,12 @@ export default async function handler(req: any, res: any) {
                 }
 
                 for (const [day, slots] of Array.from(byDay.entries()).sort((a, b) => a[0] - b[0])) {
-                    agendaSemanaTxt += `📆 *${DAY_NAMES[day]}*\n${'─'.repeat(22)}\n`;
+                    agendaSemanaTxt += `📆 ${DAY_NAMES[day]}\n${'─'.repeat(22)}\n`;
                     for (const slot of slots) {
                         const time = slot.scheduled_time?.slice(0, 5) || '??:??';
                         const emoji = CONTENT_EMOJI[slot.content_type] || '📱';
                         const label = CONTENT_LABEL[slot.content_type] || slot.content_type;
-                        agendaSemanaTxt += `\n${emoji} *${time} — ${label}*\n`;
+                        agendaSemanaTxt += `\n${emoji} ${time} — ${label}\n`;
                         if (slot.hook) agendaSemanaTxt += `🎣 ${safe(slot.hook)}\n`;
                         if (slot.caption) agendaSemanaTxt += `📝 ${safe(slot.caption)}\n`;
                         if (slot.cta) agendaSemanaTxt += `👉 ${safe(slot.cta)}\n`;
@@ -298,22 +298,14 @@ export default async function handler(req: any, res: any) {
             // Truncar se ultrapassar o limite do Telegram (4096 chars)
             if (msg.length > 4000) msg = msg.substring(0, 3900) + '\n\n... [mensagem truncada]';
 
-            // Enviar requisição HTTPS pro Telegram
+            // Enviar requisição HTTPS pro Telegram (texto simples, sem parse_mode)
             const url = `https://api.telegram.org/bot${settings.bot_token}/sendMessage`;
             try {
-                const tgRes = await fetch(url, {
+                await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: settings.chat_id, text: msg, parse_mode: 'Markdown' }),
+                    body: JSON.stringify({ chat_id: settings.chat_id, text: msg }),
                 });
-                if (!tgRes.ok) {
-                    // Tentar sem Markdown se falhar
-                    await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id: settings.chat_id, text: msg }),
-                    });
-                }
                 disparosSuccess++;
             } catch (e) {
                 console.error('Falha ao enviar disparo:', template.name);
