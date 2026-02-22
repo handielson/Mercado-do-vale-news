@@ -58,6 +58,7 @@ export interface Company {
     businessHours?: string;
     description?: string;
     internalNotes?: string;
+    catalogFooterText?: string; // Texto do rodapé exibido no catálogo público
 
     // Integrations
     googleAnalyticsId?: string; // Google Analytics Measurement ID (ex: G-XXXXXXXXXX)
@@ -100,5 +101,6 @@ export const defaultCompany: Company = {
     bankAccount: '',
     businessHours: '',
     description: '',
-    internalNotes: ''
+    internalNotes: '',
+    catalogFooterText: '© 2026 Mercado do Vale. Todos os direitos reservados. As informações, preços e disponibilidade de produtos estão sujeitos a alterações sem aviso prévio.'
 };

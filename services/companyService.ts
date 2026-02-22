@@ -48,6 +48,7 @@ interface CompanySettingsRow {
     description: string | null;
     internal_notes: string | null;
     google_analytics_id: string | null;
+    catalog_footer_text: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -98,6 +99,7 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     description: row.description || '',
     internalNotes: row.internal_notes || '',
     googleAnalyticsId: row.google_analytics_id || '',
+    catalogFooterText: row.catalog_footer_text || '',
 });
 
 /**
@@ -141,6 +143,7 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     description: company.description || null,
     internal_notes: company.internalNotes || null,
     google_analytics_id: company.googleAnalyticsId || null,
+    catalog_footer_text: company.catalogFooterText || null,
 });
 
 /**

@@ -68,6 +68,22 @@ export const CompanyAdditionalInfoSection: React.FC<CompanyAdditionalInfoSection
                     Estas observações são apenas para uso interno
                 </p>
             </div>
+
+            <div className="mt-6 pt-6 border-t border-slate-100">
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                    Rodapé do Catálogo Público
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                    Texto exibido no rodapé da página do catálogo para todos os clientes.
+                </p>
+                <textarea
+                    value={form.catalogFooterText || ''}
+                    onChange={(e) => onChange({ catalogFooterText: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                    placeholder="Ex: © 2026 Mercado do Vale. Todos os direitos reservados."
+                    rows={2}
+                />
+            </div>
         </div>
     );
 };

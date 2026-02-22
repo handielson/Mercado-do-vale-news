@@ -16,6 +16,7 @@ import { useCatalog } from '@/hooks/useCatalog';
 
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import { groupProductsByVariants } from '@/services/productGrouping';
+import { getCompanyData } from '@/services/companyService';
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { CatalogSection } from '@/types/catalogSections';
 import { QuoteCartProvider } from '@/contexts/QuoteCartContext';
@@ -29,6 +30,7 @@ function CatalogContent() {
     const [sections, setSections] = useState<CatalogSection[]>([]);
     const [sectionsLoading, setSectionsLoading] = useState(true);
     const [isCartOpen, setIsCartOpen] = useState(false);
+    const [footerText, setFooterText] = useState('');
 
     const { customer } = useSupabaseAuth();
 
@@ -67,6 +69,9 @@ function CatalogContent() {
     // Carregar seções ativas
     useEffect(() => {
         loadSections();
+        getCompanyData().then(c => {
+            if (c.catalogFooterText) setFooterText(c.catalogFooterText);
+        }).catch(() => { });
     }, []);
 
     const loadSections = async () => {
@@ -173,9 +178,7 @@ function CatalogContent() {
                             <h1 className="text-3xl font-bold text-slate-900 mb-2">
                                 Catálogo de Produtos
                             </h1>
-                            <p className="text-slate-600">
-                                {loading ? 'Carregando...' : `${productGroups.length} ${productGroups.length === 1 ? 'variante encontrada' : 'variantes encontradas'}`}
-                            </p>
+
                         </div>
 
                         {/* Share and View Controls */}
@@ -252,6 +255,15 @@ function CatalogContent() {
                 onClose={() => setIsCartOpen(false)}
                 onSendQuote={handleSendQuote}
             />
+
+            {/* Rodapé do Catálogo */}
+            {footerText && (
+                <footer className="border-t border-slate-200 bg-white mt-4">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 text-center">
+                        <p className="text-xs text-slate-400">{footerText}</p>
+                    </div>
+                </footer>
+            )}
         </div>
     );
 }
