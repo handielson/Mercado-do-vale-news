@@ -100,14 +100,6 @@ export default function TelegramPage() {
                 { tag: '{empresa_horario}', desc: 'Horario de funcionamento' },
                 { tag: '{empresa_instagram}', desc: '@instagram da loja' },
             ];
-                { tag: '{agenda_instagram_semana}', desc: 'Cronograma completo Instagram da semana (todos os dias, legendas, CTAs e hashtags)' },
-                { tag: '{empresa_nome}', desc: 'Nome da empresa' },
-                { tag: '{empresa_telefone}', desc: 'Telefone/WhatsApp da loja' },
-                { tag: '{empresa_whatsapp}', desc: 'WhatsApp da loja' },
-                { tag: '{empresa_endereco}', desc: 'Endereco completo' },
-                { tag: '{empresa_horario}', desc: 'Horario de funcionamento' },
-                { tag: '{empresa_instagram}', desc: '@instagram da loja' },
-            ];
         }
 
         if (actionType === 'new_customer') {
