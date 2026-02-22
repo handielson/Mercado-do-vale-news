@@ -47,19 +47,31 @@ export const CompanyIdentitySection: React.FC<CompanyIdentitySectionProps> = ({
             {/* Logo e Favicon */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <ImageUploader
-                    label="Logo da Empresa"
+                    label="Logo Principal da Empresa"
                     value={form.logo}
                     onChange={(base64) => onChange({ logo: base64 })}
                     recommendedSize="400x400px"
                 />
 
                 <ImageUploader
-                    label="Favicon"
+                    label="Favicon (Ícone do Navegador)"
                     value={form.favicon || null}
                     onChange={(base64) => onChange({ favicon: base64 })}
                     recommendedSize="64x64px"
                     maxWidth={64}
                 />
+
+                <div className="md:col-span-2">
+                    <ImageUploader
+                        label="Marca d'Água (Marketing)"
+                        value={form.watermarkLogoUrl || null}
+                        onChange={(base64) => onChange({ watermarkLogoUrl: base64 })}
+                        recommendedSize="Fundo Transparente (Branco/Cinza)"
+                    />
+                    <p className="text-xs text-slate-500 mt-2">
+                        Utilizado para assinar as artes geradas no <b>Estúdio de Marketing</b>. Envie de preferência o seu logotipo na cor Branca com fundo transparente (PNG).
+                    </p>
+                </div>
             </div>
 
             {/* URL do Logo (alternativa) */}

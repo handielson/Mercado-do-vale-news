@@ -153,8 +153,8 @@ export default async function handler(req: any, res: any) {
             celularListStr = sortedList.length > 0 ? sortedList.join('\n') : 'Nenhum celular em estoque.';
         }
 
-        // 5. Preparar o Dicionário de Variáveis
-        const dict: any = {
+        // 5. Preparar o Dicionário de Variáveis Built-in
+        const builtinDict: Record<string, string> = {
             '{qtd_vendas}': qtd_vendas.toString(),
             '{faturamento}': fmtMoney(faturamento),
             '{lucro_total}': fmtMoney(lucro_total),
@@ -163,6 +163,28 @@ export default async function handler(req: any, res: any) {
             '{estoque_geral_loja}': estoqueGeralTotal.toString(),
             '{estoque_lista_celulares}': celularListStr,
         };
+
+        // 5.1 Carregar tags customizadas do banco e resolvê-las
+        let customDict: Record<string, string> = {};
+        try {
+            const { data: systemTags } = await supabase
+                .from('system_tags')
+                .select('*')
+                .eq('active', true)
+                .neq('resolver_type', 'system_injected');
+
+            if (systemTags && systemTags.length > 0) {
+                for (const tag of systemTags) {
+                    try {
+                        const value = await resolveTagInline(tag, supabase, now, fmtMoney);
+                        customDict[`{${tag.name}}`] = value;
+                    } catch { /* ignora falha individual */ }
+                }
+            }
+        } catch { /* ignora falha na busca — usa só o built-in */ }
+
+        // Custom tags sobrescrevem built-in se nomes coincidirem
+        const dict = { ...builtinDict, ...customDict };
 
         // 6. Fazer os disparos para todos os templates agendados para este momento
         let disparosSuccess = 0;
@@ -195,5 +217,119 @@ export default async function handler(req: any, res: any) {
     } catch (error: any) {
         console.error('Cron job fatal error', error);
         return res.status(500).json({ error: error.message });
+    }
+}
+
+// ── Resolver inline para tags customizadas do system_tags ──────────────────
+async function resolveTagInline(
+    tag: any,
+    supabase: any,
+    now: Date,
+    fmtMoney: (v: number) => string
+): Promise<string> {
+    const cfg = tag.resolver_config || {};
+
+    switch (tag.resolver_type) {
+        case 'static':
+            return cfg.value ?? '';
+
+        case 'date_now': {
+            const tz = 'America/Sao_Paulo';
+            if (cfg.format === 'time') {
+                return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(now);
+            }
+            if (cfg.format === 'datetime') {
+                return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: tz }).format(now);
+            }
+            return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: tz }).format(now);
+        }
+
+        case 'count_products': {
+            let q = supabase.from('products').select('id', { count: 'exact', head: true });
+            if (cfg.status) q = q.eq('status', cfg.status);
+            if (cfg.min_stock != null) q = q.gt('stock_quantity', cfg.min_stock - 1);
+            const { count } = await q;
+            return (count ?? 0).toString();
+        }
+
+        case 'sum_products_stock': {
+            let q = supabase.from('products').select('stock_quantity');
+            if (cfg.status) q = q.eq('status', cfg.status);
+            const { data } = await q;
+            return ((data ?? []).reduce((s: number, p: any) => s + (p.stock_quantity || 0), 0)).toString();
+        }
+
+        case 'list_products': {
+            const limit = cfg.limit ?? 30;
+            const fmt = cfg.format ?? '• {qty}x - {name} - {color} - {ram}/{storage}';
+            const { data: prods } = await supabase
+                .from('products')
+                .select('name, stock_quantity, specs, price_pix, price_card')
+                .eq('status', 'active')
+                .gt('stock_quantity', 0);
+
+            if (!prods || prods.length === 0) return 'Nenhum item em estoque.';
+
+            const CELULAR_KW = ['iphone', 'samsung', 'xiaomi', 'motorola', 'galaxy', 'poco', 'redmi', 'smartphone'];
+            const filtered = cfg.category_slug === 'celulares'
+                ? prods.filter((p: any) => CELULAR_KW.some(k => p.name.toLowerCase().includes(k)))
+                : prods;
+
+            const grouped = new Map<string, { qty: number; p: any }>();
+            filtered.forEach((p: any) => {
+                const color = p.specs?.color || '';
+                const ram = p.specs?.ram || '';
+                const storage = p.specs?.storage || '';
+                const key = `${p.name}||${color}||${ram}||${storage}`;
+                const ex = grouped.get(key);
+                if (ex) ex.qty += p.stock_quantity || 0;
+                else grouped.set(key, { qty: p.stock_quantity || 0, p });
+            });
+
+            const lines = Array.from(grouped.values())
+                .sort((a, b) => b.qty - a.qty)
+                .slice(0, limit)
+                .map(({ qty, p }) => {
+                    let line = fmt;
+                    const row: Record<string, string> = {
+                        qty: qty.toString(),
+                        name: p.name,
+                        color: p.specs?.color || '',
+                        ram: p.specs?.ram || '',
+                        storage: p.specs?.storage || '',
+                        avg_price: p.price_pix ? fmtMoney(p.price_pix / 100) : '',
+                        price_pix: p.price_pix ? fmtMoney(p.price_pix / 100) : '',
+                        price_card: p.price_card ? fmtMoney(p.price_card / 100) : '',
+                    };
+                    Object.entries(row).forEach(([k, v]) => { line = line.split(`{${k}}`).join(v); });
+                    return line;
+                });
+
+            return lines.length > 0 ? lines.join('\n') : 'Nenhum item em estoque.';
+        }
+
+        case 'count_sales_today': {
+            const start = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(start); end.setHours(23, 59, 59, 999);
+            let q = supabase.from('sales').select('id', { count: 'exact', head: true }).gte('created_at', start.toISOString()).lte('created_at', end.toISOString());
+            if (cfg.status) q = q.eq('status', cfg.status);
+            const { count } = await q;
+            return (count ?? 0).toString();
+        }
+
+        case 'sum_sales_today': {
+            const start = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(start); end.setHours(23, 59, 59, 999);
+            const field = cfg.field ?? 'total';
+            let q = supabase.from('sales').select(field).gte('created_at', start.toISOString()).lte('created_at', end.toISOString());
+            if (cfg.status) q = q.eq('status', cfg.status);
+            const { data } = await q;
+            return fmtMoney((data ?? []).reduce((s: number, r: any) => s + (r[field] || 0), 0));
+        }
+
+        default:
+            return tag.preview_value || `{${tag.name}}`;
     }
 }

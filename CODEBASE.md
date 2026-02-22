@@ -23,6 +23,7 @@
 | 9 | ~~`storages.ts` usa localStorage~~ ✅ **RESOLVIDO** — `CapacitySelect` importa de `storages-supabase.ts` | `services/storages-supabase.ts` | — | — |
 | 10 | ~~Dead code excluído em 2026-02-19: `AutoNamingSection.tsx`, `EANAutofillSection.tsx`, `CustomFieldsEditor.tsx` (legado), `FieldDialog.tsx`~~ ✅ **REMOVIDO** — nenhum componente ativo os importava. `AutoNamingSection` e `EANAutofillSection` não estavam montados na `CategoryEditPage`. `CustomFieldsEditor` foi substituído por `CustomFieldsEditorNew`. `FieldDialog` era dependência exclusiva do legado. | `components/categories/` | — | — |
 | 11 | ~~Dead code excluído em 2026-02-19: `ModelModalNew.tsx`, `ModelModalExcel.tsx`, `ModelModalTemplateValues.tsx`, `ModelBasicInfo.tsx`, `ModelSpecifications.tsx`, `ModelCustomFields.tsx`, `ModelEANManager.tsx`~~ ✅ **REMOVIDO** — nenhum componente ativo os importava. `ModelModalNew` era modal alternativo não montado na `ModelsPage`. Os demais eram dependências exclusivas do `ModelModalNew`. O modal ativo é `ModelModal.tsx`. | `components/settings/` | — | — |
+| 12 | **Telegram Cron Vercel Hobby Limit:** Vercel Hobby tier limita Crons a 1x por dia (`0 22 * * *`). Para agendamentos de hora em hora funcionarem, migrar para gatilho externo como `cron-job.org` batendo no endpoint `/api/cron-dispatcher`. | `vercel.json`, `api/cron-dispatcher.ts` | Backend não dispara alertas de hora em hora | Alta |
 
 ---
 
@@ -6570,3 +6571,177 @@ interface BatchItem {
 | 6 | `battery_mah` e `display` filtrados pelo `PRODUCT_LEVEL_FIELDS` | `fieldMetadata.ts` |
 | 7 | UUIDs em `template_values` resolvidos via `versionService.getById()` | `ProductBasicInfo.tsx` |
 | 8 | Cadastro em massa: unicidade verificada para TODOS antes de salvar qualquer item | `ProductForm.tsx:507` |
+
+---
+
+## 🤖 SISTEMA DE AGENT SKILLS — Antigravity
+
+> **Localização:** `.agent/skills/` (raiz do workspace, fora de `mercado-do-vale/`)
+> Skills são módulos de conhecimento especializado carregados pelo agente Antigravity conforme o tipo de solicitação.
+
+### Estrutura de Diretórios
+
+```
+.agent/
+├── skills/
+│   ├── intelligent-routing/
+│   │   └── SKILL.md        # Roteamento automático de agentes
+│   ├── instagram-revenue/
+│   │   └── SKILL.md        # ← NOVA SKILL (criada em 2026-02-22)
+│   ├── clean-code/
+│   ├── brainstorming/
+│   ├── frontend-design/
+│   └── ... (demais skills)
+```
+
+---
+
+### Skill: `instagram-revenue` — Instagram Revenue Domination System
+
+**Arquivo:** `.agent/skills/instagram-revenue/SKILL.md`
+**Criada em:** 2026-02-22
+**Tipo:** `global_skill`
+
+#### Descrição
+
+Especialista de elite em Instagram, growth marketing e engenharia de conversão.
+Transforma perfis em máquinas previsíveis de vendas com **receita previsível e mensurável**.
+
+#### Gatilhos de Ativação
+
+| Modo | Condição | Prioridade |
+|------|----------|------------|
+| **Forçado** | Mensagem começa com `ag_Instagram` | 🔴 HIGH — ativa imediatamente, sem perguntas |
+| **Automático** | Mensagem contém qualquer keyword abaixo | 🟡 MEDIUM |
+
+**Keywords de ativação automática:**
+`ag_instagram`, `instagram`, `reels`, `stories`, `story`, `bio`, `direct`,
+`funil de vendas`, `tráfego pago`, `meta ads`, `crescimento`, `engajamento`,
+`monetização`, `seguidores`, `conteúdo`
+
+#### Modo Operacional (Estrutura Obrigatória de Resposta)
+
+Quando ativada, sempre responde nas **7 seções abaixo** (nessa ordem):
+
+```
+1️⃣ Diagnóstico           → Situação atual, pontos críticos
+2️⃣ Estratégia de Crescimento → Ações para expandir audiência qualificada
+3️⃣ Estratégia de Conteúdo    → Formatos, frequências, hooks, calendário
+4️⃣ Funil de Conversão        → Jornada do seguidor até o cliente
+5️⃣ Estratégia de Tráfego     → Orgânico + Pago (Meta Ads)
+6️⃣ Métricas                  → KPIs prioritários e como acompanhar
+7️⃣ Plano de Execução         → Próximos passos em ordem de prioridade
+```
+
+**Prioriza:** Conversão > vaidade, retenção nos primeiros 3s, compartilhamentos, receita mensurável.
+**Nunca faz:** Respostas genéricas, foco só em seguidores, sugestão de engajamento falso.
+
+#### Módulos Documentados (16 no total)
+
+| # | Módulo | Conteúdo Principal |
+|---|--------|--------------------|
+| 1 | **Crescimento Orgânico** | Pirâmide 70-20-10, algoritmo 2025, Hook Formula |
+| 2 | **Funil de Vendas** | 4 camadas (TOPO→PÓS-VENDA), protocolo de DM |
+| 3 | **Tráfego Pago (Meta Ads)** | Estrutura de campanha, script de vídeo 30s, budget/escala |
+| 4 | **Métricas** | KPIs por etapa, análise semanal obrigatória |
+| 5 | **Psicologia de Vendas** | Gatilhos mentais, fórmula AIDA para legendas |
+| 6 | **Instagram SEO** | Bio otimizada (4 linhas), palavras-chave, alt text, áudio |
+| 7 | **Carrossel de Alta Performance** | Template 10 slides, regras de design mobile |
+| 8 | **Estratégia de Hashtags** | Mix micro/médio/macro, rotação de 30-50 tags |
+| 9 | **Live que Vende** | Estrutura 60-90min, preparação, engajamento em tempo real |
+| 10 | **Collab Posts e UGC** | Parceria de conteúdo, User Generated Content, seleção de parceiros |
+| 11 | **Close Friends e Broadcast Channel** | Estratégia VIP, canal one-way com notificação direta |
+| 12 | **Monetização Avançada** | Instagram Shopping, Brand Deals (tabela de preços BR), escalonamento |
+| 13 | **Análise de Concorrentes** | Matriz de análise, ferramentas (Meta Ad Library, Phlanx) |
+| 14 | **Calendário Editorial** | Template mensal, datas sazonais BR (Dia das Mães, Black Friday, etc.) |
+| 15 | **Benchmarks por Nicho** | Taxa de engajamento e crescimento por setor (moda, varejo, imóveis, etc.) |
+| 16 | **Automação de DM (ManyChat)** | 4 flows prontos, sequência de nurturing de 5 dias |
+
+#### Checklists Incluídos
+
+- ✅ **Checklist Antes de Postar um Reel** (6 itens)
+- ✅ **Checklist de Campanha Meta Ads** (6 itens)
+- ✅ **Checklist de Bio Otimizada** (7 itens)
+- ✅ **Checklist de Carrossel** (6 itens)
+- ✅ **Checklist de Análise Mensal** (6 itens)
+
+#### Framework Principal: R.E.A.C.H.
+
+| Letra | Etapa | Descrição |
+|-------|-------|-----------|
+| **R** | Reach | Expandir audiência qualificada |
+| **E** | Engage | Criar conexão e autoridade |
+| **A** | Attract | Atrair leads com conteúdo ímã |
+| **C** | Convert | Transformar seguidores em clientes |
+| **H** | Humanize | Construir relacionamento e fidelidade |
+
+---
+
+### Skill Modificada: `intelligent-routing` — Roteamento Automático
+
+**Arquivo:** `.agent/skills/intelligent-routing/SKILL.md`
+**Modificado em:** 2026-02-22
+
+#### Regras de Roteamento Adicionadas
+
+```
+PRIORITY TRIGGER (HIGH):
+  IF message starts with "ag_Instagram"
+  THEN activate instagram-revenue skill — PRIORITY HIGH
+       Skip all other routing. No questions asked.
+
+AUTOMATIC TRIGGER (MEDIUM):
+  IF message contains: instagram | reels | stories | story | bio | direct
+                       seguidores | engajamento | tráfego instagram
+  THEN activate instagram-revenue skill — PRIORITY MEDIUM
+```
+
+#### Tabela de Roteamento Completa (após modificação)
+
+| Intent | Keywords | Agent/Skill | Auto-invoke |
+|--------|----------|-------------|-------------|
+| 🔴 Instagram (FORCED) | Inicia com `ag_Instagram` | `instagram-revenue` — HIGH | ✅ FORCED |
+| Instagram | keywords variadas | `instagram-revenue` — MEDIUM | ✅ YES |
+| Authentication | login, auth, signup | `security-auditor` + `backend-specialist` | ✅ YES |
+| UI Component | button, card, layout | `frontend-specialist` | ✅ YES |
+| Mobile UI | screen, navigation, touch | `mobile-developer` | ✅ YES |
+| API Endpoint | endpoint, route, API | `backend-specialist` | ✅ YES |
+| Database | schema, migration, query | `database-architect` + `backend-specialist` | ✅ YES |
+| Bug Fix | error, bug, not working | `debugger` | ✅ YES |
+| Test | test, coverage, unit, e2e | `test-engineer` | ✅ YES |
+| Deployment | deploy, production, CI/CD | `devops-engineer` | ✅ YES |
+| Security Review | security, vulnerability | `security-auditor` + `penetration-tester` | ✅ YES |
+| Performance | slow, optimize, performance | `performance-optimizer` | ✅ YES |
+| Product Def | requirements, user story, MVP | `product-owner` | ✅ YES |
+| New Feature / Complex | build, create, multi-domain | `orchestrator` → multi-agent | ⚠️ ASK FIRST |
+
+#### Protocolo de Prioridade de Regras
+
+```
+P0: GEMINI.md (sempre prevalece)
+P1: Agent .md específico
+P2: SKILL.md (intelligent-routing)
+→ Trigger ag_Instagram tem HIGH priority dentro do P2
+```
+
+---
+
+### Como Usar as Skills no Projeto
+
+```
+1. Modo automático:
+   → Mencione qualquer keyword mapeada
+   → O agente ativa a skill sem intervenção manual
+
+2. Modo forçado (ag_Instagram):
+   → Inicie a mensagem com "ag_Instagram ..."
+   → Garante ativação mesmo em contextos mistos
+
+3. Modo explícito (qualquer skill):
+   → @[nome-da-skill] no início da mensagem
+   → Sobrepõe o roteamento automático
+```
+
+**⚠️ REGRA DE OURO:** Roteamento automático **NÃO** sobrepõe o Socratic Gate do GEMINI.md.
+Se a tarefa for complexa/vaga, o agente ainda fará perguntas antes de prosseguir.
+

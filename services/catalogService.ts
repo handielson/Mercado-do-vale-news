@@ -396,7 +396,7 @@ export const catalogService = {
     },
 
     /**
-     * Buscar categorias disponíveis
+     * Buscar categorias disponíveis (somente IDs em uso)
      */
     getCategories: async (): Promise<string[]> => {
         const { data, error } = await supabase
@@ -408,6 +408,19 @@ export const catalogService = {
 
         const categories = [...new Set(data?.map(p => p.category_id).filter(Boolean))];
         return categories.sort();
+    },
+
+    /**
+     * Buscar lista completa de categorias com ID e Nome (útil para Selects)
+     */
+    getCategoriesWithNames: async (): Promise<{ id: string, name: string }[]> => {
+        const { data, error } = await supabase
+            .from('categories')
+            .select('id, name')
+            .order('name');
+
+        if (error) throw error;
+        return data || [];
     },
 
     /**

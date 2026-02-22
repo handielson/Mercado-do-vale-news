@@ -36,6 +36,7 @@ export interface Company {
     email: string;
     logo: string | null;
     logoUrl?: string; // URL do logo (alternativa ao base64)
+    watermarkLogoUrl?: string | null; // Logo sem fundo/branco pra usar como marca d'água
     favicon?: string | null;
 
     // Address

@@ -22,6 +22,7 @@ interface CompanySettingsRow {
     phone: string | null;
     email: string | null;
     logo: string | null;
+    watermark_url: string | null;
     favicon: string | null;
     address_zip_code: string | null;
     address_street: string | null;
@@ -67,6 +68,7 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     email: row.email || '',
     logo: row.logo,
     logoUrl: row.logo || '', // Use logo field for logoUrl
+    watermarkLogoUrl: row.watermark_url || '',
     favicon: row.favicon,
     address: {
         zipCode: row.address_zip_code || '',
@@ -113,6 +115,7 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     phone: company.phone || null,
     email: company.email || null,
     logo: company.logo,
+    watermark_url: company.watermarkLogoUrl || null,
     favicon: company.favicon || null,
     address_zip_code: company.address.zipCode || null,
     address_street: company.address.street || null,

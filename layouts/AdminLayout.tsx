@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -192,10 +192,22 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             active={location.pathname.startsWith('/admin/settings/messages')}
           />
           <NavItem
+            to="/admin/settings/marketing"
+            icon={<Megaphone size={18} />}
+            label="Criativos"
+            active={location.pathname.startsWith('/admin/settings/marketing')}
+          />
+          <NavItem
             to="/admin/settings/telegram"
             icon={<Bot size={18} />}
             label="Automações Bot"
             active={location.pathname.startsWith('/admin/settings/telegram')}
+          />
+          <NavItem
+            to="/admin/settings/system-tags"
+            icon={<Tag size={18} />}
+            label="Tags do Sistema"
+            active={location.pathname.startsWith('/admin/settings/system-tags')}
           />
           <NavItem
             to="/admin/settings/banners"

@@ -143,6 +143,36 @@ export default function TelegramPage() {
         }
     };
 
+    const handleForceTrigger = async (templateIdToDps: string) => {
+        if (!settings?.bot_token || !settings?.chat_id) {
+            toast.error('O Bot precisa estar salvo e configurado.');
+            return;
+        }
+
+        const activeLayout = settings.templates.find(t => t.id === templateIdToDps);
+        if (!activeLayout) return;
+
+        try {
+            toast.loading('Iniciando construção do relatório...', { id: 'cron-force' });
+
+            // Passa o ID na porta local da Vercel/Vite
+            const res = await fetch(`/api/cron-dispatcher?forceTemplateId=${templateIdToDps}`, {
+                method: 'POST'
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                toast.success('Disparado com sucesso! Verifique o Telegram.', { id: 'cron-force' });
+            } else {
+                toast.error(data.message || 'Falha ao processar o relatório', { id: 'cron-force' });
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error('Erro ao se conectar com motor de relatórios.', { id: 'cron-force' });
+        }
+    };
+
     const handleTest = async () => {
         if (!settings?.bot_token || !settings?.chat_id) {
             toast.error('Preencha e salve o Token e Chat ID antes de testar.');
@@ -377,14 +407,27 @@ export default function TelegramPage() {
                                                 </p>
                                             )}
                                         </div>
-                                        {(t.id !== 'sale_template' && t.id !== 'new_customer_template' && t.id !== 'daily_report_template') && (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(t.id); }}
-                                                className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
+
+                                        <div className="flex gap-2">
+                                            {t.type === 'scheduled' && activeTemplateId === t.id && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleForceTrigger(t.id); }}
+                                                    className="p-1.5 text-blue-500 hover:bg-blue-100/50 rounded-md transition-colors"
+                                                    title="Disparar Relatório Agora"
+                                                >
+                                                    <Send className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            {t.id !== 'sale_template' && t.id !== 'new_customer_template' && t.id !== 'daily_report_template' && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(t.id); }}
+                                                    className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
+                                                    title="Excluir Template"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
