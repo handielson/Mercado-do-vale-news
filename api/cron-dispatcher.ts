@@ -154,6 +154,54 @@ export default async function handler(req: any, res: any) {
         }
 
         // 5. Preparar o Dicionário de Variáveis Built-in
+        const DAY_NAMES = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+        const CONTENT_EMOJI: Record<string, string> = { story: '📸', reels: '🎬', carrossel: '🎴', post: '📷' };
+        const CONTENT_LABEL: Record<string, string> = { story: 'Story', reels: 'Reels', carrossel: 'Carrossel', post: 'Post Feed' };
+
+        // Resolver {agenda_instagram_semana}
+        let agendaSemanaTxt = '';
+        try {
+            const nlDb = (s: string | null) => (s || '').replace(/\\n/g, '\n');
+            const { data: allSlots } = await supabase
+                .from('instagram_schedule')
+                .select('*')
+                .eq('active', true)
+                .order('day_of_week')
+                .order('scheduled_time');
+
+            if (allSlots && allSlots.length > 0) {
+                agendaSemanaTxt = `📅 *PROGRAMAÇÃO INSTAGRAM DA SEMANA*\n${'═'.repeat(30)}\n\n`;
+
+                const byDay = new Map<number, typeof allSlots>();
+                for (const slot of allSlots) {
+                    if (!byDay.has(slot.day_of_week)) byDay.set(slot.day_of_week, []);
+                    byDay.get(slot.day_of_week)!.push(slot);
+                }
+
+                for (const [day, slots] of Array.from(byDay.entries()).sort((a, b) => a[0] - b[0])) {
+                    agendaSemanaTxt += `📆 *${DAY_NAMES[day]}*\n${'─'.repeat(25)}\n`;
+                    for (const slot of slots) {
+                        const time = slot.scheduled_time?.slice(0, 5) || '??:??';
+                        const emoji = CONTENT_EMOJI[slot.content_type] || '📱';
+                        const label = CONTENT_LABEL[slot.content_type] || slot.content_type;
+                        agendaSemanaTxt += `\n${emoji} *${time} — ${label}*\n`;
+                        if (slot.hook) agendaSemanaTxt += `🎣 _${nlDb(slot.hook)}_\n`;
+                        if (slot.caption) agendaSemanaTxt += `📝 ${nlDb(slot.caption)}\n`;
+                        if (slot.cta) agendaSemanaTxt += `👉 ${nlDb(slot.cta)}\n`;
+                        if (slot.hashtags) agendaSemanaTxt += `🏷️ ${slot.hashtags}\n`;
+                        if (slot.visual_notes) agendaSemanaTxt += `🎨 _${nlDb(slot.visual_notes)}_\n`;
+                    }
+                    agendaSemanaTxt += '\n';
+                }
+
+                agendaSemanaTxt += `✅ _Total: ${allSlots.length} posts planejados para a semana._`;
+            } else {
+                agendaSemanaTxt = '_Nenhum slot de Instagram cadastrado para a semana._';
+            }
+        } catch {
+            agendaSemanaTxt = '_Erro ao carregar agenda Instagram._';
+        }
+
         const builtinDict: Record<string, string> = {
             '{qtd_vendas}': qtd_vendas.toString(),
             '{faturamento}': fmtMoney(faturamento),
@@ -162,7 +210,9 @@ export default async function handler(req: any, res: any) {
             '{estoque_celulares}': estoqueCelularesTotal.toString(),
             '{estoque_geral_loja}': estoqueGeralTotal.toString(),
             '{estoque_lista_celulares}': celularListStr,
+            '{agenda_instagram_semana}': agendaSemanaTxt,
         };
+
 
         // 5.1 Carregar tags customizadas do banco e resolvê-las
         let customDict: Record<string, string> = {};
