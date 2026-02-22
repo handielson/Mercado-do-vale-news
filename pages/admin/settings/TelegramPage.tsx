@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Bot, Save, Send, AlertCircle, Info, Plus, Trash2, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { telegramSettingsService, TelegramSettings, TelegramTemplate } from '../../../services/telegramSettings';
@@ -11,7 +11,7 @@ const renderTelegramFormatting = (text: string) => {
     // Trocar quebras de linha
     let html = text.replace(/\n/g, '<br />');
 
-    // Negrito *texto* -> <strong>texto</strong> e Itálico _texto_ -> <em>texto</em>
+    // Negrito *texto* -> <strong>texto</strong> e ItÃ¡lico _texto_ -> <em>texto</em>
     html = html.replace(/\*(.*?)\*/g, '<strong>$1</strong>');
     html = html.replace(/_(.*?)_/g, '<em>$1</em>');
 
@@ -20,13 +20,13 @@ const renderTelegramFormatting = (text: string) => {
 
 const DUMMY_PREVIEW_DATA = {
     id_venda: 'H78XF9A',
-    cliente: 'João da Silva',
+    cliente: 'JoÃ£o da Silva',
     telefone: '(11) 99999-0000',
-    produto: 'iPhone 15 Pro Max 256GB - Titânio Natural',
+    produto: 'iPhone 15 Pro Max 256GB - TitÃ¢nio Natural',
     modelo: 'iPhone 15 Pro Max',
     valor: 'R$ 7.500,00',
     lucro: 'R$ 1.200,00',
-    pagamento: 'Pix, Cartão de Crédito (12x)',
+    pagamento: 'Pix, CartÃ£o de CrÃ©dito (12x)',
     desconto: 'R$ 150,00',
     estoque: '3',
     // Tags Agendadas
@@ -36,7 +36,7 @@ const DUMMY_PREVIEW_DATA = {
     data: '21/02/2026',
     estoque_celulares: '27',
     estoque_geral_loja: '450',
-    estoque_lista_celulares: '• 15x - iPhone 13 Pro Max 8GB/256GB - Azul\n• 7x - Galaxy S24 Ultra - Titânio\n• 5x - Redmi Note 13',
+    estoque_lista_celulares: 'â€¢ 15x - iPhone 13 Pro Max 8GB/256GB - Azul\nâ€¢ 7x - Galaxy S24 Ultra - TitÃ¢nio\nâ€¢ 5x - Redmi Note 13',
     // Tags Cliente
     nome_cliente: 'Maria Oliveira',
     telefone_cliente: '(11) 98888-7777',
@@ -58,7 +58,7 @@ export default function TelegramPage() {
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
 
-    // Estado para gerenciar qual template está ativo na tela
+    // Estado para gerenciar qual template estÃ¡ ativo na tela
     const [activeTemplateId, setActiveTemplateId] = useState<string>('sale_template');
 
     useEffect(() => {
@@ -76,29 +76,43 @@ export default function TelegramPage() {
                 setActiveTemplateId(found ? found.id : data.templates[0].id);
             }
         } catch (err: any) {
-            toast.error('Erro ao buscar configurações do Telegram.');
+            toast.error('Erro ao buscar configuraÃ§Ãµes do Telegram.');
         } finally {
             setLoading(false);
         }
     }
 
-    // --- DICIONÁRIO E LÓGICA DE VARIÁVEIS INTELIGENTES ---
+    // --- DICIONÃRIO E LÃ“GICA DE VARIÃVEIS INTELIGENTES ---
     const getTagsForTemplate = (templateType?: 'action' | 'scheduled', actionType?: 'sale' | 'new_customer' | null) => {
         if (templateType === 'scheduled') {
             return [
                 { tag: '{qtd_vendas}', desc: 'Ex: 15 (Soma de vendas do dia)' },
                 { tag: '{faturamento}', desc: 'Ex: R$ 5.000,00 (Total em R$)' },
                 { tag: '{lucro_total}', desc: 'Ex: R$ 1.500,00 (Lucro puro de hoje)' },
-                { tag: '{data}', desc: 'Ex: 21/05/2026 (Data do relatório)' },
+                { tag: '{data}', desc: 'Ex: 21/05/2026 (Data do relatÃ³rio)' },
                 { tag: '{estoque_celulares}', desc: 'Ex: 14 (Contagem global)' },
                 { tag: '{estoque_geral_loja}', desc: 'Soma total de estoque da loja' },
-                { tag: '{estoque_lista_celulares}', desc: 'Ex: 3x iPhone 15 Pro Max 256GB - Azul\n2x S24 Ultra...' }
+                { tag: '{estoque_lista_celulares}', desc: 'Ex: 3x iPhone 15 Pro Max 256GB - Azul\n2x S24 Ultra...' },
+                { tag: '{agenda_instagram_semana}', desc: 'Cronograma completo Instagram da semana (dias, legendas, CTAs, hashtags)' },
+                { tag: '{empresa_nome}', desc: 'Nome da empresa' },
+                { tag: '{empresa_telefone}', desc: 'Telefone/WhatsApp da loja' },
+                { tag: '{empresa_endereco}', desc: 'Endereco completo' },
+                { tag: '{empresa_horario}', desc: 'Horario de funcionamento' },
+                { tag: '{empresa_instagram}', desc: '@instagram da loja' },
+            ];
+                { tag: '{agenda_instagram_semana}', desc: 'Cronograma completo Instagram da semana (todos os dias, legendas, CTAs e hashtags)' },
+                { tag: '{empresa_nome}', desc: 'Nome da empresa' },
+                { tag: '{empresa_telefone}', desc: 'Telefone/WhatsApp da loja' },
+                { tag: '{empresa_whatsapp}', desc: 'WhatsApp da loja' },
+                { tag: '{empresa_endereco}', desc: 'Endereco completo' },
+                { tag: '{empresa_horario}', desc: 'Horario de funcionamento' },
+                { tag: '{empresa_instagram}', desc: '@instagram da loja' },
             ];
         }
 
         if (actionType === 'new_customer') {
             return [
-                { tag: '{nome_cliente}', desc: 'Ex: João da Silva' },
+                { tag: '{nome_cliente}', desc: 'Ex: JoÃ£o da Silva' },
                 { tag: '{telefone_cliente}', desc: 'Ex: (11) 99999-0000' },
                 { tag: '{tipo_cliente}', desc: 'Ex: Varejo, Atacado' }
             ];
@@ -113,7 +127,7 @@ export default function TelegramPage() {
             { tag: '{modelo}', desc: 'Modelo base' },
             { tag: '{valor}', desc: 'Valor total pago' },
             { tag: '{lucro}', desc: 'Lucro daquela venda' },
-            { tag: '{pagamento}', desc: 'Cartão/Pix/Espécie' },
+            { tag: '{pagamento}', desc: 'CartÃ£o/Pix/EspÃ©cie' },
             { tag: '{desconto}', desc: 'Desconto aplicado' },
             { tag: '{estoque}', desc: 'Unidades restantes do item' }
         ];
@@ -123,7 +137,7 @@ export default function TelegramPage() {
         if (!settings) return;
 
         if (settings.active && (!settings.bot_token || !settings.chat_id)) {
-            toast.error('Para ativar a integração, preencha o Token do Bot e o Chat ID.');
+            toast.error('Para ativar a integraÃ§Ã£o, preencha o Token do Bot e o Chat ID.');
             return;
         }
 
@@ -135,9 +149,9 @@ export default function TelegramPage() {
                 chat_id: settings.chat_id,
                 templates: settings.templates // Salva o array de templates
             });
-            toast.success('Configurações salvas com sucesso!');
+            toast.success('ConfiguraÃ§Ãµes salvas com sucesso!');
         } catch (err: any) {
-            toast.error('Erro ao salvar as configurações.');
+            toast.error('Erro ao salvar as configuraÃ§Ãµes.');
         } finally {
             setSaving(false);
         }
@@ -153,7 +167,7 @@ export default function TelegramPage() {
         if (!activeLayout) return;
 
         try {
-            toast.loading('Iniciando construção do relatório...', { id: 'cron-force' });
+            toast.loading('Iniciando construÃ§Ã£o do relatÃ³rio...', { id: 'cron-force' });
 
             // Passa o ID na porta local da Vercel/Vite
             const res = await fetch(`/api/cron-dispatcher?forceTemplateId=${templateIdToDps}`, {
@@ -165,11 +179,11 @@ export default function TelegramPage() {
             if (res.ok && data.success) {
                 toast.success('Disparado com sucesso! Verifique o Telegram.', { id: 'cron-force' });
             } else {
-                toast.error(data.message || 'Falha ao processar o relatório', { id: 'cron-force' });
+                toast.error(data.message || 'Falha ao processar o relatÃ³rio', { id: 'cron-force' });
             }
         } catch (e) {
             console.error(e);
-            toast.error('Erro ao se conectar com motor de relatórios.', { id: 'cron-force' });
+            toast.error('Erro ao se conectar com motor de relatÃ³rios.', { id: 'cron-force' });
         }
     };
 
@@ -196,7 +210,7 @@ export default function TelegramPage() {
     const handleAddTemplate = () => {
         if (!settings) return;
         if (settings.templates.length >= 10) {
-            toast.error('Limite máximo de 10 templates atingido.');
+            toast.error('Limite mÃ¡ximo de 10 templates atingido.');
             return;
         }
 
@@ -204,7 +218,7 @@ export default function TelegramPage() {
         const newTemplate: TelegramTemplate = {
             id: newId,
             name: `Novo Template ${settings.templates.length + 1}`,
-            type: 'scheduled', // default behavior para templates extras (relatórios customizados)
+            type: 'scheduled', // default behavior para templates extras (relatÃ³rios customizados)
             schedule_time: '18:00',
             content: 'Digite sua mensagem aqui...\nUse *asteriscos* para negrito.'
         };
@@ -219,15 +233,15 @@ export default function TelegramPage() {
     const handleDeleteTemplate = (idToDelete: string) => {
         if (!settings) return;
         if (idToDelete === 'sale_template') {
-            toast.error('O template de Venda Padrão não pode ser excluído, apenas editado.');
+            toast.error('O template de Venda PadrÃ£o nÃ£o pode ser excluÃ­do, apenas editado.');
             return;
         }
         if (idToDelete === 'new_customer_template') {
-            toast.error('O template de Novo Cliente não pode ser excluído, apenas editado.');
+            toast.error('O template de Novo Cliente nÃ£o pode ser excluÃ­do, apenas editado.');
             return;
         }
         if (idToDelete === 'daily_report_template') {
-            toast.error('O template de Relatório Diário não pode ser excluído, apenas editado.');
+            toast.error('O template de RelatÃ³rio DiÃ¡rio nÃ£o pode ser excluÃ­do, apenas editado.');
             return;
         }
 
@@ -282,9 +296,9 @@ export default function TelegramPage() {
                 <div>
                     <h1 className="text-3xl font-bold flex items-center gap-3">
                         <Bot className="w-8 h-8 text-blue-500" />
-                        Automações do Telegram
+                        AutomaÃ§Ãµes do Telegram
                     </h1>
-                    <p className="text-slate-500 mt-1">Configure alertas em múltiplas lógicas e regras de negócio para seu negócio.</p>
+                    <p className="text-slate-500 mt-1">Configure alertas em mÃºltiplas lÃ³gicas e regras de negÃ³cio para seu negÃ³cio.</p>
                 </div>
                 <button
                     onClick={handleSave}
@@ -296,7 +310,7 @@ export default function TelegramPage() {
                     ) : (
                         <Save className="w-5 h-5" />
                     )}
-                    Salvar Alterações
+                    Salvar AlteraÃ§Ãµes
                 </button>
             </div>
 
@@ -311,7 +325,7 @@ export default function TelegramPage() {
                             <div className="flex items-center justify-between mb-4">
                                 <h2 className="text-base font-bold flex items-center gap-2">
                                     <AlertCircle className="w-4 h-4 text-indigo-500" />
-                                    Conexão com Bot
+                                    ConexÃ£o com Bot
                                 </h2>
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <span className={`text-xs font-semibold ${settings.active ? 'text-green-600' : 'text-slate-500'}`}>
@@ -358,13 +372,13 @@ export default function TelegramPage() {
                                         className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-xs font-semibold transition-colors disabled:opacity-50"
                                     >
                                         {testing ? <div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" /> : <Send className="w-3 h-3" />}
-                                        Testar Conexão
+                                        Testar ConexÃ£o
                                     </button>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Bloco 2: Lista de Templates Editáveis */}
+                        {/* Bloco 2: Lista de Templates EditÃ¡veis */}
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                             <div className="flex items-center justify-between mb-4">
                                 <h2 className="text-base font-bold flex items-center gap-2">
@@ -399,7 +413,7 @@ export default function TelegramPage() {
                                                 <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mt-0.5">Gatilho Novo Cliente</p>
                                             )}
                                             {t.id === 'daily_report_template' && (
-                                                <p className="text-[10px] text-green-600 uppercase tracking-wider font-bold mt-0.5">Automático ({t.schedule_time})</p>
+                                                <p className="text-[10px] text-green-600 uppercase tracking-wider font-bold mt-0.5">AutomÃ¡tico ({t.schedule_time})</p>
                                             )}
                                             {t.id !== 'sale_template' && t.id !== 'new_customer_template' && t.id !== 'daily_report_template' && (
                                                 <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mt-0.5">
@@ -413,7 +427,7 @@ export default function TelegramPage() {
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleForceTrigger(t.id); }}
                                                     className="p-1.5 text-blue-500 hover:bg-blue-100/50 rounded-md transition-colors"
-                                                    title="Disparar Relatório Agora"
+                                                    title="Disparar RelatÃ³rio Agora"
                                                 >
                                                     <Send className="w-4 h-4" />
                                                 </button>
@@ -438,14 +452,14 @@ export default function TelegramPage() {
                     {/* LADO DIREITO: Editor e Live Preview (8 Colunas) */}
                     <div className="lg:col-span-8 flex flex-col md:flex-row gap-6">
 
-                        {/* O Editor (50% do espaço restante) */}
+                        {/* O Editor (50% do espaÃ§o restante) */}
                         <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
                             {activeTemplate ? (
                                 <>
                                     {/* Linha 1: Nome e Contextos */}
                                     <div className="flex gap-3 mb-4">
                                         <div className="flex-1">
-                                            <label className="block text-xs font-medium text-slate-700 mb-1">Nome de Exibição do Template</label>
+                                            <label className="block text-xs font-medium text-slate-700 mb-1">Nome de ExibiÃ§Ã£o do Template</label>
                                             <input
                                                 type="text"
                                                 value={activeTemplate.name}
@@ -458,7 +472,7 @@ export default function TelegramPage() {
                                         {(activeTemplate.id !== 'sale_template' && activeTemplate.id !== 'new_customer_template' && activeTemplate.id !== 'daily_report_template') && (
                                             <>
                                                 <div className="w-40 flex-shrink-0">
-                                                    <label className="block text-xs font-medium text-slate-700 mb-1">Tipo da Automação</label>
+                                                    <label className="block text-xs font-medium text-slate-700 mb-1">Tipo da AutomaÃ§Ã£o</label>
                                                     <select
                                                         value={activeTemplate.type}
                                                         onChange={(e) => updateActiveTemplateProps({ type: e.target.value as 'action' | 'scheduled' })}
@@ -471,7 +485,7 @@ export default function TelegramPage() {
 
                                                 {activeTemplate.type === 'scheduled' && (
                                                     <div className="w-24 flex-shrink-0">
-                                                        <label className="block text-xs font-medium text-amber-700 mb-1">Horário</label>
+                                                        <label className="block text-xs font-medium text-amber-700 mb-1">HorÃ¡rio</label>
                                                         <input
                                                             type="time"
                                                             value={activeTemplate.schedule_time || '18:00'}
@@ -497,7 +511,7 @@ export default function TelegramPage() {
                                             <Info className="w-4 h-4 text-blue-500" />
                                             Contextos & Tags Recomendadas
                                         </p>
-                                        <p className="text-[11px] text-slate-500 mb-3">Clique em uma tag para copiar e cole no seu texto acima. O Preview simulará valores falsos pra você.</p>
+                                        <p className="text-[11px] text-slate-500 mb-3">Clique em uma tag para copiar e cole no seu texto acima. O Preview simularÃ¡ valores falsos pra vocÃª.</p>
                                         <div className="flex flex-wrap gap-2">
                                             {getTagsForTemplate(activeTemplate.type, activeTemplate.action_type).map(item => (
                                                 <div
@@ -525,7 +539,7 @@ export default function TelegramPage() {
                             {/* Header Falso iPhone */}
                             <div className="bg-slate-100 pt-4 pb-2 px-4 shadow-sm z-10 relative flex flex-col items-center border-b border-slate-300">
                                 <div className="w-16 h-1 bg-slate-300 rounded-full mb-2" />
-                                <p className="font-bold text-sm text-slate-800">Bot da Empresa 🤖</p>
+                                <p className="font-bold text-sm text-slate-800">Bot da Empresa ðŸ¤–</p>
                                 <p className="text-[10px] text-slate-500">bot</p>
                             </div>
 
@@ -534,7 +548,7 @@ export default function TelegramPage() {
 
                                 <div className="flex justify-start w-full drop-shadow-sm mb-2">
                                     <div className="bg-white p-3 rounded-2xl rounded-tl-none relative max-w-[90%]">
-                                        {/* O Conteúdo renderizado pelo mock de Markdown */}
+                                        {/* O ConteÃºdo renderizado pelo mock de Markdown */}
                                         {processPreviewText(activeTemplate?.content || '')}
                                         <p className="text-[9px] text-slate-400 absolute bottom-1.5 right-2 mt-1text-right">Agora</p>
                                     </div>
