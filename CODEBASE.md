@@ -6745,3 +6745,237 @@ P2: SKILL.md (intelligent-routing)
 **⚠️ REGRA DE OURO:** Roteamento automático **NÃO** sobrepõe o Socratic Gate do GEMINI.md.
 Se a tarefa for complexa/vaga, o agente ainda fará perguntas antes de prosseguir.
 
+---
+
+## 🏷️ DYNAMIC TAGS ENGINE — Motor Global de Variáveis
+
+> **Criado em:** 2026-02-22
+> Sistema de variáveis dinâmicas reutilizáveis em qualquer canal de comunicação do sistema: Telegram, WhatsApp, relatórios, garantias, documentos e gerador de nomes.
+
+---
+
+### Arquitetura Geral
+
+```
+Admin cria tag          Cron / Evento        Canal de saída
+─────────────────       ─────────────────    ─────────────────
+SystemTagsPage.tsx  →   tagResolver.ts   →   Telegram / WhatsApp
+  (CRUD visual)         resolveTag()          Garantia / PDF
+                              ↕
+                        system_tags (DB)
+                        resolver_type
+                        resolver_config
+```
+
+---
+
+### Banco de Dados — Tabela `system_tags`
+
+**SQL:** `supabase/create_system_tags_table.sql`
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| `id` | UUID PK | Identificador único |
+| `name` | TEXT UNIQUE | Slug da tag → vira `{nome}` nas mensagens |
+| `label` | TEXT | Nome amigável exibido na UI |
+| `description` | TEXT | Explicação do que a tag retorna |
+| `context` | TEXT | Onde é usada (ver tabela abaixo) |
+| `resolver_type` | TEXT | Como o valor é calculado (ver tabela abaixo) |
+| `resolver_config` | JSONB | Parâmetros do resolver (filtros, formato, campo a somar) |
+| `preview_value` | TEXT | Valor fake para simulação no editor de templates |
+| `active` | BOOLEAN | Se a tag está ativa e deve ser resolvida |
+| `sort_order` | INTEGER | Ordem de exibição na UI |
+
+**RLS:** Somente `authenticated` tem acesso total. Anônimos: sem acesso.
+
+---
+
+### Contextos Disponíveis
+
+| `context` | Onde é usada |
+|-----------|--------------|
+| `scheduled` | Templates agendados do Telegram (cron-dispatcher) |
+| `action_sale` | Evento de venda finalizada no PDV |
+| `action_customer` | Cadastro de novo cliente |
+| `welcome` | Mensagem de boas-vindas via WhatsApp |
+| `warranty` | Documentos de garantia (PDF) |
+| `product_name` | Gerador de nome automático de produto |
+| `static` | Valor fixo configurável pelo admin |
+
+---
+
+### Resolver Types
+
+| `resolver_type` | O que faz | `resolver_config` |
+|-----------------|-----------|-------------------|
+| `static` | Retorna texto fixo | `{ value: "texto" }` |
+| `count_products` | Conta produtos com filtros | `{ status?, min_stock?, category_slug? }` |
+| `sum_products_stock` | Soma estoque total | `{ status?, category_slug? }` |
+| `list_products` | Lista formatada de produtos | `{ format?, category_slug?, limit?, order_by? }` |
+| `count_sales_today` | Conta vendas do dia | `{ status? }` |
+| `sum_sales_today` | Soma financeira do dia | `{ field: "total"\|"profit", status? }` |
+| `date_now` | Data/hora atual | `{ format: "date"\|"time"\|"datetime" }` |
+| `system_injected` | Injetada dinamicamente pelo código | — (read-only, não configurável) |
+
+#### Variáveis disponíveis no formato do `list_products`
+
+| Variável | O que insere |
+|----------|-------------|
+| `{qty}` | Quantidade em estoque |
+| `{name}` | Nome do produto |
+| `{color}` | Cor (`specs.color`) |
+| `{ram}` | RAM (`specs.ram`) |
+| `{storage}` | Armazenamento (`specs.storage`) |
+| `{avg_price}` | Preço médio de estoque (`price_pix / 100`) |
+| `{price_pix}` | Preço à vista Pix |
+| `{price_card}` | Preço no cartão |
+
+**Exemplo de formato:**
+```
+• {qty}x - {name} - {color} - {ram}/{storage} — R$ {avg_price}
+```
+
+---
+
+### Tags Pré-cadastradas (40 tags em 6 grupos)
+
+#### Grupo 1 — Relatórios Agendados (Telegram Cron)
+| Tag | Resolver | Descrição |
+|-----|----------|-----------|
+| `{qtd_vendas}` | `count_sales_today` | Vendas concluídas hoje |
+| `{faturamento}` | `sum_sales_today` | Total faturado hoje (R$) |
+| `{lucro_total}` | `sum_sales_today` | Lucro total hoje (R$) |
+| `{data}` | `date_now` | Data atual DD/MM/YYYY |
+| `{estoque_celulares}` | `count_products` | Qtd. de celulares em estoque |
+| `{estoque_geral_loja}` | `sum_products_stock` | Total de produtos |
+| `{estoque_lista_celulares}` | `list_products` | Lista formatada de celulares |
+
+#### Grupo 2 — Evento de Venda / PDV (system_injected)
+`{id_venda}` · `{cliente}` · `{telefone}` · `{produto}` · `{modelo}` · `{valor}` · `{lucro}` · `{pagamento}` · `{desconto}` · `{estoque}`
+
+#### Grupo 3 — Novo Cliente (system_injected)
+`{nome_cliente}` · `{telefone_cliente}` · `{tipo_cliente}`
+
+#### Grupo 4 — Boas-Vindas WhatsApp (system_injected)
+`{nome}` · `{cpf}` · `{senha}` · `{link}`
+
+#### Grupo 5 — Garantia PDF (system_injected)
+`{dias}` · `{marca}` · `{data_compra}`
+
+#### Grupo 6 — Gerador de Nome de Produto (system_injected)
+`{sku}` · `{ram}` · `{armazenamento}` · `{cor}` · `{versao}` · `{bateria}` · `{serial}` · `{ncm}` · `{cest}` · `{peso}`
+
+---
+
+### Arquivos do Sistema
+
+#### `services/systemTagsService.ts`
+
+CRUD completo para a tabela `system_tags`. Exporta:
+
+| Função | Descrição |
+|--------|-----------|
+| `list()` | Lista todas as tags (ordenado por `sort_order`) |
+| `listActive()` | Lista só as ativas |
+| `listByContext(ctx)` | Filtra por contexto |
+| `create(input)` | Cria tag (auto-slug do `name`) |
+| `update(id, input)` | Edita tag |
+| `delete(id)` | Remove tag |
+| `toggleActive(id, active)` | Ativa/desativa tag |
+
+Também exporta: `CONTEXT_LABELS`, `RESOLVER_LABELS`, tipos `TagContext`, `TagResolverType`, `SystemTag`, `SystemTagInput`.
+
+#### `services/tagResolver.ts`
+
+Motor de resolução. Executa a query/lógica correta para cada `resolver_type`.
+
+| Função | Descrição |
+|--------|-----------|
+| `resolveTag(tag, supabaseClient)` | Resolve uma única tag → `string` |
+| `resolveAll(tags, supabaseClient)` | Resolve todas as tags ativas (não `system_injected`) → `Record<string, string>` |
+| `applyDict(text, dict)` | Aplica dicionário de substituição em um texto |
+
+> **Uso no frontend (ex: WhatsApp):**
+> ```ts
+> const tags = await systemTagsService.listActive();
+> const dict = await resolveAll(tags, supabase);
+> const msg = applyDict(template, dict);
+> ```
+
+#### `api/cron-dispatcher.ts` (atualizado)
+
+- Mantém dict built-in (`builtinDict`) com as 7 tags de relatório hardcoded
+- Busca tags customizadas do `system_tags` (exceto `system_injected`)
+- Resolve cada tag via `resolveTagInline()` (função inline no próprio arquivo, sem dependência do SDK do cliente)
+- Mescla: `{ ...builtinDict, ...customDict }` — custom sobrescreve built-in se nomes coincidirem
+- Em caso de falha na busca do banco, usa apenas o built-in (fallback seguro)
+
+#### `pages/admin/settings/SystemTagsPage.tsx`
+
+**Rota:** `/admin/settings/system-tags`
+**Sidebar:** "Tags do Sistema" (ícone `Tag`)
+
+**Features:**
+- Lista agrupada por contexto com badges coloridas
+- Busca por nome/label + filtro por contexto
+- Stats: total de tags, ativas, computáveis
+- Toggle ativo/inativo por linha
+- Botão editar → abre `TagFormModal`
+- Botão excluir (desabilitado para `system_injected`)
+- `TagFormModal` — formulário dinâmico que exibe campos específicos por `resolver_type`
+
+**Configura dinamicamente conforme o tipo:**
+- `static` → campo "Valor fixo"
+- `count_products` / `sum_products_stock` → filtros de categoria, status, estoque mínimo
+- `list_products` → filtro, formato de linha, limite, ordenação
+- `count_sales_today` / `sum_sales_today` → status, campo a somar
+- `date_now` → formato (date / time / datetime)
+- `system_injected` → aviso read-only (não editável)
+
+---
+
+### Fluxo de Resolução no Cron (Telegram Agendado)
+
+```
+1. Cron dispara (Vercel, hourly)
+   ↓
+2. Busca template agendado para a hora atual
+   ↓
+3. Constrói builtinDict (7 tags hardcoded)
+   ↓
+4. Busca system_tags WHERE active=true AND resolver_type != 'system_injected'
+   ↓
+5. Resolve cada tag via resolveTagInline()
+   ↓
+6. Mescla: { ...builtinDict, ...customDict }
+   ↓
+7. Substitui tags no conteúdo do template
+   ↓
+8. Envia via Telegram Bot API
+```
+
+### Fluxo de Resolução no Frontend (WhatsApp / Garantia)
+
+```ts
+// Em qualquer componente/service do frontend:
+import { systemTagsService } from './systemTagsService';
+import { resolveAll, applyDict } from './tagResolver';
+import { supabase } from './supabase';
+
+const tags = await systemTagsService.listByContext('welcome');
+const dict = await resolveAll(tags, supabase);
+const mensagem = applyDict(templateComTags, dict);
+```
+
+---
+
+### Regras Críticas
+
+| # | Regra |
+|---|-------|
+| 1 | Tags `system_injected` são read-only na UI — não podem ser excluídas |
+| 2 | O slug (`name`) é auto-gerado em lowercase com underscores ao salvar |
+| 3 | Custom tags sobrescrevem built-in no cron se tiverem o mesmo nome |
+| 4 | Falha na busca de tags customizadas: cron continua com built-in (não quebra) |
+| 5 | `tagResolver.ts` usa Supabase Client como parâmetro — compatível com service role no server |
+| 6 | Preview value é obrigatório para simular tags no editor de templates Telegram |
