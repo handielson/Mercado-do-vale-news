@@ -141,7 +141,9 @@ export default function MarketingPage() {
 
     const handleOpenEditSlot = (slot: InstagramSlot) => {
         setEditingSlot(slot);
-        setSlotForm({ ...slot, scheduled_time: slot.scheduled_time?.slice(0, 5) });
+        const nl = (s: string | null | undefined) => (s || '').replace(/\\n/g, '\n');
+        setSlotForm({ ...slot, scheduled_time: slot.scheduled_time?.slice(0, 5), hook: nl(slot.hook), caption: nl(slot.caption), cta: nl(slot.cta), visual_notes: nl(slot.visual_notes) });
+
         setShowSlotForm(true);
     };
 
@@ -1023,8 +1025,8 @@ export default function MarketingPage() {
                                         key={i}
                                         onClick={() => setSelectedDay(i)}
                                         className={`flex flex-col items-center px-4 py-2.5 rounded-lg text-sm font-bold transition-all min-w-[60px] ${selectedDay === i
-                                                ? 'bg-pink-600 text-white shadow-md'
-                                                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                                            ? 'bg-pink-600 text-white shadow-md'
+                                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
                                             }`}
                                     >
                                         <span>{d}</span>
