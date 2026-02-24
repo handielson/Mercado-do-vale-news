@@ -1444,6 +1444,31 @@ Preview miniatura + informações por card:
 
 ---
 
+### `services/custom-fields.ts` — Campos Globais (Custom Fields)
+**Exporta:** `customFieldsService`, `FORMAT_OPTIONS`, tipos `CustomField`, `FieldFormat`
+**Tabela:** `custom_fields`
+**Depende de:** `company_id` via `getCompanyId()`
+
+Gerencia a biblioteca global de especificações personalizadas (Custom Fields) reutilizáveis entre categorias.
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `list()` | `(): Promise<CustomField[]>` | Lista todos os campos globais da empresa |
+| `getById(id)` | `(id: string): Promise<CustomField \| null>` | Campo por ID |
+| `create(input)` | `(input: CustomFieldInput): Promise<CustomField>` | Cria novo campo global |
+| `update(id, input)` | `(id, input: Partial<CustomFieldInput>): Promise<CustomField>` | Atualiza configuração do campo |
+| `delete(id)` | `(id: string): Promise<void>` | Remove campo global |
+
+**Opções de Formatação (`FORMAT_OPTIONS`):**
+Array centralizado que define os tipos de campos disponíveis (Texto Livre, Seletor Lista (`select`), Boolean, Datas, Fiscal, etc.).
+- **Campo do tipo `select`:** Possui a propriedade extra `options: string[]` definindo as escolhas disponíveis no dropdown. Essa configuração é feita no modal `CustomFieldModal`.
+
+**Integrações Chave:**
+- **ProductDetailsModal:** Ao renderizar as especificações técnicas (Modal do Cliente), faz o fetch (`customFieldsService.list()`) para exibir o **Nome exato do Campo** (label real configurado) em vez das chaves técnicas desatualizadas.
+- **Categorias:** O `CustomFieldsEditorNew` lida com a importação desses campos globais para categorias específicas e define sua obrigatoriedade (hidden, optional, required).
+
+---
+
 ## 🪝 HOOKS — Funções Retornadas
 
 ### `hooks/useProducts.ts`
@@ -6979,3 +7004,10 @@ const mensagem = applyDict(templateComTags, dict);
 | 4 | Falha na busca de tags customizadas: cron continua com built-in (não quebra) |
 | 5 | `tagResolver.ts` usa Supabase Client como parâmetro — compatível com service role no server |
 | 6 | Preview value é obrigatório para simular tags no editor de templates Telegram |
+
+
+---
+
+### `pages/admin/settings/FieldConfigPage.tsx`  Dicionário de Campos (Global Fields)
+**Rota:** /admin/settings/fields`n**Tabela:** `custom_fields` e `category_field_requirements`
+**O que faz:** Gerencia o sistema global de campos do Mercado do Vale. Permite criar, editar e excluir chaves de sistema (specs, logistics, basic, etc) e definir nativamente qual o tipo de formatação ou componente React que vai ser gerado para este atributo no formulário (ex: CurrencyInput, IMEIInput, uppercase, titlecase). Substituiu a arquitetura antiga baseada em localStorage ou metadados de categoria. Atua em conjunto com o `CustomFieldsEditorNew` para aplicar esses campos como Obrigatórios, Opcionais ou Ocultos em cada categoria.
