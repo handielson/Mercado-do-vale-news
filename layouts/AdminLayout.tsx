@@ -39,221 +39,56 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         </div>
 
-        <nav className="space-y-1 flex-1 overflow-y-auto pr-2 -mr-2">
-          <NavItem
-            to="/admin"
-            icon={<LayoutDashboard size={18} />}
-            label="Dashboard"
-            active={location.pathname === '/admin'}
-          />
-          <NavItem
-            to="/admin/products"
-            icon={<Package size={18} />}
-            label="Produtos"
-            active={location.pathname.startsWith('/admin/products')}
-          />
-          <NavItem
-            to="/admin/sales"
-            icon={<ShoppingBag size={18} />}
-            label="Vendas"
-            active={location.pathname.startsWith('/admin/sales')}
-          />
-          <NavItem
-            to="/admin/inventory"
-            icon={<ClipboardList size={18} />}
-            label="Estoque"
-            active={location.pathname.startsWith('/admin/inventory')}
-          />
-          <NavItem
-            to="/admin/customers"
-            icon={<Users size={18} />}
-            label="Clientes"
-            active={location.pathname.startsWith('/admin/customers')}
-          />
-          <NavItem
-            to="/admin/team"
-            icon={<Users size={18} />}
-            label="Equipe"
-            active={location.pathname.startsWith('/admin/team')}
-          />
-          <NavItem
-            to="/admin/pdv"
-            icon={<ShoppingCart size={18} />}
-            label="PDV"
-            active={location.pathname.startsWith('/admin/pdv')}
-          />
-          <NavItem
-            to="/admin/coupons"
-            icon={<Ticket size={18} />}
-            label="Cupons"
-            active={location.pathname.startsWith('/admin/coupons')}
-          />
-          <NavItem
-            to="/admin/cashback"
-            icon={<Coins size={18} />}
-            label="Moedas do Vale"
-            active={location.pathname.startsWith('/admin/cashback')}
-          />
-          <NavItem
-            to="/admin/migration"
-            icon={<Database size={18} />}
-            label="Migração"
-            active={location.pathname.startsWith('/admin/migration')}
-          />
-          <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Configuração</div>
-          <NavItem
-            to="/admin/settings/categories"
-            icon={<Tags size={18} />}
-            label="Categorias"
-            active={location.pathname.startsWith('/admin/settings/categories')}
-          />
-          <NavItem
-            to="/admin/settings/fields"
-            icon={<FileText size={18} />}
-            label="Campos"
-            active={location.pathname.startsWith('/admin/settings/fields')}
-          />
-          <NavItem
-            to="/admin/settings/brands"
-            icon={<BadgeCheck size={18} />}
-            label="Marcas"
-            active={location.pathname.startsWith('/admin/settings/brands')}
-          />
-          <NavItem
-            to="/admin/settings/models"
-            icon={<Smartphone size={18} />}
-            label="Modelos"
-            active={location.pathname.startsWith('/admin/settings/models')}
-          />
-          <NavItem
-            to="/admin/settings/colors"
-            icon={<Palette size={18} />}
-            label="Cores"
-            active={location.pathname.startsWith('/admin/settings/colors')}
-          />
-          <NavItem
-            to="/admin/settings/storages"
-            icon={<HardDrive size={18} />}
-            label="Armazenamento"
-            active={location.pathname.startsWith('/admin/settings/storages')}
-          />
-          <NavItem
-            to="/admin/settings/rams"
-            icon={<MemoryStick size={18} />}
-            label="Memória RAM"
-            active={location.pathname.startsWith('/admin/settings/rams')}
-          />
-          <NavItem
-            to="/admin/settings/versions"
-            icon={<GitBranch size={18} />}
-            label="Versões"
-            active={location.pathname.startsWith('/admin/settings/versions')}
-          />
-          <NavItem
-            to="/admin/settings/battery-healths"
-            icon={<BatteryCharging size={18} />}
-            label="Saúde Bateria"
-            active={location.pathname.startsWith('/admin/settings/battery-healths')}
-          />
-          <NavItem
-            to="/admin/settings/payment-fees"
-            icon={<CreditCard size={18} />}
-            label="Taxas"
-            active={location.pathname.startsWith('/admin/settings/payment-fees')}
-          />
-          <NavItem
-            to="/admin/settings/shipping"
-            icon={<Truck size={18} />}
-            label="Frete"
-            active={location.pathname.startsWith('/admin/settings/shipping')}
-          />
-          <NavItem
-            to="/admin/settings/company"
-            icon={<Settings size={18} />}
-            label="Dados da Empresa"
-            active={location.pathname.startsWith('/admin/settings/company')}
-          />
-          <NavItem
-            to="/admin/settings/documents"
-            icon={<FileText size={18} />}
-            label="Documentos"
-            active={location.pathname.startsWith('/admin/settings/documents')}
-          />
-          <NavItem
-            to="/admin/settings/warranty-templates"
-            icon={<Shield size={18} />}
-            label="Garantias"
-            active={location.pathname.startsWith('/admin/settings/warranty-templates')}
-          />
-          <NavItem
-            to="/admin/settings/messages"
-            icon={<MessageCircle size={18} />}
-            label="Mensagens"
-            active={location.pathname.startsWith('/admin/settings/messages')}
-          />
-          <NavItem
-            to="/admin/settings/marketing"
-            icon={<Megaphone size={18} />}
-            label="Criativos"
-            active={location.pathname.startsWith('/admin/settings/marketing')}
-          />
-          <NavItem
-            to="/admin/settings/telegram"
-            icon={<Bot size={18} />}
-            label="Automações Bot"
-            active={location.pathname.startsWith('/admin/settings/telegram')}
-          />
-          <NavItem
-            to="/admin/settings/system-tags"
-            icon={<Tag size={18} />}
-            label="Tags do Sistema"
-            active={location.pathname.startsWith('/admin/settings/system-tags')}
-          />
-          <NavItem
-            to="/admin/settings/banners"
-            icon={<Image size={18} />}
-            label="Banners"
-            active={location.pathname.startsWith('/admin/settings/banners')}
-          />
-          <NavItem
-            to="/admin/catalog-config"
-            icon={<Settings size={18} />}
-            label="Config. Catálogo"
-            active={location.pathname.startsWith('/admin/catalog-config')}
-          />
+        <nav className="space-y-1 flex-1 overflow-y-auto pr-2 -mr-2 pb-4">
+          {/* OPERACIONAL */}
+          <div className="pt-2 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Operacional</div>
+          <NavItem to="/admin" icon={<LayoutDashboard size={18} />} label="Dashboard" active={location.pathname === '/admin'} />
+          <NavItem to="/admin/pdv" icon={<ShoppingCart size={18} />} label="PDV" active={location.pathname.startsWith('/admin/pdv')} />
+          <NavItem to="/admin/sales" icon={<ShoppingBag size={18} />} label="Vendas" active={location.pathname.startsWith('/admin/sales')} />
+          <NavItem to="/admin/products" icon={<Package size={18} />} label="Produtos" active={location.pathname.startsWith('/admin/products')} />
+          <NavItem to="/admin/inventory" icon={<ClipboardList size={18} />} label="Estoque" active={location.pathname.startsWith('/admin/inventory')} />
+          <NavItem to="/admin/customers" icon={<Users size={18} />} label="Clientes" active={location.pathname.startsWith('/admin/customers')} />
+          <NavItem to="/admin/team" icon={<Users size={18} />} label="Equipe" active={location.pathname.startsWith('/admin/team')} />
 
+          {/* MARKETING & LOJA */}
+          <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Marketing & Loja</div>
+          <NavItem to="/admin/catalog-config" icon={<Settings size={18} />} label="Config. Catálogo" active={location.pathname.startsWith('/admin/catalog-config')} />
+          <NavItem to="/admin/settings/banners" icon={<Image size={18} />} label="Banners" active={location.pathname.startsWith('/admin/settings/banners')} />
+          <NavItem to="/admin/settings/marketing" icon={<Megaphone size={18} />} label="Criativos" active={location.pathname.startsWith('/admin/settings/marketing')} />
+          <NavItem to="/admin/coupons" icon={<Ticket size={18} />} label="Cupons" active={location.pathname.startsWith('/admin/coupons')} />
+          <NavItem to="/admin/cashback" icon={<Coins size={18} />} label="Moedas do Vale" active={location.pathname.startsWith('/admin/cashback')} />
+          <NavItem to="/admin/settings/whatsapp" icon={<MessageCircle size={18} />} label="WhatsApp" active={location.pathname.startsWith('/admin/settings/whatsapp')} />
+          <NavItem to="/admin/settings/telegram" icon={<Bot size={18} />} label="Automações Bot" active={location.pathname.startsWith('/admin/settings/telegram')} />
+          <NavItem to="/admin/settings/messages" icon={<MessageCircle size={18} />} label="Mensagens" active={location.pathname.startsWith('/admin/settings/messages')} />
+
+          {/* ESTRUTURA DE CATÁLOGO */}
+          <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Estrutura de Catálogo</div>
+          <NavItem to="/admin/settings/categories" icon={<Tags size={18} />} label="Categorias" active={location.pathname.startsWith('/admin/settings/categories')} />
+          <NavItem to="/admin/settings/brands" icon={<BadgeCheck size={18} />} label="Marcas" active={location.pathname.startsWith('/admin/settings/brands')} />
+          <NavItem to="/admin/settings/models" icon={<Smartphone size={18} />} label="Modelos" active={location.pathname.startsWith('/admin/settings/models')} />
+          <NavItem to="/admin/settings/fields" icon={<FileText size={18} />} label="Campos Customizados" active={location.pathname.startsWith('/admin/settings/fields')} />
+          <NavItem to="/admin/settings/system-tags" icon={<Tag size={18} />} label="Tags do Sistema" active={location.pathname.startsWith('/admin/settings/system-tags')} />
+          <NavItem to="/admin/settings/colors" icon={<Palette size={18} />} label="Cores" active={location.pathname.startsWith('/admin/settings/colors')} />
+          <NavItem to="/admin/settings/storages" icon={<HardDrive size={18} />} label="Armazenamento" active={location.pathname.startsWith('/admin/settings/storages')} />
+          <NavItem to="/admin/settings/rams" icon={<MemoryStick size={18} />} label="Memória RAM" active={location.pathname.startsWith('/admin/settings/rams')} />
+          <NavItem to="/admin/settings/versions" icon={<GitBranch size={18} />} label="Versões" active={location.pathname.startsWith('/admin/settings/versions')} />
+          <NavItem to="/admin/settings/battery-healths" icon={<BatteryCharging size={18} />} label="Saúde Bateria" active={location.pathname.startsWith('/admin/settings/battery-healths')} />
+
+          {/* AJUSTES DA EMPRESA */}
+          <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Ajustes da Empresa</div>
+          <NavItem to="/admin/settings/company" icon={<Settings size={18} />} label="Dados da Empresa" active={location.pathname.startsWith('/admin/settings/company')} />
+          <NavItem to="/admin/settings/shipping" icon={<Truck size={18} />} label="Frete" active={location.pathname.startsWith('/admin/settings/shipping')} />
+          <NavItem to="/admin/settings/payment-fees" icon={<CreditCard size={18} />} label="Taxas" active={location.pathname.startsWith('/admin/settings/payment-fees')} />
+          <NavItem to="/admin/settings/documents" icon={<FileText size={18} />} label="Documentos" active={location.pathname.startsWith('/admin/settings/documents')} />
+          <NavItem to="/admin/settings/warranty-templates" icon={<Shield size={18} />} label="Garantias" active={location.pathname.startsWith('/admin/settings/warranty-templates')} />
           {customer?.customer_type === 'ADMIN' && (
-            <NavItem
-              to="/admin/settings/permissions"
-              icon={<Shield size={18} />}
-              label="Permissões"
-              active={location.pathname.startsWith('/admin/settings/permissions')}
-            />
+            <NavItem to="/admin/settings/permissions" icon={<Shield size={18} />} label="Permissões" active={location.pathname.startsWith('/admin/settings/permissions')} />
           )}
-          <NavItem
-            to="/admin/governance"
-            icon={<Shield size={18} />}
-            label="Governança"
-            active={location.pathname === '/admin/governance'}
-          />
-          <NavItem
-            to="/admin/dev-diary"
-            icon={<BookOpen size={18} />}
-            label="Diário de Dev"
-            active={location.pathname === '/admin/dev-diary'}
-          />
-          <NavItem
-            to="/test-tabs"
-            icon={<Tags size={18} />}
-            label="🧪 Teste de Abas"
-            active={location.pathname === '/test-tabs'}
-          />
-          <NavItem
-            to="/admin/settings"
-            icon={<Settings size={18} />}
-            label="Ajustes Sistema"
-            active={location.pathname === '/admin/settings'}
-          />
+
+          {/* SISTEMA */}
+          <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Sistema</div>
+          <NavItem to="/admin/migration" icon={<Database size={18} />} label="Migração" active={location.pathname.startsWith('/admin/migration')} />
+          <NavItem to="/test-tabs" icon={<Tags size={18} />} label="🧪 Teste de Abas" active={location.pathname === '/test-tabs'} />
         </nav>
 
         {user && (

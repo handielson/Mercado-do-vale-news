@@ -98,6 +98,36 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             }
         }
 
+        // Process referral code if provided
+        if (saleInput.referral_code) {
+            try {
+                // Get customer name for the log
+                const { data: customer } = await supabase
+                    .from('customers')
+                    .select('name')
+                    .eq('id', saleInput.customer_id)
+                    .single();
+
+                const buyerName = customer?.name || 'Cliente';
+
+                const { data: rpcResult, error: rpcError } = await supabase.rpc('process_referral_reward', {
+                    p_referral_code: saleInput.referral_code,
+                    p_sale_id: sale.id,
+                    p_buyer_name: buyerName
+                });
+
+                if (rpcError) {
+                    console.error('RPC Error processing referral:', rpcError);
+                } else if (rpcResult?.success) {
+                    console.log(`Referral reward applied: ${rpcResult.coins_awarded} coins`);
+                } else {
+                    console.warn('Referral reward failed or ignored:', rpcResult?.error);
+                }
+            } catch (refError) {
+                console.error('Unexpected error processing referral:', refError);
+            }
+        }
+
         return sale;
     } catch (error) {
         console.error('Error creating sale:', error);

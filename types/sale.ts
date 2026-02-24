@@ -40,6 +40,10 @@ export interface SaleItem {
     // Controle de estoque
     track_inventory: boolean; // Se o produto controla estoque
     stock_quantity?: number; // Quantidade em estoque
+
+    // Garantia Estendida
+    warranty_months?: number; // Meses de garantia estendida
+    warranty_price?: number; // Valor da garantia em centavos
 }
 
 /**
@@ -68,6 +72,9 @@ export interface Sale {
     // Discount fields
     promotional_discount?: number; // em centavos
 
+    // Indicação (Referral)
+    referral_code?: string;
+
     created_at: string;
     updated_at: string;
 }
@@ -91,6 +98,9 @@ export interface SaleInput {
 
     // Discount fields
     promotional_discount?: number; // em centavos
+
+    // Indicação (Referral)
+    referral_code?: string;
 }
 
 /**

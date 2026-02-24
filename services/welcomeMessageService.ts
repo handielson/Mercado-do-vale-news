@@ -17,6 +17,11 @@ Neste portal exclusivo você poderá:
 
 🪙 *Moedas do Vale — Programa de Fidelidade*
 Ao comprar conosco você acumula Moedas do Vale que podem ser trocadas por descontos reais! Faça check-in diário no aplicativo para ganhar ainda mais moedas.
+
+🤝 *Ganhe ainda mais indicando amigos!*
+Compartilhe nossas ofertas. Quando alguém comprar usando o seu código de indicação, você ganha Moedas do Vale automaticamente!
+Seu Código de Indicação: *{codigo_indicacao}*
+
 📋 Regulamento completo: {link}moedas-do-vale`;
 
 
@@ -50,11 +55,13 @@ export function buildMessage(template: string, customer: Customer): string {
     const cpfFormatted = customer.cpf_cnpj || '';
     const cpfMasked = maskCpf(cpfFormatted);
     const senha = customer.cpf_cnpj ? getDefaultPassword(customer.cpf_cnpj) : '*****';
+    const codigoIndicacao = customer.referral_code || 'MV-XXXXX';
 
     return template
         .replace(/\{nome\}/g, customer.name)
         .replace(/\{cpf\}/g, cpfMasked)
         .replace(/\{senha\}/g, senha)
+        .replace(/\{codigo_indicacao\}/g, codigoIndicacao)
         .replace(/\{link\}/g, PORTAL_LINK);
 }
 

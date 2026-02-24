@@ -56,8 +56,6 @@ const getPageTitleFromRoute = (pathname: string): string => {
         '/admin/settings/payment-fees': 'Taxas de Pagamento',
         '/admin/settings/company': 'Dados da Empresa',
         '/admin/settings/custom-fields': 'Biblioteca de Campos',
-        '/admin/governance': 'Governança',
-        '/admin/dev-diary': 'Diário de Desenvolvimento',
         '/test-tabs': 'Teste de Abas',
         '/store': 'Loja',
         '/login': 'Login'

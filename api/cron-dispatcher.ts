@@ -181,7 +181,7 @@ export default async function handler(req: any, res: any) {
             });
 
             const sortedList = Array.from(celularesMap.entries())
-                .sort((a, b) => b[1].qtd - a[1].qtd)
+                .sort((a, b) => a[0].localeCompare(b[0]))
                 .map(([itemName, data]) => {
                     const avgCost = data.qtd > 0 ? data.costTotal / data.qtd : 0;
                     const costStr = avgCost > 0 ? ` (${fmtMoney(avgCost / 100)})` : '';

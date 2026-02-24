@@ -11,6 +11,8 @@ export interface CashbackSettings {
     coins_to_brl_rate: number;        // quantas moedas = R$ 1,00 (ex: 100 = 100 moedas/R$)
     max_redeem_percent: number;       // máx % do pedido pago com moedas (ex: 20)
     min_coins_to_redeem: number;      // saldo mínimo para resgatar
+    // Indicação (Referral)
+    coins_per_referral_purchase: number; // moedas ganhas por venda indicada (ex: 50)
     // Check-in
     checkin_base_coins: number;
     checkin_streak_milestones: CheckinMilestone[];
@@ -42,6 +44,7 @@ export type CoinTransactionType =
     | 'spend_discount'
     | 'refund_cancel'
     | 'expire'
+    | 'earn_referral'
     | 'admin_adjust';
 
 export type CoinReferenceType = 'sale' | 'quote' | 'checkin' | 'admin';

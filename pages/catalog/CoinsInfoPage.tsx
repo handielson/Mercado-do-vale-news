@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Coins, ShoppingBag, Calendar, Flame, Gift, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { ArrowLeft, Coins, ShoppingBag, Calendar, Flame, Gift, CheckCircle2, AlertTriangle, Clock, Share2 } from 'lucide-react';
 import { getCashbackSettings } from '../../services/cashbackService';
+import { supabase } from '../../services/supabase';
 import type { CashbackSettings } from '../../types/cashback';
 
 const DEFAULT_DAILY = [5, 10, 15, 20, 25, 30, 50];
@@ -20,6 +21,22 @@ export default function CoinsInfoPage() {
     const minRedeem = settings?.min_coins_to_redeem ?? 100;
     const maxRedeemPct = settings?.max_redeem_percent ?? 20;
     const expiryDays = settings?.coins_expire_after_days ?? 0;
+    const coinsPerReferral = settings?.coins_per_referral_purchase ?? 50;
+
+    const [userCode, setUserCode] = useState<string | null>(null);
+
+    // Simulator states
+    const [simPurchase, setSimPurchase] = useState<number | ''>('');
+    const [simCoins, setSimCoins] = useState<number | ''>('');
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user) {
+                supabase.from('customers').select('referral_code').eq('id', user.id).single()
+                    .then(({ data }) => setUserCode(data?.referral_code || null));
+            }
+        });
+    }, []);
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white">
@@ -121,6 +138,25 @@ export default function CoinsInfoPage() {
                             </div>
                         </div>
 
+                        {/* Indicação */}
+                        <div className="bg-white border border-purple-200 rounded-xl p-4 flex gap-4 shadow-sm">
+                            <div className="p-2 bg-purple-100 rounded-xl h-fit">
+                                <Share2 className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-slate-800 mb-1">Indicação de Amigos (Compartilhamento)</h3>
+                                <p className="text-sm text-slate-600">
+                                    Compartilhe produtos conosco! Quando alguém fechar uma compra no WhatsApp usando sua indicação, você ganha{' '}
+                                    <strong className="text-purple-700">{coinsPerReferral} moedas</strong> automaticamente!
+                                </p>
+                                {userCode && (
+                                    <div className="mt-2 text-sm bg-purple-50 p-2 rounded border border-purple-100">
+                                        Seu código de indicação: <strong className="font-mono text-purple-800 tracking-wider">{userCode}</strong>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                     </div>
                 </section>
 
@@ -205,6 +241,50 @@ export default function CoinsInfoPage() {
 
                     <div className="mt-3 bg-blue-50 border border-blue-100 rounded-xl p-3 text-sm text-blue-700">
                         ℹ️ <strong>Saldo mínimo para resgatar:</strong> {minRedeem} moedas
+                    </div>
+                </section>
+
+                {/* Simulador */}
+                <section>
+                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                        <span className="text-xl">🧮</span> Simulador de Benefícios
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Simulador de Ganho */}
+                        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                            <h3 className="font-semibold text-slate-800 mb-2">Simular Ganhos</h3>
+                            <label className="block text-xs text-slate-500 mb-1">Se eu comprar (R$):</label>
+                            <input
+                                type="number"
+                                min="0"
+                                value={simPurchase}
+                                onChange={e => setSimPurchase(e.target.value === '' ? '' : Number(e.target.value))}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm mb-3 focus:outline-none focus:border-yellow-500"
+                                placeholder="Ex: 500"
+                            />
+                            <div className="bg-yellow-50 rounded-lg p-3 flex justify-between items-center text-sm border border-yellow-100">
+                                <span className="text-yellow-800 font-medium">Você ganhará:</span>
+                                <strong className="text-yellow-700 text-lg">+{Math.floor((Number(simPurchase) || 0) * coinsPerReal)} moedas</strong>
+                            </div>
+                        </div>
+
+                        {/* Simulador de Resgate */}
+                        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                            <h3 className="font-semibold text-slate-800 mb-2">Simular Desconto</h3>
+                            <label className="block text-xs text-slate-500 mb-1">Se eu resgatar (moedas):</label>
+                            <input
+                                type="number"
+                                min="0"
+                                value={simCoins}
+                                onChange={e => setSimCoins(e.target.value === '' ? '' : Number(e.target.value))}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm mb-3 focus:outline-none focus:border-yellow-500"
+                                placeholder="Ex: 1000"
+                            />
+                            <div className="bg-green-50 rounded-lg p-3 flex justify-between items-center text-sm border border-green-100">
+                                <span className="text-green-800 font-medium">Terá desconto de:</span>
+                                <strong className="text-green-700 text-lg">R$ {((Number(simCoins) || 0) / coinsToReais).toFixed(2).replace('.', ',')}</strong>
+                            </div>
+                        </div>
                     </div>
                 </section>
 

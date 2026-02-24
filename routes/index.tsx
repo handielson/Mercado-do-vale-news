@@ -25,8 +25,6 @@ import CategorySettingsPage from '../pages/admin/settings/categories/index';
 import NewCategoryPage from '../pages/admin/settings/categories/new';
 import EditCategoryPage from '../pages/admin/settings/categories/[id]/edit';
 import FieldsManagementPage from '../pages/admin/settings/fields';
-import { GovernancePage } from '../pages/admin/GovernancePage';
-import { DevDiaryPage } from '../pages/admin/DevDiaryPage';
 import { BrandsPage } from '../pages/admin/settings/BrandsPage';
 import { ModelsPage } from '../pages/admin/settings/ModelsPage';
 import { ColorsPage } from '../pages/admin/settings/ColorsPage';
@@ -58,11 +56,14 @@ import CashbackPage from '../pages/admin/CashbackPage';
 import TelegramPage from '../pages/admin/settings/TelegramPage';
 import SystemTagsPage from '../pages/admin/settings/SystemTagsPage';
 import MarketingPage from '../pages/admin/settings/MarketingPage';
+import SalesPage from '../pages/admin/sales/SalesPage';
+import WhatsAppPage from '../pages/admin/settings/WhatsAppPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
 import CoinsInfoPage from '../pages/catalog/CoinsInfoPage';
 import LegacyMigrationPage from '../pages/LegacyMigration';
 import FieldMappingPage from '../pages/FieldMappingPage';
+import ExtendedWarrantyPage from '../pages/customer/ExtendedWarrantyPage';
 
 
 // Temporary components (will be moved to separate files in next phase)
@@ -222,6 +223,11 @@ export const router = createBrowserRouter([
     path: "/moedas-do-vale",
     element: <CoinsInfoPage />
   },
+  // Garantia Estendida (página pública)
+  {
+    path: "/garantia-estendida",
+    element: <ExtendedWarrantyPage />
+  },
   // Admin Dashboard (Supabase Auth)
   {
     path: "/admin/dashboard",
@@ -244,6 +250,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductListPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/sales",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SalesPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
@@ -463,6 +477,14 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     )
   },
+  {
+    path: "/admin/settings/whatsapp",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><WhatsAppPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
   // Customer Routes
   {
     path: "/admin/customers",
@@ -501,22 +523,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CustomFieldsLibraryPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/governance",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><GovernancePage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/dev-diary",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><DevDiaryPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

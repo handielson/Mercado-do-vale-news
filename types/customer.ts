@@ -23,6 +23,7 @@ export interface Customer {
     address?: CustomerAddress;
     admin_notes?: string;
     custom_data?: Record<string, any>;
+    referral_code?: string; // Código único de indicação (Moedas do Vale)
     is_active: boolean;
     account_status?: 'pending' | 'active';  // Account activation status
     admin_preview_type?: 'retail' | 'resale' | 'wholesale';  // Admin catalog preview preference

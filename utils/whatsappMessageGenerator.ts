@@ -27,6 +27,8 @@ export interface QuoteRequest {
     availableColors?: string[];
     couponCode?: string;
     couponDiscount?: number; // valor em R$
+    referrerName?: string;
+    referralCode?: string;
 }
 
 /**
@@ -144,6 +146,11 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
         );
         message += `\n🎟️ Cupom *${couponCode}*: -${discountFormatted}\n`;
         message += `✅ *Total com desconto: ${finalFormatted}*\n`;
+    }
+
+    // Referral code tag
+    if (quote.referralCode && quote.referrerName) {
+        message += `\n🤝 Indicação de: ${quote.referrerName} (Cód: ${quote.referralCode})\n`;
     }
 
     return message;

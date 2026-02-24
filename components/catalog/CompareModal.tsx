@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, GitCompare, Package } from 'lucide-react';
+import { X, GitCompare, Package, Trophy } from 'lucide-react';
 import { useCompare } from '../../contexts/CompareContext';
 import type { CatalogProduct } from '../../types/catalog';
 import { formatPrice } from '../../services/installmentCalculator';
@@ -25,8 +25,8 @@ const SPEC_LABELS: Record<string, string> = {
     display: 'Display (pol)',
     resolution: 'Resolução',
     refresh_rate: 'Taxa de Atualização',
-    main_camera_mpx: 'Câmera Principal',
-    selfie_camera_mpx: 'Câmera Frontal',
+    main_camera_mpx: 'Cam Principal Mpx',
+    selfie_camera_mpx: 'Cam Selfie Mpx',
     nfc: 'NFC',
     network: 'Rede',
     wifi: 'Wi-Fi',
@@ -48,29 +48,76 @@ const SPEC_LABELS: Record<string, string> = {
     origin: 'Origem',
     voltage: 'Voltagem',
     warranty: 'Garantia',
+    versao: 'Versão',
+    version: 'Versão',
 };
 
 const formatFieldKey = (key: string): string => {
-    const lower = key.toLowerCase();
-    if (SPEC_LABELS[lower]) return SPEC_LABELS[lower];
-    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const defaultLabel = key
+        .replace(/_/g, ' ')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+    // Resolve basic translation
+    const label = SPEC_LABELS[key.toLowerCase()] || defaultLabel;
+
+    // Special handling for version
+    if (label.toLowerCase() === 'version' || label.toLowerCase() === 'versao') return 'Versão';
+
+    return label;
 };
 
+// Base keywords for physical dimension fields to exclude
+const DIMENSION_KEYWORDS = [
+    'profundidade', 'altura', 'largura', 'comprimento', 'dimensions', 'depth', 'height', 'width'
+];
+// Base keywords for package weight fields to exclude
+const PACKAGE_WEIGHT_KEYWORDS = [
+    'peso (kg)', 'peso kg', 'peso_kg', 'weight kg', 'weight_kg', 'peso da embalagem'
+];
+
 /** Collects all unique spec keys across all products */
-function collectSpecKeys(templateValues: (Record<string, unknown> | null)[]): string[] {
-    const ignore = new Set(['imei1', 'imei2', 'serial', 'id', 'created_at', 'updated_at']);
-    const keySet = new Set<string>();
-    for (const tv of templateValues) {
-        if (!tv) continue;
-        for (const key of Object.keys(tv)) {
-            if (!ignore.has(key.toLowerCase())) keySet.add(key);
+function collectSpecKeys(templates: (Record<string, unknown> | null)[]): string[] {
+    // Collect unique keys
+    const rawKeys = new Set<string>();
+    templates.forEach(t => {
+        if (!t) return;
+        Object.keys(t).forEach(k => {
+            if (!['imei1', 'imei2', 'serial', 'id', 'created_at', 'updated_at'].includes(k.toLowerCase())) {
+                rawKeys.add(k);
+            }
+        });
+    });
+
+    // Deduplicate by formatted label
+    const uniqueKeys: string[] = [];
+    const seenLabels = new Set<string>();
+
+    Array.from(rawKeys).forEach(key => {
+        const label = formatFieldKey(key);
+        const lcLabel = label.toLowerCase();
+
+        // Exclude legacy "Rede" (replaced by "Rede Operadora")
+        if (lcLabel === 'rede') return;
+
+        // Exclude physical dimensions
+        const isDimension = DIMENSION_KEYWORDS.some(kw => lcLabel.includes(kw));
+
+        // Exclude package weight (allow exact product weight like 'peso (g)' or 'peso g' but exclude standalone 'peso' as it's usually package)
+        const isPackageWeight = PACKAGE_WEIGHT_KEYWORDS.some(kw => lcLabel.includes(kw)) || lcLabel === 'peso' || lcLabel === 'weight';
+
+        if (isDimension || isPackageWeight) return;
+
+        if (!seenLabels.has(label)) {
+            seenLabels.add(label);
+            uniqueKeys.push(key);
         }
-    }
-    // Sort: known SPEC_LABELS first, then alphabetical
-    const knownOrder = Object.keys(SPEC_LABELS);
-    return Array.from(keySet).sort((a, b) => {
-        const ia = knownOrder.indexOf(a.toLowerCase());
-        const ib = knownOrder.indexOf(b.toLowerCase());
+    });
+
+    return uniqueKeys.sort((a, b) => {
+        const ia = Object.keys(SPEC_LABELS).indexOf(a.toLowerCase());
+        const ib = Object.keys(SPEC_LABELS).indexOf(b.toLowerCase());
         if (ia === -1 && ib === -1) return a.localeCompare(b);
         if (ia === -1) return 1;
         if (ib === -1) return -1;
@@ -79,11 +126,73 @@ function collectSpecKeys(templateValues: (Record<string, unknown> | null)[]): st
 }
 
 /** Tries to parse value as a number for highlight comparison */
-function toNumber(val: unknown): number | null {
+function toNumber(val: unknown, key?: string): number | null {
     if (val === null || val === undefined || val === '') return null;
-    const s = String(val).replace(/[^\d.,]/g, '').replace(',', '.');
-    const n = parseFloat(s);
-    return isNaN(n) ? null : n;
+
+    const strVal = String(val);
+
+    // Default extraction for normal fields
+    if (!key || (key.toLowerCase() !== 'processor' && key.toLowerCase() !== 'processador')) {
+        const s = strVal.replace(/[^\d.,]/g, '').replace(',', '.');
+        const n = parseFloat(s);
+        return isNaN(n) ? null : n;
+    }
+
+    // Advanced scoring for Processors
+    let score = 0;
+    const lower = strVal.toLowerCase();
+
+    // Base processor family tiering
+    if (lower.includes('snapdragon 8 gen 3')) score += 9000;
+    else if (lower.includes('snapdragon 8 gen 2')) score += 8000;
+    else if (lower.includes('snapdragon 8+ gen 1')) score += 7500;
+    else if (lower.includes('snapdragon 8 gen 1')) score += 7000;
+    else if (lower.includes('snapdragon 8')) score += 6000;
+    else if (lower.includes('snapdragon 7+ gen 2') || lower.includes('snapdragon 7 gen 3')) score += 6500;
+    else if (lower.includes('snapdragon 7s gen 2') || lower.includes('snapdragon 7 gen 1')) score += 5000;
+    else if (lower.includes('snapdragon 7')) score += 4000;
+    else if (lower.includes('snapdragon 6')) score += 3000;
+    else if (lower.includes('snapdragon 4')) score += 2000;
+
+    if (lower.includes('dimensity 9300')) score += 9000;
+    else if (lower.includes('dimensity 9200')) score += 8000;
+    else if (lower.includes('dimensity 9000')) score += 7000;
+    else if (lower.includes('dimensity 8300')) score += 6800;
+    else if (lower.includes('dimensity 8200')) score += 6000;
+    else if (lower.includes('dimensity 8100')) score += 5800;
+    else if (lower.includes('dimensity 8000')) score += 5500;
+    else if (lower.includes('dimensity 7300') || lower.includes('dimensity 7200')) score += 4500;
+    else if (lower.includes('dimensity 7000')) score += 4000;
+    else if (lower.includes('dimensity 6000')) score += 3500;
+    else if (lower.includes('dimensity 1080') || lower.includes('dimensity 920')) score += 3500;
+    else if (lower.includes('dimensity')) score += 3000;
+
+    if (lower.includes('helio g99')) score += 2500;
+    else if (lower.includes('helio g96') || lower.includes('helio g95')) score += 2000;
+    else if (lower.includes('helio g88') || lower.includes('helio g85')) score += 1500;
+    else if (lower.includes('helio g81') || lower.includes('helio g80')) score += 1200;
+    else if (lower.includes('helio')) score += 1000;
+
+    if (lower.includes('apple a17')) score += 9500;
+    else if (lower.includes('apple a16')) score += 8500;
+    else if (lower.includes('apple a15')) score += 7500;
+    else if (lower.includes('apple a14')) score += 6500;
+
+    if (lower.includes('exynos 2400')) score += 8500;
+    else if (lower.includes('exynos 2200')) score += 7000;
+    else if (lower.includes('exynos 2100')) score += 6000;
+    else if (lower.includes('exynos 1480')) score += 5500;
+    else if (lower.includes('exynos 1380')) score += 4000;
+    else if (lower.includes('exynos')) score += 2000;
+
+    // Tie-breaker using GHz if provided
+    const ghzMatch = strVal.match(/([\d.,]+)\s*[Gg][Hh][Zz]/);
+    if (ghzMatch) {
+        const freq = parseFloat(ghzMatch[1].replace(',', '.'));
+        score += freq * 10; // Small bump for frequency to break ties inside the same tier
+    }
+
+    return score > 0 ? score : null;
 }
 
 export function CompareModal({ onClose }: CompareModalProps) {
@@ -92,22 +201,31 @@ export function CompareModal({ onClose }: CompareModalProps) {
 
     // Fetch template_values from `models` table for each product
     const [templateValues, setTemplateValues] = useState<(Record<string, unknown> | null)[]>([]);
+    const [versionsMap, setVersionsMap] = useState<Map<string, string>>(new Map());
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchAll = async () => {
             setLoading(true);
-            const results = await Promise.all(
-                selected.map(async (p) => {
-                    if (!p.model_id) return null;
-                    const { data } = await supabase
-                        .from('models')
-                        .select('template_values')
-                        .eq('id', p.model_id)
-                        .single();
-                    return (data?.template_values as Record<string, unknown>) || null;
-                })
-            );
+            const [results, { data: versionsData }] = await Promise.all([
+                Promise.all(
+                    selected.map(async (p) => {
+                        if (!p.model_id) return null;
+                        const { data } = await supabase
+                            .from('models')
+                            .select('template_values')
+                            .eq('id', p.model_id)
+                            .single();
+                        return (data?.template_values as Record<string, unknown>) || null;
+                    })
+                ),
+                supabase.from('versions').select('id, name')
+            ]);
+
+            if (versionsData) {
+                setVersionsMap(new Map(versionsData.map((v: any) => [v.id, v.name])));
+            }
+
             setTemplateValues(results);
             setLoading(false);
         };
@@ -118,12 +236,31 @@ export function CompareModal({ onClose }: CompareModalProps) {
 
     /** Determines which column index has the "best" numeric value for a given spec key */
     const getBestIndex = (key: string, products: CatalogProduct[]): number | null => {
+        const formattedKeyLower = formatFieldKey(key).toLowerCase();
+
+        // Exclude subjective or non-numeric fields from "Best" highlighting
+        const subjectiveKeywords = [
+            'display', 'tela', 'resolu', 'resolution',
+            'rede', 'network', 'vers', 'version',
+            'os', 'sistema', 'android', 'cor', 'color'
+        ];
+        if (subjectiveKeywords.some(kw => formattedKeyLower.includes(kw))) return null;
+
         // Lower is better for price, weight; higher is better for most specs
         const higherIsBetter = !['weight', 'weight_g', 'weight_kg', 'peso_g', 'peso_kg'].includes(key.toLowerCase());
-        const numbers = templateValues.map(tv => tv ? toNumber(tv[key]) : null);
+        const numbers = templateValues.map(tv => {
+            if (!tv) return null;
+            const val = tv[key] !== undefined ? tv[key] : Object.entries(tv).find(([k]) => formatFieldKey(k) === formatFieldKey(key))?.[1];
+            return toNumber(val, key);
+        });
         const valid = numbers.filter(n => n !== null) as number[];
         if (valid.length < 2) return null;
         const best = higherIsBetter ? Math.max(...valid) : Math.min(...valid);
+
+        // Check for tie (if multiple products have the best score, nobody "wins")
+        const bestCount = numbers.filter(n => n === best).length;
+        if (bestCount > 1) return null;
+
         return numbers.findIndex(n => n === best);
     };
 
@@ -257,17 +394,24 @@ export function CompareModal({ onClose }: CompareModalProps) {
                                             </td>
                                             {selected.map((product, colIdx) => {
                                                 const tv = templateValues[colIdx];
-                                                const val = tv ? tv[key] : undefined;
+                                                const val = tv ? (tv[key] !== undefined ? tv[key] : Object.entries(tv).find(([k]) => formatFieldKey(k) === formatFieldKey(key))?.[1]) : undefined;
                                                 const isBest = bestIdx === colIdx;
                                                 return (
                                                     <td
                                                         key={product.id}
                                                         className={`p-4 text-center text-sm transition-colors ${isBest ? 'bg-green-50 text-green-700 font-semibold' : 'text-slate-800'}`}
                                                     >
-                                                        {val !== undefined && val !== null && val !== ''
-                                                            ? String(val)
-                                                            : <span className="text-slate-300">—</span>
-                                                        }
+                                                        <div className="flex items-center justify-center gap-1.5 break-words">
+                                                            {isBest && <Trophy className="w-4 h-4 text-green-600 shrink-0" />}
+                                                            <span>
+                                                                {val !== undefined && val !== null && val !== ''
+                                                                    ? (key.toLowerCase() === 'versao' || key.toLowerCase() === 'version') && typeof val === 'string' && versionsMap.has(val)
+                                                                        ? versionsMap.get(val)
+                                                                        : String(val)
+                                                                    : <span className="text-slate-300">—</span>
+                                                                }
+                                                            </span>
+                                                        </div>
                                                     </td>
                                                 );
                                             })}
@@ -286,7 +430,7 @@ export function CompareModal({ onClose }: CompareModalProps) {
                                         <td key={product.id} className="p-4 text-xs text-slate-700 align-top max-w-xs">
                                             {product.description ? (
                                                 <div
-                                                    className="prose prose-xs max-w-none line-clamp-6"
+                                                    className="prose prose-xs max-w-none"
                                                     dangerouslySetInnerHTML={{ __html: product.description }}
                                                 />
                                             ) : (

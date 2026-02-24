@@ -1,0 +1,258 @@
+{
+    "name": "Bot Vendedor Inteligente (Mercado do Vale)",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "whatsapp-inbox",
+                "options": {}
+            },
+            "id": "4b68ce9d-5ac2-4bb3-9c86-efdbb7cbfce1",
+            "name": "Webhook Evolution",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                0,
+                0
+            ],
+            "webhookId": "whatsapp-bot-inbox"
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict"
+                                },
+                                "conditions": [
+                                    {
+                                        "leftValue": "={{ $json.body?.data?.fromMe || false }}",
+                                        "rightValue": false,
+                                        "operator": {
+                                            "type": "boolean",
+                                            "operation": "false",
+                                            "singleValue": true
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Permitido"
+                        }
+                    ]
+                },
+                "fallbackOutput": 1
+            },
+            "id": "e72bd5a3-7186-4e5c-a5b8-5cfbe3685e13",
+            "name": "Ignorar o Próprio Bot",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3,
+            "position": [
+                220,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const msgData = $input.item.json.body?.data || {};\nlet finalMessage = \"\";\nlet hasMedia = false;\nlet mediaType = \"none\";\nlet base64Media = \"\";\n\nif (msgData.messageType === \"audioMessage\") {\n    hasMedia = true;\n    mediaType = \"audio\";\n    base64Media = msgData.message?.base64 || \"\";\n} else if (msgData.messageType === \"imageMessage\") {\n    hasMedia = true;\n    mediaType = \"image\";\n    base64Media = msgData.message?.base64 || \"\";\n} else {\n    finalMessage = msgData.message?.conversation || msgData.message?.extendedTextMessage?.text || \"\";\n}\n\n// Extrai apenas os numeros do remoteJid (11999999999@s.whatsapp.net)\nconst number = (msgData.remoteJid || \"\").replace(/[^0-9]/g, '');\n\nreturn {\n    remoteId: msgData.remoteJid || \"\",\n    number: number,\n    pushName: msgData.pushName || \"Cliente\",\n    message: finalMessage,\n    hasMedia: hasMedia,\n    mediaType: mediaType,\n    base64Media: base64Media\n};"
+            },
+            "id": "b1b7470f-5baf-4bd6-be0c-5d9c6e5e8c18",
+            "name": "Parser da Mensagem",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                440,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "text": "={{ $json.message }}",
+                "options": {
+                    "systemMessage": "Você é o atendente virtual do Mercado do Vale (loja de celulares e tecnologia). Seu nome é Assistente Virtual e você fala diretamente com o cliente ({{ $('Parser da Mensagem').item.json.pushName }}).\n\nREGRAS:\n1. CHAME A FERRAMENTA 'checar_estoque' OBRIGATORIAMENTE se o cliente perguntar se tem um produto, preços ou o que temos na loja.\n2. Os valores vindos da ferramenta estão em centavos. Sempre divida por 100 para exibir em Reais (R$). (Ex: 10500 = R$ 105,00).\n3. Trate o usuário de forma amigável, educada e vendedora.\n4. Se o usuário mandar Foto/Áudio e não estiver transcrito, avise gentilmente \"Ainda estou aprendendo a ouvir áudios, poderia digitar por favor?\" (A não ser que os módulos extras de transcrição já estejam ativados no seu fluxo).\n5. NUNCA invente preços ou descontos. Seja direto nas respostas."
+                }
+            },
+            "id": "e1f13a0e-0eb3-4903-b0df-26feee0b8528",
+            "name": "AI Agent (Vendedor)",
+            "type": "@n8n/n8n-nodes-langchain.agent",
+            "typeVersion": 1.6,
+            "position": [
+                700,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "modelName": "models/gemini-2.5-flash",
+                "options": {
+                    "temperature": 0.5
+                }
+            },
+            "id": "1894d07d-5310-449e-bdd0-87a31b46b14f",
+            "name": "Google Gemini Chat Model",
+            "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+            "typeVersion": 1,
+            "position": [
+                680,
+                220
+            ]
+        },
+        {
+            "parameters": {
+                "sessionId": "={{ $('Parser da Mensagem').item.json.remoteId }}"
+            },
+            "id": "27f2c686-fc59-4f7f-85bf-d7e1bcbac907",
+            "name": "Window Buffer Memory",
+            "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+            "typeVersion": 1.2,
+            "position": [
+                820,
+                240
+            ]
+        },
+        {
+            "parameters": {
+                "name": "checar_estoque",
+                "description": "Busca a base de dados oficial e em tempo real do Mercado do Vale para consultar todo o catálogo e estoque de produtos.",
+                "url": "https://cqbdyxxzmkgeghwkozts.supabase.co/rest/v1/ai_product_catalog_view?select=*",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxYmR5eHh6bWtnZWdod2tvenRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg3NzU4MTUsImV4cCI6MjA1NDM1MTgxNX0.YcPZKqJDzVwdXrTKHNz0bqKFiTdYVZKmVOuKWxbQDQo"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxYmR5eHh6bWtnZWdod2tvenRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg3NzU4MTUsImV4cCI6MjA1NDM1MTgxNX0.YcPZKqJDzVwdXrTKHNz0bqKFiTdYVZKmVOuKWxbQDQo"
+                        }
+                    ]
+                }
+            },
+            "id": "6fcf5674-60ef-4fce-bc8c-26ecef781cd8",
+            "name": "Tool - Consultar Catálogo",
+            "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+            "typeVersion": 1.1,
+            "position": [
+                980,
+                280
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://whatsapp-bot-evolution-api.7am0gd.easypanel.host/message/sendText/{{ $json.output.instanceName || 'bot' }}",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "429683C4C977415CAAFCCE10F7D557E11"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"number\": \"{{ $('Parser da Mensagem').item.json.number }}\",\n  \"options\": {\n    \"delay\": 1200,\n    \"presence\": \"composing\"\n  },\n  \"text\": {{ JSON.stringify($json.output) }}\n}",
+                "options": {}
+            },
+            "id": "dd8c47b9-626a-4b9b-88da-3bc34a4c688c",
+            "name": "Evolution API (Enviar Resposta)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                1120,
+                0
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook Evolution": {
+            "main": [
+                [
+                    {
+                        "node": "Ignorar o Próprio Bot",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Ignorar o Próprio Bot": {
+            "main": [
+                [
+                    {
+                        "node": "Parser da Mensagem",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                []
+            ]
+        },
+        "Parser da Mensagem": {
+            "main": [
+                [
+                    {
+                        "node": "AI Agent (Vendedor)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Google Gemini Chat Model": {
+            "ai_languageModel": [
+                [
+                    {
+                        "node": "AI Agent (Vendedor)",
+                        "type": "ai_languageModel",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Window Buffer Memory": {
+            "ai_memory": [
+                [
+                    {
+                        "node": "AI Agent (Vendedor)",
+                        "type": "ai_memory",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Tool - Consultar Catálogo": {
+            "ai_tool": [
+                [
+                    {
+                        "node": "AI Agent (Vendedor)",
+                        "type": "ai_tool",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "AI Agent (Vendedor)": {
+            "main": [
+                [
+                    {
+                        "node": "Evolution API (Enviar Resposta)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

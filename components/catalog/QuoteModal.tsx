@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, Copy, Check, Plus, Coins } from 'lucide-react';
+import { X, Send, Copy, Check, Plus, Coins, Shield } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import type { VariantSpecs, ProductVariants } from '@/services/productVariants';
 import type { InstallmentPlan } from '@/services/installmentCalculator';
@@ -14,6 +14,8 @@ import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { useCoupon } from '@/hooks/useCoupon';
 import { formatPrice } from '@/services/installmentCalculator';
 import { getCoinBalance, getCashbackSettings, coinsToReais, validateCoinRedeem } from '@/services/cashbackService';
+import { companySettingsService } from '@/services/companySettingsService';
+import type { WarrantyOption } from '@/types/companySettings';
 
 interface QuoteModalProps {
     product: CatalogProduct;
@@ -44,6 +46,10 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
     const [coinDiscount, setCoinDiscount] = useState(0);
     const [coinsToSpend, setCoinsToSpend] = useState(0);
 
+    // Garantia Estendida
+    const [warrantyOptions, setWarrantyOptions] = useState<WarrantyOption[]>([]);
+    const [selectedWarranty, setSelectedWarranty] = useState<WarrantyOption | null>(null);
+
     // Cleanup timeout on unmount
     useEffect(() => {
         return () => {
@@ -63,8 +69,14 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
     const effectivePrice = getEffectivePrice(product, customer) ?? 0;
     const coupon = useCoupon(effectivePrice, customer?.customer_type);
 
-    // Carregar saldo de moedas do cliente
+    // Carregar saldo de moedas do cliente e configs globais da empresa
     useEffect(() => {
+        companySettingsService.get().then(settings => {
+            if (settings?.extended_warranty_options) {
+                setWarrantyOptions(settings.extended_warranty_options.filter(o => o.active));
+            }
+        }).catch(() => { });
+
         if (!customer || isAdmin) return;
         Promise.all([getCoinBalance(customer.id), getCashbackSettings()])
             .then(([bal, settings]) => {
@@ -199,19 +211,22 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
         loadAvailableColors();
     }, [product.model_id, selectedVariant.ram, selectedVariant.storage, customer]);
 
+    // Calculate total price including warranty
+    const warrantyPrice = selectedWarranty ? Math.round((effectivePrice * selectedWarranty.percentage) / 100) : 0;
+    const effectivePriceWithWarranty = effectivePrice + warrantyPrice;
+
     // Load installment plans when price changes
     useEffect(() => {
-        const effectivePrice = getEffectivePrice(product, customer);
-        if (!effectivePrice) return;
+        if (!effectivePriceWithWarranty) return;
 
         const loadPlans = async () => {
-            const plans = await calculateInstallments(effectivePrice, 12);
+            const plans = await calculateInstallments(effectivePriceWithWarranty, 12);
             setInstallmentPlans(plans);
             setSelectedPlan(plans.find(p => p.highlighted) || plans[0]);
         };
 
         loadPlans();
-    }, [product, customer]);
+    }, [effectivePriceWithWarranty, customer]);
 
     // Generate WhatsApp message
     const handleSendWhatsApp = async () => {
@@ -228,6 +243,12 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                 availableColors,
                 couponCode: coupon.appliedCoupon?.code,
                 couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
+                referrerName: customer?.name,
+                referralCode: customer?.referral_code,
+                selectedWarranty: selectedWarranty ? {
+                    months: selectedWarranty.months,
+                    price: warrantyPrice
+                } : undefined
             });
 
             const link = await generateWhatsAppLink(message);
@@ -253,7 +274,13 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             installmentPlan: selectedPlan,
             delivery,
             userType: customer?.customer_type,
-            availableColors: availableColors
+            availableColors: availableColors,
+            referrerName: customer?.name,
+            referralCode: customer?.referral_code,
+            selectedWarranty: selectedWarranty ? {
+                months: selectedWarranty.months,
+                price: warrantyPrice
+            } : undefined
         });
 
         navigator.clipboard.writeText(message);
@@ -289,7 +316,13 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             availableColors,
             price: effectivePrice,
             installmentPlan: selectedPlan,
-            paymentOptions
+            paymentOptions,
+            ...(selectedWarranty ? {
+                warranty: {
+                    months: selectedWarranty.months,
+                    price: warrantyPrice
+                }
+            } : {})
         });
 
         onClose();
@@ -350,9 +383,37 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                             </div>
                         )}
 
+                        {/* Garantia Estendida */}
+                        {warrantyOptions.length > 0 && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                    <Shield className="w-4 h-4 text-blue-600" />
+                                    Garantia Estendida
+                                </label>
+                                <select
+                                    value={selectedWarranty?.months || ''}
+                                    onChange={(e) => {
+                                        const opt = warrantyOptions.find(o => o.months === Number(e.target.value));
+                                        setSelectedWarranty(opt || null);
+                                    }}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+                                >
+                                    <option value="">Sem garantia estendida</option>
+                                    {warrantyOptions.sort((a, b) => a.months - b.months).map(opt => {
+                                        const cost = Math.round((effectivePrice * opt.percentage) / 100);
+                                        return (
+                                            <option key={opt.months} value={opt.months}>
+                                                +{opt.months} Meses (+ {formatPrice(cost * 100)})
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+                        )}
+
                         {/* Simulador de Pagamento Combinado (Pix + Cartão) */}
                         {installmentPlans.length > 0 && (
-                            <MixedPaymentSimulator totalPrice={effectivePrice} />
+                            <MixedPaymentSimulator totalPrice={effectivePriceWithWarranty} />
                         )}
 
                         {/* Delivery Options */}
@@ -474,12 +535,18 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                         )}
 
                         {/* Resumo de descontos */}
-                        {(coupon.discount > 0 || coinDiscount > 0) && (
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm space-y-1">
+                        {(coupon.discount > 0 || coinDiscount > 0 || warrantyPrice > 0) && (
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm space-y-1">
                                 <div className="flex justify-between text-slate-600">
-                                    <span>Subtotal:</span>
+                                    <span>Produto:</span>
                                     <span>{formatPrice(effectivePrice * 100)}</span>
                                 </div>
+                                {warrantyPrice > 0 && (
+                                    <div className="flex justify-between text-blue-700">
+                                        <span>Garantia (+{selectedWarranty?.months}m):</span>
+                                        <span>+ {formatPrice(warrantyPrice * 100)}</span>
+                                    </div>
+                                )}
                                 {coupon.discount > 0 && (
                                     <div className="flex justify-between text-green-700">
                                         <span>Cupom ({coupon.appliedCoupon?.code}):</span>
@@ -492,9 +559,9 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                                         <span>- R$ {coinDiscount.toFixed(2).replace('.', ',')}</span>
                                     </div>
                                 )}
-                                <div className="flex justify-between text-slate-900 font-bold border-t border-green-200 pt-1">
+                                <div className="flex justify-between text-slate-900 font-bold border-t border-slate-200 pt-1 mt-1">
                                     <span>Total:</span>
-                                    <span>{formatPrice((effectivePrice - coupon.discount - coinDiscount) * 100)}</span>
+                                    <span>{formatPrice((effectivePriceWithWarranty - coupon.discount - coinDiscount) * 100)}</span>
                                 </div>
                             </div>
                         )}

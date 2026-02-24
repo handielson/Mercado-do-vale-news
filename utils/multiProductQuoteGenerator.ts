@@ -41,13 +41,17 @@ export function generateMultiProductQuoteMessage(
         if (item.availableColors.length > 0) {
             message += `   \ud83c\udfa8 Cores: ${item.availableColors.join(', ')}\n`;
         }
+
+        if (item.warranty) {
+            message += `   \ud83d\udee1\ufe0f Garantia Estendida: +${item.warranty.months} Meses (+${formatPrice(item.warranty.price)})\n`;
+        }
     });
 
     const cashItems = items.filter(i => !((i.paymentOptions?.showInstallment ?? true) && i.installmentPlan.installments > 1));
     const installmentItems = items.filter(i => (i.paymentOptions?.showInstallment ?? true) && i.installmentPlan.installments > 1);
 
-    const cashSubtotal = cashItems.reduce((s, i) => s + i.price, 0);
-    const installmentSubtotal = installmentItems.reduce((s, i) => s + i.installmentPlan.total, 0);
+    const cashSubtotal = cashItems.reduce((s, i) => s + i.price + (i.warranty?.price || 0), 0);
+    const installmentSubtotal = installmentItems.reduce((s, i) => s + i.installmentPlan.total + (i.warranty?.price || 0), 0);
     const grandTotal = cashSubtotal + installmentSubtotal;
 
     const isMixed = cashItems.length > 0 && installmentItems.length > 0;

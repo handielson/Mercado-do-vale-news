@@ -5,6 +5,7 @@ import { Product } from '../../types/product';
 import { SaleItem, PaymentMethod, SaleInput, DeliveryType } from '../../types/sale';
 import { calculateSaleTotals, calculateTotalPaid } from '../../utils/saleCalculations';
 import ProductSearchSection from '../../components/pdv/ProductSearchSection';
+import CartItemsSection from '../../components/pdv/CartItemsSection';
 import CustomerSection from '../../components/pdv/CustomerSection';
 import PaymentSection from '../../components/pdv/PaymentSection';
 import DeliverySection from '../../components/pdv/DeliverySection';
@@ -16,6 +17,7 @@ import { warrantyDocumentService } from '../../services/warrantyDocumentService'
 import { companySettingsService } from '../../services/companySettingsService';
 import { replaceWarrantyTags, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
 import { WarrantyTagData, DeliveryTypeWarranty } from '../../types/warrantyDocument';
+import { WarrantyOption } from '../../types/companySettings';
 import { toast } from 'sonner';
 import { validateCoupon, applyCoupon, type Coupon } from '../../services/couponService';
 import { earnCoinsForPurchase } from '../../services/cashbackService';
@@ -34,6 +36,15 @@ export default function PDVPage() {
 
     // Estado do carrinho
     const [cartItems, setCartItems] = useState<SaleItem[]>([]);
+    const [warrantyOptions, setWarrantyOptions] = useState<WarrantyOption[]>([]);
+
+    React.useEffect(() => {
+        companySettingsService.get().then(settings => {
+            if (settings?.extended_warranty_options) {
+                setWarrantyOptions(settings.extended_warranty_options.filter(o => o.active));
+            }
+        }).catch(() => { });
+    }, []);
 
     // Estado do cliente
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
@@ -55,6 +66,9 @@ export default function PDVPage() {
     const [couponLoading, setCouponLoading] = useState(false);
     const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
     const [couponError, setCouponError] = useState<string | null>(null);
+
+    // Estado da Indicação (Moedas do Vale)
+    const [referralCode, setReferralCode] = useState('');
 
     // Estado do termo de garantia
     const [showWarrantyModal, setShowWarrantyModal] = useState(false);
@@ -175,7 +189,7 @@ export default function PDVPage() {
 
         const newItems = cartItems.map(item => {
             if (item.id === itemId) {
-                const subtotal = item.unit_price * quantity;
+                const subtotal = (item.unit_price * quantity) + (item.warranty_price || 0);
                 return {
                     ...item,
                     quantity,
@@ -192,6 +206,23 @@ export default function PDVPage() {
     const handleRemoveItem = (itemId: string) => {
         setCartItems(cartItems.filter(item => item.id !== itemId));
         toast.info('Item removido do carrinho');
+    };
+
+    // Atualizar garantia do item
+    const handleUpdateWarranty = (itemId: string, selectedWarranty: WarrantyOption | null) => {
+        setCartItems(current => current.map(item => {
+            if (item.id === itemId) {
+                if (selectedWarranty) {
+                    const price = Math.round((item.unit_price * selectedWarranty.percentage) / 100);
+                    const subtotal = (item.unit_price * item.quantity) + price;
+                    return { ...item, warranty_months: selectedWarranty.months, warranty_price: price, subtotal, total: item.is_gift ? 0 : subtotal };
+                } else {
+                    const subtotal = (item.unit_price * item.quantity);
+                    return { ...item, warranty_months: undefined, warranty_price: undefined, subtotal, total: item.is_gift ? 0 : subtotal };
+                }
+            }
+            return item;
+        }));
     };
 
     // Limpar carrinho
@@ -267,7 +298,8 @@ export default function PDVPage() {
             delivery_cost_store: deliveryCostStore,
             delivery_cost_customer: deliveryCostCustomer,
             delivery_total: deliveryTotal,
-            promotional_discount: promotionalDiscount
+            promotional_discount: promotionalDiscount,
+            referral_code: referralCode.trim() || undefined
         };
 
         try {
@@ -280,7 +312,7 @@ export default function PDVPage() {
 
             // Creditar Moedas do Vale pelo valor final pago
             try {
-                const totals = calculateSaleTotals(cartItems, promotionalDiscount);
+                const totals = calculateSaleTotals(cartItems);
                 const couponDiscount = appliedCoupon
                     ? (totals.subtotal * ((appliedCoupon as any).discount_percent ?? 0)) / 100
                     : 0;
@@ -315,11 +347,10 @@ export default function PDVPage() {
 
                 // Formas de Pagamento
                 const paymentMethodsList = payments.map(p => {
-                    if (p.method === 'cash') return 'Dinheiro';
+                    if (p.method === 'money') return 'Dinheiro';
                     if (p.method === 'pix') return 'Pix';
                     if (p.method === 'credit') return `Cartão de Crédito (${p.installments}x)`;
                     if (p.method === 'debit') return 'Cartão de Débito';
-                    if (p.method === 'store_credit') return 'Crediário';
                     return p.method;
                 }).join(', ') || 'Não informado';
 
@@ -358,6 +389,8 @@ export default function PDVPage() {
             setDeliveryPersonId(undefined);
             setDeliveryCostStore(0);
             setDeliveryCostCustomer(0);
+            setReferralCode('');
+            handleClearCoupon();
         } catch (error) {
             console.error('Erro ao finalizar venda:', error);
             toast.error('Erro ao finalizar venda. Verifique os dados e tente novamente.');
@@ -529,6 +562,14 @@ export default function PDVPage() {
 
                         <ProductSearchSection onAddToCart={handleAddToCart} />
 
+                        <CartItemsSection
+                            items={cartItems}
+                            warrantyOptions={warrantyOptions}
+                            onUpdateQuantity={handleUpdateQuantity}
+                            onRemoveItem={handleRemoveItem}
+                            onUpdateWarranty={handleUpdateWarranty}
+                        />
+
                         <DeliverySection
                             deliveryType={deliveryType}
                             deliveryPersonId={deliveryPersonId}
@@ -572,6 +613,23 @@ export default function PDVPage() {
                                 </div>
                             )}
                             {couponError && <p className="text-xs text-red-600">{couponError}</p>}
+                        </div>
+
+                        {/* Código de Indicação */}
+                        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2">
+                            <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg">🤝</span>
+                                    <span className="text-sm font-semibold text-purple-800">Código de Indicação (Moedas)</span>
+                                </div>
+                            </div>
+                            <input
+                                value={referralCode}
+                                onChange={e => setReferralCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                                placeholder="CÓDIGO (Ex: MV-A1B2C)"
+                                className="w-full px-3 py-2 border-2 border-purple-200 rounded-lg focus:border-purple-500 focus:outline-none font-mono uppercase text-sm bg-white"
+                            />
+                            <p className="text-xs text-purple-600/80">Recompensa o divulgador que indicou esta venda.</p>
                         </div>
 
                         <PaymentSection

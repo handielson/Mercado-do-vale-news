@@ -64,8 +64,16 @@ export const PublicHeader: React.FC = () => {
                     <h1 className="text-2xl font-bold text-slate-800">{themeSettings.company_name}</h1>
                 </Link>
 
-                {/* Right Side */}
                 <div className="flex items-center gap-4">
+                    <Link
+                        to="/garantia-estendida"
+                        className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Ver opções de Garantia Estendida"
+                    >
+                        <Shield className="w-4 h-4" />
+                        <span className="font-medium">Garantia</span>
+                    </Link>
+
                     {user && customer ? (
                         <>
                             {/* Customer Type Badge */}

@@ -19,6 +19,10 @@ export interface QuoteCartItem {
         showCash: boolean;      // Show cash price in quote
         showInstallment: boolean; // Show installment price in quote
     };
+    warranty?: {
+        months: number;
+        price: number; // in cents
+    };
 }
 
 /**

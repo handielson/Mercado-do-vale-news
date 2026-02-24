@@ -25,7 +25,7 @@ export const calculateItemTotal = (item: SaleItem): number => {
  * Calculate subtotal for a single item (without discount)
  */
 export const calculateItemSubtotal = (item: SaleItem): number => {
-    return item.unit_price * item.quantity;
+    return (item.unit_price * item.quantity) + (item.warranty_price || 0);
 };
 
 /**

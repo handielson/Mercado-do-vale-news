@@ -23,7 +23,7 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     const [isCopied, setIsCopied] = useState(false);
 
     // Calculate total cart value in R$ (prices are in centavos)
-    const totalCart = items.reduce((sum, item) => sum + (item.price / 100), 0);
+    const totalCart = items.reduce((sum, item) => sum + (item.price / 100) + ((item.warranty?.price || 0) / 100), 0);
     const coupon = useCoupon(totalCart, customer?.customer_type);
 
     // Load WhatsApp number from company settings
@@ -337,6 +337,13 @@ function CartItemCard({ item, onRemove }: CartItemCardProps) {
             {availableColors.length > 0 && (
                 <div className="text-xs text-slate-600 mb-2">
                     <span className="font-medium">Cores:</span> {availableColors.join(', ')}
+                </div>
+            )}
+
+            {/* Warranty */}
+            {item.warranty && (
+                <div className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded inline-flex font-medium mb-2">
+                    🛡️ Garantia Estendida: +{item.warranty.months}M (+{formatPrice(item.warranty.price)})
                 </div>
             )}
 

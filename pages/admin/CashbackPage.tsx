@@ -536,6 +536,11 @@ function SettingsTab() {
                     {field('Mínimo para resgatar (moedas)', 'min_coins_to_redeem', 'Saldo mínimo exigido para resgatar')}
                 </div>
 
+                <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+                    <h3 className="font-semibold text-slate-800">🤝 Indicações e Compartilhamento</h3>
+                    {field('Moedas por Venda Indicada', 'coins_per_referral_purchase', 'Qtd. de moedas que o cliente ganha quando alguém compra usando seu código')}
+                </div>
+
                 <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4 md:col-span-2">
                     <div>
                         <h3 className="font-semibold text-slate-800 mb-0.5">📅 Check-in Diário — Ciclo Progressivo</h3>

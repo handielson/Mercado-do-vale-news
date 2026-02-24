@@ -128,15 +128,30 @@ class CustomerService {
     }
 
     /**
+     * Helper to generate a unique referral code based on ID
+     */
+    private generateReferralCode(id: string): string {
+        // Generate a simple MV-XXXXX code using the first 5 chars of the UUID
+        const hash = id.replace(/-/g, '').substring(0, 5).toUpperCase();
+        return `MV-${hash}`;
+    }
+
+    /**
      * Create new customer
      */
     async create(input: CustomerInput): Promise<Customer> {
         const companyId = await this.getCompanyId();
 
+        // Generate UUID first so we can use it for the referral code
+        const newId = crypto.randomUUID();
+        const referralCode = this.generateReferralCode(newId);
+
         const { data, error } = await supabase
             .from('customers')
             .insert({
+                id: newId,
                 company_id: companyId,
+                referral_code: referralCode,
                 ...input
             })
             .select()

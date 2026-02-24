@@ -87,7 +87,8 @@ export const companySettingsService = {
             show_company_info: true,
             show_order_number: true,
             show_timestamp: true,
-            show_seller_info: true
+            show_seller_info: true,
+            receipt_show_extra_page: false
         };
     }
 };

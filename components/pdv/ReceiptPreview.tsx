@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Receipt, User, Package, Truck, CreditCard, DollarSign, Smartphone } from 'lucide-react';
 import { SaleItem, PaymentMethod, DeliveryType } from '../../types/sale';
+import QRCode from 'react-qr-code';
 import { calculateSaleTotals } from '../../utils/saleCalculations';
 import { companySettingsService } from '../../services/companySettingsService';
 import { CompanySettings } from '../../types/companySettings';
@@ -141,6 +142,38 @@ export default function ReceiptPreview({
         }
     };
 
+    // Função para obter o max-width baseado na configuração do DB
+    const getReceiptMaxWidthClass = () => {
+        const width = companySettings?.receipt_width || '80mm';
+        if (width === '58mm') return 'max-w-[280px]'; // Aprox 58mm legível em tela
+        if (width === '100mm') return 'max-w-[500px]'; // Aprox 100mm / Impressora Larga
+        return 'max-w-[400px]'; // Aprox 80mm padrão
+    };
+
+    // Replace dynamic tags for the extra page
+
+    const getReplacedExtraPageText = () => {
+        let text = companySettings?.receipt_extra_page_text || '';
+        if (!text) return '';
+
+        text = text.replace(/\{\{cliente_nome\}\}/g, customer?.name || 'Cliente Avulso');
+        text = text.replace(/\{\{cliente_documento\}\}/g, customer?.cpf_cnpj || 'Não informado');
+        text = text.replace(/\{\{cliente_telefone\}\}/g, customer?.phone || 'Não informado');
+        text = text.replace(/\{\{cliente_email\}\}/g, customer?.email || 'Não informado');
+        text = text.replace(/\{\{empresa_nome\}\}/g, companySettings?.company_name || 'MERCADO DO VALE');
+        text = text.replace(/\{\{empresa_telefone\}\}/g, companySettings?.phone || 'Não informado');
+        text = text.replace(/\{\{empresa_email\}\}/g, companySettings?.email || 'Não informado');
+        text = text.replace(/\{\{empresa_cnpj\}\}/g, companySettings?.cnpj || 'Não informado');
+        text = text.replace(/\{\{empresa_endereco\}\}/g, companySettings?.address || 'Não informado');
+
+        const now = new Date();
+        text = text.replace(/\{\{data_venda\}\}/g, now.toLocaleDateString('pt-BR'));
+        text = text.replace(/\{\{hora_venda\}\}/g, now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        text = text.replace(/\{\{numero_pedido\}\}/g, orderNumber ? String(orderNumber).padStart(7, '0') : '0000000');
+
+        return text;
+    };
+
     return (
         <div className="bg-white rounded-xl border-2 border-slate-200 shadow-lg sticky top-6">
             {/* Header - Padronizado com Termo de Garantia */}
@@ -247,10 +280,15 @@ export default function ReceiptPreview({
                                                 (Uni {formatCurrency(item.unit_price)})
                                             </span>
                                         )}
+                                        {item.warranty_months && item.warranty_price && (
+                                            <div className="text-xs text-blue-600 mt-0.5 ml-4 font-medium">
+                                                🛡️ + Garantia {item.warranty_months}M ({formatCurrency(item.warranty_price)})
+                                            </div>
+                                        )}
                                     </div>
-                                    <span className="font-mono text-slate-800 ml-2">
+                                    <span className="font-mono text-slate-800 ml-2 text-right">
                                         {/* Mostrar preço integral, mesmo para brindes */}
-                                        {formatCurrency(item.unit_price * item.quantity)}
+                                        {formatCurrency((item.unit_price * item.quantity) + (item.warranty_price || 0))}
                                     </span>
                                 </div>
                             ))}
@@ -442,6 +480,45 @@ export default function ReceiptPreview({
                     {isComplete ? 'Finalizar Venda' : 'Complete os dados para finalizar'}
                 </button>
             </div >
+
+            {/* FOLHA EXTRA OPCIONAL (Somente Impressão / Final do Recibo) */}
+            {companySettings?.receipt_show_extra_page && (
+                <div className={`print-only-extra-page hidden print:block mt-8 pt-8 border-t-2 border-dashed border-slate-300 mx-auto ${getReceiptMaxWidthClass()}`} style={{ pageBreakBefore: 'always' }}>
+                    <div className="flex flex-col items-center justify-center text-center p-8">
+                        {companySettings.logo_url && (
+                            <img
+                                src={companySettings.logo_url}
+                                alt="Logo Empresa"
+                                className="max-w-[200px] max-h-[100px] object-contain mb-8"
+                            />
+                        )}
+                        <div className="w-full bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mb-8">
+                            {companySettings.receipt_extra_page_qr_url ? (
+                                <div className="flex justify-center mb-6">
+                                    <div className="p-4 bg-white rounded-xl shadow-sm border border-slate-100">
+                                        <QRCode
+                                            value={companySettings.receipt_extra_page_qr_url}
+                                            size={200}
+                                            level="H"
+                                            className="mx-auto"
+                                        />
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {companySettings.receipt_extra_page_text && (
+                                <p className="text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap text-left">
+                                    {getReplacedExtraPageText()}
+                                </p>
+                            )}
+                        </div>
+
+                        <p className="text-xs text-slate-400 mt-4">
+                            Documento acessório ao recibo principal pedido #{orderNumber ? String(orderNumber).padStart(7, '0') : ''}
+                        </p>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

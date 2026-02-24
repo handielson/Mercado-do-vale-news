@@ -1,0 +1,15 @@
+{
+    "mcpServers": {
+        "n8n": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@n8n/chat"
+            ],
+            "env": {
+                "N8N_HOST": "https://handielson.app.n8n.cloud",
+                "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNGY4ODRjYi0zNzBhLTRmYjMtYTJhNy1kOGFmYTcyYzc3NjciLCJpc3MiOiJuOG4iLCJhdWQiOiJtY3Atc2VydmVyLWFwaSIsImp0aSI6IjNhNmM1OGJkLWFkNWMtNDI5MC1iZTYzLTMxYjViMGZiYWVjZiIsImlhdCI6MTc3MTgwMDYxMH0.O-r7mDki5vlLqUInrnPeXMQZpr7-0OOXzOjQ7ZnDUek"
+            }
+        }
+    }
+}

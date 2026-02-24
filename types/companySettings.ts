@@ -1,5 +1,11 @@
 // Company Settings Types
 
+export interface WarrantyOption {
+    months: number;
+    percentage: number;
+    active: boolean;
+}
+
 export interface CompanySettings {
     id: string;
     company_name: string;
@@ -11,7 +17,7 @@ export interface CompanySettings {
     footer_text?: string;
     warranty_terms?: string;
     receipt_logo_url?: string;
-    receipt_width: '58mm' | '80mm';
+    receipt_width: '58mm' | '80mm' | '100mm';
     show_company_info: boolean;
     show_order_number: boolean;
     show_timestamp: boolean;
@@ -23,6 +29,11 @@ export interface CompanySettings {
     warranty_show_phone: boolean;
     warranty_show_email: boolean;
     warranty_show_address: boolean;
+    receipt_extra_page_text?: string;
+    receipt_extra_page_qr_url?: string;
+    receipt_show_extra_page: boolean;
+    extended_warranty_options?: WarrantyOption[];
+    extended_warranty_terms_text?: string;
     created_at: string;
     updated_at: string;
 }
@@ -37,7 +48,7 @@ export interface CompanySettingsInput {
     footer_text?: string;
     warranty_terms?: string;
     receipt_logo_url?: string;
-    receipt_width?: '58mm' | '80mm';
+    receipt_width?: '58mm' | '80mm' | '100mm';
     show_company_info?: boolean;
     show_order_number?: boolean;
     show_timestamp?: boolean;
@@ -49,4 +60,9 @@ export interface CompanySettingsInput {
     warranty_show_phone?: boolean;
     warranty_show_email?: boolean;
     warranty_show_address?: boolean;
+    receipt_extra_page_text?: string;
+    receipt_extra_page_qr_url?: string;
+    receipt_show_extra_page?: boolean;
+    extended_warranty_options?: WarrantyOption[];
+    extended_warranty_terms_text?: string;
 }

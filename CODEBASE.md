@@ -220,6 +220,30 @@ A tabela `categories` tem RLS que bloqueia leitura para **usuários anônimos/p�
 
 ---
 
+### 🛡️ Sistema de Garantia Estendida Dinâmica
+
+O sistema permite configurar prazos (ex: 3, 6, 12 meses) com acréscimo percentual calculado dinamicamente no momento da compra, disponível tanto no Catálogo Cliente quanto na Frente de Caixa (PDV).
+
+**Configuração Admin (`company_settings`):**
+- `extended_warranty_options` — Array JSONB contendo opções ativas (meses e porcentagem). 
+- `extended_warranty_terms_text` — Regulamento exibido na página pública `/garantia-estendida`.
+
+**Tabelas e Tipagem (`SaleItem`):**
+- `warranty_months` — Armazena os meses da garantia no momento do fechamento da venda.
+- `warranty_price` — Custo fixo em centavos consolidado durante a venda, para prevenir mudanças de preço retroativas.
+
+**Lógica de Cálculos (`utils/saleCalculations.ts`):**
+- `calculateItemSubtotal` agora injeta o valor nominal da garantia (`item.warranty_price`) diretamente no subtotal do produto.
+- Essa integração possibilita que os juros de cartão de crédito e subtotais considerem o acréscimo natural sem fragmentar o Recibo de Pagamento.
+
+**Componentes Principais:**
+1. **`QuoteModal` (Catálogo):** O cliente seleciona a garantia; o price-tag do botão Checkout e as parcelas são recalculadas on the fly.
+2. **`multiProductQuoteGenerator` (WhatsApp API):** Se `item.warranty` existir, uma linha é desenhada explicitando o acréscimo "Garantia Estendida" daquele item na mensagem de orçamento.
+3. **`CartItemsSection` (PDV):** Renderiza o carrinho atual com a possibilidade de trocar/remover garantias item a item.
+4. **`ReceiptPreview` (PDV Recibo):** Extrato consolidado que exibe claramente a escolha de garantia do cliente alinhada com o parcelamento de crédito escolhido pelo Vendedor.
+
+---
+
 ### `services/couponService.ts` — Cupons de Desconto
 **Exporta:** `validateCoupon`, `applyCoupon`, `listCoupons`, `createCoupon`, `updateCoupon`, `deleteCoupon`, tipos `Coupon` e `CouponValidation`
 **Tabela:** `coupons`
@@ -2350,11 +2374,12 @@ Senha do sistema deve ter **exatamente 5 dígitos numéricos**.
 - `useTheme()` — aplica `settings.company_name` no header da sidebar
 - Banner amarelo de topo se `VITE_DEV_MODE=true`
 
-**Itens de navegação (sidebar):**
-Dashboard, Produtos, Vendas, Estoque, Clientes, Equipe, PDV, Migração
-**Configuração:** Categorias, Campos, Marcas, Modelos, Cores, Armazenamento, RAM, Versões, Saúde Bateria, Taxas, Dados da Empresa, Documentos, Garantias, Banners, Config. Catálogo
-**Admin only:** Permissões (visível apenas se `customer_type === 'ADMIN'`)
-**Dev:** Governança, Diário de Dev, Teste de Abas, Ajustes Sistema
+**Itens de navegação (sidebar) agrupados em 5 seções:**
+1. **Operacional:** Dashboard, PDV, Vendas, Produtos, Estoque, Clientes, Equipe
+2. **Marketing & Loja:** Config. Catálogo, Banners, Criativos, Cupons, Moedas do Vale, WhatsApp, Telegram, Mensagens
+3. **Estrutura de Catálogo:** Categorias, Marcas, Modelos, Campos Customizados, Tags do Sistema, Cores, Armazenamento, RAM, Versões, Saúde Bateria
+4. **Ajustes da Empresa:** Dados da Empresa, Frete, Taxas, Documentos, Garantias, Permissões (se `customer_type === 'ADMIN'`)
+5. **Sistema:** Migração, Teste de Abas
 
 **⚠️ `PDVPage` NÃO usa `AdminLayout`** — tela cheia sem sidebar
 
@@ -3496,9 +3521,7 @@ avgPrice = (sumOf(price × stock) + newPrice × newQty) / (totalStock + newQty)
 |--------|------|-----------|
 | `AdminDashboardPage` | `/admin` | Dashboard principal (stub, em desenvolvimento) |
 | `CatalogConfigPage` | `/admin/catalog-config` | Configuração completa do catálogo público (seções, banners, temas) |
-| `DevDiaryPage` | `/admin/dev-diary` | Diário de desenvolvimento — histórico de mudanças |
 | `EntradaPage` | `/admin/entrada` | Entrada em lote de produtos via `ProductEntryWizard` |
-| `GovernancePage` | `/admin/governance` | Documentação viva de padrões e auditoria de configurações |
 | `SimpleEntryPage` | `/admin/simple-entry` | Entrada simplificada de produto único |
 | `catalog-editor` | `/admin/catalog-editor` | Editor visual do catálogo (Draft → Published) |
 
@@ -6393,6 +6416,14 @@ const discount    = min(raw, maxDiscount)
 
 **⚠️ Importante:** O widget valida mas NÃO debita. O debit (`redeemCoins()`) deve ser chamado externamente na confirmação final da compra.
 
+#### `CoinsInfoPage.tsx` e Simulador (Regulamento)
+
+- Mostra o regulamento oficial do programa aos clientes.
+- Exibe o **Código de Indicação** do cliente (buscado em `customers.referral_code`).
+- Contém o **Simulador de Benefícios**:
+  - Usa `coins_per_real` para calcular e exibir saldo futuro de moedas com base em um valor R$ simulado.
+  - Usa `coins_to_brl_rate` para calcular e exibir desconto R$ com base em moedas gastas simuladas.
+
 #### `CoinsInfoModal.tsx` — Modal Explicativo (11kb)
 
 - Bottom sheet no mobile / modal centrado no desktop
@@ -6452,6 +6483,22 @@ Admin cancela venda
      ↳ Estorna moedas gastas no pedido
   → [pendente] Remover moedas ganhas (earn_purchase) da venda cancelada
      ↳ adminAdjustCoins(customerId, -coinsEarned, 'Cancelamento da venda X')
+```
+
+#### Fluxo de Indicação (Referral Rewards)
+
+```
+Cliente compartilha Orçamento via WhatsApp
+  → getCustomer(loggedUserId) recupera referral_code (ex: MV-7B9F)
+  → whatsappMessageGenerator injeta tag final: "🤝 Indicação: João (Cód: MV-7B9F)"
+
+Equipe fecha venda no PDV
+  → Vendedor digita MV-7B9F no campo de indicação
+  → createSale(saleInput com referral_code)
+  → Serviço de Vendas no Backend finaliza e chama RPC [process_referral_reward(code, saleId, buyerName)]
+     ↳ Busca user_id pelo código. Ignora se user_id == buyer_id (auto-fraude).
+     ↳ add_coins RPC (type='earn_referral', amount=coins_per_referral_purchase)
+     ↳ Description = "Indicação convertida: Venda #XXXX para Maria" (Rastreabilidade)
 ```
 
 ---
