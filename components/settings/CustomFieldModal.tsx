@@ -11,6 +11,7 @@ interface CustomFieldFormData {
     description: string;
     minLength?: number;
     maxLength?: number;
+    options?: string[];
 }
 
 interface CustomFieldModalProps {
@@ -34,7 +35,8 @@ export function CustomFieldModal({ isOpen, onClose, onCreate, formatOptions, edi
         required: false,
         description: editingField?.help_text || '',
         minLength: undefined,
-        maxLength: undefined
+        maxLength: undefined,
+        options: editingField?.options || []
     });
 
     const handleSubmit = () => {
@@ -48,7 +50,8 @@ export function CustomFieldModal({ isOpen, onClose, onCreate, formatOptions, edi
             required: false,
             description: '',
             minLength: undefined,
-            maxLength: undefined
+            maxLength: undefined,
+            options: []
         });
     };
 
@@ -159,8 +162,37 @@ export function CustomFieldModal({ isOpen, onClose, onCreate, formatOptions, edi
                             <li>• <strong>Capitalize:</strong> Primeira letra maiúscula → "Iphone 14"</li>
                             <li>• <strong>UPPERCASE:</strong> Tudo maiúsculo → "ABC-123"</li>
                             <li>• <strong>lowercase:</strong> Tudo minúsculo → "email@exemplo.com"</li>
+                            <li>• <strong>Seletor (Lista):</strong> Cria um dropdown com opções pré-definidas</li>
                             <li>• <strong>None:</strong> Sem formatação (mantém como digitado)</li>
                         </ul>
+
+                        {/* Options Input for Select Type */}
+                        {formData.format === 'select' && (
+                            <div className="mt-4 p-4 bg-fuchsia-50 border border-fuchsia-200 rounded-lg">
+                                <label className="block text-sm font-medium text-fuchsia-900 mb-1">
+                                    Opções da Lista (Uma por linha) <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    value={formData.options?.join('\n') || ''}
+                                    onChange={(e) => setFormData({
+                                        ...formData,
+                                        options: e.target.value.split('\n').map(opt => opt.trim()).filter(Boolean)
+                                    })}
+                                    placeholder="Sim\nNão\nTalvez"
+                                    rows={4}
+                                    className="w-full px-3 py-2 border border-fuchsia-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-fuchsia-500 resize-none"
+                                />
+                                <p className="text-xs text-fuchsia-700 mt-1">
+                                    📋 Digite cada opção em uma linha diferente. Ex:
+                                    <br />
+                                    110V
+                                    <br />
+                                    220V
+                                    <br />
+                                    Bivolt
+                                </p>
+                            </div>
+                        )}
 
                         {/* Real-time Preview */}
                         <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
@@ -208,6 +240,7 @@ export function CustomFieldModal({ isOpen, onClose, onCreate, formatOptions, edi
                                         {formData.format === 'ncm' && '"12345678"'}
                                         {formData.format === 'ean13' && '"7891234567890"'}
                                         {formData.format === 'cest' && '"1234567"'}
+                                        {formData.format === 'select' && '"[Opção selecionada da lista]"'}
                                         {formData.format === 'none' && '"iPhone 14 PRO max"'}
                                     </code>
                                 </div>

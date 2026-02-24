@@ -1,5 +1,44 @@
 import { supabase } from './supabase';
 
+export const FORMAT_OPTIONS = [
+    // Tipos de Texto
+    { value: 'none', label: '📝 Texto Livre (Sem formatação)', color: 'bg-slate-100 text-slate-800' },
+    { value: 'capitalize', label: '📝 Capitalize (Primeira maiúscula)', color: 'bg-blue-100 text-blue-800' },
+    { value: 'uppercase', label: '📝 UPPERCASE (Tudo maiúsculo)', color: 'bg-purple-100 text-purple-800' },
+    { value: 'lowercase', label: '📝 lowercase (Tudo minúsculo)', color: 'bg-green-100 text-green-800' },
+    { value: 'titlecase', label: '📝 Title Case (Iniciais maiúsculas)', color: 'bg-indigo-100 text-indigo-800' },
+    { value: 'sentence', label: '📝 Sentence case (Início de frase)', color: 'bg-cyan-100 text-cyan-800' },
+    { value: 'slug', label: '🔗 slug-case (URL amigável)', color: 'bg-teal-100 text-teal-800' },
+
+    // Componentes e Seletores
+    { value: 'select', label: '🎯 Seletor (Lista Dropdown)', color: 'bg-fuchsia-100 text-fuchsia-800' },
+    { value: 'checkbox', label: '☑️ Checkbox (Sim/Não)', color: 'bg-sky-100 text-sky-800' },
+    { value: 'textarea', label: '📄 Área de Texto (Texto Longo)', color: 'bg-slate-100 text-slate-800' },
+
+    // Formatadores Específicos
+    { value: 'numeric', label: '🔢 Numérico (Apenas números)', color: 'bg-lime-100 text-lime-800' },
+    { value: 'alphanumeric', label: '🔤 Alfanumérico (Sem especiais)', color: 'bg-sky-100 text-sky-800' },
+    { value: 'phone', label: '📱 Telefone', color: 'bg-orange-100 text-orange-800' },
+    { value: 'cpf', label: '📋 CPF', color: 'bg-rose-100 text-rose-800' },
+    { value: 'cnpj', label: '📋 CNPJ', color: 'bg-pink-100 text-pink-800' },
+    { value: 'cep', label: '📮 CEP', color: 'bg-amber-100 text-amber-800' },
+    { value: 'brl', label: '💰 R$ (Real - Para campos textuais)', color: 'bg-emerald-100 text-emerald-800' },
+
+    // Datas
+    { value: 'date_br', label: '📅 DD/MM/YYYY', color: 'bg-blue-100 text-blue-800' },
+    { value: 'date_br_short', label: '📅 DD/MM/YY', color: 'bg-indigo-100 text-indigo-800' },
+    { value: 'date_iso', label: '📅 YYYY-MM-DD', color: 'bg-cyan-100 text-cyan-800' },
+
+    // Componentes Nativos (Evitar usar como Formatação simples, mas disponíveis)
+    { value: 'currency', label: '💰 Componente Valor Monetário', color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'imei', label: '📱 Componente IMEI', color: 'bg-violet-100 text-violet-800' },
+
+    // Fiscais
+    { value: 'ncm', label: '📋 NCM (8 dígitos)', color: 'bg-slate-100 text-slate-800' },
+    { value: 'ean13', label: '📋 EAN-13 (13 dígitos)', color: 'bg-gray-100 text-gray-800' },
+    { value: 'cest', label: '📋 CEST (7 dígitos)', color: 'bg-zinc-100 text-zinc-800' },
+];
+
 export interface TableConfig {
     table_name: string;
     value_column: string;

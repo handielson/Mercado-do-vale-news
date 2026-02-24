@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, RefreshCw, Plus, Trash2, Pencil } from 'lucide-react';
-import { customFieldsService, CustomField } from '../../../services/custom-fields';
+import { customFieldsService, CustomField, FORMAT_OPTIONS } from '../../../services/custom-fields';
 import { CustomFieldModal } from '../../../components/settings/CustomFieldModal';
 
 /**
@@ -39,36 +39,7 @@ export function FieldConfigPage() {
         }
     };
 
-    const formatOptions = [
-        // Text formats
-        { value: 'capitalize', label: 'Capitalize', color: 'bg-blue-100 text-blue-800' },
-        { value: 'uppercase', label: 'UPPERCASE', color: 'bg-purple-100 text-purple-800' },
-        { value: 'lowercase', label: 'lowercase', color: 'bg-green-100 text-green-800' },
-        { value: 'titlecase', label: 'Title Case', color: 'bg-indigo-100 text-indigo-800' },
-        { value: 'sentence', label: 'Sentence case', color: 'bg-cyan-100 text-cyan-800' },
-        { value: 'slug', label: 'slug-case', color: 'bg-teal-100 text-teal-800' },
-        // Number/Document formats
-        { value: 'phone', label: '📱 Telefone', color: 'bg-orange-100 text-orange-800' },
-        { value: 'cpf', label: '📋 CPF', color: 'bg-rose-100 text-rose-800' },
-        { value: 'cnpj', label: '📋 CNPJ', color: 'bg-pink-100 text-pink-800' },
-        { value: 'cep', label: '📮 CEP', color: 'bg-amber-100 text-amber-800' },
-        { value: 'brl', label: '💰 R$ (Real)', color: 'bg-emerald-100 text-emerald-800' },
-        { value: 'numeric', label: 'Numérico', color: 'bg-lime-100 text-lime-800' },
-        { value: 'alphanumeric', label: 'Alfanumérico', color: 'bg-sky-100 text-sky-800' },
-        // Date formats
-        { value: 'date_br', label: '📅 DD/MM/YYYY', color: 'bg-blue-100 text-blue-800' },
-        { value: 'date_br_short', label: '📅 DD/MM/YY', color: 'bg-indigo-100 text-indigo-800' },
-        { value: 'date_iso', label: '📅 YYYY-MM-DD', color: 'bg-cyan-100 text-cyan-800' },
-        // Fiscal formats
-        { value: 'ncm', label: '📋 NCM (8 dígitos)', color: 'bg-slate-100 text-slate-800' },
-        { value: 'ean13', label: '📋 EAN-13 (13 dígitos)', color: 'bg-gray-100 text-gray-800' },
-        { value: 'cest', label: '📋 CEST (7 dígitos)', color: 'bg-zinc-100 text-zinc-800' },
-        // Specialized components
-        { value: 'currency', label: '💰 CurrencyInput', color: 'bg-yellow-100 text-yellow-800' },
-        { value: 'imei', label: '📱 IMEIInput', color: 'bg-violet-100 text-violet-800' },
-        { value: 'selector', label: '🎯 Selector', color: 'bg-fuchsia-100 text-fuchsia-800' },
-        { value: 'none', label: 'None', color: 'bg-slate-100 text-slate-600' }
-    ];
+
 
     const handleCreateCustomField = async (formData: any) => {
         if (!formData.key || !formData.label) {
@@ -81,7 +52,8 @@ export function FieldConfigPage() {
                 key: formData.key,
                 label: formData.label,
                 category: formData.category || 'spec',
-                field_type: formData.field_type || 'text',
+                field_type: formData.field_type || formData.format || 'text',
+                options: formData.options || [],
                 placeholder: formData.placeholder,
                 help_text: formData.help_text
             });
@@ -123,6 +95,7 @@ export function FieldConfigPage() {
                 label: formData.label,
                 field_type: formData.field_type || formData.format,
                 category: formData.category,
+                options: formData.options,
                 placeholder: formData.placeholder,
                 help_text: formData.description
             });
@@ -314,7 +287,7 @@ export function FieldConfigPage() {
                         setEditingField(null);
                     }}
                     onCreate={editingField ? handleUpdateField : handleCreateCustomField}
-                    formatOptions={formatOptions as any}
+                    formatOptions={FORMAT_OPTIONS as any}
                     editingField={editingField}
                 />
             )}

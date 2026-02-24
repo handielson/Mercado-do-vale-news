@@ -5,6 +5,7 @@ import { formatPrice, calculateInstallments } from '@/services/installmentCalcul
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { supabase } from '@/services/supabase';
+import { customFieldsService, CustomField } from '@/services/custom-fields';
 
 interface ProductDetailsModalProps {
     product: CatalogProduct;
@@ -34,8 +35,8 @@ const SPEC_LABELS: Record<string, string> = {
     resolution: 'Resolução',
     refresh_rate: 'Taxa de Atualização',
     // Camera
-    main_camera_mpx: 'Câmera Principal',
-    selfie_camera_mpx: 'Câmera Frontal',
+    main_camera_mpx: 'Cam Principal Mpx',
+    selfie_camera_mpx: 'Cam Selfie Mpx',
     camera: 'Câmera',
     // Battery
     battery_mah: 'Bateria (mAh)',
@@ -99,19 +100,25 @@ const SPEC_LABELS: Record<string, string> = {
 };
 
 /** Converts an unknown field key to a human-readable Portuguese label */
-const formatFieldKey = (key: string): string => {
+const formatFieldKey = (key: string, fields: CustomField[] = []): string => {
     const lower = key.toLowerCase();
-    // Check full key first
+
+    // 1. Check custom fields first
+    const field = fields.find(f => f.key === lower);
+    if (field?.label) return field.label;
+
+    // 2. Check full key in SPEC_LABELS
     if (SPEC_LABELS[lower]) return SPEC_LABELS[lower];
-    // Handle dotted keys like "Dimensions.Depth" → check last segment
+
+    // 3. Handle dotted keys like "Dimensions.Depth"
     if (lower.includes('.')) {
         const parts = lower.split('.');
         const lastPart = parts[parts.length - 1];
         if (SPEC_LABELS[lastPart]) return SPEC_LABELS[lastPart];
-        // Return last segment formatted
         return lastPart.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     }
-    // Default: replace underscores and capitalize
+
+    // 4. Default
     return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 };
 
@@ -134,6 +141,13 @@ export function ProductDetailsModal({
     const [warrantyDays, setWarrantyDays] = useState<number | null>(null);
     // UUID → name map for version resolution
     const [versionsMap, setVersionsMap] = useState<Map<string, string>>(new Map());
+    const [customFields, setCustomFields] = useState<CustomField[]>([]);
+
+    useEffect(() => {
+        if (isOpen) {
+            customFieldsService.list().then(setCustomFields).catch(console.error);
+        }
+    }, [isOpen]);
 
     // Calculate 12x installment when modal opens (not for wholesale)
     useEffect(() => {
@@ -316,43 +330,77 @@ export function ProductDetailsModal({
                                 <p className="text-sm text-slate-600 mt-2">Carregando especificações...</p>
                             </div>
                         ) : templateValues && Object.keys(templateValues).length > 0 ? (
-                            <div>
-                                <h3 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                                    <Package className="w-5 h-5" />
-                                    Especificações Técnicas
-                                </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {Object.entries(templateValues)
-                                        .filter(([key]) => !['imei1', 'imei2', 'serial', 'id', 'created_at', 'updated_at'].includes(key.toLowerCase()))
-                                        .sort(([a], [b]) => {
-                                            const keys = Object.keys(SPEC_LABELS);
-                                            const idxA = keys.indexOf(a.toLowerCase());
-                                            const idxB = keys.indexOf(b.toLowerCase());
-                                            // Known fields first (by SPEC_LABELS order), unknown fields alphabetically at end
-                                            if (idxA === -1 && idxB === -1) return a.localeCompare(b);
-                                            if (idxA === -1) return 1;
-                                            if (idxB === -1) return -1;
-                                            return idxA - idxB;
-                                        })
-                                        .map(([key, value]) => {
-                                            // Resolve UUID → version name for versao/version fields
-                                            const isVersionField = key.toLowerCase() === 'versao' || key.toLowerCase() === 'version';
-                                            const displayValue = isVersionField && typeof value === 'string' && versionsMap.has(value)
-                                                ? versionsMap.get(value)!
-                                                : String(value);
-                                            return (
-                                                <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
-                                                    <span className="text-sm font-medium text-slate-600">
-                                                        {formatFieldKey(key)}:
-                                                    </span>
-                                                    <span className="text-sm text-slate-900 font-semibold">
-                                                        {displayValue}
-                                                    </span>
+                            (() => {
+                                const entries = Object.entries(templateValues)
+                                    .filter(([key]) => !['imei1', 'imei2', 'serial', 'id', 'created_at', 'updated_at'].includes(key.toLowerCase()))
+                                    .sort(([a], [b]) => {
+                                        const keys = Object.keys(SPEC_LABELS);
+                                        const idxA = keys.indexOf(a.toLowerCase());
+                                        const idxB = keys.indexOf(b.toLowerCase());
+                                        if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+                                        if (idxA === -1) return 1;
+                                        if (idxB === -1) return -1;
+                                        return idxA - idxB;
+                                    })
+                                    .filter(([key], index, self) => {
+                                        const label = formatFieldKey(key, customFields);
+                                        return self.findIndex(([k]) => formatFieldKey(k, customFields) === label) === index;
+                                    });
+
+                                const logisticsLabels = [
+                                    'Peso (kg)',
+                                    'Profundidade (cm)', 'Altura (cm)', 'Largura (cm)',
+                                    'Profundidade', 'Altura', 'Largura'
+                                ];
+
+                                const logisticsEntries = entries.filter(([key]) => logisticsLabels.includes(formatFieldKey(key, customFields)));
+                                const specEntries = entries.filter(([key]) => !logisticsLabels.includes(formatFieldKey(key, customFields)));
+
+                                const renderEntry = ([key, value]: [string, any]) => {
+                                    const isVersionField = key.toLowerCase() === 'versao' || key.toLowerCase() === 'version';
+                                    const displayValue = isVersionField && typeof value === 'string' && versionsMap.has(value)
+                                        ? versionsMap.get(value)!
+                                        : String(value);
+                                    return (
+                                        <div key={key} className="flex justify-between p-3 bg-slate-50 rounded-lg">
+                                            <span className="text-sm font-medium text-slate-600">
+                                                {formatFieldKey(key, customFields)}:
+                                            </span>
+                                            <span className="text-sm text-slate-900 font-semibold">
+                                                {displayValue}
+                                            </span>
+                                        </div>
+                                    );
+                                };
+
+                                return (
+                                    <>
+                                        {specEntries.length > 0 && (
+                                            <div className="mb-6">
+                                                <h3 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                                    <Package className="w-5 h-5" />
+                                                    Especificações Técnicas
+                                                </h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {specEntries.map(renderEntry)}
                                                 </div>
-                                            );
-                                        })}
-                                </div>
-                            </div>
+                                            </div>
+                                        )}
+
+                                        {logisticsEntries.length > 0 && (
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                                    <Package className="w-5 h-5 text-slate-500" />
+                                                    Informações Logísticas
+                                                </h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {logisticsEntries.map(renderEntry)}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()
                         ) : (
                             <div className="text-center py-8 bg-slate-50 rounded-lg">
                                 <Package className="w-12 h-12 text-slate-400 mx-auto mb-2" />

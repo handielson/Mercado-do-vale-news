@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ExternalLink, Check } from 'lucide-react';
 import { CustomField, FieldRequirement } from '../../types/category';
-import { customFieldsService } from '../../services/custom-fields';
+import { customFieldsService, FORMAT_OPTIONS } from '../../services/custom-fields';
 import { CustomField as GlobalCustomField } from '../../services/custom-fields';
 import { useNavigate } from 'react-router-dom';
+import { CustomFieldModal } from '../settings/CustomFieldModal';
 
 interface CustomFieldsEditorProps {
     fields: CustomField[];
@@ -22,7 +23,10 @@ interface CustomFieldsEditorProps {
 export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, onChange }) => {
     const [globalFields, setGlobalFields] = useState<GlobalCustomField[]>([]);
     const [showAddDialog, setShowAddDialog] = useState(false);
+    const [showCreateModal, setShowCreateModal] = useState(false);
     const navigate = useNavigate();
+
+
 
     // Load global custom fields
     useEffect(() => {
@@ -56,6 +60,35 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
 
         onChange([...fields, newField]);
         setShowAddDialog(false);
+    };
+
+    const handleCreateCustomField = async (formData: any) => {
+        if (!formData.key || !formData.label) {
+            alert('❌ Preencha a chave e o label do campo!');
+            return;
+        }
+
+        try {
+            const newGlobalField = await customFieldsService.create({
+                key: formData.key,
+                label: formData.label,
+                category: formData.category || 'spec',
+                field_type: formData.field_type || formData.format || 'text',
+                options: formData.options || [],
+                placeholder: formData.placeholder,
+                help_text: formData.help_text
+            });
+
+            await loadGlobalFields();
+            setShowCreateModal(false);
+
+            // Automatically add the newly created field directly to this category
+            handleAddField(newGlobalField);
+
+        } catch (error: any) {
+            console.error('Error creating field:', error);
+            alert(`❌ Erro ao criar campo: ${error.message}`);
+        }
     };
 
     const handleRemoveField = (fieldId: string) => {
@@ -120,6 +153,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                 </div>
                 <div className="flex items-center gap-2">
                     <button
+                        type="button"
                         onClick={() => navigate('/admin/settings/fields')}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
                     >
@@ -127,6 +161,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                         Gerenciar Campos
                     </button>
                     <button
+                        type="button"
                         onClick={handleAddAllFields}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
                     >
@@ -134,6 +169,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                         Adicionar Todos
                     </button>
                     <button
+                        type="button"
                         onClick={() => setShowAddDialog(true)}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
                     >
@@ -149,6 +185,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                     Nenhum campo adicionado ainda.
                     <br />
                     <button
+                        type="button"
                         onClick={() => setShowAddDialog(true)}
                         className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
                     >
@@ -186,6 +223,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                 {/* Requirement Selector */}
                                 <div className="flex items-center gap-1">
                                     <button
+                                        type="button"
                                         onClick={() => handleRequirementChange(field.id, 'off')}
                                         className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${field.requirement === 'off'
                                             ? 'bg-slate-200 text-slate-900 font-medium'
@@ -196,6 +234,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                         Oculto
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => handleRequirementChange(field.id, 'optional')}
                                         className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${field.requirement === 'optional'
                                             ? 'bg-yellow-100 text-yellow-900 font-medium'
@@ -206,6 +245,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                         Opcional
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => handleRequirementChange(field.id, 'required')}
                                         className={`px-3 py-1.5 text-xs rounded-lg transition-colors ${field.requirement === 'required'
                                             ? 'bg-green-100 text-green-900 font-medium'
@@ -219,6 +259,7 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
 
                                 {/* Remove Button */}
                                 <button
+                                    type="button"
                                     onClick={() => handleRemoveField(field.id)}
                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                     title="Remover campo"
@@ -250,10 +291,11 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                                     Nenhum campo global encontrado.
                                     <br />
                                     <button
-                                        onClick={() => navigate('/admin/settings/fields')}
+                                        type="button"
+                                        onClick={() => setShowCreateModal(true)}
                                         className="mt-2 text-blue-600 hover:text-blue-700 font-medium"
                                     >
-                                        Criar primeiro campo global
+                                        Criar primeiro campo
                                     </button>
                                 </div>
                             ) : (
@@ -289,8 +331,17 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 border-t border-slate-200 flex justify-end">
+                        <div className="p-4 border-t border-slate-200 flex justify-between">
                             <button
+                                type="button"
+                                onClick={() => setShowCreateModal(true)}
+                                className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Criar Novo Campo Base
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => setShowAddDialog(false)}
                                 className="px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                             >
@@ -299,6 +350,16 @@ export const CustomFieldsEditor: React.FC<CustomFieldsEditorProps> = ({ fields, 
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Create inline global field Modal */}
+            {showCreateModal && (
+                <CustomFieldModal
+                    isOpen={showCreateModal}
+                    onClose={() => setShowCreateModal(false)}
+                    onCreate={handleCreateCustomField}
+                    formatOptions={FORMAT_OPTIONS as any}
+                />
             )}
         </div>
     );
