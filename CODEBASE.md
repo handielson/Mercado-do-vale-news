@@ -781,7 +781,7 @@ Permite que o cliente compare até 3 produtos lado a lado em um modal fullscreen
 | `contexts/CompareContext.tsx` | Estado global de produtos selecionados |
 | `components/catalog/CompareBar.tsx` | Barra flutuante no rodapé |
 | `components/catalog/CompareModal.tsx` | Modal fullscreen com tabela comparativa |
-| `components/catalog/ModernProductCard.tsx` | Botão ⚖️ GitCompare no hover |
+| `components/catalog/ModernProductCard.tsx` | Botão ⚖️ GitCompare explícito permanentemente na área final de botões (responsivo mobile/desktop) |
 | `App.tsx` | Monta `<CompareProvider>` + `<CompareBar>` globalmente |
 
 ---
