@@ -34,6 +34,7 @@ export interface CompanySettings {
     receipt_show_extra_page: boolean;
     extended_warranty_options?: WarrantyOption[];
     extended_warranty_terms_text?: string;
+    ai_prompts?: any;
     created_at: string;
     updated_at: string;
 }
@@ -65,4 +66,5 @@ export interface CompanySettingsInput {
     receipt_show_extra_page?: boolean;
     extended_warranty_options?: WarrantyOption[];
     extended_warranty_terms_text?: string;
+    ai_prompts?: any;
 }

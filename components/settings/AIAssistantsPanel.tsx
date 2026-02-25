@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, Copy, ExternalLink, Check, Sparkles, Edit2 } from 'lucide-react';
 
+import { companySettingsService } from '../../../services/companySettingsService';
+import toast from 'react-hot-toast';
+
 const AI_LINKS = [
     { name: 'ChatGPT', url: 'https://chat.openai.com/', color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200' },
     { name: 'Gemini', url: 'https://gemini.google.com/', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200' },
@@ -9,8 +12,6 @@ const AI_LINKS = [
     { name: 'Claude', url: 'https://claude.ai/', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200' },
 ];
 
-const STORAGE_KEY = 'mv_admin_ai_prompts';
-
 export function AIAssistantsPanel() {
     const [prompts, setPrompts] = useState({
         prompt1: { title: 'Geração de Especificações', content: '' },
@@ -18,37 +19,52 @@ export function AIAssistantsPanel() {
         prompt3: { title: 'FAQ e Diferenciais', content: '' }
     });
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
-    // Load from localStorage on mount
+    // Load from Supabase on mount
     useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
+        const loadPrompts = async () => {
             try {
-                const parsed = JSON.parse(saved);
-                // Migrate from old string format if necessary
-                if (parsed.prompt1 !== undefined && typeof parsed.prompt1 === 'string') {
-                    setPrompts({
-                        prompt1: { title: 'Geração de Especificações', content: parsed.prompt1 || '' },
-                        prompt2: { title: 'Descrição de Marketing', content: parsed.prompt2 || '' },
-                        prompt3: { title: 'FAQ e Diferenciais', content: parsed.prompt3 || '' }
-                    });
-                } else if (parsed.prompt1 && typeof parsed.prompt1 === 'object') {
-                    setPrompts(parsed);
+                const settings = await companySettingsService.get();
+                if (settings?.ai_prompts) {
+                    setPrompts((prev) => ({
+                        ...prev,
+                        ...settings.ai_prompts
+                    }));
                 }
-            } catch (e) {
-                console.error('Failed to parse saved prompts');
+            } catch (error) {
+                console.error('Failed to load AI prompts from Supabase:', error);
             }
-        }
+        };
+
+        loadPrompts();
     }, []);
 
-    // Save to localStorage when changed
+    // Save to Supabase with debounce
     const handlePromptChange = (key: keyof typeof prompts, field: 'title' | 'content', value: string) => {
         const newPrompts = {
             ...prompts,
             [key]: { ...prompts[key], [field]: value }
         };
         setPrompts(newPrompts);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newPrompts));
+
+        // Debounce save to avoid too many DB calls
+        if (saveTimeout) clearTimeout(saveTimeout);
+
+        const timeout = setTimeout(async () => {
+            setIsSaving(true);
+            try {
+                await companySettingsService.update({ ai_prompts: newPrompts });
+            } catch (error) {
+                console.error('Failed to save AI prompts to Supabase:', error);
+                toast.error('Erro ao salvar os prompts na nuvem.');
+            } finally {
+                setIsSaving(false);
+            }
+        }, 1000);
+
+        setSaveTimeout(timeout);
     };
 
     const handleCopy = (text: string, index: number) => {
@@ -80,7 +96,7 @@ export function AIAssistantsPanel() {
                         href={ai.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-medium transition-colors ${ai.color}`}
+                        className={`flex items - center gap - 2 px - 4 py - 2 rounded - lg border font - medium transition - colors ${ai.color} `}
                     >
                         {ai.name}
                         <ExternalLink size={16} />
@@ -137,9 +153,13 @@ export function AIAssistantsPanel() {
                 ))}
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 w-fit">
-                <Check size={14} className="text-green-500" />
-                Os prompts são salvos localmente no seu navegador automaticamente.
+            <div className={`flex items - center gap - 2 text - xs px - 3 py - 2 rounded - lg border w - fit transition - colors ${isSaving ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-500'} `}>
+                {isSaving ? (
+                    <div className="w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                    <Check size={14} className="text-green-500" />
+                )}
+                {isSaving ? 'Salvando na nuvem...' : 'Todos os seus prompts estão sincronizados no banco de dados da Mercado do Vale.'}
             </div>
         </div>
     );
