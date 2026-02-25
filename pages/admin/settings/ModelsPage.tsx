@@ -7,6 +7,7 @@ import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
 import { NextStepBanner } from '../../../components/ui/NextStepBanner';
+import { AIAssistantsPanel } from '../../../components/settings/AIAssistantsPanel';
 
 /**
  * Models Management Page
@@ -116,6 +117,9 @@ export function ModelsPage() {
                     <button onClick={() => setDeleteError('')} className="text-red-500 hover:text-red-700 font-bold ml-4">×</button>
                 </div>
             )}
+
+            {/* AI Shortcuts Panel */}
+            <AIAssistantsPanel />
 
             {/* Models Table */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
