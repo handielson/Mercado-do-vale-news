@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, CalendarDays, Check } from 'lucide-react';
-import { BusinessHours, DaySchedule } from '../../../types/companySettings';
-import { companySettingsService } from '../../../services/companySettingsService';
+import { BusinessHours, DaySchedule } from '../../types/companySettings';
+import { companySettingsService } from '../../services/companySettingsService';
 import toast from 'react-hot-toast';
 
 const DEFAULT_HOURS: BusinessHours = {
