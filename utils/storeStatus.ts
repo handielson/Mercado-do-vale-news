@@ -61,6 +61,15 @@ export async function getStoreStatus(businessHours?: BusinessHours, holidayOverr
     const openTimeMinutes = openH * 60 + openM;
     const closeTimeMinutes = closeH * 60 + closeM;
 
+    console.log('[StoreStatus Check Internal]', {
+        dayName,
+        currentTimeMinutes,
+        openTimeMinutes,
+        closeTimeMinutes,
+        isOpenFlag: todaySchedule.isOpen,
+        hasLunchBreak: todaySchedule.hasLunchBreak
+    });
+
     // Check if within lunch break
     if (todaySchedule.hasLunchBreak && todaySchedule.lunchStart && todaySchedule.lunchEnd) {
         const [lStartH, lStartM] = todaySchedule.lunchStart.split(':').map(Number);

@@ -12,6 +12,13 @@ export function StoreStatusBadge() {
             try {
                 const settings = await companySettingsService.get();
                 const currentStatus = await getStoreStatus(settings?.business_hours, settings?.holiday_overrides);
+                console.log('[StoreStatus Check]', {
+                    dayOfWeek: new Date().getDay(),
+                    currentTime: `${new Date().getHours()}:${new Date().getMinutes()}`,
+                    business_hours: settings?.business_hours,
+                    holiday_overrides: settings?.holiday_overrides,
+                    evaluatedStatus: currentStatus
+                });
                 if (isMounted) setStatus(currentStatus);
             } catch (error) {
                 console.error('Failed to get store status:', error);
