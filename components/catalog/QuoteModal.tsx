@@ -641,7 +641,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm space-y-1">
                                 <div className="flex justify-between text-slate-600">
                                     <span>Produto:</span>
-                                    <span>{formatPrice(effectivePrice * 100)}</span>
+                                    <span>{formatPrice(effectivePrice)}</span>
                                 </div>
                                 {warrantyPrice > 0 && (
                                     <div className="flex justify-between text-blue-700">

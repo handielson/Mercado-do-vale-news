@@ -83,13 +83,23 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
         if (variant.ram && variant.storage) {
             message += `  📱 ${variant.ram}/${variant.storage}\n`;
         }
-        if (paymentOptions?.showCash !== false) {
-            message += `  ${priceAtVista} a vista\n`;
-        }
+        if (quote.mixedPaymentState && quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
+            const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
+            message += `  À Vista (Pix): ${cashFmt}\n`;
 
-        // Show card payment only if NOT wholesale
-        if (!isWholesale && installmentPlan.installments > 1 && paymentOptions?.showInstallment !== false) {
-            message += `  💳 ${installmentPlan.installments}x de ${installmentValue} (Total: ${installmentTotal})\n`;
+            const opt = quote.mixedPaymentState.cardOption!;
+            const moFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.monthlyValue / 100);
+            const totFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.totalWithFee / 100);
+            message += `  💳 Cartão: ${opt.installments}x de ${moFmt} (Total cart.: ${totFmt})\n`;
+        } else {
+            if (paymentOptions?.showCash !== false) {
+                message += `  ${priceAtVista} a vista\n`;
+            }
+
+            // Show card payment only if NOT wholesale
+            if (!isWholesale && installmentPlan.installments > 1 && paymentOptions?.showInstallment !== false) {
+                message += `  💳 ${installmentPlan.installments}x de ${installmentValue} (Total: ${installmentTotal})\n`;
+            }
         }
 
         if (selectedWarranty) {

@@ -8,7 +8,7 @@ import type { QuoteCartItem } from '@/contexts/QuoteCartContext';
 import toast from 'react-hot-toast';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useCoupon } from '@/hooks/useCoupon';
-import { MixedPaymentSimulator } from './MixedPaymentSimulator';
+import { MixedPaymentSimulator, type MixedPaymentState } from './MixedPaymentSimulator';
 
 interface QuoteCartSidebarProps {
     isOpen: boolean;
@@ -27,6 +27,7 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     const [referralName, setReferralName] = useState('');
     const [isVerifyingReferral, setIsVerifyingReferral] = useState(false);
     const [cashbackSettings, setCashbackSettings] = useState<any>(null);
+    const [mixedPaymentState, setMixedPaymentState] = useState<MixedPaymentState | null>(null);
 
     // Calculate total cart value in R$ (prices are in centavos)
     const totalCart = items.reduce((sum, item) => sum + (item.price / 100) + ((item.warranty?.price || 0) / 100), 0);
@@ -91,12 +92,13 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
 
         const whatsappLink = generateMultiProductWhatsAppLink(
             items,
-            undefined,
-            coupon.appliedCoupon?.code,
-            coupon.discount > 0 ? coupon.discount : undefined,
-            undefined,
-            undefined,
-            storeAddress
+            undefined, // no specific number
+            {
+                couponCode: coupon.appliedCoupon?.code,
+                couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
+                storeAddress,
+                mixedPaymentState
+            }
         );
         window.location.href = whatsappLink;
         coupon.confirm();
@@ -145,11 +147,12 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
         const whatsappLink = generateMultiProductWhatsAppLink(
             items,
             numberToUse,
-            coupon.appliedCoupon?.code,
-            coupon.discount > 0 ? coupon.discount : undefined,
-            undefined,
-            undefined,
-            storeAddress
+            {
+                couponCode: coupon.appliedCoupon?.code,
+                couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
+                storeAddress,
+                mixedPaymentState
+            }
         );
         window.open(whatsappLink, '_blank');
         coupon.confirm();
@@ -165,11 +168,12 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
         try {
             const message = generateMultiProductQuoteMessage(
                 items,
-                coupon.appliedCoupon?.code,
-                coupon.discount > 0 ? coupon.discount : undefined,
-                undefined,
-                undefined,
-                storeAddress
+                {
+                    couponCode: coupon.appliedCoupon?.code,
+                    couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
+                    storeAddress,
+                    mixedPaymentState
+                }
             );
             await navigator.clipboard.writeText(message);
             setIsCopied(true);
@@ -321,7 +325,10 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                         )}
 
                         {/* Simulador de Pagamento Combinado (Pix + Cartão) */}
-                        <MixedPaymentSimulator totalPrice={Math.round(totalCart * 100)} />
+                        <MixedPaymentSimulator
+                            totalPrice={Math.round(totalCart * 100)}
+                            onChange={setMixedPaymentState}
+                        />
 
                         {/* Main button: Open WhatsApp (user chooses recipient) */}
                         <button

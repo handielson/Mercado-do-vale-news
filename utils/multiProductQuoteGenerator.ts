@@ -1,17 +1,24 @@
 import type { QuoteCartItem } from '@/contexts/QuoteCartContext';
 import { formatPrice } from '@/services/installmentCalculator';
 
+import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
+
+export interface MultiQuoteOptions {
+    couponCode?: string;
+    couponDiscount?: number;
+    referrerName?: string;
+    referralCode?: string;
+    storeAddress?: string;
+    mixedPaymentState?: MixedPaymentState | null;
+}
+
 /**
  * Generate WhatsApp quote message for multiple products
  * Respects payment options selected for each item
  */
 export function generateMultiProductQuoteMessage(
     items: QuoteCartItem[],
-    couponCode?: string,
-    couponDiscount?: number,
-    referrerName?: string,
-    referralCode?: string,
-    storeAddress?: string
+    quoteOptions?: MultiQuoteOptions
 ): string {
     if (items.length === 0) {
         return '';
@@ -79,31 +86,31 @@ export function generateMultiProductQuoteMessage(
     }
 
     // Coupon discount line
-    if (couponCode && couponDiscount && couponDiscount > 0) {
-        const discountCents = Math.round(couponDiscount * 100);
+    if (quoteOptions?.couponCode && quoteOptions.couponDiscount && quoteOptions.couponDiscount > 0) {
+        const discountCents = Math.round(quoteOptions.couponDiscount * 100);
         const finalTotal = grandTotal - discountCents;
-        message += `\ud83c\udf9f\ufe0f Cupom *${couponCode}*: -${formatPrice(discountCents)}\n`;
-        message += `\u2705 *Total com desconto: ${formatPrice(Math.max(0, finalTotal))}*\n`;
+        message += `\n🎟️ Cupom *${quoteOptions.couponCode}*: -${formatPrice(discountCents)}\n`;
+        message += `✅ *Total com desconto: ${formatPrice(Math.max(0, finalTotal))}*\n`;
     }
 
     // Referral code tag
-    if (referralCode) {
-        if (referrerName) {
-            message += `\n🤝 Indicação de: ${referrerName} (Cód: ${referralCode})\n`;
+    if (quoteOptions?.referralCode) {
+        if (quoteOptions.referrerName) {
+            message += `\n🤝 Indicação de: ${quoteOptions.referrerName} (Cód: ${quoteOptions.referralCode})\n`;
         } else {
-            message += `\n🤝 Indicação (Cód): ${referralCode}\n`;
+            message += `\n🤝 Indicação (Cód): ${quoteOptions.referralCode}\n`;
         }
     }
 
-    if (storeAddress) {
+    if (quoteOptions?.storeAddress) {
         message += `\n*🏪 RETIRADA NA LOJA*\n`;
-        message += `📍 ${storeAddress}\n`;
-        message += `🗺️ Maps: https://maps.google.com/?q=${encodeURIComponent(storeAddress)}\n`;
+        message += `📍 ${quoteOptions.storeAddress}\n`;
+        message += `🗺️ Maps: https://maps.google.com/?q=${encodeURIComponent(quoteOptions.storeAddress)}\n`;
     }
 
     message += `\n---\n`;
-    message += `\ud83c\udfaf *Or\u00e7amento exclusivo Mercado do Vale!*\n`;
-    message += `Garanta o seu agora enquanto est\u00e1 dispon\u00edvel em estoque! \ud83d\udd25`;
+    message += `🎯 *Orçamento exclusivo Mercado do Vale!*\n`;
+    message += `Garanta o seu agora enquanto está disponível em estoque! 🔥`;
 
     return message;
 }
@@ -117,13 +124,9 @@ export function generateMultiProductQuoteMessage(
 export function generateMultiProductWhatsAppLink(
     items: QuoteCartItem[],
     whatsappNumber?: string,
-    couponCode?: string,
-    couponDiscount?: number,
-    referrerName?: string,
-    referralCode?: string,
-    storeAddress?: string
+    quoteOptions?: MultiQuoteOptions
 ): string {
-    const message = generateMultiProductQuoteMessage(items, couponCode, couponDiscount, referrerName, referralCode, storeAddress);
+    const message = generateMultiProductQuoteMessage(items, quoteOptions);
     const encodedMessage = encodeURIComponent(message);
 
     if (!whatsappNumber) {
