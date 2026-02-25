@@ -65,8 +65,18 @@ mercado-do-vale/
 ├── types/                # Interfaces TypeScript
 └── utils/                # Funções utilitárias
 ```
-
 ```
+
+---
+
+## 🚦 Roteamento e Navegação (React Router)
+
+O sistema de roteamento (`routes/index.tsx`) utiliza o `createBrowserRouter` do React Router v7.
+
+**Regras Vitais de Roteamento:**
+1. **Página Inicial:** A raiz do projeto (`/`) serve nativamente o catálogo público de clientes (`CatalogPage`).
+2. **Depreciação da Rota `/catalog`:** A rota `/catalog` foi **REMOVIDA**. Todo o tráfego de clientes, redirecionamentos pós-login (`AuthCallbackPage`, `ClienteLoginPage`) e navegações em fluxos de compras devem apontar **EXCLUSIVAMENTE** para a raiz (`/`). O uso de `/catalog` resultará em erro 404.
+3. **Área Administrativa:** Tudo dentro de `/admin/*` é protegido por `ProtectedRoute` e exige `customer_type === 'ADMIN'`.
 
 ---
 
