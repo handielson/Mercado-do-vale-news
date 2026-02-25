@@ -48,24 +48,56 @@ export const PublicHeader: React.FC = () => {
         );
     };
 
+    const getStoreAgeBadge = () => {
+        if (!themeSettings.data_abertura) return null;
+
+        // Formato da string de data_abertura vinda da Receita Brasileira costuma ser "DD/MM/YYYY" ou "YYYY-MM-DD"
+        let year = null;
+
+        if (themeSettings.data_abertura.includes('/')) {
+            const parts = themeSettings.data_abertura.split('/');
+            if (parts.length === 3) year = parseInt(parts[2], 10);
+        } else if (themeSettings.data_abertura.includes('-')) {
+            const parts = themeSettings.data_abertura.split('-');
+            if (parts.length >= 1) year = parseInt(parts[0], 10);
+        }
+
+        if (!year || isNaN(year)) return null;
+
+        const currentYear = new Date().getFullYear();
+        const age = currentYear - year;
+
+        if (age <= 0) return null;
+
+        return (
+            <div className="hidden sm:flex flex-col justify-center border-l border-slate-200 pl-4 ml-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Desde {year}</span>
+                <span className="text-sm font-semibold text-slate-700 leading-tight mt-0.5">{age} {age === 1 ? 'Ano' : 'Anos'}</span>
+            </div>
+        );
+    };
+
     return (
         <header className="sticky top-0 z-50 bg-white shadow-md border-b border-slate-200">
             <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-                {/* Logo */}
-                <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                    {themeSettings.logo_main ? (
-                        <img
-                            src={themeSettings.logo_main}
-                            alt={themeSettings.company_name}
-                            className="h-10 w-auto object-contain"
-                        />
-                    ) : (
-                        <>
-                            <ShoppingBag className="text-blue-600" size={32} />
-                            <h1 className="text-2xl font-bold text-slate-800">{themeSettings.company_name}</h1>
-                        </>
-                    )}
-                </Link>
+                {/* Logo and Age Badge Group */}
+                <div className="flex items-center gap-2">
+                    <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                        {themeSettings.logo_main ? (
+                            <img
+                                src={themeSettings.logo_main}
+                                alt={themeSettings.company_name}
+                                className="h-10 w-auto object-contain"
+                            />
+                        ) : (
+                            <>
+                                <ShoppingBag className="text-blue-600" size={32} />
+                                <h1 className="text-2xl font-bold text-slate-800">{themeSettings.company_name}</h1>
+                            </>
+                        )}
+                    </Link>
+                    {getStoreAgeBadge()}
+                </div>
 
                 <div className="flex items-center gap-4">
                     <StoreStatusBadge />

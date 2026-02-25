@@ -8,6 +8,7 @@ interface ThemeSettings {
   theme_colors: Record<string, string>;
   logo_main?: string;
   logo_dark?: string;
+  data_abertura?: string;
 }
 
 interface ThemeContextType {
@@ -51,6 +52,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           theme_colors: data.theme_colors || { primary: '#3b82f6', secondary: '#1e293b' },
           logo_main: data.logo || null,
           logo_dark: data.logo_dark,
+          data_abertura: data.data_abertura || undefined,
         };
 
         // Update settings (will cause seamless re-render)
