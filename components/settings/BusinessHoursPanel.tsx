@@ -35,7 +35,22 @@ export function BusinessHoursPanel() {
             try {
                 const settings = await companySettingsService.get();
                 if (settings?.business_hours) {
-                    setHours(settings.business_hours);
+                    // Merge with DEFAULT_HOURS to ensure no missing days or properties
+                    const mergedHours = { ...DEFAULT_HOURS };
+
+                    if (typeof settings.business_hours === 'object') {
+                        Object.keys(DEFAULT_HOURS).forEach((key) => {
+                            const day = key as keyof BusinessHours;
+                            if (settings.business_hours?.[day]) {
+                                mergedHours[day] = {
+                                    ...DEFAULT_HOURS[day],
+                                    ...settings.business_hours[day]
+                                };
+                            }
+                        });
+                    }
+
+                    setHours(mergedHours);
                 }
             } catch (error) {
                 console.error('Failed to load business hours:', error);

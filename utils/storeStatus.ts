@@ -44,8 +44,11 @@ export async function getStoreStatus(businessHours?: BusinessHours): Promise<Sto
     const currentMinute = now.getMinutes();
     const currentTimeMinutes = currentHour * 60 + currentMinute;
 
-    const [openH, openM] = todaySchedule.openTime.split(':').map(Number);
-    const [closeH, closeM] = todaySchedule.closeTime.split(':').map(Number);
+    const openTimeStr = todaySchedule.openTime || '08:00';
+    const closeTimeStr = todaySchedule.closeTime || '18:00';
+
+    const [openH, openM] = openTimeStr.split(':').map(Number);
+    const [closeH, closeM] = closeTimeStr.split(':').map(Number);
 
     const openTimeMinutes = openH * 60 + openM;
     const closeTimeMinutes = closeH * 60 + closeM;
@@ -66,7 +69,7 @@ export async function getStoreStatus(businessHours?: BusinessHours): Promise<Sto
     if (currentTimeMinutes >= openTimeMinutes && currentTimeMinutes < closeTimeMinutes) {
         return { status: 'open', message: 'Loja Aberta' };
     } else if (currentTimeMinutes < openTimeMinutes) {
-        return { status: 'closed', message: `Abre às ${todaySchedule.openTime}` };
+        return { status: 'closed', message: `Abre às ${openTimeStr}` };
     } else {
         return { status: 'closed', message: 'Fechado' };
     }
