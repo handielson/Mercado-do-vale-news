@@ -38,7 +38,7 @@ export const SupabaseProtectedRoute: React.FC<SupabaseProtectedRouteProps> = ({
 
     // Admin required but user is not admin
     if (requireAdmin && customer?.customer_type !== 'ADMIN') {
-        return <Navigate to="/catalog" replace />;
+        return <Navigate to="/" replace />;
     }
 
     return <>{children}</>;

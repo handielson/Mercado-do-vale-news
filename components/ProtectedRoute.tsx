@@ -34,7 +34,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
 
   // Requires admin but user is not admin
   if (requireAdmin && customer.customer_type !== 'ADMIN') {
-    return <Navigate to="/catalog" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

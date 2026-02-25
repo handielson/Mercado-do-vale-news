@@ -80,7 +80,7 @@ export const CompletarCadastroPage: React.FC = () => {
             toast.success('Bem-vindo ao Mercado do Vale! 🎉', {
                 description: 'Cadastro completo. Comece a acumular Moedas do Vale agora!'
             });
-            navigate('/catalog');
+            navigate('/');
         } catch (error: any) {
             console.error('[CompletarCadastro] Error:', error);
             toast.error(error.message || 'Erro ao completar cadastro');

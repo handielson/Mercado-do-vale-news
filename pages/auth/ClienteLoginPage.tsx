@@ -28,7 +28,7 @@ export const ClienteLoginPage: React.FC = () => {
             toast.success('Login realizado com sucesso!');
 
             // Always redirect to catalog - admins can access admin panel via header link
-            navigate('/catalog');
+            navigate('/');
         } catch (error: any) {
             toast.error(error.message || 'Erro ao fazer login');
         } finally {

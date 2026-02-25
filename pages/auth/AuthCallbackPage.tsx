@@ -51,7 +51,7 @@ export const AuthCallbackPage: React.FC = () => {
             } else {
                 console.log('[AuthCallback] Customer complete, redirecting to catalog');
                 setStatus('Login realizado! Redirecionando...');
-                setTimeout(() => navigate('/catalog'), 1000);
+                setTimeout(() => navigate('/'), 1000);
             }
         };
 

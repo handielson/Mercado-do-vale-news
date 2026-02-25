@@ -104,7 +104,7 @@ export const CadastroPage: React.FC = () => {
             });
 
             toast.success('Conta ativada com sucesso!');
-            navigate('/catalog');
+            navigate('/');
         } catch (error: any) {
             toast.error(error.message || 'Erro ao ativar conta');
         } finally {
