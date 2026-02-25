@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CalendarDays, Check } from 'lucide-react';
+import { Clock, CalendarDays, Check, AlertCircle } from 'lucide-react';
 import { BusinessHours, DaySchedule } from '../../types/companySettings';
 import { companySettingsService } from '../../services/companySettingsService';
+import { holidayService, Holiday } from '../../utils/holidayService';
 import toast from 'react-hot-toast';
 
 const DEFAULT_HOURS: BusinessHours = {
@@ -26,6 +27,8 @@ const DAY_LABELS: Record<keyof BusinessHours, string> = {
 
 export function BusinessHoursPanel() {
     const [hours, setHours] = useState<BusinessHours>(DEFAULT_HOURS);
+    const [holidayOverrides, setHolidayOverrides] = useState<string[]>([]);
+    const [availableHolidays, setAvailableHolidays] = useState<Holiday[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -33,6 +36,7 @@ export function BusinessHoursPanel() {
     useEffect(() => {
         const loadSettings = async () => {
             try {
+                // Fetch settings
                 const settings = await companySettingsService.get();
                 if (settings?.business_hours) {
                     // Merge with DEFAULT_HOURS to ensure no missing days or properties
@@ -61,6 +65,22 @@ export function BusinessHoursPanel() {
         loadSettings();
     }, []);
 
+    const handleSave = async (updatedHours: BusinessHours, updatedOverrides: string[]) => {
+        setIsSaving(true);
+        try {
+            await companySettingsService.update({
+                business_hours: updatedHours,
+                holiday_overrides: updatedOverrides
+            });
+            // We keep it silent since it auto-saves constantly
+        } catch (error) {
+            console.error('Failed to save business hours:', error);
+            toast.error('Erro ao salvar horários.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const handleChange = (day: keyof BusinessHours, field: keyof DaySchedule, value: string | boolean) => {
         const newHours = {
             ...hours,
@@ -73,19 +93,23 @@ export function BusinessHoursPanel() {
 
         if (saveTimeout) clearTimeout(saveTimeout);
 
-        const timeout = setTimeout(async () => {
-            setIsSaving(true);
-            try {
-                await companySettingsService.update({ business_hours: newHours });
-                // We keep it silent since it auto-saves constantly
-            } catch (error) {
-                console.error('Failed to save business hours:', error);
-                toast.error('Erro ao salvar horários.');
-            } finally {
-                setIsSaving(false);
-            }
-        }, 1000);
+        const timeout = setTimeout(() => handleSave(newHours, holidayOverrides), 1000);
+        setSaveTimeout(timeout);
+    };
 
+    const handleHolidayToggle = (dateString: string, isOpening: boolean) => {
+        let newOverrides = [...holidayOverrides];
+
+        if (isOpening && !newOverrides.includes(dateString)) {
+            newOverrides.push(dateString);
+        } else if (!isOpening) {
+            newOverrides = newOverrides.filter(d => d !== dateString);
+        }
+
+        setHolidayOverrides(newOverrides);
+
+        if (saveTimeout) clearTimeout(saveTimeout);
+        const timeout = setTimeout(() => handleSave(hours, newOverrides), 1000);
         setSaveTimeout(timeout);
     };
 
@@ -180,11 +204,57 @@ export function BusinessHoursPanel() {
 
                 <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg flex items-start gap-3 mt-6">
                     <CalendarDays className="text-blue-500 mt-0.5 flex-shrink-0" size={20} />
-                    <div>
-                        <h4 className="font-semibold text-blue-800">Feriados Nacionais</h4>
-                        <p className="text-sm text-blue-600 mt-1">
-                            A loja será sinalizada automaticamente como "Fechada" em feriados nacionais oficiais (com base no calendário brasileiro da BrasilAPI). Não é necessário desmarcar os dias da tabela durante os feriados.
-                        </p>
+                    <div className="w-full">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h4 className="font-semibold text-blue-800">Feriados Nacionais</h4>
+                                <p className="text-sm text-blue-600 mt-1">
+                                    A loja será sinalizada automaticamente como "Fechada" em feriados nacionais oficiais (BrasilAPI).
+                                    Caso decida abrir em algum deles, marque a opção abaixo.
+                                </p>
+                            </div>
+                        </div>
+
+                        {availableHolidays.length > 0 ? (
+                            <div className="mt-4 space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                {availableHolidays.map((holiday) => {
+                                    const isOverridden = holidayOverrides.includes(holiday.date);
+                                    // Parse date safely
+                                    const [year, month, day] = holiday.date.split('-');
+                                    const dateStr = `${day}/${month}/${year}`;
+
+                                    return (
+                                        <div key={holiday.date} className="flex items-center justify-between bg-white bg-opacity-60 p-3 rounded border border-blue-100">
+                                            <div>
+                                                <p className="font-medium text-slate-800 text-sm">
+                                                    {dateStr} - {holiday.name}
+                                                </p>
+                                                <p className="text-xs text-slate-500">{holiday.type}</p>
+                                            </div>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <span className={`text-xs font-semibold ${isOverridden ? 'text-green-600' : 'text-slate-400'}`}>
+                                                    {isOverridden ? 'Atenderemos' : 'Fechado'}
+                                                </span>
+                                                <div className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="sr-only peer"
+                                                        checked={isOverridden}
+                                                        onChange={(e) => handleHolidayToggle(holiday.date, e.target.checked)}
+                                                    />
+                                                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="mt-4 p-3 bg-white bg-opacity-60 rounded flex items-center gap-2 text-sm text-slate-600">
+                                <AlertCircle size={16} className="text-amber-500" />
+                                Nenhum feriado futuro encontrado para este ano.
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

@@ -55,6 +55,7 @@ export interface CompanySettings {
     extended_warranty_terms_text?: string;
     ai_prompts?: any;
     business_hours?: BusinessHours;
+    holiday_overrides?: string[];
     created_at: string;
     updated_at: string;
 }
@@ -88,4 +89,5 @@ export interface CompanySettingsInput {
     extended_warranty_terms_text?: string;
     ai_prompts?: any;
     business_hours?: BusinessHours;
+    holiday_overrides?: string[];
 }

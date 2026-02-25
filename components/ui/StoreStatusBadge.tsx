@@ -11,7 +11,7 @@ export function StoreStatusBadge() {
         const checkStatus = async () => {
             try {
                 const settings = await companySettingsService.get();
-                const currentStatus = await getStoreStatus(settings?.business_hours);
+                const currentStatus = await getStoreStatus(settings?.business_hours, settings?.holiday_overrides);
                 if (isMounted) setStatus(currentStatus);
             } catch (error) {
                 console.error('Failed to get store status:', error);

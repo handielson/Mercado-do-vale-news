@@ -13,7 +13,7 @@ const DAYS_OF_WEEK: (keyof BusinessHours)[] = [
     'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'
 ];
 
-export async function getStoreStatus(businessHours?: BusinessHours): Promise<StoreStatus> {
+export async function getStoreStatus(businessHours?: BusinessHours, holidayOverrides?: string[]): Promise<StoreStatus> {
     if (!businessHours) {
         return { status: 'open', message: 'Aberto' }; // Default fallback if not configured
     }
@@ -23,7 +23,15 @@ export async function getStoreStatus(businessHours?: BusinessHours): Promise<Sto
 
     // 1. Check holiday first
     const holiday = await holidayService.isHoliday(now);
-    if (holiday) {
+
+    // Format date string to check against overrides
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+
+    // If it's a holiday, but NOT in the overrides list, we are closed
+    if (holiday && (!holidayOverrides || !holidayOverrides.includes(dateString))) {
         return {
             status: 'holiday',
             message: `Fechado - Feriado (${holiday.name})`,
