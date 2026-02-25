@@ -63,7 +63,8 @@ function CatalogContent() {
         filterStats
     } = useCatalog({
         pageSize: 12,
-        initialSearchQuery
+        initialSearchQuery,
+        bypassCache: customer?.customer_type === 'ADMIN'
     });
 
     // Carregar seções ativas

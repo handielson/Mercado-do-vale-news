@@ -11,10 +11,16 @@ interface UseCatalogOptions {
     initialFilters?: Partial<FilterState>;
     initialSearchQuery?: string;
     pageSize?: number;
+    bypassCache?: boolean;
 }
 
 export function useCatalog(options: UseCatalogOptions = {}) {
-    const { initialFilters = {}, initialSearchQuery = '', pageSize = 12 } = options;
+    const {
+        initialFilters = {},
+        initialSearchQuery = '',
+        pageSize = 12,
+        bypassCache = false
+    } = options;
 
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
@@ -91,7 +97,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 featuredOnly: filters.featuredOnly,
                 newOnly: filters.newOnly,
                 sortBy: filters.sortBy as 'recent' | 'price_asc' | 'price_desc' | 'featured' | undefined
-            }, currentPage, pageSize);
+            }, currentPage, pageSize, bypassCache);
 
             console.log('[useCatalog] Products loaded:', {
                 count: response.products.length,
@@ -127,7 +133,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         } finally {
             setLoading(false);
         }
-    }, [searchQuery, filters, pageSize, applyVisibilityRules]); // Removed 'page' from dependencies
+    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache]); // Removed 'page' from dependencies
 
     // Recarregar quando filtros, busca ou configurações mudarem
     useEffect(() => {

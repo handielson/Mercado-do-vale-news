@@ -6,6 +6,12 @@ class CatalogSectionsService {
     private cache: Map<string, { data: CatalogSection[]; timestamp: number }> = new Map();
     private cacheDuration = 5 * 60 * 1000; // 5 minutos
 
+    // Prefix for persistent LocalStorage caching of section products
+    private CACHE_KEY_PREFIX = '@mv:section_products:';
+
+    // Helper to safely access localStorage (prevents SSR errors)
+    private getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
+
     // ==================== CRUD ====================
 
     /**
@@ -162,8 +168,30 @@ class CatalogSectionsService {
     /**
      * Buscar produtos para uma seção específica
      */
-    async getProductsForSection(section: CatalogSection): Promise<CatalogProduct[]> {
+    async getProductsForSection(section: CatalogSection, bypassCache: boolean = false): Promise<CatalogProduct[]> {
+        const cacheKey = `${this.CACHE_KEY_PREFIX}${section.id}`;
+
+        // 1. SWR: Return from LocalStorage immediately for fast paints (unless bypassed)
+        if (!bypassCache) {
+            const storage = this.getStorage();
+            if (storage) {
+                try {
+                    const cachedStr = storage.getItem(cacheKey);
+                    if (cachedStr) {
+                        const cached = JSON.parse(cachedStr);
+                        if (Date.now() - cached.timestamp < this.cacheDuration) {
+                            console.log(`⚡ [catalogSectionsService] Serving section ${section.title} from persistent cache`);
+                            return cached.data;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse section products cache', e);
+                }
+            }
+        }
+
         try {
+            console.log(`🌐 [catalogSectionsService] Fetching section ${section.title} from Supabase (bypassCache: ${bypassCache})`);
             let query = supabase
                 .from('products')
                 .select('*');
@@ -221,6 +249,21 @@ class CatalogSectionsService {
                         }
                         return product;
                     });
+                }
+            }
+
+            // Update persistent cache
+            if (!bypassCache) {
+                const storage = this.getStorage();
+                if (storage) {
+                    try {
+                        storage.setItem(cacheKey, JSON.stringify({
+                            data: products,
+                            timestamp: Date.now()
+                        }));
+                    } catch (e) {
+                        // Ignore quota exceeded
+                    }
                 }
             }
 

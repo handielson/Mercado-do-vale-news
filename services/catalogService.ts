@@ -1,9 +1,12 @@
 import { supabase } from './supabase';
 import type { CatalogProduct, FilterState } from '@/types/catalog';
 
-// Cache simples em memória
-const productCache = new Map<string, { data: CatalogProduct[], timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+// Persistent Cache (Stale-While-Revalidate pattern)
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos (Para revalidação silenciosa)
+const CACHE_KEY_PREFIX = '@mv:catalog:';
+
+// Helper to safely access localStorage (prevents SSR errors)
+const getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
 
 export const catalogService = {
     /**
@@ -21,19 +24,40 @@ export const catalogService = {
             sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'featured';
         },
         page: number = 1,
-        pageSize: number = 20
+        pageSize: number = 20,
+        bypassCache: boolean = false
     ): Promise<{ products: CatalogProduct[], total: number, hasMore: boolean }> => {
-        const cacheKey = JSON.stringify({ filters, page, pageSize });
-        const cached = productCache.get(cacheKey);
+        const cacheKey = `${CACHE_KEY_PREFIX}products:${JSON.stringify({ filters, page, pageSize })}`;
 
-        // Retornar do cache se válido (não cachear buscas por texto)
-        if (cached && !filters?.search && Date.now() - cached.timestamp < CACHE_TTL) {
-            return {
-                products: cached.data,
-                total: cached.data.length,
-                hasMore: cached.data.length === pageSize
-            };
+        // 1. STALE: Try to return instantly from LocalStorage
+        if (!bypassCache && !filters?.search) {
+            const storage = getStorage();
+            if (storage) {
+                try {
+                    const cachedStr = storage.getItem(cacheKey);
+                    if (cachedStr) {
+                        const cached = JSON.parse(cachedStr);
+                        // Serve staled cache instantly, but still proceed to fetch and revalidate in background IF TTL expired
+                        if (Date.now() - cached.timestamp < CACHE_TTL) {
+                            console.log('⚡ [catalogService] Serving from persistent cache (Fresh)');
+                            return {
+                                products: cached.data,
+                                total: cached.total,
+                                hasMore: cached.hasMore
+                            };
+                        } else {
+                            // It's stale - we COULD return it here for instant SWR, but for critical e-comm data 
+                            // we usually prefer letting TTL control freshness, or we return now and trigger async fetch via React Query.
+                            // Since we are not using React Query, we will just let it fetch normally if expired.
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse catalog cache', e);
+                }
+            }
         }
+
+        console.log(`🌐 [catalogService] Fetching from Supabase (bypassCache: ${bypassCache})`);
 
         // Construir query
         let query = supabase
@@ -211,7 +235,21 @@ export const catalogService = {
         }
 
         // Atualizar cache
-        productCache.set(cacheKey, { data: products, timestamp: Date.now() });
+        if (!filters?.search) {
+            const storage = getStorage();
+            if (storage) {
+                try {
+                    storage.setItem(cacheKey, JSON.stringify({
+                        data: products,
+                        total: count || 0,
+                        hasMore: products.length === pageSize,
+                        timestamp: Date.now()
+                    }));
+                } catch (e) {
+                    console.warn('Failed to save catalog to cache (storage full?)', e);
+                }
+            }
+        }
 
         return {
             products,
@@ -267,7 +305,24 @@ export const catalogService = {
     /**
      * Buscar produtos por categoria
      */
-    getProductsByCategory: async (category: string): Promise<CatalogProduct[]> => {
+    getProductsByCategory: async (category: string, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
+        const cacheKey = `${CACHE_KEY_PREFIX}category:${category}`;
+
+        if (!bypassCache) {
+            const storage = getStorage();
+            if (storage) {
+                try {
+                    const cachedStr = storage.getItem(cacheKey);
+                    if (cachedStr) {
+                        const cached = JSON.parse(cachedStr);
+                        if (Date.now() - cached.timestamp < CACHE_TTL) {
+                            return cached.data;
+                        }
+                    }
+                } catch (e) { }
+            }
+        }
+
         const { data, error } = await supabase
             .from('products')
             .select('*')
@@ -277,13 +332,41 @@ export const catalogService = {
 
         if (error) throw error;
 
-        return (data || []) as CatalogProduct[];
+        const products = (data || []) as CatalogProduct[];
+
+        if (!bypassCache) {
+            const storage = getStorage();
+            if (storage) {
+                try {
+                    storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() }));
+                } catch (e) { }
+            }
+        }
+
+        return products;
     },
 
     /**
      * Buscar produtos em destaque
      */
-    getFeaturedProducts: async (limit: number = 10): Promise<CatalogProduct[]> => {
+    getFeaturedProducts: async (limit: number = 10, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
+        const cacheKey = `${CACHE_KEY_PREFIX}featured:${limit}`;
+
+        if (!bypassCache) {
+            const storage = getStorage();
+            if (storage) {
+                try {
+                    const cachedStr = storage.getItem(cacheKey);
+                    if (cachedStr) {
+                        const cached = JSON.parse(cachedStr);
+                        if (Date.now() - cached.timestamp < CACHE_TTL) {
+                            return cached.data;
+                        }
+                    }
+                } catch (e) { }
+            }
+        }
+
         const { data, error } = await supabase
             .from('products')
             .select('*')
@@ -293,13 +376,41 @@ export const catalogService = {
 
         if (error) throw error;
 
-        return (data || []) as CatalogProduct[];
+        const products = (data || []) as CatalogProduct[];
+
+        if (!bypassCache) {
+            const storage = getStorage();
+            if (storage) {
+                try {
+                    storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() }));
+                } catch (e) { }
+            }
+        }
+
+        return products;
     },
 
     /**
      * Buscar produtos novos
      */
-    getNewProducts: async (limit: number = 10): Promise<CatalogProduct[]> => {
+    getNewProducts: async (limit: number = 10, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
+        const cacheKey = `${CACHE_KEY_PREFIX}new:${limit}`;
+
+        if (!bypassCache) {
+            const storage = getStorage();
+            if (storage) {
+                try {
+                    const cachedStr = storage.getItem(cacheKey);
+                    if (cachedStr) {
+                        const cached = JSON.parse(cachedStr);
+                        if (Date.now() - cached.timestamp < CACHE_TTL) {
+                            return cached.data;
+                        }
+                    }
+                } catch (e) { }
+            }
+        }
+
         const { data, error } = await supabase
             .from('products')
             .select('*')
@@ -309,7 +420,18 @@ export const catalogService = {
 
         if (error) throw error;
 
-        return (data || []) as CatalogProduct[];
+        const products = (data || []) as CatalogProduct[];
+
+        if (!bypassCache) {
+            const storage = getStorage();
+            if (storage) {
+                try {
+                    storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() }));
+                } catch (e) { }
+            }
+        }
+
+        return products;
     },
 
     /**
@@ -392,13 +514,35 @@ export const catalogService = {
      * Limpar cache
      */
     clearCache: () => {
-        productCache.clear();
+        const storage = getStorage();
+        if (storage) {
+            for (let i = 0; i < storage.length; i++) {
+                const key = storage.key(i);
+                if (key && key.startsWith(CACHE_KEY_PREFIX)) {
+                    storage.removeItem(key);
+                }
+            }
+        }
     },
 
     /**
      * Buscar categorias disponíveis (somente IDs em uso)
      */
     getCategories: async (): Promise<string[]> => {
+        const cacheKey = `${CACHE_KEY_PREFIX}categories_used`;
+        const storage = getStorage();
+        if (storage) {
+            try {
+                const cachedStr = storage.getItem(cacheKey);
+                if (cachedStr) {
+                    const cached = JSON.parse(cachedStr);
+                    if (Date.now() - cached.timestamp < CACHE_TTL) {
+                        return cached.data;
+                    }
+                }
+            } catch (e) { }
+        }
+
         const { data, error } = await supabase
             .from('products')
             .select('category_id')
@@ -407,26 +551,70 @@ export const catalogService = {
         if (error) throw error;
 
         const categories = [...new Set(data?.map(p => p.category_id).filter(Boolean))];
-        return categories.sort();
+        const result = categories.sort();
+
+        if (storage) {
+            try {
+                storage.setItem(cacheKey, JSON.stringify({ data: result, timestamp: Date.now() }));
+            } catch (e) { }
+        }
+
+        return result;
     },
 
     /**
      * Buscar lista completa de categorias com ID e Nome (útil para Selects)
      */
     getCategoriesWithNames: async (): Promise<{ id: string, name: string }[]> => {
+        const cacheKey = `${CACHE_KEY_PREFIX}categories_full`;
+        const storage = getStorage();
+        if (storage) {
+            try {
+                const cachedStr = storage.getItem(cacheKey);
+                if (cachedStr) {
+                    const cached = JSON.parse(cachedStr);
+                    if (Date.now() - cached.timestamp < CACHE_TTL) {
+                        return cached.data;
+                    }
+                }
+            } catch (e) { }
+        }
+
         const { data, error } = await supabase
             .from('categories')
             .select('id, name')
             .order('name');
 
         if (error) throw error;
-        return data || [];
+        const result = data || [];
+
+        if (storage) {
+            try {
+                storage.setItem(cacheKey, JSON.stringify({ data: result, timestamp: Date.now() }));
+            } catch (e) { }
+        }
+
+        return result;
     },
 
     /**
      * Buscar marcas disponíveis
      */
     getBrands: async (): Promise<string[]> => {
+        const cacheKey = `${CACHE_KEY_PREFIX}brands_used`;
+        const storage = getStorage();
+        if (storage) {
+            try {
+                const cachedStr = storage.getItem(cacheKey);
+                if (cachedStr) {
+                    const cached = JSON.parse(cachedStr);
+                    if (Date.now() - cached.timestamp < CACHE_TTL) {
+                        return cached.data;
+                    }
+                }
+            } catch (e) { }
+        }
+
         const { data, error } = await supabase
             .from('products')
             .select('brand')
@@ -435,7 +623,15 @@ export const catalogService = {
         if (error) throw error;
 
         const brands = [...new Set(data?.map(p => p.brand).filter(Boolean))];
-        return brands.sort();
+        const result = brands.sort();
+
+        if (storage) {
+            try {
+                storage.setItem(cacheKey, JSON.stringify({ data: result, timestamp: Date.now() }));
+            } catch (e) { }
+        }
+
+        return result;
     }
 };
 

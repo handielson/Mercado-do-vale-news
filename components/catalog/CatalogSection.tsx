@@ -27,7 +27,8 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
     const loadProducts = async () => {
         try {
             setLoading(true);
-            const data = await catalogSectionsService.getProductsForSection(section);
+            const bypassCache = customer?.customer_type === 'ADMIN';
+            const data = await catalogSectionsService.getProductsForSection(section, bypassCache);
             setProducts(data);
         } catch (error) {
             console.error('Erro ao carregar produtos da seção:', error);
