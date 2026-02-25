@@ -5,13 +5,13 @@ import { companySettingsService } from '../../services/companySettingsService';
 import toast from 'react-hot-toast';
 
 const DEFAULT_HOURS: BusinessHours = {
-    monday: { isOpen: true, openTime: '08:00', closeTime: '18:00' },
-    tuesday: { isOpen: true, openTime: '08:00', closeTime: '18:00' },
-    wednesday: { isOpen: true, openTime: '08:00', closeTime: '18:00' },
-    thursday: { isOpen: true, openTime: '08:00', closeTime: '18:00' },
-    friday: { isOpen: true, openTime: '08:00', closeTime: '18:00' },
-    saturday: { isOpen: true, openTime: '08:00', closeTime: '12:00' },
-    sunday: { isOpen: false, openTime: '08:00', closeTime: '12:00' },
+    monday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    tuesday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    wednesday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    thursday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    friday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    saturday: { isOpen: true, openTime: '08:00', closeTime: '12:00', hasLunchBreak: false, lunchStart: '12:00', lunchEnd: '13:30' },
+    sunday: { isOpen: false, openTime: '08:00', closeTime: '12:00', hasLunchBreak: false, lunchStart: '12:00', lunchEnd: '13:30' },
 };
 
 const DAY_LABELS: Record<keyof BusinessHours, string> = {
@@ -113,20 +113,51 @@ export function BusinessHoursPanel() {
                                 </span>
                             </div>
 
-                            <div className={`flex items-center gap-3 transition-opacity ${hours[day].isOpen ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                                <input
-                                    type="time"
-                                    value={hours[day].openTime}
-                                    onChange={(e) => handleChange(day, 'openTime', e.target.value)}
-                                    className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                                />
-                                <span className="text-slate-400 font-medium">até</span>
-                                <input
-                                    type="time"
-                                    value={hours[day].closeTime}
-                                    onChange={(e) => handleChange(day, 'closeTime', e.target.value)}
-                                    className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                                />
+                            <div className="flex flex-col gap-3">
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="time"
+                                        value={hours[day].openTime}
+                                        onChange={(e) => handleChange(day, 'openTime', e.target.value)}
+                                        className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                    />
+                                    <span className="text-slate-400 font-medium">até</span>
+                                    <input
+                                        type="time"
+                                        value={hours[day].closeTime}
+                                        onChange={(e) => handleChange(day, 'closeTime', e.target.value)}
+                                        className="px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!hours[day].hasLunchBreak}
+                                            onChange={(e) => handleChange(day, 'hasLunchBreak', e.target.checked)}
+                                            className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                        />
+                                        <span className="text-sm text-slate-600">Pausa pro almoço</span>
+                                    </label>
+
+                                    {hours[day].hasLunchBreak && (
+                                        <div className="flex items-center gap-2 fade-in">
+                                            <input
+                                                type="time"
+                                                value={hours[day].lunchStart || '12:00'}
+                                                onChange={(e) => handleChange(day, 'lunchStart', e.target.value)}
+                                                className="px-2 py-1 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                            />
+                                            <span className="text-slate-400 text-xs font-medium">até</span>
+                                            <input
+                                                type="time"
+                                                value={hours[day].lunchEnd || '13:30'}
+                                                onChange={(e) => handleChange(day, 'lunchEnd', e.target.value)}
+                                                className="px-2 py-1 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ))}

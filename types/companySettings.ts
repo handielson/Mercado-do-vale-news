@@ -10,6 +10,9 @@ export interface DaySchedule {
     isOpen: boolean;
     openTime: string; // "HH:MM" format
     closeTime: string; // "HH:MM" format
+    hasLunchBreak?: boolean;
+    lunchStart?: string; // "HH:MM" format
+    lunchEnd?: string; // "HH:MM" format
 }
 
 export interface BusinessHours {

@@ -50,7 +50,20 @@ export async function getStoreStatus(businessHours?: BusinessHours): Promise<Sto
     const openTimeMinutes = openH * 60 + openM;
     const closeTimeMinutes = closeH * 60 + closeM;
 
-    if (currentTimeMinutes >= openTimeMinutes && currentTimeMinutes <= closeTimeMinutes) {
+    // Check if within lunch break
+    if (todaySchedule.hasLunchBreak && todaySchedule.lunchStart && todaySchedule.lunchEnd) {
+        const [lStartH, lStartM] = todaySchedule.lunchStart.split(':').map(Number);
+        const [lEndH, lEndM] = todaySchedule.lunchEnd.split(':').map(Number);
+
+        const lunchStartMins = lStartH * 60 + lStartM;
+        const lunchEndMins = lEndH * 60 + lEndM;
+
+        if (currentTimeMinutes >= lunchStartMins && currentTimeMinutes < lunchEndMins) {
+            return { status: 'closed', message: `Retorna às ${todaySchedule.lunchEnd}` };
+        }
+    }
+
+    if (currentTimeMinutes >= openTimeMinutes && currentTimeMinutes < closeTimeMinutes) {
         return { status: 'open', message: 'Loja Aberta' };
     } else if (currentTimeMinutes < openTimeMinutes) {
         return { status: 'closed', message: `Abre às ${todaySchedule.openTime}` };
