@@ -361,16 +361,6 @@ export function ModernProductCard({
                         >
                             <Share2 className="w-4 h-4" />
                         </button>
-                        <button
-                            onClick={handleCompare}
-                            className={`p-2.5 rounded-full backdrop-blur-md transition-all shadow-lg ${isInCompare
-                                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                : 'bg-white/90 text-slate-700 hover:bg-white'
-                                }`}
-                            title={isInCompare ? 'Remover da comparação' : 'Comparar produto'}
-                        >
-                            <GitCompare className="w-4 h-4" />
-                        </button>
                     </div>
 
                     {/* Out of Stock Overlay */}
@@ -538,12 +528,25 @@ export function ModernProductCard({
                                 'Comprar'
                             )}
                         </button>
-                        <button
-                            onClick={handleInfoClick}
-                            className="w-full py-2 px-4 border-2 border-slate-300 text-slate-700 font-medium rounded-lg hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50 transition-all"
-                        >
-                            Ver Descrição
-                        </button>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <button
+                                onClick={handleInfoClick}
+                                className="flex-1 py-2 px-3 border-2 border-slate-300 text-slate-700 font-medium rounded-lg hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50 transition-all text-sm"
+                            >
+                                Detalhes
+                            </button>
+                            <button
+                                onClick={handleCompare}
+                                className={`flex-1 py-2 px-2 border-2 font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm ${isInCompare
+                                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                    : 'border-slate-300 text-slate-700 hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50'
+                                    }`}
+                                title={isInCompare ? 'Remover da comparação' : 'Comparar produto'}
+                            >
+                                <GitCompare className="w-4 h-4 shrink-0" />
+                                <span className="truncate">{isInCompare ? 'Comparando' : 'Comparar'}</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
