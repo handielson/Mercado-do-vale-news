@@ -56,6 +56,26 @@ export function BusinessHoursPanel() {
 
                     setHours(mergedHours);
                 }
+
+                if (settings?.holiday_overrides) {
+                    setHolidayOverrides(settings.holiday_overrides);
+                }
+
+                // Fetch current year holidays
+                const currentYear = new Date().getFullYear();
+                const holidays = await holidayService.getHolidays(currentYear);
+
+                // Keep only future/today holidays for cleaner UI
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                const upcomingHolidays = holidays.filter(h => {
+                    const hDate = new Date(h.date + 'T00:00:00'); // Ensure local time parsing
+                    return hDate >= today;
+                });
+
+                setAvailableHolidays(upcomingHolidays.length > 0 ? upcomingHolidays : holidays);
+
             } catch (error) {
                 console.error('Failed to load business hours:', error);
             } finally {
