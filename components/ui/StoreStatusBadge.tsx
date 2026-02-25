@@ -39,22 +39,31 @@ export function StoreStatusBadge() {
 
     const colors = {
         open: 'bg-green-50 text-green-700 border-green-200',
+        closing_soon: 'bg-amber-50 text-amber-700 border-amber-200',
         closed: 'bg-slate-50 text-slate-600 border-slate-200',
         holiday: 'bg-orange-50 text-orange-700 border-orange-200'
     };
 
     const dotColors = {
         open: 'bg-green-500',
+        closing_soon: 'bg-amber-500',
         closed: 'bg-slate-400',
         holiday: 'bg-orange-500'
+    };
+
+    const tooltips = {
+        open: 'A loja está recebendo pedidos e fazendo entregas.',
+        closing_soon: 'A loja fechará em breve! Finalize seu pedido agora.',
+        closed: 'Neste momento a loja não está fazendo entregas.',
+        holiday: 'Neste momento a loja não está fazendo entregas.'
     };
 
     return (
         <div
             className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${colors[status.status]} transition-colors shadow-sm cursor-help hover:opacity-80`}
-            title={status.status === 'open' ? 'A loja está recebendo pedidos e fazendo entregas.' : 'Neste momento a loja não está fazendo entregas.'}
+            title={tooltips[status.status]}
         >
-            <div className={`w-2 h-2 rounded-full ${dotColors[status.status]} ${status.status === 'open' ? 'animate-pulse' : ''}`}></div>
+            <div className={`w-2 h-2 rounded-full ${dotColors[status.status]} ${(status.status === 'open' || status.status === 'closing_soon') ? 'animate-pulse' : ''}`}></div>
             {status.message}
         </div>
     );

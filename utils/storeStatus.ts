@@ -1,11 +1,12 @@
 import { BusinessHours } from '../types/companySettings';
 import { holidayService, Holiday } from './holidayService';
 
-export type StoreState = 'open' | 'closed' | 'holiday';
+export type StoreState = 'open' | 'closed' | 'holiday' | 'closing_soon';
 
 export interface StoreStatus {
     status: StoreState;
     message: string;
+    actionMessage?: string;
     holiday?: Holiday;
 }
 
@@ -13,12 +14,18 @@ const DAYS_OF_WEEK: (keyof BusinessHours)[] = [
     'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'
 ];
 
-export async function getStoreStatus(businessHours?: BusinessHours, holidayOverrides?: string[]): Promise<StoreStatus> {
-    if (!businessHours) {
-        return { status: 'open', message: 'Aberto' }; // Default fallback if not configured
-    }
+const DEFAULT_HOURS: BusinessHours = {
+    monday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    tuesday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    wednesday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    thursday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    friday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+    saturday: { isOpen: true, openTime: '08:00', closeTime: '12:00', hasLunchBreak: false, lunchStart: '12:00', lunchEnd: '13:30' },
+    sunday: { isOpen: false, openTime: '08:00', closeTime: '12:00', hasLunchBreak: false, lunchStart: '12:00', lunchEnd: '13:30' },
+};
 
-    // Get current date/time in local timezone (assuming user is in Brazil or we use device time)
+export async function getStoreStatus(businessHours?: BusinessHours, holidayOverrides?: string[]): Promise<StoreStatus> {
+    const hours = businessHours || DEFAULT_HOURS;
     const now = new Date();
 
     // 1. Check holiday first
@@ -35,16 +42,22 @@ export async function getStoreStatus(businessHours?: BusinessHours, holidayOverr
         return {
             status: 'holiday',
             message: `Fechado - Feriado (${holiday.name})`,
+            actionMessage: 'A loja está fechada devido ao feriado. Seu pedido será processado no próximo dia útil.',
             holiday
         };
     }
 
     // 2. Check day of week
     const dayName = DAYS_OF_WEEK[now.getDay()];
-    const todaySchedule = businessHours[dayName];
+    // Merge DB schedule with default to prevent missing properties causing closed state
+    const todaySchedule = { ...DEFAULT_HOURS[dayName], ...(hours[dayName] || {}) };
 
-    if (!todaySchedule || !todaySchedule.isOpen) {
-        return { status: 'closed', message: 'Fechado Hoje' };
+    if (!todaySchedule.isOpen) {
+        return {
+            status: 'closed',
+            message: 'Fechado Hoje',
+            actionMessage: 'A loja está fechada hoje. Seu pedido será processado amanhã.'
+        };
     }
 
     // 3. Check time
@@ -61,15 +74,6 @@ export async function getStoreStatus(businessHours?: BusinessHours, holidayOverr
     const openTimeMinutes = openH * 60 + openM;
     const closeTimeMinutes = closeH * 60 + closeM;
 
-    console.log('[StoreStatus Check Internal]', {
-        dayName,
-        currentTimeMinutes,
-        openTimeMinutes,
-        closeTimeMinutes,
-        isOpenFlag: todaySchedule.isOpen,
-        hasLunchBreak: todaySchedule.hasLunchBreak
-    });
-
     // Check if within lunch break
     if (todaySchedule.hasLunchBreak && todaySchedule.lunchStart && todaySchedule.lunchEnd) {
         const [lStartH, lStartM] = todaySchedule.lunchStart.split(':').map(Number);
@@ -79,15 +83,35 @@ export async function getStoreStatus(businessHours?: BusinessHours, holidayOverr
         const lunchEndMins = lEndH * 60 + lEndM;
 
         if (currentTimeMinutes >= lunchStartMins && currentTimeMinutes < lunchEndMins) {
-            return { status: 'closed', message: `Retorna às ${todaySchedule.lunchEnd}` };
+            return {
+                status: 'closed',
+                message: `Retorna às ${todaySchedule.lunchEnd}`,
+                actionMessage: `A loja está em horário de almoço. Seu pedido será processado a partir das ${todaySchedule.lunchEnd}.`
+            };
         }
     }
 
     if (currentTimeMinutes >= openTimeMinutes && currentTimeMinutes < closeTimeMinutes) {
+        // Enhanced Status: Check if within 30 minutes of closing
+        if (closeTimeMinutes - currentTimeMinutes <= 30) {
+            return {
+                status: 'closing_soon',
+                message: 'Fechando em breve',
+                actionMessage: `A loja fechará às ${closeTimeStr}! Garanta seu pedido para envio imediato.`
+            };
+        }
         return { status: 'open', message: 'Loja Aberta' };
     } else if (currentTimeMinutes < openTimeMinutes) {
-        return { status: 'closed', message: `Abre às ${openTimeStr}` };
+        return {
+            status: 'closed',
+            message: `Abre às ${openTimeStr}`,
+            actionMessage: `A loja está fechada no momento. Seu pedido será processado hoje a partir das ${openTimeStr}.`
+        };
     } else {
-        return { status: 'closed', message: 'Fechado' };
+        return {
+            status: 'closed',
+            message: 'Fechado',
+            actionMessage: 'A loja encerrou o expediente de hoje. Seu pedido será processado amanhã.'
+        };
     }
 }

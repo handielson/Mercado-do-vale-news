@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useCoupon } from '@/hooks/useCoupon';
 import { MixedPaymentSimulator, type MixedPaymentState } from './MixedPaymentSimulator';
+import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
 
 interface QuoteCartSidebarProps {
     isOpen: boolean;
@@ -28,6 +29,8 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     const [isVerifyingReferral, setIsVerifyingReferral] = useState(false);
     const [cashbackSettings, setCashbackSettings] = useState<any>(null);
     const [mixedPaymentState, setMixedPaymentState] = useState<MixedPaymentState | null>(null);
+    const [storeStatus, setStoreStatus] = useState<StoreStatus | null>(null);
+    const isAdmin = customer?.customer_type === 'ADMIN';
 
     // Calculate total cart value in R$ (prices are in centavos)
     const totalCart = items.reduce((sum, item) => sum + (item.price / 100) + ((item.warranty?.price || 0) / 100), 0);
@@ -45,6 +48,9 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                 if (data?.address) {
                     setStoreAddress(data.address);
                 }
+
+                const status = await getStoreStatus(data?.business_hours, data?.holiday_overrides);
+                setStoreStatus(status);
             } catch (error) {
                 console.error('Error loading WhatsApp number:', error);
             }
@@ -329,6 +335,19 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                             totalPrice={Math.round(totalCart * 100)}
                             onChange={setMixedPaymentState}
                         />
+
+                        {/* Avisos de Transporte e Expediente */}
+                        {storeStatus && storeStatus.status !== 'open' && !isAdmin && (
+                            <div className={`p-3 rounded-lg text-sm border ${storeStatus.status === 'closing_soon' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-700 border-slate-200'} mb-2 mt-2`}>
+                                <div className="flex items-center gap-2 font-medium mb-1 relative">
+                                    <span className={storeStatus.status === 'closing_soon' ? 'text-amber-500' : 'text-slate-500'}>
+                                        {storeStatus.status === 'closing_soon' ? '⚠️' : '🕒'}
+                                    </span>
+                                    {storeStatus.message}
+                                </div>
+                                <p className="text-xs">{storeStatus.actionMessage}</p>
+                            </div>
+                        )}
 
                         {/* Main button: Open WhatsApp (user chooses recipient) */}
                         <button

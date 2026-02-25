@@ -15,6 +15,7 @@ import { useCoupon } from '@/hooks/useCoupon';
 import { formatPrice } from '@/services/installmentCalculator';
 import { getCoinBalance, getCashbackSettings, coinsToReais, validateCoinRedeem } from '@/services/cashbackService';
 import { companySettingsService } from '@/services/companySettingsService';
+import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
 import type { WarrantyOption } from '@/types/companySettings';
 
 interface QuoteModalProps {
@@ -58,6 +59,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
     const [warrantyOptions, setWarrantyOptions] = useState<WarrantyOption[]>([]);
     const [selectedWarranty, setSelectedWarranty] = useState<WarrantyOption | null>(null);
     const [storeAddress, setStoreAddress] = useState('');
+    const [storeStatus, setStoreStatus] = useState<StoreStatus | null>(null);
 
     // Cleanup timeout on unmount
     useEffect(() => {
@@ -88,6 +90,9 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             if (settings?.address) {
                 setStoreAddress(settings.address);
             }
+            getStoreStatus(settings?.business_hours, settings?.holiday_overrides)
+                .then(setStoreStatus)
+                .catch(console.error);
         }).catch(() => { });
 
         if (!customer || isAdmin) return;
@@ -665,6 +670,19 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                                     <span>Total:</span>
                                     <span>{formatPrice(finalTotalCents)}</span>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Avisos de Transporte e Expediente */}
+                        {storeStatus && storeStatus.status !== 'open' && !isAdmin && (
+                            <div className={`p-3 rounded-lg text-sm border ${storeStatus.status === 'closing_soon' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                                <div className="flex items-center gap-2 font-medium mb-1 relative">
+                                    <span className={storeStatus.status === 'closing_soon' ? 'text-amber-500' : 'text-slate-500'}>
+                                        {storeStatus.status === 'closing_soon' ? '⚠️' : '🕒'}
+                                    </span>
+                                    {storeStatus.message}
+                                </div>
+                                <p className="text-xs">{storeStatus.actionMessage}</p>
                             </div>
                         )}
 
