@@ -27,6 +27,7 @@ import { CompanySocialMediaSection } from '../../../components/company/CompanySo
 import { CompanyFinancialSection } from '../../../components/company/CompanyFinancialSection';
 import { CompanyAdditionalInfoSection } from '../../../components/company/CompanyAdditionalInfoSection';
 import { CompanyDocumentsSection } from '../../../components/company/CompanyDocumentsSection';
+import { BusinessHoursPanel } from '../../../components/settings/BusinessHoursPanel';
 
 export const CompanyDataPage: React.FC = () => {
     const [form, setForm] = useState<Company>(defaultCompany);
@@ -264,7 +265,10 @@ export const CompanyDataPage: React.FC = () => {
                 onChange={handleFormChange}
             />
 
-            {/* Section 6: Documents */}
+            {/* Section 6: Business Hours */}
+            <BusinessHoursPanel />
+
+            {/* Section 7: Documents */}
             <CompanyDocumentsSection
                 documents={documents}
                 isLoading={isLoadingDocs}

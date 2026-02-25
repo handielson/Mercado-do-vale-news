@@ -6,6 +6,22 @@ export interface WarrantyOption {
     active: boolean;
 }
 
+export interface DaySchedule {
+    isOpen: boolean;
+    openTime: string; // "HH:MM" format
+    closeTime: string; // "HH:MM" format
+}
+
+export interface BusinessHours {
+    monday: DaySchedule;
+    tuesday: DaySchedule;
+    wednesday: DaySchedule;
+    thursday: DaySchedule;
+    friday: DaySchedule;
+    saturday: DaySchedule;
+    sunday: DaySchedule;
+}
+
 export interface CompanySettings {
     id: string;
     company_name: string;
@@ -35,6 +51,7 @@ export interface CompanySettings {
     extended_warranty_options?: WarrantyOption[];
     extended_warranty_terms_text?: string;
     ai_prompts?: any;
+    business_hours?: BusinessHours;
     created_at: string;
     updated_at: string;
 }
@@ -67,4 +84,5 @@ export interface CompanySettingsInput {
     extended_warranty_options?: WarrantyOption[];
     extended_warranty_terms_text?: string;
     ai_prompts?: any;
+    business_hours?: BusinessHours;
 }

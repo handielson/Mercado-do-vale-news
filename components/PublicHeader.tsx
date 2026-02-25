@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { StoreStatusBadge } from './ui/StoreStatusBadge';
 
 /**
  * PublicHeader - Header for public pages (catalog)
@@ -67,6 +68,8 @@ export const PublicHeader: React.FC = () => {
                 </Link>
 
                 <div className="flex items-center gap-4">
+                    <StoreStatusBadge />
+
                     <Link
                         to="/promocoes"
                         className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
