@@ -8,7 +8,10 @@ import { formatPrice } from '@/services/installmentCalculator';
 export function generateMultiProductQuoteMessage(
     items: QuoteCartItem[],
     couponCode?: string,
-    couponDiscount?: number
+    couponDiscount?: number,
+    referrerName?: string,
+    referralCode?: string,
+    storeAddress?: string
 ): string {
     if (items.length === 0) {
         return '';
@@ -26,6 +29,10 @@ export function generateMultiProductQuoteMessage(
 
         if (item.variant.ram && item.variant.storage) {
             message += `   \ud83d\udcf1 ${item.variant.ram}/${item.variant.storage}\n`;
+        }
+
+        if (item.variant.color) {
+            message += `   \ud83c\udfa8 Cor: ${item.variant.color}\n`;
         }
 
         if (item.paymentOptions?.showCash ?? true) {
@@ -79,6 +86,21 @@ export function generateMultiProductQuoteMessage(
         message += `\u2705 *Total com desconto: ${formatPrice(Math.max(0, finalTotal))}*\n`;
     }
 
+    // Referral code tag
+    if (referralCode) {
+        if (referrerName) {
+            message += `\n🤝 Indicação de: ${referrerName} (Cód: ${referralCode})\n`;
+        } else {
+            message += `\n🤝 Indicação (Cód): ${referralCode}\n`;
+        }
+    }
+
+    if (storeAddress) {
+        message += `\n*🏪 RETIRADA NA LOJA*\n`;
+        message += `📍 ${storeAddress}\n`;
+        message += `🗺️ Maps: https://maps.google.com/?q=${encodeURIComponent(storeAddress)}\n`;
+    }
+
     message += `\n---\n`;
     message += `\ud83c\udfaf *Or\u00e7amento exclusivo Mercado do Vale!*\n`;
     message += `Garanta o seu agora enquanto est\u00e1 dispon\u00edvel em estoque! \ud83d\udd25`;
@@ -96,9 +118,12 @@ export function generateMultiProductWhatsAppLink(
     items: QuoteCartItem[],
     whatsappNumber?: string,
     couponCode?: string,
-    couponDiscount?: number
+    couponDiscount?: number,
+    referrerName?: string,
+    referralCode?: string,
+    storeAddress?: string
 ): string {
-    const message = generateMultiProductQuoteMessage(items, couponCode, couponDiscount);
+    const message = generateMultiProductQuoteMessage(items, couponCode, couponDiscount, referrerName, referralCode, storeAddress);
     const encodedMessage = encodeURIComponent(message);
 
     if (!whatsappNumber) {

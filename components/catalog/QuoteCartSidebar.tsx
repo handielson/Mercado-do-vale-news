@@ -2,6 +2,7 @@ import { ShoppingCart, X, Trash2, Copy, Check } from 'lucide-react';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { formatPrice } from '@/services/installmentCalculator';
 import { generateMultiProductWhatsAppLink, generateMultiProductQuoteMessage } from '@/utils/multiProductQuoteGenerator';
+import { companySettingsService } from '@/services/companySettingsService';
 import { useEffect, useState } from 'react';
 import type { QuoteCartItem } from '@/contexts/QuoteCartContext';
 import toast from 'react-hot-toast';
@@ -19,8 +20,13 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     const { items, removeItem, clear } = useQuoteCart();
     const { customer } = useSupabaseAuth();
     const [whatsappNumber, setWhatsappNumber] = useState('');
+    const [storeAddress, setStoreAddress] = useState('');
     const [customNumber, setCustomNumber] = useState('');
-    const [isCopied, setIsCopied] = useState(false);
+    const [referralInput, setReferralInput] = useState('');
+    const [referralError, setReferralError] = useState('');
+    const [referralName, setReferralName] = useState('');
+    const [isVerifyingReferral, setIsVerifyingReferral] = useState(false);
+    const [cashbackSettings, setCashbackSettings] = useState<any>(null);
 
     // Calculate total cart value in R$ (prices are in centavos)
     const totalCart = items.reduce((sum, item) => sum + (item.price / 100) + ((item.warranty?.price || 0) / 100), 0);
@@ -30,14 +36,13 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     useEffect(() => {
         const loadWhatsAppNumber = async () => {
             try {
-                const { supabase } = await import('@/services/supabase');
-                const { data } = await supabase
-                    .from('company_settings')
-                    .select('phone')
-                    .single();
+                const data = await companySettingsService.get();
 
                 if (data?.phone) {
                     setWhatsappNumber(data.phone);
+                }
+                if (data?.address) {
+                    setStoreAddress(data.address);
                 }
             } catch (error) {
                 console.error('Error loading WhatsApp number:', error);
@@ -47,6 +52,35 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
         loadWhatsAppNumber();
     }, []);
 
+
+    // Validate Referral Code on input change
+    const applyReferral = async () => {
+        if (!referralInput.trim()) return;
+
+        setIsVerifyingReferral(true);
+        setReferralError('');
+        setReferralName('');
+
+        try {
+            const { validateReferralCode } = await import('@/services/cashbackService');
+            const result = await validateReferralCode(referralInput, customer?.id);
+            if (result.valid && result.referrerName) {
+                setReferralName(result.referrerName);
+            } else {
+                setReferralError(result.error || 'Código válido não encontrado');
+            }
+        } catch (error) {
+            setReferralError('Erro ao validar código');
+        } finally {
+            setIsVerifyingReferral(false);
+        }
+    };
+
+    const clearReferral = () => {
+        setReferralInput('');
+        setReferralName('');
+        setReferralError('');
+    };
 
     // Open WhatsApp with message ready (user chooses recipient)
     const handleSendQuote = () => {
@@ -59,7 +93,10 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
             items,
             undefined,
             coupon.appliedCoupon?.code,
-            coupon.discount > 0 ? coupon.discount : undefined
+            coupon.discount > 0 ? coupon.discount : undefined,
+            undefined,
+            undefined,
+            storeAddress
         );
         window.location.href = whatsappLink;
         coupon.confirm();
@@ -109,7 +146,10 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
             items,
             numberToUse,
             coupon.appliedCoupon?.code,
-            coupon.discount > 0 ? coupon.discount : undefined
+            coupon.discount > 0 ? coupon.discount : undefined,
+            undefined,
+            undefined,
+            storeAddress
         );
         window.open(whatsappLink, '_blank');
         coupon.confirm();
@@ -126,7 +166,10 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
             const message = generateMultiProductQuoteMessage(
                 items,
                 coupon.appliedCoupon?.code,
-                coupon.discount > 0 ? coupon.discount : undefined
+                coupon.discount > 0 ? coupon.discount : undefined,
+                undefined,
+                undefined,
+                storeAddress
             );
             await navigator.clipboard.writeText(message);
             setIsCopied(true);
@@ -189,6 +232,45 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                 {items.length > 0 && (
                     <div className="p-4 border-t border-slate-200 space-y-3 bg-slate-50">
 
+                        {/* Referral Field */}
+                        {!isAdmin && (
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-2">
+                                    🤝 Fui indicado por (Código)
+                                </label>
+                                {referralName ? (
+                                    <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                                        <span className="text-xs text-emerald-800 font-medium">
+                                            ✅ Indicado por: <strong>{referralName}</strong>
+                                        </span>
+                                        <button onClick={clearReferral} className="text-emerald-600 hover:text-emerald-800 text-xs underline">Remover</button>
+                                    </div>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={referralInput}
+                                            onChange={e => { setReferralInput(e.target.value.toUpperCase()); setReferralError(''); }}
+                                            onKeyDown={e => e.key === 'Enter' && applyReferral()}
+                                            placeholder="CÓDIGO DE INDICAÇÃO"
+                                            className={`flex-1 px-3 py-2 border-2 rounded-lg focus:outline-none font-mono uppercase text-xs ${referralError ? 'border-red-400 focus:border-red-500 bg-red-50' : 'border-slate-200 focus:border-blue-500 bg-white'}`}
+                                        />
+                                        <button
+                                            onClick={applyReferral}
+                                            disabled={isVerifyingReferral || !referralInput}
+                                            className="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                        >
+                                            {isVerifyingReferral ? '...' : 'Aplicar'}
+                                        </button>
+                                    </div>
+                                )}
+                                {referralError && (
+                                    <p className="text-xs text-red-500 font-medium leading-tight">
+                                        {referralError}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
                         {/* Coupon Field */}
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">🎟️ Cupom de desconto</label>
@@ -244,7 +326,8 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                         {/* Main button: Open WhatsApp (user chooses recipient) */}
                         <button
                             onClick={handleSendQuote}
-                            className="w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-md hover:shadow-lg"
+                            disabled={!!referralError || isVerifyingReferral}
+                            className="w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             📱 Abrir WhatsApp ({items.length} {items.length === 1 ? 'item' : 'itens'})
                         </button>

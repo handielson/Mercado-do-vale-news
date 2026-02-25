@@ -535,6 +535,24 @@ Gerencia os percentuais de acréscimo cobrados por parcela.
 
 ---
 
+### `utils/whatsappMessageGenerator.ts` — Motor de Orçamentos
+**Exporta:** `generateQuoteMessage`, `generateMultiProductQuoteMessage`, `generateWhatsAppLink`
+Responsável por formatar os cálculos do Cart/Modal em um texto legível e pronto para envio via WhatsApp API.
+
+**Fluxo de Dados:**
+1. Recebe a `QuoteRequest` (Produto, Especificações, Opções de Pagamento, Entrega, Cliente).
+2. Oculta ou exibe blocos (à vista/parcelado) baseando-se no `paymentOptions` escolhido.
+3. Incorpora o `mixedPaymentState` (Simulação Híbrida) dentro do bloco de **💳 PAGAMENTO**.
+4. Concatena `variant.ram`, `variant.storage` e `variant.color` ao lado do nome do produto.
+5. Embuté promoções ativas (Cupom/Moedas do Vale) no cálculo do Total da Compra.
+6. Se Frete Delivery for escolhido, inclui o link do Google Maps apontando para a string de endereço formatada.
+
+**Interações:**
+- Usado intensamente por `QuoteModal.tsx` (Single Product) e `QuoteCartSidebar.tsx` (Cart Checkout).
+- Respeita o cargo do usuário `ADMIN` x `customer` para gerar formatos comCTAs agressivos (Admin) ou detalhados (Cliente).
+
+---
+
 ### `services/averagePriceService.ts` — Preço Médio
 **Exporta:** `averagePriceService`, `updateAveragePrices`
 **Tabela:** `products` (update em massa)

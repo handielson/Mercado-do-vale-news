@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { MapPin, Store, Loader2, Truck, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MapPin, Store, Loader2, Truck, Check, Map } from 'lucide-react';
 import type { Address } from '@/services/addressLookup';
 import { lookupCEP, formatCEP } from '@/services/addressLookup';
 import { shippingService } from '@/services/shippingService';
+import { companySettingsService } from '@/services/companySettingsService';
 import type { ShippingOption } from '@/types/shipping';
 
 export interface DeliveryOption {
@@ -23,6 +24,15 @@ export function DeliveryOptions({ selected, onSelect }: DeliveryOptionsProps) {
     const [cepError, setCepError] = useState('');
     const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
     const [isLoadingShipping, setIsLoadingShipping] = useState(false);
+    const [storeAddress, setStoreAddress] = useState('');
+
+    useEffect(() => {
+        companySettingsService.get().then(settings => {
+            if (settings?.address) {
+                setStoreAddress(settings.address);
+            }
+        }).catch(console.error);
+    }, []);
 
     const handleTypeChange = (type: 'pickup' | 'delivery') => {
         onSelect({ ...selected, type, address: type === 'pickup' ? undefined : selected.address });
@@ -250,8 +260,8 @@ export function DeliveryOptions({ selected, onSelect }: DeliveryOptionsProps) {
                                             type="button"
                                             onClick={() => onSelect({ ...selected, shippingOption: opt })}
                                             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border-2 text-left transition-all ${isSelected
-                                                    ? 'border-green-500 bg-green-50'
-                                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                                ? 'border-green-500 bg-green-50'
+                                                : 'border-slate-200 bg-white hover:border-slate-300'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2">
@@ -293,6 +303,26 @@ export function DeliveryOptions({ selected, onSelect }: DeliveryOptionsProps) {
                             rows={2}
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                         />
+                    </div>
+                </div>
+            )}
+
+            {/* Pickup Info */}
+            {selected.type === 'pickup' && storeAddress && (
+                <div className="mt-4 p-4 rounded-lg bg-blue-50 border border-blue-200 flex items-start gap-3">
+                    <Store className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <h4 className="text-sm font-semibold text-blue-900 mb-1">Nosso Endereço</h4>
+                        <p className="text-sm text-blue-800 mb-3 leading-relaxed">{storeAddress}</p>
+                        <a
+                            href={`https://maps.google.com/?q=${encodeURIComponent(storeAddress)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg transition-colors shadow-sm active:scale-95"
+                        >
+                            <Map className="w-4 h-4" />
+                            Abrir no Google Maps
+                        </a>
                     </div>
                 </div>
             )}

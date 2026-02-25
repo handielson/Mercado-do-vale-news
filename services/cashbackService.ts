@@ -245,6 +245,42 @@ export async function adminAdjustCoins(
 }
 
 // ============================================================
+// VALIDAÇÃO DE INDICAÇÃO
+// ============================================================
+
+export async function validateReferralCode(
+    code: string,
+    currentCustomerId?: string
+): Promise<{ valid: boolean; error?: string; referrerName?: string }> {
+    if (!code.trim()) return { valid: false, error: 'Código vazio.' };
+
+    // Check if it's the user's own code
+    if (currentCustomerId) {
+        const { data: currentCustomer } = await supabase
+            .from('customers')
+            .select('referral_code')
+            .eq('id', currentCustomerId)
+            .single();
+
+        if (currentCustomer && currentCustomer.referral_code === code.trim().toUpperCase()) {
+            return { valid: false, error: 'Você não pode usar seu próprio código de indicação.' };
+        }
+    }
+
+    const { data: referrer, error } = await supabase
+        .from('customers')
+        .select('name')
+        .eq('referral_code', code.trim().toUpperCase())
+        .single();
+
+    if (error || !referrer) {
+        return { valid: false, error: 'Código de indicação inválido ou não encontrado.' };
+    }
+
+    return { valid: true, referrerName: referrer.name };
+}
+
+// ============================================================
 // HELPERS
 // ============================================================
 

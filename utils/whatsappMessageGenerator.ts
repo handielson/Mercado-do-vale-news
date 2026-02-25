@@ -3,6 +3,7 @@ import type { InstallmentPlan } from '@/services/installmentCalculator';
 import type { Address } from '@/services/addressLookup';
 import type { VariantSpecs } from '@/services/productVariants';
 import type { ShippingOption } from '@/types/shipping';
+import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
 import { supabase } from '@/services/supabase';
 
 /**
@@ -29,13 +30,18 @@ export interface QuoteRequest {
     couponDiscount?: number; // valor em R$
     referrerName?: string;
     referralCode?: string;
+    storeAddress?: string;
+    selectedWarranty?: { months: number; price: number };
+    paymentOptions?: { showCash: boolean; showInstallment: boolean };
+    mixedPaymentState?: MixedPaymentState | null;
+    cashPrice?: number;
 }
 
 /**
  * Generate formatted WhatsApp quote message
  */
 export function generateQuoteMessage(quote: QuoteRequest): string {
-    const { product, variant, installmentPlan, delivery, userType, availableColors, couponCode, couponDiscount } = quote;
+    const { product, variant, installmentPlan, delivery, userType, availableColors, couponCode, couponDiscount, selectedWarranty, paymentOptions } = quote;
 
     // Check if user is admin (ADMIN type indicates admin/staff)
     const isAdmin = userType === 'ADMIN';
@@ -74,11 +80,21 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
         message += `📅 Data: ${date}\n\n`;
         message += `*ITENS:*\n`;
         message += `• ${productName}\n`;
-        message += `  ${priceAtVista} a vista\n`;
+        if (variant.ram && variant.storage) {
+            message += `  📱 ${variant.ram}/${variant.storage}\n`;
+        }
+        if (paymentOptions?.showCash !== false) {
+            message += `  ${priceAtVista} a vista\n`;
+        }
 
         // Show card payment only if NOT wholesale
-        if (!isWholesale && installmentPlan.installments > 1) {
+        if (!isWholesale && installmentPlan.installments > 1 && paymentOptions?.showInstallment !== false) {
             message += `  💳 ${installmentPlan.installments}x de ${installmentValue} (Total: ${installmentTotal})\n`;
+        }
+
+        if (selectedWarranty) {
+            const warrantyPriceFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedWarranty.price / 100);
+            message += `  🛡️ Garantia Est.: +${selectedWarranty.months} Meses (+${warrantyPriceFmt})\n`;
         }
 
         // Show available colors if provided
@@ -92,18 +108,44 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
     } else {
         // Customer format (original)
         message = `*📱 ORÇAMENTO DE PRODUTOS*\n`;
-        message += `📅 Data: ${date}\n\n`;
         message += `*ITENS:*\n`;
-        message += `• ${productName}\n`;
 
-        if (variant.color) {
-            message += `  Cor: ${variant.color}\n`;
+        const specs = [];
+        if (variant.ram && variant.storage) specs.push(`${variant.ram}/${variant.storage}`);
+        if (variant.color) specs.push(variant.color);
+
+        message += `• ${productName}`;
+        if (specs.length > 0) message += `, ${specs.join(', ')}`;
+        message += ` \n`;
+
+        if (selectedWarranty) {
+            const warrantyPriceFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedWarranty.price / 100);
+            message += `🛡️ Garantia Est.: +${selectedWarranty.months} Meses (+${warrantyPriceFmt})\n`;
         }
 
-        message += `  ${priceAtVista} à vista\n`;
+        const cashTotal = quote.cashPrice ? quote.cashPrice / 100 : installmentPlan.total / 100;
 
-        if (installmentPlan.installments > 1) {
-            message += `  💳 ${installmentPlan.installments}x de ${installmentValue} (Total: ${installmentTotal})\n`;
+        message += `\n*💰 VALOR TOTAL DA COMPRA*\n`;
+        message += `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cashTotal)}\n`;
+
+        message += `\n*💳 PAGAMENTO*\n`;
+        if (quote.mixedPaymentState && quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
+            // Mixed payment
+            const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
+            message += `À Vista (Pix): ${cashFmt}\n`;
+
+            const opt = quote.mixedPaymentState.cardOption!;
+            const moFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.monthlyValue / 100);
+            const totFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.totalWithFee / 100);
+            message += `Cartão: ${opt.installments}x de ${moFmt} (Total cart.: ${totFmt})\n`;
+        } else {
+            // Standard
+            if (paymentOptions?.showCash !== false) {
+                message += `À vista: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cashTotal)}\n`;
+            }
+            if (installmentPlan.installments > 1 && paymentOptions?.showInstallment !== false) {
+                message += `Parcelado: ${installmentPlan.installments}x de ${installmentValue} (Total: ${installmentTotal})\n`;
+            }
         }
 
         // Delivery information
@@ -127,11 +169,18 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
                 message += `Frete: ${s.name} (${price})\n`;
             }
 
+            const mapQuery = `${delivery.address.street}, ${delivery.address.number || ''}, Bairro ${delivery.address.neighborhood}, ${delivery.address.city} - ${delivery.address.state} - CEP: ${delivery.address.cep}`;
+            message += `🗺️ Maps: https://maps.google.com/?q=${encodeURIComponent(mapQuery)}\n`;
+
             if (delivery.notes) {
                 message += `Obs: ${delivery.notes}\n`;
             }
         } else {
             message += `\n*🏪 RETIRADA NA LOJA*\n`;
+            if (quote.storeAddress) {
+                message += `📍 ${quote.storeAddress}\n`;
+                message += `🗺️ Maps: https://maps.google.com/?q=${encodeURIComponent(quote.storeAddress)}\n`;
+            }
         }
 
         message += `\n---\n`;
@@ -149,8 +198,12 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
     }
 
     // Referral code tag
-    if (quote.referralCode && quote.referrerName) {
-        message += `\n🤝 Indicação de: ${quote.referrerName} (Cód: ${quote.referralCode})\n`;
+    if (quote.referralCode) {
+        if (quote.referrerName) {
+            message += `\n🤝 Indicação de: ${quote.referrerName} (Cód: ${quote.referralCode})\n`;
+        } else {
+            message += `\n🤝 Indicação (Cód): ${quote.referralCode}\n`;
+        }
     }
 
     return message;

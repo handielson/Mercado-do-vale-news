@@ -4,7 +4,7 @@ import type { CatalogProduct } from '@/types/catalog';
 import type { VariantSpecs, ProductVariants } from '@/services/productVariants';
 import type { InstallmentPlan } from '@/services/installmentCalculator';
 import { VariantSelector } from './VariantSelector';
-import { MixedPaymentSimulator } from './MixedPaymentSimulator';
+import { MixedPaymentSimulator, type MixedPaymentState } from './MixedPaymentSimulator';
 import { DeliveryOptions, type DeliveryOption } from './DeliveryOptions';
 import { calculateInstallments } from '@/services/installmentCalculator';
 import { generateQuoteMessage, generateWhatsAppLink } from '@/utils/whatsappMessageGenerator';
@@ -37,6 +37,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
         showCash: true,
         showInstallment: true
     });
+    const [mixedPaymentState, setMixedPaymentState] = useState<MixedPaymentState | null>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Moedas do Vale
@@ -45,10 +46,18 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
     const [useCoins, setUseCoins] = useState(false);
     const [coinDiscount, setCoinDiscount] = useState(0);
     const [coinsToSpend, setCoinsToSpend] = useState(0);
+    const [cashbackSettings, setCashbackSettings] = useState<any>(null);
 
-    // Garantia Estendida
+    // Indicação
+    const [referralInput, setReferralInput] = useState('');
+    const [referralError, setReferralError] = useState('');
+    const [referralName, setReferralName] = useState('');
+    const [isVerifyingReferral, setIsVerifyingReferral] = useState(false);
+
+    // Garantia Estendida e Configs de Loja
     const [warrantyOptions, setWarrantyOptions] = useState<WarrantyOption[]>([]);
     const [selectedWarranty, setSelectedWarranty] = useState<WarrantyOption | null>(null);
+    const [storeAddress, setStoreAddress] = useState('');
 
     // Cleanup timeout on unmount
     useEffect(() => {
@@ -67,13 +76,17 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
 
     // Effective price + coupon
     const effectivePrice = getEffectivePrice(product, customer) ?? 0;
-    const coupon = useCoupon(effectivePrice, customer?.customer_type);
+    const effectivePriceReais = effectivePrice / 100;
+    const coupon = useCoupon(effectivePriceReais, customer?.customer_type);
 
     // Carregar saldo de moedas do cliente e configs globais da empresa
     useEffect(() => {
         companySettingsService.get().then(settings => {
             if (settings?.extended_warranty_options) {
                 setWarrantyOptions(settings.extended_warranty_options.filter(o => o.active));
+            }
+            if (settings?.address) {
+                setStoreAddress(settings.address);
             }
         }).catch(() => { });
 
@@ -82,9 +95,39 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             .then(([bal, settings]) => {
                 setCoinBalance(bal?.balance ?? 0);
                 setCoinRate(settings.coins_to_brl_rate);
+                setCashbackSettings(settings);
             })
             .catch(() => { });
     }, [customer, isAdmin]);
+
+    // Validate Referral Code on input change (Debounced)
+    const applyReferral = async () => {
+        if (!referralInput.trim()) return;
+
+        setIsVerifyingReferral(true);
+        setReferralError('');
+        setReferralName('');
+
+        try {
+            const { validateReferralCode } = await import('@/services/cashbackService');
+            const result = await validateReferralCode(referralInput, customer?.id);
+            if (result.valid && result.referrerName) {
+                setReferralName(result.referrerName);
+            } else {
+                setReferralError(result.error || 'Código válido não encontrado');
+            }
+        } catch (error) {
+            setReferralError('Erro ao validar código');
+        } finally {
+            setIsVerifyingReferral(false);
+        }
+    };
+
+    const clearReferral = () => {
+        setReferralInput('');
+        setReferralName('');
+        setReferralError('');
+    };
 
     // Recalcular desconto de moedas quando ativado
     useEffect(() => {
@@ -93,8 +136,8 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             setCoinsToSpend(0);
             return;
         }
-        const base = coupon.finalPrice > 0 ? coupon.finalPrice : effectivePrice - coupon.discount;
-        validateCoinRedeem(customer.id, coinBalance, base)
+        const baseReais = coupon.finalPrice > 0 ? coupon.finalPrice : effectivePriceReais - coupon.discount;
+        validateCoinRedeem(customer.id, coinBalance, baseReais)
             .then(v => {
                 if (v.valid) {
                     setCoinDiscount(v.discount_brl);
@@ -105,11 +148,11 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                 }
             })
             .catch(() => { });
-    }, [useCoins, coinBalance, coupon.finalPrice, effectivePrice, coupon.discount, customer]);
+    }, [useCoins, coinBalance, coupon.finalPrice, effectivePriceReais, coupon.discount, customer]);
 
     // Update selected variant when initialVariant changes (when modal opens with pre-selected variant)
     useEffect(() => {
-        if (initialVariant && (initialVariant.ram || initialVariant.storage)) {
+        if (initialVariant && (initialVariant.ram || initialVariant.storage || initialVariant.color)) {
             setSelectedVariant(initialVariant);
         }
     }, [initialVariant]);
@@ -215,18 +258,22 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
     const warrantyPrice = selectedWarranty ? Math.round((effectivePrice * selectedWarranty.percentage) / 100) : 0;
     const effectivePriceWithWarranty = effectivePrice + warrantyPrice;
 
+    // Convert to final cents considering coupon and coins
+    const finalTotalCents = effectivePriceWithWarranty - Math.round(coupon.discount * 100) - Math.round(coinDiscount * 100);
+    const finalTotalReais = finalTotalCents / 100;
+
     // Load installment plans when price changes
     useEffect(() => {
-        if (!effectivePriceWithWarranty) return;
+        if (!finalTotalCents) return;
 
         const loadPlans = async () => {
-            const plans = await calculateInstallments(effectivePriceWithWarranty, 12);
+            const plans = await calculateInstallments(finalTotalCents, 12);
             setInstallmentPlans(plans);
             setSelectedPlan(plans.find(p => p.highlighted) || plans[0]);
         };
 
         loadPlans();
-    }, [effectivePriceWithWarranty, customer]);
+    }, [finalTotalCents, customer]);
 
     // Generate WhatsApp message
     const handleSendWhatsApp = async () => {
@@ -245,10 +292,14 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                 couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
                 referrerName: customer?.name,
                 referralCode: customer?.referral_code,
+                storeAddress,
                 selectedWarranty: selectedWarranty ? {
                     months: selectedWarranty.months,
                     price: warrantyPrice
-                } : undefined
+                } : undefined,
+                paymentOptions,
+                mixedPaymentState,
+                cashPrice: finalTotalCents
             });
 
             const link = await generateWhatsAppLink(message);
@@ -280,7 +331,10 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             selectedWarranty: selectedWarranty ? {
                 months: selectedWarranty.months,
                 price: warrantyPrice
-            } : undefined
+            } : undefined,
+            paymentOptions,
+            mixedPaymentState,
+            cashPrice: finalTotalCents
         });
 
         navigator.clipboard.writeText(message);
@@ -311,7 +365,8 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             product,
             variant: {
                 ram: selectedVariant.ram,
-                storage: selectedVariant.storage
+                storage: selectedVariant.storage,
+                color: selectedVariant.color
             },
             availableColors,
             price: effectivePrice,
@@ -403,7 +458,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                                         const cost = Math.round((effectivePrice * opt.percentage) / 100);
                                         return (
                                             <option key={opt.months} value={opt.months}>
-                                                +{opt.months} Meses (+ {formatPrice(cost * 100)})
+                                                +{opt.months} Meses (+ {formatPrice(cost)})
                                             </option>
                                         );
                                     })}
@@ -413,7 +468,10 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
 
                         {/* Simulador de Pagamento Combinado (Pix + Cartão) */}
                         {installmentPlans.length > 0 && (
-                            <MixedPaymentSimulator totalPrice={effectivePriceWithWarranty} />
+                            <MixedPaymentSimulator
+                                totalPrice={effectivePriceWithWarranty}
+                                onChange={setMixedPaymentState}
+                            />
                         )}
 
                         {/* Delivery Options */}
@@ -473,6 +531,50 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                             </div>
                         )}
 
+                        {/* Campo de Indicação (Referral) */}
+                        {!isAdmin && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                    🤝 Fui indicado por um amigo (Código)
+                                </label>
+                                {referralName ? (
+                                    <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                                        <span className="text-sm text-emerald-800 font-medium">
+                                            ✅ Indicado por: <strong>{referralName}</strong>
+                                        </span>
+                                        <button onClick={clearReferral} className="text-emerald-600 hover:text-emerald-800 text-xs underline">Remover</button>
+                                    </div>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={referralInput}
+                                            onChange={e => { setReferralInput(e.target.value.toUpperCase()); setReferralError(''); }}
+                                            onKeyDown={e => e.key === 'Enter' && applyReferral()}
+                                            placeholder="CÓDIGO DE INDICAÇÃO"
+                                            className={`flex-1 px-3 py-2 border-2 rounded-lg focus:outline-none font-mono uppercase text-sm ${referralError ? 'border-red-400 focus:border-red-500 bg-red-50' : 'border-slate-200 focus:border-blue-500 bg-white'}`}
+                                        />
+                                        <button
+                                            onClick={applyReferral}
+                                            disabled={isVerifyingReferral || !referralInput}
+                                            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                        >
+                                            {isVerifyingReferral ? '...' : 'Aplicar'}
+                                        </button>
+                                    </div>
+                                )}
+                                {referralError && (
+                                    <p className="text-xs text-red-500 font-medium">
+                                        {referralError}
+                                    </p>
+                                )}
+                                {!referralName && !referralError && !isVerifyingReferral && (
+                                    <p className="text-xs text-slate-500">
+                                        Mande o código de quem te indicou para que ele ganhe Moedas do Vale!
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
                         {/* Coupon Field */}
                         {!isAdmin && (
                             <div className="space-y-2">
@@ -502,7 +604,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                                         </button>
                                     </div>
                                 )}
-                                {coupon.error && <p className="text-xs text-red-600">{coupon.error}</p>}
+                                {coupon.error && <p className="text-xs text-red-600">Cupom não encontrado</p>}
                             </div>
                         )}
 
@@ -544,7 +646,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                                 {warrantyPrice > 0 && (
                                     <div className="flex justify-between text-blue-700">
                                         <span>Garantia (+{selectedWarranty?.months}m):</span>
-                                        <span>+ {formatPrice(warrantyPrice * 100)}</span>
+                                        <span>+ {formatPrice(warrantyPrice)}</span>
                                     </div>
                                 )}
                                 {coupon.discount > 0 && (
@@ -561,7 +663,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                                 )}
                                 <div className="flex justify-between text-slate-900 font-bold border-t border-slate-200 pt-1 mt-1">
                                     <span>Total:</span>
-                                    <span>{formatPrice((effectivePriceWithWarranty - coupon.discount - coinDiscount) * 100)}</span>
+                                    <span>{formatPrice(finalTotalCents)}</span>
                                 </div>
                             </div>
                         )}
@@ -600,7 +702,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
 
                                     <button
                                         onClick={handleSendWhatsApp}
-                                        disabled={isLoading || !selectedPlan}
+                                        disabled={isLoading || !selectedPlan || !!referralError || isVerifyingReferral}
                                         className="flex-1 py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-bold rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <Send className="w-5 h-5" />

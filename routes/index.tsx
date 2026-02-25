@@ -64,6 +64,7 @@ import CoinsInfoPage from '../pages/catalog/CoinsInfoPage';
 import LegacyMigrationPage from '../pages/LegacyMigration';
 import FieldMappingPage from '../pages/FieldMappingPage';
 import ExtendedWarrantyPage from '../pages/customer/ExtendedWarrantyPage';
+import { PromotionsPage } from '../pages/customer/PromotionsPage';
 
 
 // Temporary components (will be moved to separate files in next phase)
@@ -222,6 +223,11 @@ export const router = createBrowserRouter([
   {
     path: "/moedas-do-vale",
     element: <CoinsInfoPage />
+  },
+  // Promoções e Vantagens (Central Pública)
+  {
+    path: "/promocoes",
+    element: <PromotionsPage />
   },
   // Garantia Estendida (página pública)
   {

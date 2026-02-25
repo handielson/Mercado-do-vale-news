@@ -7,13 +7,21 @@ import { useEffect } from 'react';
 
 interface MixedPaymentSimulatorProps {
     totalPrice: number; // em centavos
+    onChange?: (state: MixedPaymentState) => void;
 }
 
-interface CardOption {
+export interface CardOption {
     installments: number;
     monthlyValue: number; // centavos
     totalWithFee: number; // centavos
     feePercent: number;
+}
+
+export interface MixedPaymentState {
+    cashCents: number;
+    cardCents: number;
+    selectedInstallment: number | null;
+    cardOption?: CardOption;
 }
 
 function formatCents(cents: number): string {
@@ -23,7 +31,7 @@ function formatCents(cents: number): string {
     }).format(cents / 100);
 }
 
-export function MixedPaymentSimulator({ totalPrice }: MixedPaymentSimulatorProps) {
+export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimulatorProps) {
     const [cashInput, setCashInput] = useState('');
     const [selectedInstallment, setSelectedInstallment] = useState<number | null>(null);
     const [paymentFees, setPaymentFees] = useState<any[]>([]);
@@ -74,6 +82,18 @@ export function MixedPaymentSimulator({ totalPrice }: MixedPaymentSimulatorProps
 
     const selectedOption = cardOptions.find(o => o.installments === selectedInstallment);
 
+    // Notificar componente pai sobre o estado da simulação
+    useEffect(() => {
+        if (onChange) {
+            onChange({
+                cashCents,
+                cardCents,
+                selectedInstallment,
+                cardOption: selectedOption
+            });
+        }
+    }, [cashCents, cardCents, selectedInstallment, selectedOption, onChange]);
+
     return (
         <div className="bg-gradient-to-br from-slate-50 to-blue-50 border-2 border-blue-100 rounded-xl p-4 space-y-4">
             {/* Título */}
@@ -91,7 +111,11 @@ export function MixedPaymentSimulator({ totalPrice }: MixedPaymentSimulatorProps
             {/* Botão Rápido: Pagar tudo no PIX */}
             <button
                 onClick={() => {
-                    setCashInput((totalPrice / 100).toFixed(2).replace('.', ','));
+                    if (cashCents === totalPrice) {
+                        setCashInput('');
+                    } else {
+                        setCashInput((totalPrice / 100).toFixed(2).replace('.', ','));
+                    }
                     setSelectedInstallment(null);
                 }}
                 className={`w-full p-3 rounded-xl border-2 text-left transition-all duration-150 ${cashCents === totalPrice
@@ -168,13 +192,11 @@ export function MixedPaymentSimulator({ totalPrice }: MixedPaymentSimulatorProps
                                     <span className={`font-bold text-xs md:text-sm ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>
                                         {option.installments === 1
                                             ? '1x no cartão'
-                                            : `${option.installments}x ${formatCents(option.monthlyValue)}`}
+                                            : `${option.installments}x de ${formatCents(option.monthlyValue)}`}
                                     </span>
-                                    {option.installments > 1 && (
-                                        <p className="text-[10px] md:text-xs text-slate-500 mt-1">
-                                            Total: {formatCents(option.totalWithFee)}
-                                        </p>
-                                    )}
+                                    <p className="text-[10px] md:text-xs text-slate-500 mt-1">
+                                        Total: {formatCents(option.totalWithFee)}
+                                    </p>
                                     {isSelected && (
                                         <div className="absolute top-1 right-1">
                                             <Check className="w-3.5 h-3.5 text-blue-600" />

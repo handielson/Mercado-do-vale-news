@@ -3,6 +3,7 @@ import { Heart, Share2, ShoppingCart } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
+import { CashbackBadge } from './CashbackBadge';
 
 interface ProductCardProps {
     product: CatalogProduct;
@@ -119,9 +120,12 @@ export function ProductCard({
                                         </span>
                                     </div>
                                 )}
-                                <p className="text-2xl font-bold text-blue-600">
-                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(discountedPrice)}
-                                </p>
+                                <div className="flex items-center gap-2">
+                                    <p className="text-2xl font-bold text-blue-600">
+                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(discountedPrice)}
+                                    </p>
+                                    <CashbackBadge paidAmountBrl={discountedPrice} variant="minimal" />
+                                </div>
                             </div>
 
                             <div className="flex gap-2">
@@ -183,10 +187,16 @@ export function ProductCard({
 
                 {/* Desconto */}
                 {hasDiscount && (
-                    <div className="absolute top-3 right-3">
+                    <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
                         <span className="text-sm bg-red-500 text-white px-3 py-1.5 rounded-full font-bold shadow-md">
                             -{product.discount_percentage}%
                         </span>
+                        <CashbackBadge paidAmountBrl={discountedPrice} variant="minimal" />
+                    </div>
+                )}
+                {!hasDiscount && (
+                    <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
+                        <CashbackBadge paidAmountBrl={discountedPrice} variant="minimal" />
                     </div>
                 )}
 

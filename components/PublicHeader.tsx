@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, User, LogOut, ChevronDown, Shield } from 'lucide-react';
+import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -68,12 +68,12 @@ export const PublicHeader: React.FC = () => {
 
                 <div className="flex items-center gap-4">
                     <Link
-                        to="/garantia-estendida"
+                        to="/promocoes"
                         className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Ver opções de Garantia Estendida"
+                        title="Ver Promoções e Vantagens"
                     >
-                        <Shield className="w-4 h-4" />
-                        <span className="font-medium">Garantia</span>
+                        <Tag className="w-4 h-4" />
+                        <span className="font-medium">Promoções</span>
                     </Link>
 
                     {user && customer ? (

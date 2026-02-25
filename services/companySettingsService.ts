@@ -27,6 +27,25 @@ export const companySettingsService = {
                 throw error;
             }
 
+            if (data) {
+                // Synthesize address if it's missing but individual fields exist
+                if (!data.address && data.address_street) {
+                    const parts = [];
+                    parts.push(`${data.address_street}, ${data.address_number || 'S/N'}`);
+                    if (data.address_complement) parts.push(data.address_complement);
+                    if (data.address_neighborhood) parts.push(data.address_neighborhood);
+
+                    const cityState = [];
+                    if (data.address_city) cityState.push(data.address_city);
+                    if (data.address_state) cityState.push(data.address_state);
+                    if (cityState.length > 0) parts.push(cityState.join(' - '));
+
+                    if (data.address_zip_code) parts.push(`CEP: ${data.address_zip_code}`);
+
+                    data.address = parts.filter(Boolean).join(' - ');
+                }
+            }
+
             return data;
         } catch (error) {
             console.error('Error fetching company settings:', error);

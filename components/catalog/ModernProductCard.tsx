@@ -11,6 +11,7 @@ import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { useCompare } from '@/contexts/CompareContext';
+import { CashbackBadge } from './CashbackBadge';
 
 interface ModernProductCardProps {
     product: CatalogProduct;
@@ -253,6 +254,8 @@ export function ModernProductCard({
 
     const currentImage = colorImages[currentColorIndex] || imageUrl;
 
+    const effectivePriceReais = (getEffectivePrice(currentProduct, customer) || 0) / 100;
+
     return (
         <>
             <div
@@ -292,6 +295,11 @@ export function ModernProductCard({
                             </button>
                         </>
                     )}
+
+                    {/* Cashback Badge (top right) */}
+                    <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5 z-10 pointer-events-none">
+                        <CashbackBadge paidAmountBrl={effectivePriceReais} variant="minimal" />
+                    </div>
 
                     {/* Badges (top left) */}
                     <div className="absolute top-3 left-3 flex flex-col gap-2">
@@ -394,7 +402,6 @@ export function ModernProductCard({
                     {/* Variant Selector (RAM/Storage) - NOVO */}
                     {productGroup && productGroup.variants && productGroup.variants.length > 1 ? (
                         <div className="space-y-2">
-                            <span className="text-xs text-slate-600 font-medium">Configurações:</span>
                             <div className="space-y-1.5">
                                 {productGroup.variants.map((variant, idx) => {
                                     const installment = variantInstallments.get(idx);
@@ -471,7 +478,6 @@ export function ModernProductCard({
                     ) : (
                         // Fallback: Show individual product specs when no productGroup
                         <div className="space-y-2">
-                            <span className="text-xs text-slate-600 font-medium">Configurações:</span>
                             <div className="p-2.5 rounded-lg border-2 border-blue-600 bg-blue-50">
                                 <div className="flex justify-between items-start mb-1">
                                     {/* Only show RAM/Storage if at least one exists */}
@@ -559,7 +565,11 @@ export function ModernProductCard({
                         initialVariant={
                             selectedVariant
                                 ? { ram: selectedVariant.ram, storage: selectedVariant.storage }
-                                : undefined
+                                : {
+                                    ram: currentProduct.specs?.ram,
+                                    storage: currentProduct.specs?.storage,
+                                    color: currentProduct.specs?.color
+                                }
                         }
                     />
                 </>
