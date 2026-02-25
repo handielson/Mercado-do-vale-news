@@ -439,6 +439,128 @@ export function ProductDetailsModal({
                             );
                         })()}
 
+                        {/* Water Resistance Legend */}
+                        {(() => {
+                            if (!templateValues) return null;
+                            const resKey = Object.keys(templateValues).find(key => key.toLowerCase() === 'resistencia');
+                            if (!resKey) return null;
+
+                            const resValue = templateValues[resKey];
+                            if (!resValue || typeof resValue !== 'string') return null;
+
+                            const normalizedRes = resValue.toUpperCase().replace(/\s/g, '');
+
+                            const ipDescriptions: Record<string, string> = {
+                                'IP52': 'Aparelho resistente a poeira (sem proteção total) e a pequenas gotas de água caindo verticalmente. Não é adequado para chuva ou mergulho.',
+                                'IP53': 'Aparelho inclui proteção contra poeira e resistência a borrifos de água em ângulos de até 60º. Ideal para chuva leve ou respingos acidentais.',
+                                'IP54': 'Proteção comprovada contra poeira (quantidade não prejudicial) e respingos de água vindos de qualquer direção limitados a 10 litros por minuto (5 min).',
+                                'IP64': 'Vedação total contra entrada de poeira e proteção contra respingos de água de todas as direções. Nenhuma proteção contra jatos ou imersão.',
+                                'IP65': 'Proteção total contra poeira e resistente a jatos de água de baixa pressão (bocal de 6,3 mm) de qualquer direção.',
+                                'IP67': 'Proteção total contra poeira. O aparelho pode ser submerso em até 1 metro de água doce estática por no máximo 30 minutos.',
+                                'IP68': 'Proteção total contra poeira e capaz de suportar imersão contínua em água doce (geralmente até 1,5 metros por 30 minutos, dependendo do fabricante).',
+                                'IP69': 'Alta vedação térmica. Totalmente protegido contra poeira e suporta jatos severos de água em alta pressão e alta temperatura de perto.',
+                                'IP69K': 'Nível máximo industrial. Protegido completamente contra poeira, jatos de água de alta pressão (100 bar) e lavagem com água quente (80°C).'
+                            };
+
+                            const matchedIp = Object.keys(ipDescriptions).find(ip => normalizedRes.includes(ip));
+
+                            if (!matchedIp) return null;
+
+                            return (
+                                <div className="border-t border-slate-200 pt-6">
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                        💧 Resistência a Água
+                                    </h3>
+                                    <div className="p-4 bg-cyan-50 border border-cyan-200 rounded-lg flex flex-col gap-3">
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-3xl">💧</div>
+                                            <div>
+                                                <p className="font-semibold text-cyan-800">{matchedIp}</p>
+                                                <p className="text-sm text-cyan-700 mt-0.5">
+                                                    {ipDescriptions[matchedIp]}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="mt-1 p-2.5 bg-red-50 border border-red-100 rounded-md">
+                                            <p className="text-xs text-red-600 font-medium flex items-center gap-1.5">
+                                                <span className="text-red-500">⚠️</span>
+                                                Atenção: A garantia não cobre danos causados por contato com líquidos.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Drop/Scratch Resistance Legend */}
+                        {(() => {
+                            if (!templateValues) return null;
+
+                            // Em vez de procurar pela "chave", vamos varrer todos os valores
+                            // procurando pelas menções explícitas aos tipos de vidro
+                            let matchedGlass: string | null = null;
+                            let screenValueFound = '';
+
+                            const glassDescriptions: Record<string, string> = {
+                                'GORILLAGLASS3': 'Boa resistência a riscos do dia a dia. Oferece proteção básica contra danos e arranhões.',
+                                'GORILLAGLASS4': 'Alta resistência contra quedas. Projetado para suportar impactos de até 1 metro em superfícies ásperas.',
+                                'GORILLAGLASS5': 'Resistência extrema a quedas. Pode sobreviver a quedas de até 1,2 metros em superfícies duras (como asfalto).',
+                                'GORILLAGLASS6': 'Durabilidade máxima. Suporta múltiplas quedas consecutivas e impactos severos, além de ser altamente resistente a riscos.',
+                                'GORILLAGLASSVICTUS': 'Resistência premium a quedas (até 2 metros) e proteção dobrada contra arranhões em comparação ao Gorilla Glass 6.',
+                                'GORILLAGLASSVICTUS+': 'Versão aprimorada do Victus. Máxima resistência contra quedas de até 2 metros com proteção contra riscos superior à concorrência.',
+                                'GORILLAGLASSVICTUS2': 'Performance extrema de resistência. Otimizado para suportar quedas em concreto (até 1 metro) e asfalto (até 2 metros) em dispositivos mais pesados.',
+                                'CERAMICSHIELD': 'Desenvolvido pela Apple e Corning. Incorpora cristais de nano-cerâmica no vidro para um desempenho de queda até 4x maior do que gerações anteriores.'
+                            };
+
+                            for (const key in templateValues) {
+                                let val = templateValues[key];
+                                if (Array.isArray(val)) val = val.join(' ');
+                                if (!val || typeof val !== 'string') continue;
+
+                                const normalizedVal = val.toUpperCase().replace(/\s/g, '');
+
+                                const match = Object.keys(glassDescriptions).find(glass => normalizedVal.includes(glass));
+                                if (match) {
+                                    matchedGlass = match;
+                                    screenValueFound = val;
+                                    break;
+                                }
+                            }
+
+                            if (!matchedGlass) return null;
+
+                            // Formatar nome amigável para exibição
+                            const displayNames: Record<string, string> = {
+                                'GORILLAGLASS3': 'Gorilla Glass 3',
+                                'GORILLAGLASS4': 'Gorilla Glass 4',
+                                'GORILLAGLASS5': 'Gorilla Glass 5',
+                                'GORILLAGLASS6': 'Gorilla Glass 6',
+                                'GORILLAGLASSVICTUS': 'Gorilla Glass Victus',
+                                'GORILLAGLASSVICTUS+': 'Gorilla Glass Victus+',
+                                'GORILLAGLASSVICTUS2': 'Gorilla Glass Victus 2',
+                                'CERAMICSHIELD': 'Ceramic Shield (Apple)'
+                            };
+
+                            return (
+                                <div className="border-t border-slate-200 pt-6">
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                        📱 Resistência da Tela
+                                    </h3>
+                                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg flex flex-col gap-3">
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-3xl">📱</div>
+                                            <div>
+                                                <p className="font-semibold text-orange-800">{displayNames[matchedGlass]}</p>
+                                                <p className="text-sm text-orange-700 mt-0.5">
+                                                    {glassDescriptions[matchedGlass]}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         {/* Pricing */}
                         <div className="border-t border-slate-200 pt-6">
                             <h3 className="text-lg font-semibold text-slate-900 mb-3">Preço</h3>

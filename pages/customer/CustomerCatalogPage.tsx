@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut, Grid, List, Search } from 'lucide-react';
 import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
 import { catalogService } from '../../services/catalogService';
+import { getCompanyData } from '../../services/companyService';
+import type { Company } from '../../types/company';
 import type { CatalogProduct } from '../../types/catalog';
 import { ModernProductCard } from '../../components/catalog/ModernProductCard';
 import { ProductCard } from '../../components/catalog/ProductCard';
@@ -21,6 +23,7 @@ export const CustomerCatalogPage: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [favorites, setFavorites] = useState<string[]>([]);
     const [compareToast, setCompareToast] = useState<string | null>(null);
+    const [company, setCompany] = useState<Company | null>(null);
 
     const showCompareToast = (msg: string) => {
         setCompareToast(msg);
@@ -36,7 +39,17 @@ export const CustomerCatalogPage: React.FC = () => {
         if (customer?.id) {
             loadFavorites();
         }
+        loadCompany();
     }, [customer]);
+
+    const loadCompany = async () => {
+        try {
+            const data = await getCompanyData();
+            setCompany(data);
+        } catch (error) {
+            console.error('Error loading company data:', error);
+        }
+    };
 
     const loadProducts = async () => {
         try {
@@ -147,8 +160,20 @@ export const CustomerCatalogPage: React.FC = () => {
             <header className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-40">
                 <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <ShoppingBag className="text-blue-600" size={32} />
-                        <h1 className="text-2xl font-bold text-slate-800">Mercado do Vale</h1>
+                        {company?.logo ? (
+                            <img
+                                src={company.logo}
+                                alt={company?.name || "Mercado do Vale"}
+                                className="h-10 w-auto object-contain"
+                            />
+                        ) : (
+                            <>
+                                <ShoppingBag className="text-blue-600" size={32} />
+                                <h1 className="text-2xl font-bold text-slate-800">
+                                    {company?.name || "Mercado do Vale"}
+                                </h1>
+                            </>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-4">

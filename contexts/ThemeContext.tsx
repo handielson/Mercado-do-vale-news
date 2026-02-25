@@ -49,7 +49,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const themeSettings: ThemeSettings = {
           company_name: data.company_name || 'Mercado do Vale',
           theme_colors: data.theme_colors || { primary: '#3b82f6', secondary: '#1e293b' },
-          logo_main: data.logo_main,
+          logo_main: data.logo || null,
           logo_dark: data.logo_dark,
         };
 

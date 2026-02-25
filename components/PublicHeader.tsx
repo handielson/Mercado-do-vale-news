@@ -56,12 +56,14 @@ export const PublicHeader: React.FC = () => {
                         <img
                             src={themeSettings.logo_main}
                             alt={themeSettings.company_name}
-                            className="h-9 w-auto object-contain"
+                            className="h-10 w-auto object-contain"
                         />
                     ) : (
-                        <ShoppingBag className="text-blue-600" size={32} />
+                        <>
+                            <ShoppingBag className="text-blue-600" size={32} />
+                            <h1 className="text-2xl font-bold text-slate-800">{themeSettings.company_name}</h1>
+                        </>
                     )}
-                    <h1 className="text-2xl font-bold text-slate-800">{themeSettings.company_name}</h1>
                 </Link>
 
                 <div className="flex items-center gap-4">

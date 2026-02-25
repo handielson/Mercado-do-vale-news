@@ -66,6 +66,31 @@ mercado-do-vale/
 └── utils/                # Funções utilitárias
 ```
 
+```
+
+---
+
+## 🎨 INTEGRAÇÃO DE TEMA E LOGOMARCA DA EMPRESA
+
+O sistema possui configurações de tema que afetam dinamicamente o visual público e administrativo, persistidos globalmente na tabela `company_settings`.
+
+### 1. `ThemeContext.tsx` (Provider Global)
+O **ThemeContext** é acoplado na raiz da aplicação (App.tsx) e tem o papel exclusivo de fazer um *fetch on load* silencioso das configurações de empresa (CompanySettings) no servidor.
+
+**Funcionamento:**
+- Solicita da tabela `company_settings` as chaves do tema e informações de marca.
+- Injeta variáves de cores CSS dinamicamente no `:root` do HTML limitando `primary` e `secondary` colors, por exemplo.
+- Atualiza o `<title>` da página e o `<link rel="icon">` (Favicon) usando React Helmet.
+- **Importante:** A logomarca oficial da empresa vem da coluna **`logo`** da tabela, e não `logo_main`. Mapear incorretamente no provedor resulta na renderização da rota de Fallback (Texto puro + Ícone estático).
+
+### 2. `PublicHeader.tsx` (Componente de Cabeçalho)
+Responsável por formatar e apresentar o cabeçalho no catálogo de vendas aos visitantes e clientes logados.
+
+**Integração:**
+- Absorve as dependências fornecidas pelo `ThemeContext` via `useTheme()`.
+- Possui renderização condicional avançada: se `themeSettings.logo_main` detém uma URL de imagem gerada pelo provedor, a **logo imagem (img)** é renderizada e o **título em texto** (ex. "Mercado do Vale") acompanhado do ícone da Sacola é **escondido**.
+- Caso o lojista não tenha definido logomarca no painel, ele herda a propriedade com uma graceful degradation e mostra a marca padronizada escrita.
+
 ---
 
 ## 📦 SERVICES — Funções Exportadas
