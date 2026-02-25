@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, Copy, ExternalLink, Check, Sparkles, Edit2 } from 'lucide-react';
 
-import { companySettingsService } from '../../../services/companySettingsService';
+import { companySettingsService } from '../../services/companySettingsService';
 import toast from 'react-hot-toast';
 
 const AI_LINKS = [
