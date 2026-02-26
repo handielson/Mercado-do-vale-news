@@ -2361,6 +2361,28 @@ Implementado em **2 lugares**:
 
 ---
 
+### `EANInput` — Gerador de Códigos EAN (Brasil)
+```tsx
+<EANInput value={eans} onChange={setEans} />
+```
+**Usado por:** `IdentificationStep` (ProductEntryWizard), `ProductForm`, `ProductBasicInfo`
+**Comportamento Especial:**
+- Contém um botão **"Gerar EAN (BR)"** (ou "Gerar Novo EAN (BR)").
+- O gerador cria automaticamente um código EAN-13 válido usando o prefixo **789** (Brasil) e calcula o dígito verificador matemático. Permite gerar outro se houver colisão de EANs no banco.
+
+---
+
+### `LabelPrintModal` — Impressão de Etiquetas Térmicas
+**Usado por:** `ProductCard` (Listagem de Produtos - Admin)
+**Dependências Novas:** `react-barcode` e `react-to-print`
+**Funcionalidades:**
+- Ao clicar no ícone de "Impressora" no card do produto, abre um modal de preview de etiqueta.
+- Configurado para o tamanho **80mm x 50mm** (padrão Argox/Zebra).
+- **Editável em tempo de execução:** Permite alterar o Texto, EAN impresso e Preço na hora, sem alterar o produto no banco.
+- **Show/Hide Preço:** Chave liga/desliga para ocultar o preço na impressão.
+
+---
+
 ### `ImageUploader` — Upload de Imagens
 ```tsx
 <ImageUploader onUpload={handleUpload} maxFiles={5} />

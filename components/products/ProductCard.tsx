@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Edit, Package, Trash2 } from 'lucide-react';
+import { Edit, Package, Trash2, Printer } from 'lucide-react';
 import { Product } from '../../types/product';
 import { ProductStatus } from '../../utils/field-standards';
 import { cn } from '../../utils/cn';
 import { supabase } from '../../services/supabase';
+import { LabelPrintModal } from './LabelPrintModal';
 
 interface ProductCardProps {
     product: Product;
@@ -18,6 +19,7 @@ interface ProductCardProps {
  */
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
     const [modelImageUrl, setModelImageUrl] = useState<string | null>(null);
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
     // Buscar foto do modelo como fallback quando produto não tem imagem própria
     useEffect(() => {
@@ -140,6 +142,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             <Edit className="w-4 h-4 text-slate-600" />
                         </button>
                         <button
+                            onClick={() => setIsPrintModalOpen(true)}
+                            className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors group"
+                            title="Imprimir Etiqueta"
+                        >
+                            <Printer className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
+                        </button>
+                        <button
                             onClick={() => onDelete?.(product)}
                             className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
                             title="Excluir produto"
@@ -199,6 +208,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     </div>
                 </div>
             </div>
+
+            {/* Print Modal */}
+            <LabelPrintModal
+                isOpen={isPrintModalOpen}
+                onClose={() => setIsPrintModalOpen(false)}
+                product={product}
+            />
         </div>
     );
 };
