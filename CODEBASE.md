@@ -7133,3 +7133,111 @@ const mensagem = applyDict(templateComTags, dict);
 ### `pages/admin/settings/FieldConfigPage.tsx`  Dicionário de Campos (Global Fields)
 **Rota:** /admin/settings/fields`n**Tabela:** `custom_fields` e `category_field_requirements`
 **O que faz:** Gerencia o sistema global de campos do Mercado do Vale. Permite criar, editar e excluir chaves de sistema (specs, logistics, basic, etc) e definir nativamente qual o tipo de formatação ou componente React que vai ser gerado para este atributo no formulário (ex: CurrencyInput, IMEIInput, uppercase, titlecase). Substituiu a arquitetura antiga baseada em localStorage ou metadados de categoria. Atua em conjunto com o `CustomFieldsEditorNew` para aplicar esses campos como Obrigatórios, Opcionais ou Ocultos em cada categoria.
+
+---
+
+### feature: Sistema de Feedbacks de Clientes (Ouvidoria)
+
+Permite ao administrador coletar Dúvidas, Reclamações e Sugestões do cliente de modo identificado ou anônimo, criando um elo de melhoria contínua para a interface pública.
+
+#### Arquivos Envolvidos
+| Arquivo | Papel |
+|---------|-------|
+| `supabase/migrations/20260226_customer_feedbacks.sql` | Migration SQL de criação e RLS. Insert público permitido e Leitura apenas para `ADMIN`. |
+| `types/feedback.ts` | Tipagem base de `CustomerFeedback` e `FeedbackInput`. |
+| `services/feedbackService.ts` | `submitFeedback` (insert sem company_id inicial), `listFeedbacks`, `updateFeedback`, `getUnreadCount`. |
+| `components/catalog/FeedbackFloatingButton.tsx` | Botão flutuante minimalista na interface pública que abre o Modal. |
+| `components/catalog/FeedbackModal.tsx` | Formulário flexível (contemplando toggle para Modo Anônimo e envio via API service). |
+| `pages/admin/feedbacks/FeedbackListPage.tsx` | Dashboard visual das ouvidorias recebendo filtros práticos e gerador dinâmico do Link de WhatsApp do retorno. |
+| `routes/index.tsx` | Verifica as rotas protegidas administrativas e dispara alertas de "Mensagens não lidas" no layout Admin via badges. |
+
+**Como funciona a segurança:**
+- Público pode realizar um `INSERT` seguro na tabela sem precisar declarar UUID da loja na mão, os campos sensíveis não voltam em respostas HTTP pelo RLS ser bloqueado em SELECT para o papel `anon`.
+- Retorno de contato (WhatsApp): se o lojista decidir responder, a integração aciona uma URL de API Web do watsapp já com formatação pré-renderizada resgatando a dúvida original do cliente.
+
+---
+
+### feature: Sistema de Promoções e Benefícios
+
+Permite ao administrador criar e gerenciar promoções globais da loja (ex: "1 Ano de Película Grátis"), com controle de status manual ou por agendamento com timer regressivo. Quando uma venda é registrada no PDV, o benefício é concedido automaticamente ao cliente e rastreado mensalmente.
+
+#### Arquivos envolvidos
+
+| Arquivo | Papel |
+|---------|-------|
+| `supabase/migrations/20260226_promotions_and_benefits.sql` | Criação das tabelas `promotions`, `customer_benefits` e `benefit_redemptions` com RLS. **⚠️ Contém bug de RLS corrigido pela migration v2.** |
+| `supabase/migrations/20260226_promotions_rls_fix.sql` | Fix v1: qualifica `id` → `customers.id`. **⚠️ Ainda com bug: usa `customers.id` ao invés de `customers.user_id`.** |
+| `supabase/migrations/20260227_promotions_rls_fix_v2.sql` | **FIX DEFINITIVO.** Troca `customers.id = auth.uid()` por `customers.user_id = auth.uid()`. Esse é o SQL que deve estar aplicado no Supabase. |
+| `services/promotionService.ts` | CRUD de promoções: `getAllPromotions`, `getPromotionStatus`, `updatePromotion`. |
+| `services/benefitService.ts` | Concessão e resgate de benefícios mensais: `grantBenefit`, `getBenefitsByCustomer`, `redeemBenefit`. |
+| `pages/admin/promotions/PromotionsPage.tsx` | Central Admin de Promoções: lista, badge de status (ativa/inativa/agendada), modal de configuração com timer regressivo. |
+| `pages/customer/FreeScreenProtectorRulesPage.tsx` | Página pública do regulamento `/promocoes/pelicula-gratis`. Botão Voltar navega para `/`. |
+| `pages/customer/PromotionsPage.tsx` | Central pública de vantagens `/promocoes`. |
+| `components/customer/profile/BenefitsTab.tsx` | Aba "Meus Benefícios" no perfil do cliente. |
+| `pages/catalog/index.tsx` | Banner de promoção ativo no catálogo: exibe título da promo + link "Ver condições e regulamento". |
+
+#### `services/promotionService.ts`
+
+**Tabela:** `promotions`
+
+| Função | Assinatura | O que faz |
+|--------|-----------|-----------|
+| `getAllPromotions()` | `(): Promise<Promotion[]>` | Lista todas as promoções (admin) ordenadas por `created_at desc` |
+| `getPromotionStatus(type)` | `(type: string): Promise<{ isActive: boolean; promotion: Promotion \| null }>` | Avalia dinamicamente se a promoção está ativa agora (considera status `scheduled` + datas) |
+| `updatePromotion(id, updates)` | `(id: string, updates): Promise<boolean>` | Atualiza status/datas. **Usa `.select('id')` para detectar falha silenciosa do RLS — lança erro se 0 rows afetadas.** |
+
+**Tipo `PromotionStatus`:** `'active' | 'inactive' | 'scheduled'`
+
+**Lógica de `getPromotionStatus`:**
+1. `status === 'inactive'` → `isActive: false`
+2. `status === 'active'` → `isActive: true`
+3. `status === 'scheduled'` → verifica `now >= start_date && now <= end_date`
+
+**⚠️ Usado por:** `PromotionsPage` (admin), `CatalogContent` (banner público)
+
+---
+
+#### 🔴 Bug de RLS — Raiz do Problema e Fix Definitivo
+
+**Sintoma:** Admin salva promoção, toast de sucesso aparece, mas status não muda no banco.
+
+**Causa:** A tabela `customers` tem dois campos de UUID distintos:
+- `customers.id` → UUID da tabela (PK gerado pelo Postgres)
+- `customers.user_id` → UUID do `auth.users` (= `auth.uid()`)
+
+As políticas RLS originais usavam `WHERE customers.id = auth.uid()` — **ERRADO**. O `auth.uid()` retorna o UUID do sistema de autenticação, que corresponde ao `customers.user_id`, não ao `customers.id`. Por isso, a subquery do `EXISTS` nunca encontrava o admin e o UPDATE bloqueava silenciosamente (sem erro, 0 rows afetadas).
+
+**Fix:** `supabase/migrations/20260227_promotions_rls_fix_v2.sql` — aplica `WHERE customers.user_id = auth.uid()` em todas as políticas de `promotions`, `customer_benefits` e `benefit_redemptions`.
+
+**⚠️ AÇÃO OBRIGATÓRIA:** Executar `20260227_promotions_rls_fix_v2.sql` no SQL Editor do Supabase antes de qualquer operação de escrita nas tabelas de promoção.
+
+---
+
+#### Banner de Promoção no Catálogo (`pages/catalog/index.tsx`)
+
+O banner é renderizado condicionalmente com base em `promoActive && promoData`:
+
+```tsx
+{promoData && promoActive && (
+    <div>
+        <h2>🛡️ {promoData.title}</h2>
+        <a href="/promocoes/pelicula-gratis">Ver condições e regulamento →</a>
+        {/* Timer regressivo (se promoData.end_date existir) */}
+    </div>
+)}
+```
+
+- **Título:** vem do campo `promotions.title` (banco)
+- **Link:** sempre aponta para `/promocoes/pelicula-gratis` (hardcoded — específico para promoção de película)
+- **⚠️ Description removida** do banner em 2026-02-27 (substituída pelo link de regulamento)
+- **Timer regressivo:** exibido se `promoData.end_date` existir; desativa `promoActive` automaticamente ao expirar
+
+#### Bugs Corrigidos na Sessão 2026-02-27
+
+| Bug | Arquivo | Descrição |
+|-----|---------|-----------|
+| Falha silenciosa RLS | `services/promotionService.ts` | `updatePromotion` sem `.select('id')` retornava `true` mesmo com 0 rows afetadas |
+| Timezone drift (-3h) | `pages/admin/promotions/PromotionsPage.tsx` | `substring(0,16)` em UTC ISO exibia horário errado no `datetime-local`; resolvido com `toLocalDatetimeValue()` |
+| `loadPromotions` sem await | `pages/admin/promotions/PromotionsPage.tsx` | Toast de sucesso aparecia antes do reload dos dados — resolvido com `await` |
+| Botão "Voltar" | `pages/customer/FreeScreenProtectorRulesPage.tsx` | `navigate(-1)` levava para página anterior variável; trocado para `navigate('/')` |
+
