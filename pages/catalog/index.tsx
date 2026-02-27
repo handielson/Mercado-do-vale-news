@@ -12,7 +12,9 @@ import { PublicHeader } from '@/components/PublicHeader';
 import { CatalogSectionComponent } from '@/components/catalog/CatalogSection';
 import { FloatingCartButton } from '@/components/catalog/FloatingCartButton';
 import { QuoteCartSidebar } from '@/components/catalog/QuoteCartSidebar';
+import { FeedbackFloatingButton } from '@/components/catalog/FeedbackFloatingButton';
 import { useCatalog } from '@/hooks/useCatalog';
+import { promotionService, Promotion } from '@/services/promotionService';
 
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import { groupProductsByVariants } from '@/services/productGrouping';
@@ -31,6 +33,9 @@ function CatalogContent() {
     const [sectionsLoading, setSectionsLoading] = useState(true);
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [footerText, setFooterText] = useState('');
+    const [promoActive, setPromoActive] = useState(false);
+    const [promoData, setPromoData] = useState<Promotion | null>(null);
+    const [promoTimeLeft, setPromoTimeLeft] = useState<{ days: number, hours: number, minutes: number, seconds: number } | null>(null);
 
     const { customer } = useSupabaseAuth();
 
@@ -44,9 +49,10 @@ function CatalogContent() {
         }
     })();
 
-    // Ler ?search= da URL para suportar links de produto compartilhados
+    // Ler ?search= e ?categoria= da URL para suportar links compartilhados e botões de atalho
     const [searchParams] = useSearchParams();
     const initialSearchQuery = searchParams.get('search') ?? '';
+    const initialCategory = searchParams.get('categoria') ?? undefined;
 
     const {
         products,
@@ -64,6 +70,7 @@ function CatalogContent() {
     } = useCatalog({
         pageSize: 12,
         initialSearchQuery,
+        initialCategory,
         bypassCache: customer?.customer_type === 'ADMIN'
     });
 
@@ -73,7 +80,44 @@ function CatalogContent() {
         getCompanyData().then(c => {
             if (c.catalogFooterText) setFooterText(c.catalogFooterText);
         }).catch(() => { });
+
+        promotionService.getPromotionStatus('one_year_screen_protector')
+            .then(res => {
+                setPromoActive(res.isActive);
+                setPromoData(res.promotion);
+            }).catch(() => { });
     }, []);
+
+    // Timer regressivo para promoções programadas ou com data de fim
+    useEffect(() => {
+        if (!promoActive || !promoData || !promoData.end_date) {
+            setPromoTimeLeft(null);
+            return;
+        }
+
+        const endDate = new Date(promoData.end_date).getTime();
+
+        const timer = setInterval(() => {
+            const now = new Date().getTime();
+            const distance = endDate - now;
+
+            if (distance < 0) {
+                clearInterval(timer);
+                setPromoActive(false); // Desativa automaticamente na tela se der o tempo
+                setPromoTimeLeft(null);
+                return;
+            }
+
+            setPromoTimeLeft({
+                days: Math.floor(distance / (1000 * 60 * 60 * 24)),
+                hours: Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+                minutes: Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60)),
+                seconds: Math.floor((distance % (1000 * 60)) / 1000)
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [promoActive, promoData]);
 
     const loadSections = async () => {
         try {
@@ -170,6 +214,56 @@ function CatalogContent() {
                 }))}
             />
 
+            {/* Promo Banner Global */}
+            {promoData && promoActive && (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+                    <div className="rounded-2xl p-6 md:p-8 relative overflow-hidden shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 transition-all duration-500 bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-blue-500/20">
+                        <div className="absolute top-0 right-0 p-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                        <div className="relative z-10 flex-1 text-center md:text-left flex flex-col md:flex-row items-center justify-between w-full">
+                            <div>
+                                <h2 className="text-2xl md:text-3xl font-black mb-2 flex items-center justify-center md:justify-start gap-2">
+                                    🛡️ {promoData.title}
+                                </h2>
+                                <a
+                                    href="/promocoes/pelicula-gratis"
+                                    className="inline-flex items-center gap-1.5 text-blue-200 hover:text-white text-sm underline underline-offset-2 transition-colors"
+                                >
+                                    Ver condições e regulamento →
+                                </a>
+                            </div>
+
+                            {/* Contador */}
+                            {promoTimeLeft && (
+                                <div className="mt-4 md:mt-0 flex flex-col items-center justify-center bg-black/20 backdrop-blur-md border border-white/10 rounded-xl px-6 py-3 shrink-0">
+                                    <span className="text-xs uppercase tracking-widest text-blue-200 mb-1 font-semibold">Oferta Expira Em</span>
+                                    <div className="flex items-center gap-2 text-white font-mono text-xl font-bold">
+                                        <div className="flex flex-col items-center">
+                                            <span>{promoTimeLeft.days.toString().padStart(2, '0')}</span>
+                                            <span className="text-[9px] text-blue-300">DIAS</span>
+                                        </div>
+                                        <span className="text-blue-400/50 -mt-3">:</span>
+                                        <div className="flex flex-col items-center">
+                                            <span>{promoTimeLeft.hours.toString().padStart(2, '0')}</span>
+                                            <span className="text-[9px] text-blue-300">HRS</span>
+                                        </div>
+                                        <span className="text-blue-400/50 -mt-3">:</span>
+                                        <div className="flex flex-col items-center">
+                                            <span>{promoTimeLeft.minutes.toString().padStart(2, '0')}</span>
+                                            <span className="text-[9px] text-blue-300">MIN</span>
+                                        </div>
+                                        <span className="text-blue-400/50 -mt-3">:</span>
+                                        <div className="flex flex-col items-center">
+                                            <span>{promoTimeLeft.seconds.toString().padStart(2, '0')}</span>
+                                            <span className="text-[9px] text-blue-300">SEG</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Main Content */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Header com busca e controles */}
@@ -249,6 +343,9 @@ function CatalogContent() {
 
             {/* Floating Cart Button */}
             <FloatingCartButton onClick={() => setIsCartOpen(true)} />
+
+            {/* Feedback Button */}
+            <FeedbackFloatingButton />
 
             {/* Cart Sidebar */}
             <QuoteCartSidebar
