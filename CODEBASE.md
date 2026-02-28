@@ -93,6 +93,17 @@ O **ThemeContext** é acoplado na raiz da aplicação (App.tsx) e tem o papel ex
 - Atualiza o `<title>` da página e o `<link rel="icon">` (Favicon) usando React Helmet.
 - **Importante:** A logomarca oficial da empresa vem da coluna **`logo`** da tabela, e não `logo_main`. Mapear incorretamente no provedor resulta na renderização da rota de Fallback (Texto puro + Ícone estático).
 
+**Campos expostos em `ThemeSettings`:**
+| Campo | Fonte (company_settings) | Uso |
+|-------|--------------------------|-----|
+| `company_name` | `company_name` | Título da aba, header |
+| `theme_colors` | `theme_colors` | Variáveis CSS dinâmicas |
+| `logo_main` | `logo` | Logo no header |
+| `logo_dark` | `logo_dark` | Logo modo escuro |
+| `data_abertura` | `data_abertura` | Badge "Desde X / N Anos" |
+| `address_city` | `address_city` | Cidade padrão do WeatherWidget |
+| `address_state` | `address_state` | Estado padrão do WeatherWidget |
+
 ### 2. `PublicHeader.tsx` (Componente de Cabeçalho)
 Responsável por formatar e apresentar o cabeçalho no catálogo de vendas aos visitantes e clientes logados.
 
@@ -100,6 +111,40 @@ Responsável por formatar e apresentar o cabeçalho no catálogo de vendas aos v
 - Absorve as dependências fornecidas pelo `ThemeContext` via `useTheme()`.
 - Possui renderização condicional avançada: se `themeSettings.logo_main` detém uma URL de imagem gerada pelo provedor, a **logo imagem (img)** é renderizada e o **título em texto** (ex. "Mercado do Vale") acompanhado do ícone da Sacola é **escondido**.
 - Caso o lojista não tenha definido logomarca no painel, ele herda a propriedade com uma graceful degradation e mostra a marca padronizada escrita.
+
+**Grupo da esquerda (logo, badge de anos, clima):**
+1. Logo da empresa (imagem ou texto fallback)
+2. `getStoreAgeBadge()` — "DESDE X / N Anos" (oculto em mobile)
+3. `<WeatherWidget>` — Previsão do tempo da cidade da loja (oculto em mobile)
+
+**Botão Promoções:**
+- Visual: gradiente laranja→vermelho (`#f97316 → #ef4444`), formato pill, emoji 🔥, ponto pulsante (`animate-ping`)
+- Hover: `scale-105` + sombra
+
+### 3. `components/WeatherWidget.tsx` (Widget de Clima)
+Widget de previsão do tempo exibido no header público.
+
+**Props:** `{ defaultCity?: string, defaultState?: string }`
+
+**APIs usadas (gratuitas, sem chave, sem limite):**
+- Geocoding: `https://geocoding-api.open-meteo.com/v1/search?name={cidade}&country=BR`
+- Clima: `https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,weathercode`
+
+**Cache `localStorage` (TTL 12h):**
+| Chave | Conteúdo |
+|-------|----------|
+| `weather_data` | `{ city, state, temp, code, updatedAt }` |
+| `weather_city` | `{ name, state, lat, lng }` — preferência do usuário |
+
+**Comportamento:**
+1. Monta → verifica cache (12h). Se válido, exibe sem chamar API.
+2. Se sem cache → busca coordenadas via Geocoding → busca clima → salva cache.
+3. Cidade padrão: `address_city` da empresa. Usuário pode trocar clicando no ✏️.
+4. Ao trocar cidade: salva preferência em `weather_city`, invalida `weather_data`, refaz fetch.
+5. Oculto em telas menores que `sm` (responsive).
+
+**⚠️ Depende de:** `ThemeContext` (via props passadas pelo `PublicHeader`)
+**⚠️ Não bloqueia o carregamento** — fetch assíncrono client-side
 
 ---
 

@@ -4,6 +4,7 @@ import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag } from 'lucide-reac
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { StoreStatusBadge } from './ui/StoreStatusBadge';
+import { WeatherWidget } from './WeatherWidget';
 
 /**
  * PublicHeader - Header for public pages (catalog)
@@ -97,6 +98,10 @@ export const PublicHeader: React.FC = () => {
                         )}
                     </Link>
                     {getStoreAgeBadge()}
+                    <WeatherWidget
+                        defaultCity={themeSettings.address_city}
+                        defaultState={themeSettings.address_state}
+                    />
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -104,11 +109,15 @@ export const PublicHeader: React.FC = () => {
 
                     <Link
                         to="/promocoes"
-                        className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95"
+                        style={{ background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
                         title="Ver Promoções e Vantagens"
                     >
-                        <Tag className="w-4 h-4" />
-                        <span className="font-medium">Promoções</span>
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                        </span>
+                        <span>🔥 Promoções</span>
                     </Link>
 
                     {user && customer ? (

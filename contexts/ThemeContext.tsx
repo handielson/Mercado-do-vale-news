@@ -9,6 +9,8 @@ interface ThemeSettings {
   logo_main?: string;
   logo_dark?: string;
   data_abertura?: string;
+  address_city?: string;
+  address_state?: string;
 }
 
 interface ThemeContextType {
@@ -53,6 +55,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           logo_main: data.logo || null,
           logo_dark: data.logo_dark,
           data_abertura: data.data_abertura || undefined,
+          address_city: data.address_city || undefined,
+          address_state: data.address_state || undefined,
         };
 
         // Update settings (will cause seamless re-render)
