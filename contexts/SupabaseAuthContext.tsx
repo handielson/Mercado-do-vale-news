@@ -35,11 +35,12 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     // User signed out - clear customer and stop loading
                     setCustomer(null);
                     setIsLoading(false);
-                } else {
-                    // User is authenticated - hold loading state until customer is fetched
-                    // The separate useEffect below handles the actual customer fetch
-                    setIsLoading(true);
                 }
+                // Note: when user is authenticated, loading is managed by the
+                // customer fetch useEffect below (depends on user?.id).
+                // We must NOT call setIsLoading(true) here because token refreshes
+                // also fire SIGNED_IN with the same user, causing unnecessary
+                // unmount/remount of protected pages (e.g. PDV).
             }
         );
 
