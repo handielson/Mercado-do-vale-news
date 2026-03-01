@@ -11,7 +11,8 @@ interface CartItemsSectionProps {
     onUpdateWarranty: (id: string, warranty: WarrantyOption | null) => void;
 }
 
-const formatPrice = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+const fmt = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
 export default function CartItemsSection({ items, warrantyOptions, onUpdateQuantity, onRemoveItem, onUpdateWarranty }: CartItemsSectionProps) {
     if (items.length === 0) return null;
@@ -23,75 +24,81 @@ export default function CartItemsSection({ items, warrantyOptions, onUpdateQuant
                 Itens Adicionados ({items.length})
             </h3>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
                 {items.map(item => {
                     const productTotal = item.unit_price * item.quantity;
                     const warrantyTotal = item.warranty_price || 0;
+                    const subtotal = productTotal + warrantyTotal;
 
                     return (
-                        <div key={item.id} className="p-4 border border-slate-200 rounded-lg flex flex-col gap-3">
-                            <div className="flex justify-between items-start gap-4">
-                                <div className="flex-1">
-                                    <h4 className="font-medium text-slate-800">{item.product_name}</h4>
+                        <div key={item.id} className="border border-slate-200 rounded-lg overflow-hidden">
 
-                                    {/* Linha do produto */}
-                                    <div className="text-sm text-slate-500 flex items-center gap-1 mt-1">
-                                        <span>{item.quantity}x {formatPrice(item.unit_price)}</span>
-                                        <span className="text-slate-300 mx-0.5">=</span>
-                                        <span className="font-medium text-slate-700">{formatPrice(productTotal)}</span>
-                                    </div>
+                            {/* Bloco de linhas estilo recibo */}
+                            <div className="px-4 pt-3 pb-2 space-y-1">
 
-                                    {/* Linha da garantia estendida (somente se selecionada) */}
-                                    {warrantyTotal > 0 && item.warranty_months && (
-                                        <div className="text-sm flex items-center gap-1 mt-1 text-blue-700">
-                                            <Shield size={13} className="text-blue-500 shrink-0" />
-                                            <span>Garantia +{item.warranty_months} meses</span>
-                                            <span className="text-slate-300 mx-0.5">=</span>
-                                            <span className="font-medium">+ {formatPrice(warrantyTotal)}</span>
-                                        </div>
-                                    )}
+                                {/* Linha 1: produto */}
+                                <div className="flex justify-between items-baseline gap-2">
+                                    <span className="text-sm font-medium text-slate-800">
+                                        {item.quantity}x {item.product_name}
+                                    </span>
+                                    <span className="text-sm font-semibold text-slate-800 shrink-0 tabular-nums">
+                                        {fmt(productTotal)}
+                                    </span>
                                 </div>
 
-                                <div className="flex flex-col items-end gap-2">
-                                    {/* Total do item (produto + garantia) */}
-                                    <div className="text-right">
-                                        <span className="font-bold text-slate-800">{formatPrice(item.subtotal)}</span>
-                                        {warrantyTotal > 0 && (
-                                            <p className="text-[10px] text-slate-400 leading-none mt-0.5">total c/ garantia</p>
-                                        )}
+                                {/* Linha 2: garantia (condicional) */}
+                                {warrantyTotal > 0 && item.warranty_months && (
+                                    <div className="flex justify-between items-baseline gap-2">
+                                        <span className="text-sm text-blue-700 flex items-center gap-1">
+                                            <Shield size={13} className="text-blue-500 shrink-0" />
+                                            + Garantia {item.warranty_months}M
+                                        </span>
+                                        <span className="text-sm font-medium text-blue-700 shrink-0 tabular-nums">
+                                            {fmt(warrantyTotal)}
+                                        </span>
                                     </div>
+                                )}
 
-                                    {/* Controle de quantidade */}
-                                    <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
-                                        <button
-                                            onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                                            className="p-1 hover:bg-white rounded text-slate-600 transition-colors"
-                                        >
-                                            <Minus size={16} />
-                                        </button>
-                                        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-                                        <button
-                                            onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                                            className="p-1 hover:bg-white rounded text-slate-600 transition-colors"
-                                        >
-                                            <Plus size={16} />
-                                        </button>
-                                    </div>
+                                {/* Linha 3: subtotal */}
+                                <div className="flex justify-end pt-1 border-t border-slate-100 mt-1">
+                                    <span className="text-sm text-slate-500">
+                                        Subtotal:{' '}
+                                        <span className="font-bold text-slate-900">{fmt(subtotal)}</span>
+                                    </span>
+                                </div>
+                            </div>
 
+                            {/* Controles: quantidade e remover */}
+                            <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-t border-slate-100">
+                                <button
+                                    onClick={() => onRemoveItem(item.id)}
+                                    className="text-red-400 hover:text-red-600 text-xs flex items-center gap-1 transition-colors"
+                                >
+                                    <Trash2 size={13} /> Remover
+                                </button>
+
+                                <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
                                     <button
-                                        onClick={() => onRemoveItem(item.id)}
-                                        className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1 transition-colors mt-1"
+                                        onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                                        className="p-1 hover:bg-slate-100 rounded text-slate-600 transition-colors"
                                     >
-                                        <Trash2 size={16} /> Remover
+                                        <Minus size={14} />
+                                    </button>
+                                    <span className="w-7 text-center text-sm font-semibold text-slate-700">{item.quantity}</span>
+                                    <button
+                                        onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                                        className="p-1 hover:bg-slate-100 rounded text-slate-600 transition-colors"
+                                    >
+                                        <Plus size={14} />
                                     </button>
                                 </div>
                             </div>
 
                             {/* Seletor de Garantia Estendida */}
                             {warrantyOptions.length > 0 && !item.is_gift && (
-                                <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-col gap-2">
+                                <div className="bg-blue-50/50 px-4 py-3 border-t border-blue-100 flex flex-col gap-2">
                                     <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
-                                        <Shield size={16} className="text-blue-600" />
+                                        <Shield size={15} className="text-blue-600" />
                                         Garantia Estendida
                                     </div>
                                     <select
@@ -112,7 +119,7 @@ export default function CartItemsSection({ items, warrantyOptions, onUpdateQuant
                                             const price = Math.round((item.unit_price * opt.percentage) / 100);
                                             return (
                                                 <option key={opt.months} value={opt.months}>
-                                                    +{opt.months} Meses (+{formatPrice(price)})
+                                                    +{opt.months} Meses (+{fmt(price)})
                                                 </option>
                                             );
                                         })}

@@ -265,33 +265,47 @@ export default function ReceiptPreview({
                     </div>
                     {items.length > 0 ? (
                         <div className="space-y-2">
-                            {items.map((item, index) => (
-                                <div key={index} className="flex justify-between text-sm">
-                                    <div className="flex-1">
-                                        <span className="text-slate-600">{item.quantity}x </span>
-                                        <span className="text-slate-800">{item.product_name}</span>
-                                        {item.is_gift && (
-                                            <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                                                BRINDE
+                            {items.map((item, index) => {
+                                const productTotal = item.unit_price * item.quantity;
+                                const warrantyTotal = item.warranty_price || 0;
+
+                                return (
+                                    <div key={index} className="space-y-0.5">
+                                        {/* Linha do produto */}
+                                        <div className="flex justify-between text-sm">
+                                            <div className="flex-1">
+                                                <span className="text-slate-600">{item.quantity}x </span>
+                                                <span className="text-slate-800">{item.product_name}</span>
+                                                {item.is_gift && (
+                                                    <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                                                        BRINDE
+                                                    </span>
+                                                )}
+                                                {item.quantity > 1 && (
+                                                    <span className="text-xs text-slate-500 ml-2">
+                                                        (Uni {formatCurrency(item.unit_price)})
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className="font-mono text-slate-800 ml-2 text-right">
+                                                {formatCurrency(productTotal)}
                                             </span>
-                                        )}
-                                        {item.quantity > 1 && (
-                                            <span className="text-xs text-slate-500 ml-2">
-                                                (Uni {formatCurrency(item.unit_price)})
-                                            </span>
-                                        )}
-                                        {item.warranty_months && item.warranty_price && (
-                                            <div className="text-xs text-blue-600 mt-0.5 ml-4 font-medium">
-                                                🛡️ + Garantia {item.warranty_months}M ({formatCurrency(item.warranty_price)})
+                                        </div>
+
+                                        {/* Linha da garantia (se selecionada) */}
+                                        {item.warranty_months && warrantyTotal > 0 && (
+                                            <div className="flex justify-between text-sm text-blue-700 pl-3">
+                                                <span className="flex items-center gap-1">
+                                                    🛡️ + Garantia {item.warranty_months}M
+                                                </span>
+                                                <span className="font-mono ml-2 text-right">
+                                                    {formatCurrency(warrantyTotal)}
+                                                </span>
                                             </div>
                                         )}
                                     </div>
-                                    <span className="font-mono text-slate-800 ml-2 text-right">
-                                        {/* Mostrar preço integral, mesmo para brindes */}
-                                        {formatCurrency((item.unit_price * item.quantity) + (item.warranty_price || 0))}
-                                    </span>
-                                </div>
-                            ))}
+                                );
+                            })}
                             <div className="pt-2 mt-2 border-t border-slate-300 text-sm text-right">
                                 <span className="text-xs text-slate-500">Subtotal (A): </span>
                                 <span className="font-mono font-semibold text-slate-800">{formatCurrency(subtotal)}</span>
