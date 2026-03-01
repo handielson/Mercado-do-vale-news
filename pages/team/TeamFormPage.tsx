@@ -189,11 +189,18 @@ export default function TeamFormPage() {
         try {
             setSaving(true);
 
+            // Sanitize date fields: empty strings must become undefined (not sent) to avoid Postgres 22007
+            const dataToSave = {
+                ...formData,
+                hire_date: formData.hire_date || (null as any),
+                birth_date: formData.birth_date || undefined,
+            };
+
             if (isEditing && id) {
-                await teamService.update(id, formData);
+                await teamService.update(id, dataToSave);
                 toast.success('Membro da equipe atualizado com sucesso!');
             } else {
-                await teamService.create(formData);
+                await teamService.create(dataToSave);
                 toast.success('Membro da equipe criado com sucesso!');
             }
 
