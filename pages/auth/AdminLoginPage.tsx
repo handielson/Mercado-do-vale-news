@@ -33,7 +33,7 @@ export const AdminLoginPage: React.FC = () => {
             if (customer.customer_type === 'ADMIN') {
                 console.log('🔐 [Admin Login] Admin confirmed via context, redirecting...');
                 toast.success('Login admin realizado com sucesso!');
-                navigate('/admin/dashboard');
+                navigate('/admin');
             } else {
                 console.warn('🔐 [Admin Login] Access denied - not admin:', customer.customer_type);
                 supabase.auth.signOut();

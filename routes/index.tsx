@@ -13,7 +13,6 @@ import { RecuperarSenhaPage } from '../pages/auth/RecuperarSenhaPage';
 import { RedefinirSenhaPage } from '../pages/auth/RedefinirSenhaPage';
 import { CustomerCatalogPage } from '../pages/customer/CustomerCatalogPage';
 import { CustomerProfilePage } from '../pages/customer/CustomerProfilePage';
-import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { SupabaseProtectedRoute } from '../components/SupabaseProtectedRoute';
 import { ClientTypes } from '../utils/field-standards';
@@ -298,15 +297,6 @@ export const router = createBrowserRouter([
   {
     path: "/garantia-estendida",
     element: <ExtendedWarrantyPage />
-  },
-  // Admin Dashboard (Supabase Auth)
-  {
-    path: "/admin/dashboard",
-    element: (
-      <SupabaseProtectedRoute requireAdmin={true}>
-        <AdminDashboardPage />
-      </SupabaseProtectedRoute>
-    )
   },
   {
     path: "/admin",
