@@ -165,11 +165,6 @@ export default function TeamFormPage() {
             return;
         }
 
-        if (!formData.hire_date) {
-            toast.error('Data de contratação é obrigatória');
-            return;
-        }
-
         if (formData.cpf_cnpj) {
             const cleaned = formData.cpf_cnpj.replace(/\D/g, '');
             if (documentType === 'CPF' && cleaned.length !== 11) {
