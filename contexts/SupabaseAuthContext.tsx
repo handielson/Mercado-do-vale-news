@@ -24,76 +24,56 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.log('[DEBUG] SupabaseAuthContext MOUNTED');
         let isMounted = true;
 
-        // Check current session
-        console.log('[DEBUG] Starting getSession...');
         supabase.auth.getSession()
-            .then(({ data: { session } }) => {
-                console.log('[DEBUG] getSession resolved, isMounted:', isMounted);
-                if (!isMounted) {
-                    console.warn('[DEBUG] Component unmounted before getSession resolved!');
-                    return;
-                }
+            .then(async ({ data: { session } }) => {
+                if (!isMounted) return;
 
-                setUser(session?.user ?? null)
-
-                // CRITICAL: Set loading to false IMMEDIATELY after getting session
-                // Don't wait for loadCustomerData to complete
-                setIsLoading(false)
+                setUser(session?.user ?? null);
 
                 if (session?.user) {
-                    console.log('[DEBUG] Loading customer data for user:', session.user.id);
-                    // Load customer data in background, don't block UI
-                    loadCustomerData(session.user.id).catch(err => {
-                        if (!isMounted) return;
-                        console.error('[SupabaseAuth] Failed to load customer data:', err)
-                        // Don't block - user can still use the app
-                    })
-                } else {
-                    console.log('[DEBUG] No session found');
+                    // Aguarda carregar os dados do customer ANTES de liberar o loading
+                    // Sem isso o ProtectedRoute vê customer=null e redireciona para login
+                    try {
+                        await loadCustomerData(session.user.id);
+                    } catch (err) {
+                        console.error('[SupabaseAuth] Failed to load customer data:', err);
+                    }
                 }
+
+                if (isMounted) setIsLoading(false);
             })
             .catch(err => {
-                console.error('[DEBUG] getSession error, isMounted:', isMounted);
                 if (!isMounted) return;
-                console.error('[SupabaseAuth] Session error:', err)
-                setIsLoading(false) // Critical: always set loading to false
-            })
+                console.error('[SupabaseAuth] Session error:', err);
+                setIsLoading(false);
+            });
 
-        // Listen for auth changes
-        console.log('[DEBUG] Setting up auth state listener...');
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
-                console.log('[DEBUG] Auth state changed:', event, 'isMounted:', isMounted);
-                if (!isMounted) {
-                    console.warn('[DEBUG] Component unmounted before auth state change!');
-                    return;
-                }
+                if (!isMounted) return;
 
-                console.log('Auth state changed:', event)
-                setUser(session?.user ?? null)
+                console.log('Auth state changed:', event);
+                setUser(session?.user ?? null);
 
                 if (session?.user) {
-                    // Load customer data in background, don't block
                     loadCustomerData(session.user.id).catch(err => {
                         if (!isMounted) return;
-                        console.error('[SupabaseAuth] Failed to load customer on auth change:', err)
-                    })
+                        console.error('[SupabaseAuth] Failed to load customer on auth change:', err);
+                    });
                 } else {
-                    setCustomer(null)
+                    setCustomer(null);
                 }
 
-                // CRITICAL: Always set loading to false after auth state change
-                // This was missing and causing infinite loading
-                setIsLoading(false)
+                setIsLoading(false);
             }
-        )
+        );
 
         return () => {
-            console.log('[DEBUG] SupabaseAuthContext UNMOUNTING');
             isMounted = false;
             subscription.unsubscribe();
-        }
+        };
     }, [])
+
 
     // Load customer data linked to auth user
     const loadCustomerData = async (userId: string) => {
