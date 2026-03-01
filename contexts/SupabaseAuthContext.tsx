@@ -29,6 +29,12 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 if (!isMounted) return;
 
                 console.log('Auth state changed:', event);
+
+                // CRITICAL: Set isLoading=true IMMEDIATELY before any async work.
+                // This prevents ProtectedRoute from seeing user!=null + customer==null
+                // and redirecting back to login during the async customer fetch window.
+                setIsLoading(true);
+
                 setUser(session?.user ?? null);
 
                 if (session?.user) {
