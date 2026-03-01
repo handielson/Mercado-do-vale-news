@@ -7366,3 +7366,66 @@ Botão inline no card (entre Impressora e Deletar) para alternar `status` do pro
 | `ROW_COUNT` em PL/pgSQL | Migration SQL | Substituído por `GET DIAGNOSTICS v_rows_updated = ROW_COUNT` |
 | Título "Catálogo de Produtos" | `pages/catalog/index.tsx` | Renomeado para "Todos os Produtos" e movido para antes do grid principal |
 
+
+---
+
+## 🚚 CALCULADORA DE FRETE AVULSO (2026-03-01)
+
+### Visão Geral
+
+Ferramenta administrativa em **Frete → Calcular Frete** (`/admin/settings/shipping?tab=calcular`) para cotação de frete sem vínculo com uma venda.
+
+### Arquivos Envolvidos
+
+| Arquivo | Papel |
+|---|---|
+| `components/shipping/FreightCalculator.tsx` | Componente principal da calculadora |
+| `pages/admin/settings/ShippingPage.tsx` | Aba "Calcular Frete" — monta o componente |
+| `api/melhor-envio-calculate.ts` | Proxy Vercel para cálculo de frete (evita CORS) |
+| `api/melhor-envio-label.ts` | Proxy Vercel para geração de etiqueta |
+| `supabase/migrations/20260228_shipping_secondary_cep.sql` | Coluna `secondary_origin_cep` em `shipping_settings` |
+
+### Fluxo Principal
+
+1. Admin seleciona **CEP de Origem** (loja ou alternativo)
+2. Admin busca **cliente cadastrado** (autocomplete na tabela `customers`) ou digita o **CEP de destino** manualmente
+3. Admin adiciona **produtos** ao carrinho (busca por nome ou SKU; dimensões via `models.template_values`)
+4. Sistema calcula totais consolidados e valida **limites dos Correios** (peso ≤ 30kg, soma dims ≤ 200cm)
+5. Clica **Calcular Frete** → chama `/api/melhor-envio-calculate` (proxy → Melhor Envio)
+6. Resultados exibidos com **checkbox** de seleção
+
+### Compartilhamento de Cotação
+
+- Selecionar ≥ 1 transportadora → barra azul aparece com botões:
+  - **WhatsApp** → `wa.me/?text=<texto formatado>`
+  - **Copiar** → `navigator.clipboard`
+- Texto inclui itens, CEP de origem + endereço, destino + endereço, transportadoras selecionadas
+
+### Geração de Etiqueta
+
+- Botão **Etiqueta** em cada resultado → modal com formulário do destinatário
+- Campos pré-preenchidos automaticamente pelo CEP de destino (via ViaCEP) e pelo cliente selecionado
+- Fluxo: `POST /api/v2/me/cart` → `POST /api/v2/me/shipment/checkout` → `POST /api/v2/me/shipment/generate` → URL de impressão
+- ⚠️ Consome crédito real do Melhor Envio
+
+### Dados de Dimensão dos Produtos
+
+Os dados de envio ficam em `models.template_values` (JSONB), sob as chaves:
+- `weight_kg` (convertido ×1000 para gramas internamente)
+- `dimensions.height_cm`, `dimensions.width_cm`, `dimensions.depth_cm`
+
+### CEP Info (ViaCEP)
+
+Todos os CEPs exibem endereço completo buscado da ViaCEP: `logradouro, bairro, localidade - UF`
+
+### Busca de Cliente
+
+- Campo de autocomplete acima do CEP de destino
+- Busca na tabela `customers` por `name`, `phone` ou `cpf_cnpj`
+- Ao selecionar: preenche `destCep` e formulário do modal de etiqueta automaticamente
+- Endereço vem de `customers.address` (JSONB: `{street, number, complement, neighborhood, city, state, zipCode}`)
+
+### Dashboard — Atalho Rápido
+
+`pages/admin/AdminDashboardPage.tsx` exibe 6 cards de acesso rápido. O card **Calcular Frete** navega para `/admin/settings/shipping?tab=calcular` (inicializa direto na aba correta via `useSearchParams`).
+

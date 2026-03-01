@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Truck, Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Package } from 'lucide-react';
 import { FreightCalculator } from '../../../components/shipping/FreightCalculator';
 import { shippingService } from '../../../services/shippingService';
@@ -239,7 +240,9 @@ function PriceRangeForm({ range, zoneId, onSave, onCancel }: {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ShippingPage() {
-    const [activeTab, setActiveTab] = useState<Tab>('config');
+    const [searchParams] = useSearchParams();
+    const initialTab = (searchParams.get('tab') === 'calcular' ? 'calculator' : 'config') as Tab;
+    const [activeTab, setActiveTab] = useState<Tab>(initialTab);
     const [settings, setSettings] = useState<ShippingSettings | null>(null);
     const [zones, setZones] = useState<ShippingZone[]>([]);
     const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
