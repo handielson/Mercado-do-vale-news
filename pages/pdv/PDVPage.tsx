@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { validateCoupon, applyCoupon, type Coupon } from '../../services/couponService';
 import { earnCoinsForPurchase } from '../../services/cashbackService';
 import { telegramBotService } from '../../services/telegramBot';
+import { teamService } from '../../services/team';
 
 interface Customer {
     id: string;
@@ -77,12 +78,14 @@ export default function PDVPage() {
     const [warrantyContent, setWarrantyContent] = useState('');
     const [warrantyDeliveryType, setWarrantyDeliveryType] = useState<DeliveryTypeWarranty>('store_pickup');
 
-    // Mock de entregadores (TODO: buscar do Supabase)
-    const deliveryPersons = [
-        { id: '1', name: 'João Silva' },
-        { id: '2', name: 'Maria Santos' },
-        { id: '3', name: 'Pedro Oliveira' }
-    ];
+    // Entregadores reais do Supabase (role = 'delivery')
+    const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string }[]>([]);
+
+    React.useEffect(() => {
+        teamService.list({ role: 'delivery', is_active: true })
+            .then(members => setDeliveryPersons(members.map(m => ({ id: m.id, name: m.name }))))
+            .catch(() => { /* falha silenciosa — seção de entrega fica sem entregadores */ });
+    }, []);
 
 
     // Estado das taxas de pagamento
