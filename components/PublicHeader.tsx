@@ -105,10 +105,31 @@ export const PublicHeader: React.FC = () => {
                         )}
                     </Link>
                     {getStoreAgeBadge()}
+                    {/* Clima — só no desktop */}
+                    <div className="hidden sm:flex">
+                        <WeatherWidget
+                            defaultCity={themeSettings.address_city}
+                            defaultState={themeSettings.address_state}
+                        />
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <StoreStatusBadge />
+
+                    {/* Promoções — só no desktop */}
+                    <Link
+                        to="/promocoes"
+                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95"
+                        style={{ background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
+                        title="Ver Promoções e Vantagens"
+                    >
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                        </span>
+                        <span>🔥 Promoções</span>
+                    </Link>
 
                     {user && customer ? (
                         <>
@@ -253,9 +274,9 @@ export const PublicHeader: React.FC = () => {
                 </div>
             </div>
 
-            {/* Segunda linha — some ao rolar */}
+            {/* Segunda linha — só no mobile, some ao rolar */}
             <div
-                className="overflow-hidden transition-all duration-300 ease-in-out border-t border-slate-100"
+                className="sm:hidden overflow-hidden transition-all duration-300 ease-in-out border-t border-slate-100"
                 style={{ maxHeight: scrolled ? '0px' : '48px', opacity: scrolled ? 0 : 1 }}
             >
                 <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center justify-between gap-3">
