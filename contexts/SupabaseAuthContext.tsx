@@ -24,38 +24,9 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.log('[DEBUG] SupabaseAuthContext MOUNTED');
         let isMounted = true;
 
-        supabase.auth.getSession()
-            .then(async ({ data: { session } }) => {
-                if (!isMounted) return;
-
-                setUser(session?.user ?? null);
-
-                if (session?.user) {
-                    // Aguarda carregar os dados do customer ANTES de liberar o loading
-                    // Sem isso o ProtectedRoute vê customer=null e redireciona para login
-                    try {
-                        await loadCustomerData(session.user.id);
-                    } catch (err) {
-                        console.error('[SupabaseAuth] Failed to load customer data:', err);
-                    }
-                }
-
-                if (isMounted) setIsLoading(false);
-            })
-            .catch(err => {
-                if (!isMounted) return;
-                console.error('[SupabaseAuth] Session error:', err);
-                setIsLoading(false);
-            });
-
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 if (!isMounted) return;
-
-                // INITIAL_SESSION é tratado exclusivamente pelo getSession() acima.
-                // Se deixarmos passar aqui, ele seta isLoading=false antes de
-                // loadCustomerData terminar, causando logout no F5.
-                if (event === 'INITIAL_SESSION') return;
 
                 console.log('Auth state changed:', event);
                 setUser(session?.user ?? null);
