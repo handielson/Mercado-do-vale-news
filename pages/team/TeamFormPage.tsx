@@ -44,11 +44,15 @@ export default function TeamFormPage() {
     const [formData, setFormData] = useState<TeamMemberInput>({
         name: '',
         cpf_cnpj: '',
+        birth_date: '',
         email: '',
         phone: '',
         role: '' as Role,
         employment_type: '' as EmploymentType,
         hire_date: '',
+        pix_key_type: 'cpf',
+        pix_key: '',
+        bank_name: '',
         address: {
             street: '',
             number: '',
@@ -76,6 +80,7 @@ export default function TeamFormPage() {
                 setFormData({
                     name: member.name,
                     cpf_cnpj: member.cpf_cnpj,
+                    birth_date: member.birth_date || '',
                     email: member.email,
                     phone: member.phone,
                     role: member.role,
@@ -83,8 +88,12 @@ export default function TeamFormPage() {
                     hire_date: member.hire_date,
                     salary: member.salary,
                     hourly_rate: member.hourly_rate,
+                    monthly_salary: member.monthly_salary,
                     commission_rate: member.commission_rate,
                     delivery_fee: member.delivery_fee,
+                    pix_key_type: member.pix_key_type || 'cpf',
+                    pix_key: member.pix_key || '',
+                    bank_name: (member as any).bank_name || '',
                     address: member.address,
                     is_active: member.is_active,
                     admin_notes: member.admin_notes
@@ -273,7 +282,8 @@ export default function TeamFormPage() {
 
 
 
-            {/* Tabs - so exibe em modo edicao */}
+            {/* Tabs - so exibe em modo edicao */}
+
             {isEditing && (
                 <div className="flex gap-1 mb-6 bg-slate-100 rounded-lg p-1">
                     <button

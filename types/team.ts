@@ -43,6 +43,7 @@ export interface TeamMember {
     // Dados Financeiros
     pix_key_type?: 'cpf' | 'phone' | 'email' | 'random';
     pix_key?: string;
+    bank_name?: string;
 
     // Status
     is_active: boolean;
@@ -89,6 +90,7 @@ export interface TeamMemberInput {
     // Dados Financeiros
     pix_key_type?: 'cpf' | 'phone' | 'email' | 'random';
     pix_key?: string;
+    bank_name?: string;
 
     // Status
     is_active?: boolean;
