@@ -110,16 +110,16 @@ export default function TeamFormPage() {
         // Validate based on selected type
         const cleaned = value.replace(/\D/g, '');
         if (documentType === 'CPF' && cleaned.length > 0 && cleaned.length !== 11) {
-            toast.error('CPF deve ter 11 dÃ­gitos');
+            toast.error('CPF deve ter 11 dígitos');
             return;
         }
         if (documentType === 'CNPJ' && cleaned.length > 0 && cleaned.length !== 14) {
-            toast.error('CNPJ deve ter 14 dÃ­gitos');
+            toast.error('CNPJ deve ter 14 dígitos');
             return;
         }
 
         if (!validateCpfCnpj(value)) {
-            toast.error(`${documentType} invÃ¡lido`);
+            toast.error(`${documentType} inválido`);
         }
     };
 
@@ -154,38 +154,38 @@ export default function TeamFormPage() {
 
         // Validation
         if (!formData.name.trim()) {
-            toast.error('Nome Ã© obrigatÃ³rio');
+            toast.error('Nome é obrigatório');
             return;
         }
 
         if (!formData.role) {
-            toast.error('Cargo Ã© obrigatÃ³rio');
+            toast.error('Cargo é obrigatório');
             return;
         }
 
         if (!formData.employment_type) {
-            toast.error('Tipo de vÃ­nculo Ã© obrigatÃ³rio');
+            toast.error('Tipo de vínculo é obrigatório');
             return;
         }
 
         if (formData.cpf_cnpj) {
             const cleaned = formData.cpf_cnpj.replace(/\D/g, '');
             if (documentType === 'CPF' && cleaned.length !== 11) {
-                toast.error('CPF deve ter 11 dÃ­gitos');
+                toast.error('CPF deve ter 11 dígitos');
                 return;
             }
             if (documentType === 'CNPJ' && cleaned.length !== 14) {
-                toast.error('CNPJ deve ter 14 dÃ­gitos');
+                toast.error('CNPJ deve ter 14 dígitos');
                 return;
             }
             if (!validateCpfCnpj(formData.cpf_cnpj)) {
-                toast.error(`${documentType} invÃ¡lido`);
+                toast.error(`${documentType} inválido`);
                 return;
             }
         }
 
         if (formData.email && !validateEmail(formData.email)) {
-            toast.error('Email invÃ¡lido');
+            toast.error('Email inválido');
             return;
         }
 
@@ -215,7 +215,7 @@ export default function TeamFormPage() {
             if (err.message?.includes('unique') ||
                 err.message?.includes('duplicate key') ||
                 err.code === '23505') {
-                toast.error(`Este ${documentType} jÃ¡ estÃ¡ cadastrado`);
+                toast.error(`Este ${documentType} já está cadastrado`);
             } else {
                 toast.error(err.message || 'Erro ao salvar membro da equipe');
             }
@@ -266,14 +266,14 @@ export default function TeamFormPage() {
                         {isEditing ? 'Editar Membro da Equipe' : 'Novo Membro da Equipe'}
                     </h1>
                     <p className="text-sm text-slate-600">
-                        {isEditing ? 'Atualize as informaÃ§Ãµes do membro' : 'Preencha os dados do novo membro'}
+                        {isEditing ? 'Atualize as informações do membro' : 'Preencha os dados do novo membro'}
                     </p>
                 </div>
             </div>
 
 
 
-            {/* Tabs â€” sÃ³ exibe em modo ediÃ§Ã£o */}
+            {/* Tabs - so exibe em modo edicao */}
             {isEditing && (
                 <div className="flex gap-1 mb-6 bg-slate-100 rounded-lg p-1">
                     <button
@@ -294,12 +294,12 @@ export default function TeamFormPage() {
                             : 'text-slate-600 hover:text-slate-900'
                             }`}
                     >
-                        HistÃ³rico de Entregas
+                        Histórico de Entregas
                     </button>
                 </div>
             )}
 
-            {/* Aba: HistÃ³rico de Entregas */}
+            {/* Aba: Histórico de Entregas */}
             {isEditing && activeTab === 'deliveries' && id ? (
                 <TeamDeliveryHistoryTab memberId={id} />
             ) : (
@@ -334,7 +334,7 @@ export default function TeamFormPage() {
                     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
                         <div className="flex items-center gap-2 mb-4">
                             <MapPin className="w-5 h-5 text-slate-600" />
-                            <h2 className="text-lg font-semibold text-slate-900">EndereÃ§o</h2>
+                            <h2 className="text-lg font-semibold text-slate-900">Endereço</h2>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -369,7 +369,7 @@ export default function TeamFormPage() {
                             </div>
 
                             <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">NÃºmero</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Número</label>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
@@ -435,29 +435,29 @@ export default function TeamFormPage() {
                                     <option value="">Selecione...</option>
                                     <option value="AC">Acre</option>
                                     <option value="AL">Alagoas</option>
-                                    <option value="AP">AmapÃ¡</option>
+                                    <option value="AP">Amapá</option>
                                     <option value="AM">Amazonas</option>
                                     <option value="BA">Bahia</option>
-                                    <option value="CE">CearÃ¡</option>
+                                    <option value="CE">Ceará</option>
                                     <option value="DF">Distrito Federal</option>
-                                    <option value="ES">EspÃ­rito Santo</option>
-                                    <option value="GO">GoiÃ¡s</option>
-                                    <option value="MA">MaranhÃ£o</option>
+                                    <option value="ES">Espírito Santo</option>
+                                    <option value="GO">Goiás</option>
+                                    <option value="MA">Maranhão</option>
                                     <option value="MT">Mato Grosso</option>
                                     <option value="MS">Mato Grosso do Sul</option>
                                     <option value="MG">Minas Gerais</option>
-                                    <option value="PA">ParÃ¡</option>
-                                    <option value="PB">ParaÃ­ba</option>
-                                    <option value="PR">ParanÃ¡</option>
+                                    <option value="PA">Pará</option>
+                                    <option value="PB">Paraíba</option>
+                                    <option value="PR">Paraná</option>
                                     <option value="PE">Pernambuco</option>
-                                    <option value="PI">PiauÃ­</option>
+                                    <option value="PI">Piauí</option>
                                     <option value="RJ">Rio de Janeiro</option>
                                     <option value="RN">Rio Grande do Norte</option>
                                     <option value="RS">Rio Grande do Sul</option>
-                                    <option value="RO">RondÃ´nia</option>
+                                    <option value="RO">Rondônia</option>
                                     <option value="RR">Roraima</option>
                                     <option value="SC">Santa Catarina</option>
-                                    <option value="SP">SÃ£o Paulo</option>
+                                    <option value="SP">São Paulo</option>
                                     <option value="SE">Sergipe</option>
                                     <option value="TO">Tocantins</option>
                                 </select>
@@ -469,24 +469,24 @@ export default function TeamFormPage() {
                     <div className="bg-amber-50 rounded-lg shadow-sm border border-amber-200 p-6">
                         <div className="flex items-center gap-2 mb-4">
                             <FileText className="w-5 h-5 text-amber-600" />
-                            <h2 className="text-lg font-semibold text-slate-900">ObservaÃ§Ãµes Internas</h2>
+                            <h2 className="text-lg font-semibold text-slate-900">Observações Internas</h2>
                             <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
                                 Apenas Admin
                             </span>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">
-                                Notas e ObservaÃ§Ãµes
+                                Notas e Observações
                             </label>
                             <textarea
                                 value={formData.admin_notes || ''}
                                 onChange={(e) => updateField('admin_notes', e.target.value)}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
-                                placeholder="Adicione observaÃ§Ãµes internas sobre este cliente (visÃ­vel apenas para administradores)..."
+                                placeholder="Adicione observações internas sobre este cliente (visível apenas para administradores)..."
                                 rows={4}
                             />
                             <p className="mt-1 text-xs text-slate-500">
-                                ðŸ’¡ Estas informaÃ§Ãµes sÃ£o privadas e nÃ£o serÃ£o compartilhadas com o cliente
+                                ðŸ’¡ Estas informações são privadas e não serão compartilhadas com o cliente
                             </p>
                         </div>
                     </div>
