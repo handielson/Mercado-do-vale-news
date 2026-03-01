@@ -25,6 +25,9 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         const totals = calculateSaleTotals(saleInput.items);
 
         // Prepare sale data
+        const isValidUUID = (id?: string) =>
+            !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
         const saleData = {
             customer_id: saleInput.customer_id,
             seller_id: saleInput.seller_id,
@@ -39,7 +42,10 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
 
             // Delivery fields
             delivery_type: saleInput.delivery_type,
-            delivery_person_id: saleInput.delivery_person_id,
+            // Only send delivery_person_id if it is a real UUID (not a mock placeholder)
+            delivery_person_id: isValidUUID(saleInput.delivery_person_id)
+                ? saleInput.delivery_person_id
+                : undefined,
             delivery_cost_store: saleInput.delivery_cost_store || 0,
             delivery_cost_customer: saleInput.delivery_cost_customer || 0,
             delivery_total: saleInput.delivery_total || 0
