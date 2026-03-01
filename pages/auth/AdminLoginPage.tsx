@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Loader2, Shield } from 'lucide-react';
 import { toast } from 'sonner';
@@ -8,15 +8,45 @@ import { supabase } from '../../services/supabase';
 /**
  * Admin Login Page
  * 
- * Dedicated login page for administrators
- * Validates that user has ADMIN customer_type after login
- * Separate from customer login for security
+ * ARCHITECTURE NOTE:
+ * This page does NOT fetch customer data itself. Instead, it calls signInWithPassword
+ * and then waits for the SupabaseAuthContext to load the customer profile via
+ * onAuthStateChange. This avoids a race condition where two concurrent fetches to
+ * 'customers' (one from here, one from the context) would cause an AbortError,
+ * which previously triggered an accidental signOut() → infinite loop.
  */
 export const AdminLoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [awaitingAuth, setAwaitingAuth] = useState(false);
     const navigate = useNavigate();
+    const { user, customer, isLoading } = useSupabaseAuth();
+
+    // Watch the context's customer state after login.
+    // This fires when the context finishes loading the customer profile.
+    useEffect(() => {
+        if (!awaitingAuth) return;
+        if (isLoading) return; // Still loading - wait
+
+        if (user && customer) {
+            if (customer.customer_type === 'ADMIN') {
+                console.log('🔐 [Admin Login] Admin confirmed via context, redirecting...');
+                toast.success('Login admin realizado com sucesso!');
+                navigate('/admin/dashboard');
+            } else {
+                console.warn('🔐 [Admin Login] Access denied - not admin:', customer.customer_type);
+                supabase.auth.signOut();
+                toast.error('Acesso negado. Esta área é restrita a administradores.');
+                setLoading(false);
+                setAwaitingAuth(false);
+            }
+        } else if (!user && !isLoading) {
+            // Auth failed or signOut happened
+            setLoading(false);
+            setAwaitingAuth(false);
+        }
+    }, [user, customer, isLoading, awaitingAuth, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -31,50 +61,17 @@ export const AdminLoginPage: React.FC = () => {
         try {
             console.log('🔐 [Admin Login] Starting login process...');
 
-            // Sign in with Supabase
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email,
-                password
-            });
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
 
             if (error) {
                 console.error('🔐 [Admin Login] Auth error:', error);
                 throw error;
             }
 
-            console.log('🔐 [Admin Login] Auth successful, checking admin status...');
-
-            // Fetch customer data to verify admin status
-            const { data: customerData, error: customerError } = await supabase
-                .from('customers')
-                .select('customer_type, name')
-                .eq('user_id', data.user.id)
-                .single();
-
-            if (customerError) {
-                console.error('🔐 [Admin Login] Customer fetch error:', customerError);
-                await supabase.auth.signOut();
-                throw new Error('Erro ao verificar permissões');
-            }
-
-            console.log('🔐 [Admin Login] Customer data:', customerData);
-
-            // Verify admin status
-            if (customerData?.customer_type !== 'ADMIN') {
-                console.warn('🔐 [Admin Login] Access denied - not admin:', customerData?.customer_type);
-                await supabase.auth.signOut();
-                toast.error('Acesso negado. Esta área é restrita a administradores.');
-                setLoading(false);
-                return;
-            }
-
-            console.log('🔐 [Admin Login] Admin verified, redirecting...');
-            toast.success('Login admin realizado com sucesso!');
-
-            // Small delay to show success message
-            setTimeout(() => {
-                navigate('/admin/dashboard');
-            }, 500);
+            // Auth succeeded. Now we wait for SupabaseAuthContext to load the customer.
+            // The useEffect above will handle the redirect or denial once it's ready.
+            console.log('🔐 [Admin Login] Auth successful, waiting for context to load customer...');
+            setAwaitingAuth(true);
 
         } catch (error: any) {
             console.error('🔐 [Admin Login] Error:', error);

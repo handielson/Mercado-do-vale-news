@@ -1,0 +1,15 @@
+﻿221a831 fix: prevenir AdminLoginPage de deslogar usuario (signOut) acidentalmente quando o fetch de perfil sofrer um AbortError benigno do React Router
+046d874 fix: impedir loop infinito no relogin ajustando isLoading no onAuthStateChange para segurar o ProtectedRoute
+b49755a fix: silenciar AbortErrors benignos causados por desmontagem de componente no React Router durante navega├º├úo de login
+600198b fix: serialize supabase auth initialization to prevent postgrest deadlock and AbortErrors
+26eb671 fix: reverter para getSession() explicito na inicializacao para evitar loop infinito na Vercel
+7ca2903 fix: corrigir erro de sintaxe no SupabaseAuthContext que quebrou o build da vercel
+4daee6c fix: retry automatico em caso de AbortError de conexao ao carregar customer
+89eb4a7 fix: remover getSession duplicado e usar async await no onAuthStateChange
+cbe8814 fix: aguardar loadCustomerData no onAuthStateChange tambem para evitar F5 logout apos refresh token
+37e989a fix: ignorar INITIAL_SESSION no onAuthStateChange para evitar race condition no F5
+5546675 fix: sessao nao persiste no F5 - aguardar loadCustomerData antes de liberar isLoading
+3605567 feat: cards Catalogo Publico e Calcular Frete no dashboard /admin
+fe26332 feat: dashboard com cards destaque para Catalogo Publico e Calcular Frete
+9c0ae69 feat: dashboard com atalhos rapidos, tab=calcular na ShippingPage e documentacao no CODEBASE.md
+e9e7b32 feat: busca de cliente cadastrado no calculo de frete avulso
