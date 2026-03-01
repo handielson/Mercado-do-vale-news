@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { CreditCard } from 'lucide-react';
 import { TeamMemberInput } from '../../types/team';
 
@@ -26,11 +26,24 @@ interface TeamFinancialSectionProps {
 export default function TeamFinancialSection({ formData, onFieldUpdate }: TeamFinancialSectionProps) {
     const keyType = (formData.pix_key_type || 'cpf') as PixKeyType;
 
-    const handleTypeChange = (newType: string) => {
-        onFieldUpdate('pix_key_type', newType || 'cpf');
-        // Pre-fill CPF chave when type is 'cpf'
-        if (newType === 'cpf' && formData.cpf_cnpj) {
+    // Auto-fill pix_key with CPF when type is 'cpf' and pix_key is empty
+    useEffect(() => {
+        if (
+            (formData.pix_key_type === 'cpf' || !formData.pix_key_type) &&
+            !formData.pix_key &&
+            formData.cpf_cnpj
+        ) {
             onFieldUpdate('pix_key', formData.cpf_cnpj);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.cpf_cnpj, formData.pix_key_type]);
+
+    const handleTypeChange = (newType: string) => {
+        const type = (newType || 'cpf') as PixKeyType;
+        onFieldUpdate('pix_key_type', type);
+        // Auto-fill CPF when switching to type 'cpf'
+        if (type === 'cpf') {
+            onFieldUpdate('pix_key', formData.cpf_cnpj || '');
         } else {
             onFieldUpdate('pix_key', '');
         }
@@ -64,6 +77,9 @@ export default function TeamFinancialSection({ formData, onFieldUpdate }: TeamFi
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                         Chave PIX
+                        {keyType === 'cpf' && (
+                            <span className="ml-1 text-xs text-blue-500">(preenchido automaticamente)</span>
+                        )}
                     </label>
                     <input
                         type="text"
@@ -93,10 +109,10 @@ export default function TeamFinancialSection({ formData, onFieldUpdate }: TeamFi
                 <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-green-600 flex-shrink-0" />
                     <div className="text-sm">
-                        <span className="text-green-700 font-medium">PIX configurado: </span>
+                        <span className="text-green-700 font-medium">PIX: </span>
                         <span className="text-green-800">
                             {PIX_KEY_LABELS[keyType]} • {formData.pix_key}
-                            {(formData as any).bank_name && ` (${(formData as any).bank_name})`}
+                            {(formData as any).bank_name && ` — ${(formData as any).bank_name}`}
                         </span>
                     </div>
                 </div>
