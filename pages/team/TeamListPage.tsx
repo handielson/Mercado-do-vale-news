@@ -292,7 +292,7 @@ export default function TeamListPage() {
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex items-center justify-end gap-2">
                                             <button
-                                                onClick={() => navigate(`/admin/team/${member.id}`)}
+                                                onClick={() => navigate(`/admin/team/${member.id}/edit`)}
                                                 className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                 title="Visualizar"
                                             >
