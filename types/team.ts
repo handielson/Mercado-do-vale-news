@@ -40,6 +40,10 @@ export interface TeamMember {
     commission_rate?: number; // % de comissão
     delivery_fee?: number; // Taxa por entrega
 
+    // Dados Financeiros
+    pix_key_type?: 'cpf' | 'phone' | 'email' | 'random';
+    pix_key?: string;
+
     // Status
     is_active: boolean;
 
@@ -81,6 +85,10 @@ export interface TeamMemberInput {
     monthly_salary?: number;
     commission_rate?: number;
     delivery_fee?: number;
+
+    // Dados Financeiros
+    pix_key_type?: 'cpf' | 'phone' | 'email' | 'random';
+    pix_key?: string;
 
     // Status
     is_active?: boolean;
