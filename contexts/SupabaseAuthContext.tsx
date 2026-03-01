@@ -25,30 +25,21 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         let isMounted = true;
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
+            (event, session) => { // NOT async - synchronous to prevent concurrent callbacks
                 if (!isMounted) return;
-
                 console.log('Auth state changed:', event);
-
-                // CRITICAL: Set isLoading=true IMMEDIATELY before any async work.
-                // This prevents ProtectedRoute from seeing user!=null + customer==null
-                // and redirecting back to login during the async customer fetch window.
-                setIsLoading(true);
 
                 setUser(session?.user ?? null);
 
-                if (session?.user) {
-                    try {
-                        await loadCustomerData(session.user.id);
-                    } catch (err) {
-                        if (!isMounted) return;
-                        console.error('[SupabaseAuth] Failed to load customer on auth change:', err);
-                    }
-                } else {
+                if (!session?.user) {
+                    // User signed out - clear customer and stop loading
                     setCustomer(null);
+                    setIsLoading(false);
+                } else {
+                    // User is authenticated - hold loading state until customer is fetched
+                    // The separate useEffect below handles the actual customer fetch
+                    setIsLoading(true);
                 }
-
-                if (isMounted) setIsLoading(false);
             }
         );
 
@@ -57,6 +48,28 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             subscription.unsubscribe();
         };
     }, [])
+
+    // Separate effect to load customer data only when the user ID actually changes.
+    // This is the key fix: even if INITIAL_SESSION + SIGNED_IN both fire for the same user,
+    // this effect runs only ONCE since user?.id doesn't change between the two events.
+    useEffect(() => {
+        if (!user) return;
+
+        let cancelled = false;
+        setIsLoading(true);
+
+        loadCustomerData(user.id)
+            .catch(err => {
+                if (cancelled) return;
+                console.error('[SupabaseAuth] Failed to load customer:', err);
+            })
+            .finally(() => {
+                if (!cancelled) setIsLoading(false);
+            });
+
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id]) // Only re-run when the user ID changes, not on every render
 
 
     // Load customer data linked to auth user
