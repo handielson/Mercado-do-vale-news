@@ -61,15 +61,17 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 setUser(session?.user ?? null);
 
                 if (session?.user) {
-                    loadCustomerData(session.user.id).catch(err => {
+                    try {
+                        await loadCustomerData(session.user.id);
+                    } catch (err) {
                         if (!isMounted) return;
                         console.error('[SupabaseAuth] Failed to load customer on auth change:', err);
-                    });
+                    }
                 } else {
                     setCustomer(null);
                 }
 
-                setIsLoading(false);
+                if (isMounted) setIsLoading(false);
             }
         );
 
