@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
-import { CreditCard } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { CreditCard, Copy, Check } from 'lucide-react';
 import { TeamMemberInput } from '../../types/team';
+import { toast } from 'sonner';
 
 type PixKeyType = 'cpf' | 'phone' | 'email' | 'random';
 
@@ -25,6 +26,21 @@ interface TeamFinancialSectionProps {
 
 export default function TeamFinancialSection({ formData, onFieldUpdate }: TeamFinancialSectionProps) {
     const keyType = (formData.pix_key_type || 'cpf') as PixKeyType;
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        const bankName = (formData as any).bank_name;
+        const lines = [
+            `Nome: ${formData.name || '-'}`,
+            `Tipo de PIX: ${PIX_KEY_LABELS[keyType]}`,
+            `PIX: ${formData.pix_key || '-'}`,
+            `Instituição: ${bankName || '-'}`,
+        ];
+        await navigator.clipboard.writeText(lines.join('\n'));
+        setCopied(true);
+        toast.success('Dados de pagamento copiados!');
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     // Auto-fill pix_key with CPF when type is 'cpf' and pix_key is empty
     useEffect(() => {
@@ -106,15 +122,26 @@ export default function TeamFinancialSection({ formData, onFieldUpdate }: TeamFi
             </div>
 
             {formData.pix_key && (
-                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-green-600 flex-shrink-0" />
-                    <div className="text-sm">
-                        <span className="text-green-700 font-medium">PIX: </span>
-                        <span className="text-green-800">
-                            {PIX_KEY_LABELS[keyType]} • {formData.pix_key}
-                            {(formData as any).bank_name && ` — ${(formData as any).bank_name}`}
-                        </span>
+                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <CreditCard className="w-4 h-4 text-green-600 flex-shrink-0" />
+                        <div className="text-sm">
+                            <span className="text-green-700 font-medium">PIX: </span>
+                            <span className="text-green-800">
+                                {PIX_KEY_LABELS[keyType]} • {formData.pix_key}
+                                {(formData as any).bank_name && ` — ${(formData as any).bank_name}`}
+                            </span>
+                        </div>
                     </div>
+                    <button
+                        type="button"
+                        onClick={handleCopy}
+                        title="Copiar dados de pagamento"
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors flex-shrink-0"
+                    >
+                        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copied ? 'Copiado!' : 'Copiar'}
+                    </button>
                 </div>
             )}
         </div>
