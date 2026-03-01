@@ -52,6 +52,11 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             async (event, session) => {
                 if (!isMounted) return;
 
+                // INITIAL_SESSION é tratado exclusivamente pelo getSession() acima.
+                // Se deixarmos passar aqui, ele seta isLoading=false antes de
+                // loadCustomerData terminar, causando logout no F5.
+                if (event === 'INITIAL_SESSION') return;
+
                 console.log('Auth state changed:', event);
                 setUser(session?.user ?? null);
 
