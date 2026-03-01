@@ -56,6 +56,17 @@ interface LabelForm {
     postal_code: string;
 }
 
+interface Customer {
+    id: string;
+    name: string;
+    cpf_cnpj?: string;
+    phone?: string;
+    address?: {
+        street?: string; number?: string; complement?: string;
+        neighborhood?: string; city?: string; state?: string; zipCode?: string;
+    };
+}
+
 interface FreightCalculatorProps {
     originCep: string;
     secondaryCep?: string;
@@ -82,6 +93,13 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
     const [secondaryInfo, setSecondaryInfo] = useState<string | null>(null);
     const [destInfo, setDestInfo] = useState<string | null>(null);
     const [loadingDestCep, setLoadingDestCep] = useState(false);
+
+    // Busca de cliente
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [customerResults, setCustomerResults] = useState<Customer[]>([]);
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+    const [showCustomerDrop, setShowCustomerDrop] = useState(false);
+    const customerRef = useRef<HTMLDivElement>(null);
 
     // Produtos
     const [allProducts, setAllProducts] = useState<ProductDimension[]>([]);
@@ -146,6 +164,65 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         }, 600);
         return () => clearTimeout(timer);
     }, [destCep]);
+
+    // ── Busca de clientes ──────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!customerSearch.trim() || customerSearch.length < 2) {
+            setCustomerResults([]);
+            return;
+        }
+        const timer = setTimeout(async () => {
+            const q = `%${customerSearch}%`;
+            const { data } = await supabase
+                .from('customers')
+                .select('id, name, cpf_cnpj, phone, address')
+                .or(`name.ilike.${q},phone.ilike.${q},cpf_cnpj.ilike.${q}`)
+                .eq('is_active', true)
+                .limit(6);
+            setCustomerResults(data ?? []);
+            setShowCustomerDrop(true);
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [customerSearch]);
+
+    useEffect(() => {
+        function handler(e: MouseEvent) {
+            if (customerRef.current && !customerRef.current.contains(e.target as Node)) {
+                setShowCustomerDrop(false);
+            }
+        }
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    function selectCustomer(c: Customer) {
+        setSelectedCustomer(c);
+        setCustomerSearch(c.name);
+        setShowCustomerDrop(false);
+
+        // Preenche CEP de destino
+        const zip = (c.address?.zipCode ?? '').replace(/\D/g, '');
+        if (zip) {
+            const formatted = zip.length > 5 ? `${zip.slice(0, 5)}-${zip.slice(5)}` : zip;
+            setDestCep(formatted);
+            setResults(null);
+        }
+
+        // Preenche labelForm com dados do cliente
+        setLabelForm(prev => ({
+            ...prev,
+            name: c.name,
+            document: c.cpf_cnpj ?? '',
+            phone: c.phone ?? '',
+            address: c.address?.street ?? '',
+            number: c.address?.number ?? '',
+            complement: c.address?.complement ?? '',
+            district: c.address?.neighborhood ?? '',
+            city: c.address?.city ?? '',
+            state_abbr: (c.address?.state ?? '').slice(0, 2).toUpperCase(),
+            postal_code: (c.address?.zipCode ?? '').replace(/\D/g, ''),
+        }));
+    }
 
     async function lookupCep(cep: string): Promise<string | null> {
         try {
@@ -509,6 +586,53 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                         <p className="text-xs text-slate-400">Configure o CEP alternativo na aba Configurações.</p>
                     )}
                 </div>
+            </div>
+
+            {/* Buscar Cliente */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-2" ref={customerRef}>
+                <h3 className="text-sm font-semibold text-slate-700">👤 Cliente (opcional)</h3>
+                <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Buscar por nome, telefone ou CPF/CNPJ..."
+                        value={customerSearch}
+                        onChange={e => { setCustomerSearch(e.target.value); if (!e.target.value) { setSelectedCustomer(null); } }}
+                        onFocus={() => customerResults.length > 0 && setShowCustomerDrop(true)}
+                    />
+                    {selectedCustomer && (
+                        <button onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500">
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                    {showCustomerDrop && customerResults.length > 0 && (
+                        <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                            {customerResults.map(c => (
+                                <button key={c.id} onClick={() => selectCustomer(c)}
+                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left border-b border-slate-100 last:border-0">
+                                    <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <span className="text-xs font-bold text-blue-600">{c.name.charAt(0).toUpperCase()}</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
+                                        <p className="text-xs text-slate-500">
+                                            {c.phone && <span>{c.phone}</span>}
+                                            {c.phone && c.cpf_cnpj && <span> · </span>}
+                                            {c.cpf_cnpj && <span>{c.cpf_cnpj}</span>}
+                                            {c.address?.city && <span> · {c.address.city}/{c.address.state}</span>}
+                                        </p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                {selectedCustomer && (
+                    <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+                        ✅ Cliente selecionado: <strong>{selectedCustomer.name}</strong>{selectedCustomer.address?.city ? ` — ${selectedCustomer.address.city}` : ''}
+                    </p>
+                )}
             </div>
 
             {/* CEP de Destino */}
