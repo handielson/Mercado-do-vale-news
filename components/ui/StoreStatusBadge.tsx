@@ -60,7 +60,7 @@ export function StoreStatusBadge() {
 
     return (
         <div
-            className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${colors[status.status]} transition-colors shadow-sm cursor-help hover:opacity-80`}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${colors[status.status]} transition-colors shadow-sm cursor-help hover:opacity-80`}
             title={tooltips[status.status]}
         >
             <div className={`w-2 h-2 rounded-full ${dotColors[status.status]} ${(status.status === 'open' || status.status === 'closing_soon') ? 'animate-pulse' : ''}`}></div>

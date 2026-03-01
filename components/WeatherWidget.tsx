@@ -173,7 +173,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ defaultCity, defau
     if (!defaultCity && !weather) return null;
 
     return (
-        <div className="hidden sm:flex items-center border-l border-slate-200 pl-4 ml-2 relative">
+        <div className="flex items-center border-l border-slate-200 pl-4 ml-2 relative">
             {loading && !weather ? (
                 <div className="flex items-center gap-1.5 text-slate-400 text-xs">
                     <Loader2 size={13} className="animate-spin" />

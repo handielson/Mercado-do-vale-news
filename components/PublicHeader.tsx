@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
@@ -22,6 +22,13 @@ export const PublicHeader: React.FC = () => {
     const navigate = useNavigate();
     const [showLoginDropdown, setShowLoginDropdown] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
+
+    useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > 10);
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
 
     const handleLogout = async () => {
         await signOut();
@@ -71,7 +78,7 @@ export const PublicHeader: React.FC = () => {
         if (age <= 0) return null;
 
         return (
-            <div className="hidden sm:flex flex-col justify-center border-l border-slate-200 pl-4 ml-2">
+            <div className="flex flex-col justify-center border-l border-slate-200 pl-4 ml-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Desde {year}</span>
                 <span className="text-sm font-semibold text-slate-700 leading-tight mt-0.5">{age} {age === 1 ? 'Ano' : 'Anos'}</span>
             </div>
@@ -98,27 +105,10 @@ export const PublicHeader: React.FC = () => {
                         )}
                     </Link>
                     {getStoreAgeBadge()}
-                    <WeatherWidget
-                        defaultCity={themeSettings.address_city}
-                        defaultState={themeSettings.address_state}
-                    />
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                     <StoreStatusBadge />
-
-                    <Link
-                        to="/promocoes"
-                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95"
-                        style={{ background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
-                        title="Ver Promoções e Vantagens"
-                    >
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
-                        </span>
-                        <span>🔥 Promoções</span>
-                    </Link>
 
                     {user && customer ? (
                         <>
@@ -218,18 +208,19 @@ export const PublicHeader: React.FC = () => {
                         </>
                     ) : (
                         <>
-                            {/* Login Dropdown */}
+                            {/* Auth Dropdown (Entrar + Cadastrar unificados) */}
                             <div className="relative">
                                 <button
                                     onClick={() => setShowLoginDropdown(!showLoginDropdown)}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-lg transition-colors border border-slate-300"
+                                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
                                 >
-                                    Entrar
+                                    <User size={16} />
+                                    <span className="hidden sm:inline">Entrar / Cadastrar</span>
                                     <ChevronDown size={16} />
                                 </button>
 
                                 {showLoginDropdown && (
-                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-2">
+                                    <div className="absolute right-0 mt-2 w-52 bg-white rounded-lg shadow-lg border border-slate-200 py-2">
                                         <Link
                                             to="/cliente/login"
                                             className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
@@ -246,19 +237,44 @@ export const PublicHeader: React.FC = () => {
                                             <Shield size={16} />
                                             Entrar como Admin
                                         </Link>
+                                        <div className="border-t border-slate-200 my-1" />
+                                        <Link
+                                            to="/cliente/login?tab=register"
+                                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50"
+                                            onClick={() => setShowLoginDropdown(false)}
+                                        >
+                                            ➕ Cadastrar
+                                        </Link>
                                     </div>
                                 )}
                             </div>
-
-                            {/* Register Button */}
-                            <Link
-                                to="/cliente/login?tab=register"
-                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-                            >
-                                Cadastrar
-                            </Link>
                         </>
                     )}
+                </div>
+            </div>
+
+            {/* Segunda linha — some ao rolar */}
+            <div
+                className="overflow-hidden transition-all duration-300 ease-in-out border-t border-slate-100"
+                style={{ maxHeight: scrolled ? '0px' : '48px', opacity: scrolled ? 0 : 1 }}
+            >
+                <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center justify-between gap-3">
+                    <WeatherWidget
+                        defaultCity={themeSettings.address_city}
+                        defaultState={themeSettings.address_state}
+                    />
+                    <Link
+                        to="/promocoes"
+                        className="flex items-center gap-2 px-3 py-1 text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95"
+                        style={{ background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
+                        title="Ver Promoções e Vantagens"
+                    >
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                        </span>
+                        <span>🔥 Promoções</span>
+                    </Link>
                 </div>
             </div>
         </header>
