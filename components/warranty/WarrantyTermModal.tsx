@@ -181,10 +181,8 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
                         </div>
 
                         {/* Warranty Term Preview */}
-                        <div className="border border-slate-200 rounded-lg p-6 bg-white">
-                            <div className="font-mono text-sm whitespace-pre-wrap">
-                                {warrantyContent}
-                            </div>
+                        <div className="border border-slate-200 rounded-lg p-6 bg-white overflow-auto max-h-[500px]">
+                            <div dangerouslySetInnerHTML={{ __html: warrantyContent }} />
                         </div>
 
                         {/* Info about signatures */}
