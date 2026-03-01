@@ -37,7 +37,6 @@ export interface TeamMember {
     salary?: number; // Para CLT
     hourly_rate?: number; // Para Freelancer/PJ
     monthly_salary?: number; // Valor mensal para Freelancer/PJ
-    weekly_hours?: number; // Horas semanais para Freelancer/PJ
     commission_rate?: number; // % de comissão
     delivery_fee?: number; // Taxa por entrega
 
@@ -80,7 +79,6 @@ export interface TeamMemberInput {
     salary?: number;
     hourly_rate?: number;
     monthly_salary?: number;
-    weekly_hours?: number;
     commission_rate?: number;
     delivery_fee?: number;
 

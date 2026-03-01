@@ -301,14 +301,11 @@ export default function TeamFormPage() {
                                 type="text"
                                 value={formData.address?.zipCode || ''}
                                 onChange={(e) => {
-                                    // Permitir apenas números e hífen, máximo 8 dígitos
-                                    let value = e.target.value.replace(/[^\d-]/g, '');
-                                    // Limitar a 8 dígitos (sem contar o hífen)
-                                    const digitsOnly = value.replace(/-/g, '');
-                                    if (digitsOnly.length > 8) {
-                                        value = value.slice(0, -1);
-                                    }
-                                    updateAddress('zipCode', value);
+                                    const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                                    const formatted = digits.length > 5
+                                        ? `${digits.slice(0, 5)}-${digits.slice(5)}`
+                                        : digits;
+                                    updateAddress('zipCode', formatted);
                                 }}
                                 onBlur={(e) => searchCep(e.target.value)}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
