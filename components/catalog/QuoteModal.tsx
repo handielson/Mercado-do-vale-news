@@ -483,6 +483,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
                         <DeliveryOptions
                             selected={delivery}
                             onSelect={setDelivery}
+                            storeStatus={storeStatus}
                         />
 
                         {/* Payment Options (Admin Only) */}

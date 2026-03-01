@@ -7,6 +7,7 @@ import { ModernProductCard } from './ModernProductCard';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import type { CatalogSection } from '@/types/catalogSections';
 import type { CatalogProduct } from '@/types/catalog';
+import { groupProductsByVariants } from '@/services/productGrouping';
 
 interface CatalogSectionProps {
     section: CatalogSection;
@@ -37,6 +38,41 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
         }
     };
 
+    // Seções que NÃO devem agrupar (cada cor/variação aparece como card individual)
+    const UNGROUPED_SECTION_TYPES = ['recent', 'new', 'bestsellers'];
+    const shouldGroup = !UNGROUPED_SECTION_TYPES.includes(section.section_type);
+
+    const displayItems = React.useMemo(() => {
+        if (shouldGroup) {
+            // Agrupar por modelo — exibe seletor rico de "X Cores"
+            return groupProductsByVariants(products).map(group => ({
+                key: group.groupKey,
+                product: group.representativeProduct,
+                productGroup: group
+            }));
+        }
+
+        // Sem agrupamento: desduplica apenas o mesmo SKU exato (mesmo modelo+cor+ram+storage)
+        const deduplicated = new Map<string, CatalogProduct>();
+        for (const p of products) {
+            const key = [
+                p.model_id || p.model || p.name,
+                p.specs?.color || '',
+                p.specs?.ram || '',
+                p.specs?.storage || '',
+            ].join('|');
+            if (!deduplicated.has(key)) {
+                deduplicated.set(key, { ...p });
+            }
+        }
+
+        return Array.from(deduplicated.values()).map(p => ({
+            key: p.id,
+            product: p,
+            productGroup: undefined as ProductGroup | undefined
+        }));
+    }, [products, shouldGroup]);
+
     if (loading) {
         return (
             <div className="py-8">
@@ -56,29 +92,6 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
         return null; // Não mostrar seção vazia
     }
 
-    // Agrupar por modelo + variação (cor, RAM, storage)
-    const groupedProducts = (() => {
-        const groups = new Map<string, CatalogProduct>();
-        for (const product of products) {
-            const key = [
-                product.model_id || product.model || product.name,
-                product.specs?.color || '',
-                product.specs?.ram || '',
-                product.specs?.storage || '',
-            ].join('|');
-            if (groups.has(key)) {
-                const existing = groups.get(key)!;
-                groups.set(key, {
-                    ...existing,
-                    stock_quantity: (existing.stock_quantity || 0) + (product.stock_quantity || 0)
-                });
-            } else {
-                groups.set(key, { ...product });
-            }
-        }
-        return Array.from(groups.values());
-    })();
-
     return (
         <section className="py-8">
             {/* Header da Seção */}
@@ -89,9 +102,9 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                         <p className="text-gray-600 mt-1">{section.subtitle}</p>
                     )}
                 </div>
-                {section.show_view_all && (
+                {(section.show_view_all && (section.view_all_url || section.category_id)) && (
                     <Link
-                        to={section.view_all_url || '/catalog'}
+                        to={section.view_all_url || `/?categoria=${section.category_id}`}
                         className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium"
                     >
                         Ver todos
@@ -103,13 +116,14 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
             {/* Grid/Carousel/Lista de Produtos */}
             {section.layout_style === 'grid' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {groupedProducts.map((product) => (
+                    {displayItems.map((item) => (
                         <ModernProductCard
-                            key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`}
-                            product={product}
+                            key={item.key}
+                            product={item.product}
+                            productGroup={item.productGroup}
                             onFavorite={onFavorite}
-                            onShare={onShare}
-                            isFavorite={favorites.has(product.id)}
+                            onShare={onShare ? () => onShare(item.product) : undefined}
+                            isFavorite={favorites.has(item.product.id)}
                         />
                     ))}
                 </div>
@@ -118,13 +132,14 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
             {section.layout_style === 'carousel' && (
                 <div className="overflow-x-auto">
                     <div className="flex gap-4 pb-4">
-                        {groupedProducts.map((product) => (
-                            <div key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`} className="flex-shrink-0 w-80">
+                        {displayItems.map((item) => (
+                            <div key={item.key} className="flex-shrink-0 w-80">
                                 <ModernProductCard
-                                    product={product}
+                                    product={item.product}
+                                    productGroup={item.productGroup}
                                     onFavorite={onFavorite}
-                                    onShare={onShare}
-                                    isFavorite={favorites.has(product.id)}
+                                    onShare={onShare ? () => onShare(item.product) : undefined}
+                                    isFavorite={favorites.has(item.product.id)}
                                 />
                             </div>
                         ))}
@@ -134,13 +149,14 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
 
             {section.layout_style === 'list' && (
                 <div className="space-y-4">
-                    {groupedProducts.map((product) => (
+                    {displayItems.map((item) => (
                         <ModernProductCard
-                            key={`${product.model_id || product.id}-${product.specs?.color || ''}-${product.specs?.ram || ''}-${product.specs?.storage || ''}`}
-                            product={product}
+                            key={item.key}
+                            product={item.product}
+                            productGroup={item.productGroup}
                             onFavorite={onFavorite}
-                            onShare={onShare}
-                            isFavorite={favorites.has(product.id)}
+                            onShare={onShare ? () => onShare(item.product) : undefined}
+                            isFavorite={favorites.has(item.product.id)}
                         />
                     ))}
                 </div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Edit, Package, Trash2, Printer } from 'lucide-react';
+import { Edit, Package, Trash2, Printer, Power, PowerOff } from 'lucide-react';
 import { Product } from '../../types/product';
 import { ProductStatus } from '../../utils/field-standards';
 import { cn } from '../../utils/cn';
@@ -20,6 +20,26 @@ interface ProductCardProps {
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
     const [modelImageUrl, setModelImageUrl] = useState<string | null>(null);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [currentStatus, setCurrentStatus] = useState<ProductStatus>(product.status);
+    const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
+    const handleToggleStatus = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const newStatus = currentStatus === ProductStatus.ACTIVE ? ProductStatus.INACTIVE : ProductStatus.ACTIVE;
+        setIsTogglingStatus(true);
+        try {
+            const { error } = await supabase
+                .from('products')
+                .update({ status: newStatus })
+                .eq('id', product.id);
+            if (error) throw error;
+            setCurrentStatus(newStatus);
+        } catch (err) {
+            console.error('[ProductCard] Erro ao alterar status:', err);
+        } finally {
+            setIsTogglingStatus(false);
+        }
+    };
 
     // Buscar foto do modelo como fallback quando produto não tem imagem própria
     useEffect(() => {
@@ -149,6 +169,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             <Printer className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
                         </button>
                         <button
+                            onClick={handleToggleStatus}
+                            disabled={isTogglingStatus}
+                            className={cn(
+                                'p-1.5 rounded-lg transition-colors group',
+                                currentStatus === ProductStatus.ACTIVE
+                                    ? 'hover:bg-red-50'
+                                    : 'hover:bg-green-50'
+                            )}
+                            title={currentStatus === ProductStatus.ACTIVE ? 'Inativar produto' : 'Ativar produto'}
+                        >
+                            {currentStatus === ProductStatus.ACTIVE
+                                ? <PowerOff className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
+                                : <Power className="w-4 h-4 text-slate-400 group-hover:text-green-600" />
+                            }
+                        </button>
+                        <button
                             onClick={() => onDelete?.(product)}
                             className="p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
                             title="Excluir produto"
@@ -162,9 +198,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 <div>
                     <span className={cn(
                         'inline-block px-2 py-1 text-xs font-medium rounded-md border',
-                        getStatusColor(product.status)
+                        getStatusColor(currentStatus)
                     )}>
-                        {getStatusLabel(product.status)}
+                        {getStatusLabel(currentStatus)}
                     </span>
                 </div>
 

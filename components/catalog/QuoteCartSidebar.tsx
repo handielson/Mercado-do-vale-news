@@ -30,6 +30,7 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     const [cashbackSettings, setCashbackSettings] = useState<any>(null);
     const [mixedPaymentState, setMixedPaymentState] = useState<MixedPaymentState | null>(null);
     const [storeStatus, setStoreStatus] = useState<StoreStatus | null>(null);
+    const [isCopied, setIsCopied] = useState(false);
     const isAdmin = customer?.customer_type === 'ADMIN';
 
     // Calculate total cart value in R$ (prices are in centavos)

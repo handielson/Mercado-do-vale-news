@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { createBrowserRouter, Navigate, useNavigate } from 'react-router-dom';
+import { MessageSquareDashed } from 'lucide-react';
 import { AdminLoginPage } from '../pages/auth/AdminLoginPage';
 import { ClienteLoginPage } from '../pages/auth/ClienteLoginPage';
 import { ClienteRegisterPage } from '../pages/auth/ClienteRegisterPage';
@@ -64,17 +65,45 @@ import CoinsInfoPage from '../pages/catalog/CoinsInfoPage';
 import LegacyMigrationPage from '../pages/LegacyMigration';
 import FieldMappingPage from '../pages/FieldMappingPage';
 import ExtendedWarrantyPage from '../pages/customer/ExtendedWarrantyPage';
-import { PromotionsPage } from '../pages/customer/PromotionsPage';
+import { PromotionsPage as CustomerPromotionsPage } from '../pages/customer/PromotionsPage';
+import { FreeScreenProtectorRulesPage } from '../pages/customer/FreeScreenProtectorRulesPage';
+import { FeedbackListPage } from '../pages/admin/feedbacks/FeedbackListPage';
+import { PromotionsPage as AdminPromotionsPage } from '../pages/admin/promotions/PromotionsPage';
 
+
+import { feedbackService } from '../services/feedbackService';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const [unreadFeedbacks, setUnreadFeedbacks] = React.useState(0);
+
+  React.useEffect(() => {
+    feedbackService.getUnreadCount().then(setUnreadFeedbacks).catch(() => { });
+  }, []);
 
   return (
     <div className="animate-in fade-in duration-500">
       <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
       <p className="text-slate-500">Gestão operacional do ecossistema.</p>
+
+      {/* Alerta de Novas Mensagens */}
+      {unreadFeedbacks > 0 && (
+        <div
+          onClick={() => navigate('/admin/feedbacks')}
+          className="mt-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-sm cursor-pointer hover:bg-amber-100 transition-colors flex items-start gap-3"
+        >
+          <div className="bg-amber-100 p-2 rounded-lg text-amber-600">
+            <MessageSquareDashed size={20} />
+          </div>
+          <div>
+            <h3 className="text-amber-800 font-bold text-sm">Atenção: Novas Mensagens!</h3>
+            <p className="text-amber-700 text-sm mt-0.5">
+              Você tem <strong>{unreadFeedbacks}</strong> {unreadFeedbacks === 1 ? 'mensagem' : 'mensagens'} aguardando leitura na sua caixa de entrada. Clique aqui para ler.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Quick Access Cards */}
       <div className="mt-8">
@@ -227,7 +256,11 @@ export const router = createBrowserRouter([
   // Promoções e Vantagens (Central Pública)
   {
     path: "/promocoes",
-    element: <PromotionsPage />
+    element: <CustomerPromotionsPage />
+  },
+  {
+    path: "/promocoes/pelicula-gratis",
+    element: <FreeScreenProtectorRulesPage />
   },
   // Garantia Estendida (página pública)
   {
@@ -625,6 +658,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><FieldMappingPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/feedbacks",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><FeedbackListPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/promotions",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><AdminPromotionsPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

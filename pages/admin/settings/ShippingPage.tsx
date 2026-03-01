@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Package } from 'lucide-react';
+import { FreightCalculator } from '../../../components/shipping/FreightCalculator';
 import { shippingService } from '../../../services/shippingService';
 import type {
     ShippingSettings,
@@ -11,7 +12,7 @@ import type {
 } from '../../../types/shipping';
 import { toast } from 'sonner';
 
-type Tab = 'config' | 'zones' | 'ranges' | 'carriers';
+type Tab = 'config' | 'zones' | 'ranges' | 'carriers' | 'calculator';
 
 const ZONE_TYPE_LABELS: Record<ShippingZoneType, string> = {
     local_free: '🎁 Frete Grátis',
@@ -248,7 +249,7 @@ export default function ShippingPage() {
     const [editingZone, setEditingZone] = useState<ShippingZone | undefined>();
     const [showRangeForm, setShowRangeForm] = useState(false);
     const [editingRange, setEditingRange] = useState<ShippingPriceRange | undefined>();
-    const [settingsForm, setSettingsForm] = useState({ origin_cep: '', melhor_envio_token: '', melhor_envio_sandbox: true, melhor_envio_enabled: false, local_delivery_enabled: true });
+    const [settingsForm, setSettingsForm] = useState({ origin_cep: '', secondary_origin_cep: '', melhor_envio_token: '', melhor_envio_sandbox: true, melhor_envio_enabled: false, local_delivery_enabled: true });
 
     useEffect(() => { loadAll(); }, []);
     useEffect(() => {
@@ -264,6 +265,7 @@ export default function ShippingPage() {
             setSettings(s);
             setSettingsForm({
                 origin_cep: s.origin_cep,
+                secondary_origin_cep: (s as any).secondary_origin_cep ?? '',
                 melhor_envio_token: s.melhor_envio_token ?? '',
                 melhor_envio_sandbox: s.melhor_envio_sandbox,
                 melhor_envio_enabled: s.melhor_envio_enabled,
@@ -327,6 +329,7 @@ export default function ShippingPage() {
         { id: 'zones', label: 'Zonas de Entrega', icon: '📍' },
         { id: 'ranges', label: 'Faixas de Preço', icon: '💰' },
         { id: 'carriers', label: 'Transportadoras', icon: '🚚' },
+        { id: 'calculator', label: 'Calcular Frete', icon: '🧮' },
     ];
 
     if (loading) return (
@@ -370,6 +373,15 @@ export default function ShippingPage() {
                             value={settingsForm.origin_cep}
                             onChange={e => setSettingsForm(p => ({ ...p, origin_cep: e.target.value }))}
                             placeholder="56000-000" maxLength={9} />
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">CEP Alternativo (ex: depósito)</label>
+                        <input className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            value={settingsForm.secondary_origin_cep}
+                            onChange={e => setSettingsForm(p => ({ ...p, secondary_origin_cep: e.target.value }))}
+                            placeholder="56000-000" maxLength={9} />
+                        <p className="text-xs text-slate-400 mt-1">Usado como segunda opção na calculadora de frete avulso.</p>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -563,6 +575,14 @@ export default function ShippingPage() {
                         <Check size={16} /> Salvar
                     </button>
                 </div>
+            )}
+
+            {/* Tab: Calcular Frete */}
+            {activeTab === 'calculator' && (
+                <FreightCalculator
+                    originCep={settingsForm.origin_cep}
+                    secondaryCep={settingsForm.secondary_origin_cep || undefined}
+                />
             )}
         </div>
     );

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -52,6 +52,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
           {/* MARKETING & LOJA */}
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Marketing & Loja</div>
+          <NavItem to="/admin/promotions" icon={<Ticket size={18} />} label="Promoções" active={location.pathname.startsWith('/admin/promotions')} />
           <NavItem to="/admin/catalog-config" icon={<Settings size={18} />} label="Config. Catálogo" active={location.pathname.startsWith('/admin/catalog-config')} />
           <NavItem to="/admin/settings/banners" icon={<Image size={18} />} label="Banners" active={location.pathname.startsWith('/admin/settings/banners')} />
           <NavItem to="/admin/settings/marketing" icon={<Megaphone size={18} />} label="Criativos" active={location.pathname.startsWith('/admin/settings/marketing')} />
@@ -59,7 +60,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <NavItem to="/admin/cashback" icon={<Coins size={18} />} label="Moedas do Vale" active={location.pathname.startsWith('/admin/cashback')} />
           <NavItem to="/admin/settings/whatsapp" icon={<MessageCircle size={18} />} label="WhatsApp" active={location.pathname.startsWith('/admin/settings/whatsapp')} />
           <NavItem to="/admin/settings/telegram" icon={<Bot size={18} />} label="Automações Bot" active={location.pathname.startsWith('/admin/settings/telegram')} />
-          <NavItem to="/admin/settings/messages" icon={<MessageCircle size={18} />} label="Mensagens" active={location.pathname.startsWith('/admin/settings/messages')} />
+          <NavItem to="/admin/settings/messages" icon={<MessageCircle size={18} />} label="Mensagens Auto" active={location.pathname.startsWith('/admin/settings/messages')} />
+          <NavItem to="/admin/feedbacks" icon={<MessageSquareDashed size={18} />} label="Fale Conosco" active={location.pathname.startsWith('/admin/feedbacks')} />
 
           {/* ESTRUTURA DE CATÁLOGO */}
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Estrutura de Catálogo</div>

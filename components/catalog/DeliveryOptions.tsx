@@ -5,6 +5,7 @@ import { lookupCEP, formatCEP } from '@/services/addressLookup';
 import { shippingService } from '@/services/shippingService';
 import { companySettingsService } from '@/services/companySettingsService';
 import type { ShippingOption } from '@/types/shipping';
+import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
 
 export interface DeliveryOption {
     type: 'pickup' | 'delivery';
@@ -16,9 +17,10 @@ export interface DeliveryOption {
 interface DeliveryOptionsProps {
     selected: DeliveryOption;
     onSelect: (option: DeliveryOption) => void;
+    storeStatus?: StoreStatus | null;
 }
 
-export function DeliveryOptions({ selected, onSelect }: DeliveryOptionsProps) {
+export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOptionsProps) {
     const [cep, setCep] = useState('');
     const [isLoadingCEP, setIsLoadingCEP] = useState(false);
     const [cepError, setCepError] = useState('');
@@ -270,7 +272,9 @@ export function DeliveryOptions({ selected, onSelect }: DeliveryOptionsProps) {
                                                     <p className={`text-sm font-medium ${isSelected ? 'text-green-800' : 'text-slate-700'}`}>
                                                         {opt.name}
                                                     </p>
-                                                    <p className="text-xs text-slate-500">{opt.daysLabel}</p>
+                                                    {storeStatus && storeStatus.status !== 'open' && opt.daysLabel === 'Hoje' ? null : (
+                                                        <p className="text-xs text-slate-500">{opt.daysLabel}</p>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">

@@ -10,8 +10,10 @@ import { PasswordChangeTab } from '../../components/customer/profile/PasswordCha
 import { PurchaseHistoryTab } from '../../components/customer/profile/PurchaseHistoryTab';
 import { TypeUpgradeTab } from '../../components/customer/profile/TypeUpgradeTab';
 import DailyCheckinWidget from '../../components/cashback/DailyCheckinWidget';
+import { BenefitsTab } from '../../components/customer/profile/BenefitsTab';
+import { ShieldCheck } from 'lucide-react';
 
-type TabType = 'personal' | 'address' | 'password' | 'history' | 'upgrade' | 'coins';
+type TabType = 'personal' | 'address' | 'password' | 'history' | 'upgrade' | 'coins' | 'benefits';
 
 /**
  * Customer Profile Page
@@ -52,6 +54,7 @@ export const CustomerProfilePage: React.FC = () => {
         { id: 'address' as TabType, label: 'Endereço', icon: MapPin },
         { id: 'password' as TabType, label: 'Alterar Senha', icon: Lock },
         { id: 'history' as TabType, label: 'Histórico de Compras', icon: ShoppingBag },
+        { id: 'benefits' as TabType, label: 'Meus Benefícios', icon: ShieldCheck },
         { id: 'upgrade' as TabType, label: 'Tipo de Conta', icon: TrendingUp },
         { id: 'coins' as TabType, label: 'Moedas do Vale', icon: Coins },
     ];
@@ -100,6 +103,7 @@ export const CustomerProfilePage: React.FC = () => {
                     {activeTab === 'address' && <AddressTab />}
                     {activeTab === 'password' && <PasswordChangeTab />}
                     {activeTab === 'history' && <PurchaseHistoryTab />}
+                    {activeTab === 'benefits' && <BenefitsTab />}
                     {activeTab === 'upgrade' && <TypeUpgradeTab />}
                     {activeTab === 'coins' && (
                         <div className="space-y-4">

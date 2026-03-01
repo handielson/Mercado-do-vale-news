@@ -160,10 +160,13 @@ function CatalogContent() {
         }
     };
 
+    const isAdmin = customer?.customer_type === 'ADMIN';
+
     // Group products by variants (Brand + Model + RAM + Storage)
+    // Pass includeOutOfStock=true for admin so zero-stock SKUs still get grouped
     const productGroups = useMemo(() => {
-        return groupProductsByVariants(products);
-    }, [products]);
+        return groupProductsByVariants(products, isAdmin);
+    }, [products, isAdmin]);
 
     // Handle send quote (will implement multi-product message in next phase)
     const handleSendQuote = async () => {
@@ -270,10 +273,6 @@ function CatalogContent() {
                 <div className="mb-6">
                     <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-4">
                         <div>
-                            <h1 className="text-3xl font-bold text-slate-900 mb-2">
-                                Catálogo de Produtos
-                            </h1>
-
                         </div>
 
                         {/* Share and View Controls */}
@@ -315,10 +314,9 @@ function CatalogContent() {
                     </div>
                 )}
 
-                {/* Divisor */}
-                {sections.length > 0 && !filters.categories.length && !searchQuery && (
-                    <div className="mb-8">
-                        <div className="border-t border-slate-200"></div>
+                {!filters.categories.length && !searchQuery && (
+                    <div className="mb-6">
+                        <h2 className="text-2xl font-bold text-gray-900">Todos os Produtos</h2>
                     </div>
                 )}
 

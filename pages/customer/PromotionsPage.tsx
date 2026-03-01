@@ -1,20 +1,30 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { Tag, Coins, ShieldPlus, TicketPercent, Code, ArrowRight } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Tag, Coins, ShieldPlus, TicketPercent, Code, ArrowRight, Smartphone, ShieldCheck, ArrowLeft } from 'lucide-react';
 
 export const PromotionsPage: React.FC = () => {
+    const navigate = useNavigate();
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
             {/* Header Hero */}
             <div className="bg-gradient-to-br from-blue-900 to-slate-900 pt-16 pb-24 text-center px-4 relative overflow-hidden">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-                <div className="relative z-10 max-w-2xl mx-auto">
-                    <div className="inline-flex items-center justify-center p-3 bg-blue-500/20 rounded-2xl mb-6 backdrop-blur-sm border border-blue-400/30">
-                        <Tag className="w-8 h-8 text-blue-200" />
+                <div className="relative z-10 max-w-2xl mx-auto text-left md:text-center">
+                    <button
+                        onClick={() => navigate('/')}
+                        className="inline-flex items-center gap-2 text-blue-200 hover:text-white transition-colors mb-6 text-sm font-medium"
+                    >
+                        <ArrowLeft size={16} /> Voltar para o Catálogo
+                    </button>
+                    <div className="md:flex md:items-center md:justify-center md:gap-4 mb-4">
+                        <div className="w-12 h-12 bg-blue-500/20 rounded-2xl flex items-center justify-center border border-blue-400/30 mb-4 md:mb-0">
+                            <Tag className="w-6 h-6 text-blue-200" />
+                        </div>
+                        <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight">
+                            Aproveite as Melhores <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-indigo-300">Vantagens</span>
+                        </h1>
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight">
-                        Aproveite as Melhores <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-indigo-300">Vantagens</span>
-                    </h1>
                     <p className="text-lg text-blue-100/90 leading-relaxed font-medium">
                         Central exclusiva para você maximizar descontos, acumular moedas e proteger as suas compras.
                     </p>
@@ -99,6 +109,40 @@ export const PromotionsPage: React.FC = () => {
                             Conhecer a Garantia
                             <ArrowRight className="w-4 h-4" />
                         </Link>
+                    </div>
+
+                    {/* Película Grátis Card */}
+                    <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col hover:-translate-y-1 transition-transform duration-300">
+                        <div className="w-14 h-14 rounded-2xl bg-indigo-100 flex items-center justify-center mb-6">
+                            <Smartphone className="w-7 h-7 text-indigo-600" />
+                        </div>
+                        <h2 className="text-xl font-bold text-slate-800 mb-3">1 Ano de Película Grátis</h2>
+                        <p className="text-slate-600 mb-6 flex-1">
+                            Na compra de qualquer aparelho Celular, você ganha 1 ano de películas gratuitas para proteger a tela do seu smartphone novo.
+                        </p>
+                        <div className="border border-dashed border-indigo-300 bg-indigo-50 rounded-2xl px-4 py-5 mb-6 flex gap-3 items-center">
+                            <div className="p-2 bg-white rounded-xl shadow-sm text-indigo-600">
+                                <ShieldCheck className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-indigo-800 uppercase tracking-widest font-bold mb-1">Como Resgatar</p>
+                                <p className="text-sm text-indigo-700 font-medium leading-tight">Direito a 1 resgate por mês com aplicação gratuita exclusiva em nossas lojas físicas.</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-3 mt-auto">
+                            <Link
+                                to="/?categoria=celulares"
+                                className="flex-1 inline-flex items-center justify-center gap-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-3 rounded-xl transition-colors shadow-md shadow-indigo-200"
+                            >
+                                Ver Aparelhos
+                            </Link>
+                            <Link
+                                to="/promocoes/pelicula-gratis"
+                                className="flex-1 inline-flex items-center justify-center gap-2 font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-5 py-3 rounded-xl transition-colors border border-indigo-100"
+                            >
+                                Regulamento
+                            </Link>
+                        </div>
                     </div>
 
                 </div>

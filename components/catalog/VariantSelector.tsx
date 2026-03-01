@@ -27,10 +27,12 @@ export function VariantSelector({
         onSelect({ ...selected, color });
     };
 
-    // Build memory options (RAM/Storage combinations)
+    // Build memory options — filtra valores vazios/fallback 'no-ram'/'no-storage'
+    const validRams = variants.rams.filter(r => r && r !== 'no-ram');
+    const validStorages = variants.storages.filter(s => s && s !== 'no-storage');
     const memoryOptions: string[] = [];
-    for (const ram of variants.rams) {
-        for (const storage of variants.storages) {
+    for (const ram of validRams) {
+        for (const storage of validStorages) {
             memoryOptions.push(`${ram}/${storage}`);
         }
     }

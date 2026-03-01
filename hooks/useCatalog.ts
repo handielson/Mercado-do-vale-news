@@ -10,6 +10,7 @@ import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
 interface UseCatalogOptions {
     initialFilters?: Partial<FilterState>;
     initialSearchQuery?: string;
+    initialCategory?: string;
     pageSize?: number;
     bypassCache?: boolean;
 }
@@ -18,6 +19,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     const {
         initialFilters = {},
         initialSearchQuery = '',
+        initialCategory = '',
         pageSize = 12,
         bypassCache = false
     } = options;
@@ -33,7 +35,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     const [settingsLoading, setSettingsLoading] = useState(true);
 
     const [filters, setFilters] = useState<FilterState>({
-        categories: [],
+        categories: initialCategory ? [initialCategory] : [],
         brands: [],
         priceRange: null,
         inStockOnly: false,
@@ -207,6 +209,17 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 );
 
                 setFilterStats({ categories: filteredCategories, brands, priceRange: priceRange ?? undefined });
+
+                // Traduzir slug de categoria via URL para ID real
+                if (initialCategory && !initialCategory.match(/^[0-9a-f]{8}-/i)) {
+                    const matchedCat = filteredCategories.find(c => c.name.toLowerCase() === initialCategory.toLowerCase());
+                    if (matchedCat) {
+                        setFilters(prev => ({
+                            ...prev,
+                            categories: [matchedCat.id]
+                        }));
+                    }
+                }
             } catch (error) {
                 console.error('Erro ao carregar metadados:', error);
             }

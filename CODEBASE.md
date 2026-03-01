@@ -7286,3 +7286,83 @@ O banner é renderizado condicionalmente com base em `promoActive && promoData`:
 | `loadPromotions` sem await | `pages/admin/promotions/PromotionsPage.tsx` | Toast de sucesso aparecia antes do reload dos dados — resolvido com `await` |
 | Botão "Voltar" | `pages/customer/FreeScreenProtectorRulesPage.tsx` | `navigate(-1)` levava para página anterior variável; trocado para `navigate('/')` |
 
+---
+
+## 🛒 Catálogo — Agrupamento de Variantes por Seção (2026-02-28)
+
+### `services/productGrouping.ts`
+
+#### `filterAvailableProducts(products, includeOutOfStock?)`
+- `includeOutOfStock = false` (padrão): remove produtos com `track_inventory` e `stock_quantity <= 0`
+- `includeOutOfStock = true`: mantém todos os `active`, independente de estoque — usado para admin
+
+> ⚠️ **Pendência (ver `Pendencias.md` #1):** condição deve ser `=== true`; `track_inventory = false` = estoque infinito e não deveria ser filtrado.
+
+#### `groupProductsByVariants(products, includeOutOfStock?)`
+- Agora aceita `includeOutOfStock` e repassa para `filterAvailableProducts`
+- Chave de agrupamento: `model_id` (UUID FK) se disponível; fallback: `brand + model` normalizado
+- **Para dois SKUs de cores agruparem, ambos precisam ter o mesmo `model_id` no banco**
+
+---
+
+### `components/catalog/CatalogSection.tsx`
+
+#### Lógica de agrupamento condicional por `section_type`
+
+```ts
+const UNGROUPED_SECTION_TYPES = ['recent', 'new', 'bestsellers'];
+const shouldGroup = !UNGROUPED_SECTION_TYPES.includes(section.section_type);
+```
+
+| `section_type` | Comportamento |
+|---|---|
+| `recent`, `new`, `bestsellers` | Sem agrupamento — cada SKU aparece individualmente |
+| Outros | Com agrupamento — exibe seletor "X Cores" |
+
+Resultado unificado em `displayItems[]` com `{ key, product, productGroup? }`.
+
+---
+
+### `components/catalog/ModernProductCard.tsx`
+
+#### Seletor Rico de Variantes
+Ativado quando `productGroup.variants.length > 1 || productGroup.variants[0]?.colors.length > 1`. Exibe botão azul com seletor de RAM/Storage + bolinhas.
+
+#### Fallback Admin
+Quando `isAdmin`, usa layout simplificado mas ainda exibe `"X Cores"` + bolinhas quando há múltiplas cores sem variantes de RAM/Storage.
+
+---
+
+### `pages/catalog/index.tsx`
+
+- Grid `isAdmin` passa `includeOutOfStock: true` para `groupProductsByVariants`
+- Título **"Todos os Produtos"** (`<h2>`, estilo igual ao das seções) exibido antes do grid quando não há filtro/busca ativo
+
+---
+
+## 🧩 COMPONENTES — Admin Produtos (2026-02-28)
+
+### `components/products/ProductCard.tsx` — Toggle Ativar/Inativar
+
+Botão inline no card (entre Impressora e Deletar) para alternar `status` do produto:
+
+| Status | Ícone | Hover | Ação no banco |
+|---|---|---|---|
+| `active` | `PowerOff` | Vermelho | `status = 'inactive'` |
+| `inactive` | `Power` | Verde | `status = 'active'` |
+
+- Estado local `currentStatus` para feedback imediato sem reload
+- `isTogglingStatus` desabilita o botão durante o request
+- Badge de status no card usa `currentStatus` (não `product.status`)
+
+---
+
+#### Bugs Corrigidos — Sessão 2026-02-28
+
+| Bug | Arquivo | Descrição |
+|-----|---------|-----------| 
+| `model_id` diferente entre SKUs | Supabase → `products` | Suporte Carona Branco/Preto tinham UUIDs distintos → corrigido via `20260228_fix_suporte_carona_model_id.sql` |
+| Admin não via agrupamento de cores | `CatalogSection.tsx` | `displayItems` unificado substituiu `productGroups` hardcoded |
+| `ROW_COUNT` em PL/pgSQL | Migration SQL | Substituído por `GET DIAGNOSTICS v_rows_updated = ROW_COUNT` |
+| Título "Catálogo de Produtos" | `pages/catalog/index.tsx` | Renomeado para "Todos os Produtos" e movido para antes do grid principal |
+

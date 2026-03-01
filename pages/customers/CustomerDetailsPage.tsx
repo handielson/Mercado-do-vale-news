@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer } from '../../types/customer';
 import CustomerPrintableView from '../../components/customers/CustomerPrintableView';
+import { benefitService, BenefitStatus } from '../../services/benefitService';
+import { useSupabaseAuth } from '../../contexts/SupabaseAuthContext';
 
 /**
  * Customer Details Page
@@ -19,7 +21,9 @@ export default function CustomerDetailsPage() {
     const { id } = useParams();
 
     // State
+    const { user } = useSupabaseAuth();
     const [customer, setCustomer] = useState<Customer | null>(null);
+    const [benefits, setBenefits] = useState<BenefitStatus[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -28,8 +32,30 @@ export default function CustomerDetailsPage() {
     useEffect(() => {
         if (id) {
             loadCustomer(id);
+            loadBenefits(id);
         }
     }, [id]);
+
+    const loadBenefits = async (customerId: string) => {
+        try {
+            const data = await benefitService.getCustomerBenefitsStatus(customerId);
+            setBenefits(data);
+        } catch (err) {
+            console.error('Error loading benefits:', err);
+        }
+    };
+
+    const handleRedeem = async (benefitId: string) => {
+        if (!user) return;
+        try {
+            toast.loading('Registrando resgate...', { id: 'redeem' });
+            await benefitService.redeemScreenProtector(benefitId, user.id);
+            toast.success('Película resgatada com sucesso!', { id: 'redeem' });
+            if (id) loadBenefits(id);
+        } catch (err: any) {
+            toast.error(err.message || 'Erro ao resgatar', { id: 'redeem' });
+        }
+    };
 
     const loadCustomer = async (customerId: string) => {
         try {
@@ -234,6 +260,65 @@ export default function CustomerDetailsPage() {
                         <p className="text-slate-600 text-sm">
                             CEP: {customer.address.zipCode}
                         </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Benefícios Ativos */}
+            {benefits.length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6 mb-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <CheckCircle className="w-5 h-5 text-blue-600" />
+                        <h2 className="text-lg font-bold text-slate-900">Benefícios Ativos</h2>
+                    </div>
+
+                    <div className="space-y-6">
+                        {benefits.map(b => (
+                            <div key={b.benefit.id} className="border border-slate-100 rounded-xl p-4 bg-slate-50">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-lg">1 Ano de Película Grátis</h3>
+                                        <p className="text-sm text-slate-500">Adquirido em: {new Date(b.benefit.granted_at).toLocaleDateString('pt-BR')}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-2xl font-black text-blue-600">{b.monthsRemaining}/12</div>
+                                        <div className="text-xs text-slate-500 uppercase tracking-widest font-bold">Meses Restantes</div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg">
+                                    <div className="text-sm font-medium text-slate-700">Status do Mês Atual</div>
+                                    {b.canRedeemThisMonth ? (
+                                        <button
+                                            onClick={() => handleRedeem(b.benefit.id)}
+                                            className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-bold shadow-md hover:bg-blue-700 transition"
+                                        >
+                                            Autorizar Resgate Agora
+                                        </button>
+                                    ) : (
+                                        <span className="text-sm font-bold text-slate-400">
+                                            {b.redemptions.some(r => r.year_month === b.currentYearMonth)
+                                                ? 'Resgate do mês já utilizado'
+                                                : (b.monthsRemaining === 0 ? 'Expirado' : 'Não disponível')}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {b.redemptions.length > 0 && (
+                                    <div className="mt-4">
+                                        <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Histórico de Uso</h4>
+                                        <ul className="space-y-2">
+                                            {b.redemptions.map(r => (
+                                                <li key={r.id} className="flex justify-between text-xs py-1.5 border-b border-slate-200/50 last:border-0 text-slate-600">
+                                                    <span>Resgatado em {new Date(r.redeemed_at).toLocaleDateString('pt-BR')}</span>
+                                                    <span>Por: {r.redeemed_by_user?.name || 'Admin'} ({r.year_month})</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}

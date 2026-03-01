@@ -13,6 +13,8 @@ import {
     SaleItem
 } from '../types/sale';
 import { calculateSaleTotals } from '../utils/saleCalculations';
+import { promotionService } from './promotionService';
+import { benefitService } from './benefitService';
 
 /**
  * Create a new sale
@@ -96,6 +98,28 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                 console.error('Failed to create delivery credit:', creditError);
                 // Don't rollback sale, just log the error
             }
+        }
+
+        // Apply Promotions
+        try {
+            const promoStatus = await promotionService.getPromotionStatus('one_year_screen_protector');
+            if (promoStatus.isActive && saleInput.customer_id) {
+                const productIds = saleInput.items.map(item => item.product_id);
+                // Verify if any product is a phone (celulares)
+                const { data: productsInSale } = await supabase
+                    .from('products')
+                    .select('category_slug')
+                    .in('id', productIds);
+
+                const hasSmartphone = productsInSale?.some(p => p.category_slug === 'celulares' || p.category_slug === 'iphones') || false;
+
+                if (hasSmartphone) {
+                    await benefitService.grantScreenProtectorBenefit(saleInput.customer_id, sale.id);
+                    console.log(`✅ Promo aplicada: 1 Ano de Película para Cliente ${saleInput.customer_id}`);
+                }
+            }
+        } catch (promoError) {
+            console.error('Falha ao processar promoção automático no PDV:', promoError);
         }
 
         // Process referral code if provided

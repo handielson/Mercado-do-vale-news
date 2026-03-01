@@ -389,8 +389,8 @@ export function ModernProductCard({
 
 
 
-                    {/* Variant Selector (RAM/Storage) - NOVO */}
-                    {productGroup && productGroup.variants && productGroup.variants.length > 1 ? (
+                    {/* Variant Selector (RAM/Storage/Colors) - NOVO */}
+                    {productGroup && productGroup.variants && (productGroup.variants.length > 1 || (productGroup.variants[0] && productGroup.variants[0].colors.length > 1)) ? (
                         <div className="space-y-2">
                             <div className="space-y-1.5">
                                 {productGroup.variants.map((variant, idx) => {
@@ -433,7 +433,12 @@ export function ModernProductCard({
 
                                             <div className="flex justify-between items-start mb-1">
                                                 <span className={`font-semibold text-sm ${variantInCart ? 'text-green-700' : ''}`}>
-                                                    {variant.ram}/{variant.storage}
+                                                    {variant.ram !== 'no-ram' || variant.storage !== 'no-storage'
+                                                        ? `${variant.ram}/${variant.storage}`
+                                                        : variant.colors.length > 1
+                                                            ? `${variant.colors.length} Cores`
+                                                            : variant.colors[0]?.name || 'Padrão'
+                                                    }
                                                 </span>
                                                 <div className="text-right">
                                                     <div className={`text-base font-bold ${variantInCart ? 'text-green-600' : 'text-blue-600'}`}>
@@ -471,13 +476,15 @@ export function ModernProductCard({
                             <div className="p-2.5 rounded-lg border-2 border-blue-600 bg-blue-50">
                                 <div className="flex justify-between items-start mb-1">
                                     {/* Only show RAM/Storage if at least one exists */}
-                                    {(product.specs?.ram || product.specs?.storage) ? (
+                                    {(product.specs?.ram && product.specs?.ram !== 'no-ram') || (product.specs?.storage && product.specs?.storage !== 'no-storage') ? (
                                         <span className="font-semibold text-sm">
                                             {product.specs?.ram || 'N/A'}/{product.specs?.storage || 'N/A'}
                                         </span>
                                     ) : (
                                         <span className="font-semibold text-sm text-slate-500">
-                                            {product.specs?.color || 'Padrão'}
+                                            {productGroup && productGroup.variants[0] && productGroup.variants[0].colors.length > 1
+                                                ? `${productGroup.variants[0].colors.length} Cores`
+                                                : product.specs?.color || 'Padrão'}
                                         </span>
                                     )}
                                     <div className="text-right">
@@ -492,7 +499,7 @@ export function ModernProductCard({
                                     </div>
                                 </div>
                                 {/* Color indicator — only show if we already showed RAM/Storage above */}
-                                {(product.specs?.ram || product.specs?.storage) && product.specs?.color && (
+                                {((product.specs?.ram && product.specs?.ram !== 'no-ram') || (product.specs?.storage && product.specs?.storage !== 'no-storage')) && product.specs?.color && (
                                     <div className="flex gap-1.5 mt-1.5 items-center">
                                         <div
                                             className="w-3 h-3 rounded-full border border-slate-300"
@@ -500,6 +507,23 @@ export function ModernProductCard({
                                             title={product.specs.color}
                                         />
                                         <span className="text-xs text-slate-600">{product.specs.color}</span>
+                                    </div>
+                                )}
+
+                                {/* Color indicator for standard items with multiple colors grouped in fallback */}
+                                {(!((product.specs?.ram && product.specs?.ram !== 'no-ram') || (product.specs?.storage && product.specs?.storage !== 'no-storage'))) && productGroup && productGroup.variants[0] && productGroup.variants[0].colors.length > 1 && (
+                                    <div className="flex gap-1 mt-1.5">
+                                        {productGroup.variants[0].colors.slice(0, 4).map((color) => (
+                                            <div
+                                                key={color.name}
+                                                className="w-3 h-3 rounded-full border border-slate-300"
+                                                style={{ backgroundColor: color.hex }}
+                                                title={color.name}
+                                            />
+                                        ))}
+                                        {productGroup.variants[0].colors.length > 4 && (
+                                            <span className="text-xs text-slate-500">+{productGroup.variants[0].colors.length - 4}</span>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -523,6 +547,11 @@ export function ModernProductCard({
                                 <>
                                     <Check className="w-4 h-4" />
                                     Adicionado
+                                </>
+                            ) : isAdmin ? (
+                                <>
+                                    <ShoppingCart className="w-4 h-4" />
+                                    Adicionar ao Orçamento
                                 </>
                             ) : (
                                 'Comprar'

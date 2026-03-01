@@ -14,15 +14,15 @@ export interface ColorOption {
  * Filter products that are available for sale
  * Only products with status = 'active'
  */
-export function filterAvailableProducts(products: CatalogProduct[]): CatalogProduct[] {
+export function filterAvailableProducts(products: CatalogProduct[], includeOutOfStock = false): CatalogProduct[] {
     return products.filter(product => {
         // Must be active (available for sale)
         if (product.status !== ProductStatus.ACTIVE) {
             return false;
         }
 
-        // If tracking inventory, must have stock
-        if (product.track_inventory && (product.stock_quantity ?? 0) <= 0) {
+        // Se não for admin, filtra por estoque
+        if (!includeOutOfStock && product.track_inventory && (product.stock_quantity ?? 0) <= 0) {
             return false;
         }
 
@@ -74,7 +74,10 @@ function generateGroupKey(product: CatalogProduct): string {
 
     // Fallback: brand + model name (desnormalized text, may not exist)
     const brand = product.brand || 'unknown';
-    const model = product.model || product.name || 'unknown';
+    const rawModel = product.model || product.name || 'unknown';
+    // Normaliza: remove artigos PT iniciais ("o ", "a ", "os ", "as ") para agrupar
+    // "O Suporte Carona Universal" e "Suporte Carona Universal" na mesma chave
+    const model = rawModel.replace(/^(o|a|os|as|um|uma)\s+/i, '');
     return `${brand}_${model}`.toLowerCase().replace(/\s+/g, '-');
 }
 
@@ -90,9 +93,9 @@ function generateVariantKey(ram?: string, storage?: string): string {
  * Group products by Brand + Model, with variants for each RAM/Storage combination
  * Each group contains all colors for that variant combination
  */
-export function groupProductsByVariants(products: CatalogProduct[]): ProductGroup[] {
+export function groupProductsByVariants(products: CatalogProduct[], includeOutOfStock = false): ProductGroup[] {
     // First, filter only available products
-    const availableProducts = filterAvailableProducts(products);
+    const availableProducts = filterAvailableProducts(products, includeOutOfStock);
 
     // Group by model (Brand + Model)
     const modelGroups = new Map<string, CatalogProduct[]>();
