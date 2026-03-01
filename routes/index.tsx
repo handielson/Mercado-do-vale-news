@@ -108,6 +108,38 @@ const DashboardPage = () => {
       {/* Quick Access Cards */}
       <div className="mt-8">
         <h3 className="text-lg font-semibold text-slate-700 mb-4">⚡ Acesso Rápido</h3>
+
+        {/* Destaques */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-4 p-5 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all"
+          >
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-2xl">🛍️</span>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-lg leading-tight">Catálogo Público</p>
+              <p className="text-sm text-blue-100 mt-0.5">Ver loja como cliente ↗</p>
+            </div>
+          </a>
+
+          <button
+            onClick={() => navigate('/admin/settings/shipping?tab=calcular')}
+            className="flex items-center gap-4 p-5 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all text-left"
+          >
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-2xl">🚚</span>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-lg leading-tight">Calcular Frete</p>
+              <p className="text-sm text-blue-100 mt-0.5">Cotação avulsa com produtos</p>
+            </div>
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <button
             onClick={() => navigate('/admin/settings/models')}
