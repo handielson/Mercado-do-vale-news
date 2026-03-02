@@ -516,114 +516,111 @@ export function ModernProductCard({
                                             </div>
                                         )}
                                     </div>
-                                    {/* Color indicator — only show if we already showed RAM/Storage above */}
-                                    {((product.specs?.ram && product.specs?.ram !== 'no-ram') || (product.specs?.storage && product.specs?.storage !== 'no-storage')) && product.specs?.color && (
-                                        <div className="flex gap-1.5 mt-1.5 items-center">
+                                </div>
+                                {/* Color indicator — only show if we already showed RAM/Storage above */}
+                                {((product.specs?.ram && product.specs?.ram !== 'no-ram') || (product.specs?.storage && product.specs?.storage !== 'no-storage')) && product.specs?.color && (
+                                    <div className="flex gap-1.5 mt-1.5 items-center">
+                                        <div
+                                            className="w-3 h-3 rounded-full border border-slate-300"
+                                            style={{ backgroundColor: product.specs.color_hex || '#gray' }}
+                                            title={product.specs.color}
+                                        />
+                                        <span className="text-xs text-slate-600">{product.specs.color}</span>
+                                    </div>
+                                )}
+
+                                {/* Color indicator for standard items with multiple colors grouped in fallback */}
+                                {(!((product.specs?.ram && product.specs?.ram !== 'no-ram') || (product.specs?.storage && product.specs?.storage !== 'no-storage'))) && productGroup && productGroup.variants[0] && productGroup.variants[0].colors.length > 1 && (
+                                    <div className="flex gap-1 mt-1.5">
+                                        {productGroup.variants[0].colors.slice(0, 4).map((color) => (
                                             <div
+                                                key={color.name}
                                                 className="w-3 h-3 rounded-full border border-slate-300"
-                                                style={{ backgroundColor: product.specs.color_hex || '#gray' }}
-                                                title={product.specs.color}
+                                                style={{ backgroundColor: color.hex }}
+                                                title={color.name}
                                             />
-                                            <span className="text-xs text-slate-600">{product.specs.color}</span>
-                                        </div>
-                                    )}
-
-                                    {/* Color indicator for standard items with multiple colors grouped in fallback */}
-                                    {(!((product.specs?.ram && product.specs?.ram !== 'no-ram') || (product.specs?.storage && product.specs?.storage !== 'no-storage'))) && productGroup && productGroup.variants[0] && productGroup.variants[0].colors.length > 1 && (
-                                        <div className="flex gap-1 mt-1.5">
-                                            {productGroup.variants[0].colors.slice(0, 4).map((color) => (
-                                                <div
-                                                    key={color.name}
-                                                    className="w-3 h-3 rounded-full border border-slate-300"
-                                                    style={{ backgroundColor: color.hex }}
-                                                    title={color.name}
-                                                />
-                                            ))}
-                                            {productGroup.variants[0].colors.length > 4 && (
-                                                <span className="text-xs text-slate-500">+{productGroup.variants[0].colors.length - 4}</span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                    )}
-
-
-
-
-
-                            {/* CTA Buttons */}
-                            <div className="space-y-2">
-                                <button
-                                    onClick={handleCardClick}
-                                    className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 ${isInCart
-                                        ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
-                                        : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
-                                        }`}
-                                >
-                                    {isInCart ? (
-                                        <>
-                                            <Check className="w-4 h-4" />
-                                            Adicionado
-                                        </>
-                                    ) : isAdmin ? (
-                                        <>
-                                            <ShoppingCart className="w-4 h-4" />
-                                            Adicionar ao Orçamento
-                                        </>
-                                    ) : (
-                                        'Comprar'
-                                    )}
-                                </button>
-                                <div className="flex flex-col sm:flex-row gap-2">
-                                    <button
-                                        onClick={handleInfoClick}
-                                        className="flex-1 py-2 px-3 border-2 border-slate-300 text-slate-700 font-medium rounded-lg hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50 transition-all text-sm"
-                                    >
-                                        Detalhes
-                                    </button>
-                                    <button
-                                        onClick={handleCompare}
-                                        className={`flex-1 py-2 px-2 border-2 font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm ${isInCompare
-                                            ? 'border-blue-600 bg-blue-50 text-blue-700'
-                                            : 'border-slate-300 text-slate-700 hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50'
-                                            }`}
-                                        title={isInCompare ? 'Remover da comparação' : 'Comparar produto'}
-                                    >
-                                        <GitCompare className="w-4 h-4 shrink-0" />
-                                        <span className="truncate">{isInCompare ? 'Comparando' : 'Comparar'}</span>
-                                    </button>
-                                </div>
+                                        ))}
+                                        {productGroup.variants[0].colors.length > 4 && (
+                                            <span className="text-xs text-slate-500">+{productGroup.variants[0].colors.length - 4}</span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
+                    )}
+
+                    {/* CTA Buttons */}
+                    <div className="space-y-2">
+                        <button
+                            onClick={handleCardClick}
+                            className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 ${isInCart
+                                ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
+                                : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+                                }`}
+                        >
+                            {isInCart ? (
+                                <>
+                                    <Check className="w-4 h-4" />
+                                    Adicionado
+                                </>
+                            ) : isAdmin ? (
+                                <>
+                                    <ShoppingCart className="w-4 h-4" />
+                                    Adicionar ao Orçamento
+                                </>
+                            ) : (
+                                'Comprar'
+                            )}
+                        </button>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <button
+                                onClick={handleInfoClick}
+                                className="flex-1 py-2 px-3 border-2 border-slate-300 text-slate-700 font-medium rounded-lg hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50 transition-all text-sm"
+                            >
+                                Detalhes
+                            </button>
+                            <button
+                                onClick={handleCompare}
+                                className={`flex-1 py-2 px-2 border-2 font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm ${isInCompare
+                                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                    : 'border-slate-300 text-slate-700 hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50'
+                                    }`}
+                                title={isInCompare ? 'Remover da comparação' : 'Comparar produto'}
+                            >
+                                <GitCompare className="w-4 h-4 shrink-0" />
+                                <span className="truncate">{isInCompare ? 'Comparando' : 'Comparar'}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-                {/* Modals */}
-                {variants && (
-                    <>
-                        <ProductDetailsModal
-                            product={currentProduct}
-                            isOpen={showDetailsModal}
-                            onClose={() => setShowDetailsModal(false)}
-                            onQuote={() => setShowQuoteModal(true)}
-                        />
-                        <QuoteModal
-                            product={currentProduct}
-                            variants={variants}
-                            isOpen={showQuoteModal}
-                            onClose={() => setShowQuoteModal(false)}
-                            initialVariant={
-                                selectedVariant
-                                    ? { ram: selectedVariant.ram, storage: selectedVariant.storage }
-                                    : {
-                                        ram: currentProduct.specs?.ram,
-                                        storage: currentProduct.specs?.storage,
-                                        color: currentProduct.specs?.color
-                                    }
-                            }
-                        />
-                    </>
-                )}
-            </>
-            );
+            {/* Modals */}
+            {variants && (
+                <>
+                    <ProductDetailsModal
+                        product={currentProduct}
+                        isOpen={showDetailsModal}
+                        onClose={() => setShowDetailsModal(false)}
+                        onQuote={() => setShowQuoteModal(true)}
+                    />
+                    <QuoteModal
+                        product={currentProduct}
+                        variants={variants}
+                        isOpen={showQuoteModal}
+                        onClose={() => setShowQuoteModal(false)}
+                        initialVariant={
+                            selectedVariant
+                                ? { ram: selectedVariant.ram, storage: selectedVariant.storage }
+                                : {
+                                    ram: currentProduct.specs?.ram,
+                                    storage: currentProduct.specs?.storage,
+                                    color: currentProduct.specs?.color
+                                }
+                        }
+                    />
+                </>
+            )}
+        </>
+    );
 }
