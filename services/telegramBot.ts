@@ -4,13 +4,15 @@ export interface SaleNotificationData {
     id_venda: string;
     cliente: string;
     telefone: string;
-    produto: string; // Ex: 'iPhone 15 Pro Max 256GB'
-    modelo: string; // Ex: 'iPhone 15 Pro Max'
-    valor: string; // Valor final
-    lucro: string; // Lucro estimado
-    pagamento: string; // Formas de pagamento
-    desconto: string; // Desconto / Cupom
-    estoque: string; // Estoque numerico ou 'Múltiplos'
+    produto: string;
+    modelo: string;
+    valor: string;
+    lucro: string;
+    pagamento: string;
+    desconto: string;
+    estoque: string;
+    entregador: string;  // Nome do entregador ou 'Retirada na Loja'
+    entregador_pix: string; // Chave PIX do entregador ou '-'
 }
 
 export interface CustomerNotificationData {

@@ -227,6 +227,23 @@ class CatalogSectionsService {
             if (error) throw error;
             let products = (data || []) as CatalogProduct[];
 
+            // Se há produtos fixados manualmente, buscá-los por ID (ignora filtros automáticos)
+            if (section.pinned_product_ids && section.pinned_product_ids.length > 0) {
+                const { data: pinnedData, error: pinnedError } = await supabase
+                    .from('products')
+                    .select('*')
+                    .in('id', section.pinned_product_ids)
+                    .limit(section.max_products);
+
+                if (!pinnedError && pinnedData) {
+                    // Preserva a ordem definida pelo usuário
+                    const orderedPinned = section.pinned_product_ids
+                        .map(id => pinnedData.find((p: any) => p.id === id))
+                        .filter(Boolean) as CatalogProduct[];
+                    products = orderedPinned;
+                }
+            }
+
             // Enrich products with model images if they have no custom images
             const productsNeedingImages = products.filter(
                 p => (!p.images || p.images.length === 0) && p.model_id

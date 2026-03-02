@@ -374,6 +374,18 @@ export default function PDVPage() {
                     return p.method;
                 }).join(', ') || 'Não informado';
 
+                // Entregador
+                let entregadorNome = 'Retirada na Loja';
+                let entregadorPix = '-';
+                if (deliveryPersonId && (deliveryType === 'store_delivery' || deliveryType === 'hybrid_delivery')) {
+                    const person = deliveryPersons.find(p => p.id === deliveryPersonId);
+                    entregadorNome = person?.name || 'Entregador';
+                    try {
+                        const memberFull = await teamService.getById(deliveryPersonId);
+                        if (memberFull?.pix_key) entregadorPix = memberFull.pix_key;
+                    } catch { /* ignora */ }
+                }
+
                 telegramBotService.notifySale({
                     id_venda: sale.id.slice(0, 8).toUpperCase(),
                     cliente: selectedCustomer.name,
@@ -384,7 +396,9 @@ export default function PDVPage() {
                     lucro: `R$ ${(profitMargin / 100).toFixed(2).replace('.', ',')}`,
                     pagamento: paymentMethodsList,
                     desconto: promotionalDiscount > 0 ? `R$ ${(promotionalDiscount / 100).toFixed(2).replace('.', ',')}` : 'Nenhum',
-                    estoque: isMultiple ? '-' : String(newStock)
+                    estoque: isMultiple ? '-' : String(newStock),
+                    entregador: entregadorNome,
+                    entregador_pix: entregadorPix,
                 });
             } catch (e) {
                 // Ignore silent error

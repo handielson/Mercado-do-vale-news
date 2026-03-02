@@ -311,18 +311,56 @@ interface SectionFormProps {
 }
 
 function SectionForm({ section, onSave, onCancel }: SectionFormProps) {
-    const [formData, setFormData] = useState<Partial<CatalogSection>>(
-        section || {}
-    );
+    const [formData, setFormData] = useState<Partial<CatalogSection>>(section || {});
+    const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+    const [products, setProducts] = useState<{ id: string; name: string; stock_quantity: number }[]>([]);
+    const [productSearch, setProductSearch] = useState('');
+    const [loadingProducts, setLoadingProducts] = useState(false);
+
+    React.useEffect(() => {
+        // Carregar categorias
+        import('@/services/supabase').then(({ supabase }) => {
+            supabase.from('categories').select('id, name').order('name').then(({ data }) => {
+                if (data) setCategories(data);
+            });
+
+            // Carregar produtos
+            setLoadingProducts(true);
+            supabase.from('products').select('id, name, stock_quantity').eq('status', 'active').order('name').limit(200).then(({ data }) => {
+                if (data) setProducts(data);
+                setLoadingProducts(false);
+            });
+        });
+    }, []);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-
-        // Remover campos que não devem ser enviados
         const { id, user_id, created_at, updated_at, ...dataToSave } = formData as any;
-
         onSave(dataToSave);
     };
+
+    const toggleCategory = (catId: string) => {
+        const current = formData.filter_categories || [];
+        const updated = current.includes(catId)
+            ? current.filter(id => id !== catId)
+            : [...current, catId];
+        setFormData({ ...formData, filter_categories: updated });
+    };
+
+    const togglePinnedProduct = (productId: string) => {
+        const current = formData.pinned_product_ids || [];
+        const updated = current.includes(productId)
+            ? current.filter(id => id !== productId)
+            : [...current, productId];
+        setFormData({ ...formData, pinned_product_ids: updated });
+    };
+
+    const filteredProducts = products.filter(p =>
+        p.name.toLowerCase().includes(productSearch.toLowerCase())
+    );
+
+    const pinnedIds = formData.pinned_product_ids || [];
+    const selectedCategories = formData.filter_categories || [];
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -333,10 +371,9 @@ function SectionForm({ section, onSave, onCancel }: SectionFormProps) {
             </div>
 
             <div className="space-y-4">
+                {/* Título */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Título
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Título</label>
                     <input
                         type="text"
                         value={formData.title || ''}
@@ -346,10 +383,9 @@ function SectionForm({ section, onSave, onCancel }: SectionFormProps) {
                     />
                 </div>
 
+                {/* Subtítulo */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Subtítulo (opcional)
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Subtítulo (opcional)</label>
                     <input
                         type="text"
                         value={formData.subtitle || ''}
@@ -358,24 +394,21 @@ function SectionForm({ section, onSave, onCancel }: SectionFormProps) {
                     />
                 </div>
 
+                {/* Máximo de Produtos */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Máximo de Produtos
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Máximo de Produtos</label>
                     <input
                         type="number"
                         value={formData.max_products || 8}
                         onChange={(e) => setFormData({ ...formData, max_products: parseInt(e.target.value) })}
                         className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                        min={1}
-                        max={50}
+                        min={1} max={50}
                     />
                 </div>
 
+                {/* Layout */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Estilo de Layout
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Estilo de Layout</label>
                     <select
                         value={formData.layout_style || 'grid'}
                         onChange={(e) => setFormData({ ...formData, layout_style: e.target.value as any })}
@@ -385,6 +418,85 @@ function SectionForm({ section, onSave, onCancel }: SectionFormProps) {
                         <option value="carousel">Carrossel</option>
                         <option value="list">Lista</option>
                     </select>
+                </div>
+
+                {/* ── Filtro por Categoria ── */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Filtrar por Categoria
+                        {selectedCategories.length > 0 && (
+                            <span className="ml-2 text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                                {selectedCategories.length} selecionada(s)
+                            </span>
+                        )}
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">Deixe vazio para exibir de todas as categorias.</p>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                        {categories.map(cat => (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                onClick={() => toggleCategory(cat.id)}
+                                className={`px-3 py-1 text-sm rounded-full border transition-colors ${selectedCategories.includes(cat.id)
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                    }`}
+                            >
+                                {cat.name}
+                            </button>
+                        ))}
+                        {categories.length === 0 && (
+                            <p className="text-xs text-gray-400">Carregando categorias...</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── Produtos Fixados Manualmente ── */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Produtos Específicos (Manual)
+                        {pinnedIds.length > 0 && (
+                            <span className="ml-2 text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                                {pinnedIds.length} fixado(s)
+                            </span>
+                        )}
+                    </label>
+                    {pinnedIds.length > 0 && (
+                        <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                            <p className="text-xs text-amber-700">
+                                ⚠️ Quando há produtos fixados, os filtros automáticos e de categoria são ignorados.
+                                <button type="button" onClick={() => setFormData({ ...formData, pinned_product_ids: [] })} className="ml-2 underline text-amber-800 hover:text-red-600">
+                                    Limpar seleção
+                                </button>
+                            </p>
+                        </div>
+                    )}
+                    <p className="text-xs text-gray-500 mb-2">Selecione produtos específicos para exibir nesta seção.</p>
+                    <input
+                        type="text"
+                        value={productSearch}
+                        onChange={e => setProductSearch(e.target.value)}
+                        placeholder="Buscar produto..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-blue-600"
+                    />
+                    <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                        {loadingProducts ? (
+                            <p className="text-xs text-gray-400 p-3">Carregando produtos...</p>
+                        ) : filteredProducts.length === 0 ? (
+                            <p className="text-xs text-gray-400 p-3">Nenhum produto encontrado.</p>
+                        ) : filteredProducts.map(prod => (
+                            <label key={prod.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={pinnedIds.includes(prod.id)}
+                                    onChange={() => togglePinnedProduct(prod.id)}
+                                    className="w-4 h-4 text-blue-600 rounded"
+                                />
+                                <span className="flex-1 text-sm text-gray-700">{prod.name}</span>
+                                <span className="text-xs text-gray-400">Estoque: {prod.stock_quantity}</span>
+                            </label>
+                        ))}
+                    </div>
                 </div>
             </div>
 

@@ -29,6 +29,8 @@ const DUMMY_PREVIEW_DATA = {
     pagamento: 'Pix, Cartão de Crédito (12x)',
     desconto: 'R$ 150,00',
     estoque: '3',
+    entregador: 'João Silva',
+    entregador_pix: '11999999999 (Telefone)',
     // Tags Agendadas
     qtd_vendas: '15',
     faturamento: 'R$ 18.500,00',
@@ -122,6 +124,8 @@ export default function TelegramPage() {
             { tag: '{lucro}', desc: 'Lucro daquela venda' },
             { tag: '{pagamento}', desc: 'Cartão/Pix/Espécie' },
             { tag: '{desconto}', desc: 'Desconto aplicado' },
+            { tag: '{entregador}', desc: 'Nome do entregador ou \'Retirada na Loja\'' },
+            { tag: '{entregador_pix}', desc: 'PIX do entregador (se entrega)' },
             { tag: '{estoque}', desc: 'Unidades restantes do item' }
         ];
     };

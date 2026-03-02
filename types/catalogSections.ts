@@ -29,6 +29,9 @@ export interface CatalogSection {
     filter_max_price?: number;
     filter_tags?: string[];
 
+    // Produtos fixados manualmente
+    pinned_product_ids?: string[];
+
     // Ordenação
     sort_by: SortBy;
     sort_direction: SortDirection;
@@ -53,6 +56,7 @@ export interface CreateSectionData {
     filter_min_price?: number;
     filter_max_price?: number;
     filter_tags?: string[];
+    pinned_product_ids?: string[];
     sort_by?: SortBy;
     sort_direction?: SortDirection;
 }

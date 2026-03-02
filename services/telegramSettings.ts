@@ -24,7 +24,7 @@ const DEFAULT_TEMPLATES: TelegramTemplate[] = [
         name: 'Venda Padrão (PDV)',
         type: 'action',
         action_type: 'sale',
-        content: '🛒 *Nova Venda Registrada!* (#{id_venda})\n\n👤 *Cliente:* {cliente}\n📱 *Produto:* {produto}\n💳 *Pagamento:* {pagamento} ({desconto} desc.)\n💰 *Valor Pago:* {valor}\n📈 *Lucro Estimado:* {lucro}\n\n📦 *Estoque de {modelo}:* {estoque} unidade(s)'
+        content: '🛒 *Nova Venda Registrada!* (#{id_venda})\n\n👤 *Cliente:* {cliente}\n📱 *Produto:* {produto}\n💳 *Pagamento:* {pagamento} ({desconto} desc.)\n💰 *Valor Pago:* {valor}\n📈 *Lucro Estimado:* {lucro}\n\n🚚 *Entrega:* {entregador}\n💠 *PIX Entregador:* {entregador_pix}\n\n📦 *Estoque de {modelo}:* {estoque} unidade(s)'
     },
     {
         id: 'new_customer_template',
