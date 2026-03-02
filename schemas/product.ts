@@ -109,7 +109,15 @@ export const productSchema = z.object({
     // Inventory Control
     track_inventory: z.boolean().default(true),
     stock_quantity: z.coerce.number().int().min(0).nullable().optional()
-        .transform(val => val === null || val === 0 ? undefined : val)
+        .transform(val => val === null || val === 0 ? undefined : val),
+
+    // Promotional Pricing
+    price_promo: z.coerce.number().min(0).nullable().optional()
+        .transform(val => (val === null || val === 0) ? undefined : val),
+    promo_start: z.string().nullable().optional()
+        .transform(val => !val ? undefined : val),
+    promo_end: z.string().nullable().optional()
+        .transform(val => !val ? undefined : val),
 }).refine(
     (data) => data.price_retail >= data.price_reseller,
     {

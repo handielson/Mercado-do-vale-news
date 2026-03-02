@@ -148,7 +148,10 @@ async function create(input: ProductInput): Promise<Product> {
             track_inventory: input.track_inventory,
             is_gift: input.is_gift || false,
             warranty_type: input.warranty_type || 'brand',
-            warranty_template_id: input.warranty_template_id || null
+            warranty_template_id: input.warranty_template_id || null,
+            price_promo: input.price_promo || null,
+            promo_start: input.promo_start || null,
+            promo_end: input.promo_end || null,
         })
         .select('*')
         .single();
@@ -218,7 +221,10 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             track_inventory: input.track_inventory,
             is_gift: input.is_gift || false,
             warranty_type: input.warranty_type || 'brand',
-            warranty_template_id: input.warranty_template_id || null
+            warranty_template_id: input.warranty_template_id || null,
+            price_promo: input.price_promo || null,
+            promo_start: input.promo_start || null,
+            promo_end: input.promo_end || null,
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -313,6 +319,9 @@ function transformFromDB(row: any): Product {
         is_gift: row.is_gift || false,
         warranty_type: row.warranty_type || 'brand',
         warranty_template_id: row.warranty_template_id || null,
+        price_promo: row.price_promo || undefined,
+        promo_start: row.promo_start || undefined,
+        promo_end: row.promo_end || undefined,
         created: row.created_at,
         updated: row.updated_at
     };
