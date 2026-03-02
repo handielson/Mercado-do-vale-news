@@ -104,6 +104,11 @@ export interface Product {
     shipping_width?: number;       // Largura em cm
     shipping_length?: number;      // Comprimento em cm
 
+    // Promotional Pricing
+    price_promo?: number;          // Preço promocional em centavos (null = sem promoção)
+    promo_start?: string;          // Início da promoção (ISO 8601)
+    promo_end?: string;            // Fim da promoção (ISO 8601)
+
     // Timestamps
     created: string;
     updated: string;
@@ -149,4 +154,8 @@ export interface ProductInput {
     shipping_height?: number;
     shipping_width?: number;
     shipping_length?: number;
+    // Promotional Pricing
+    price_promo?: number;
+    promo_start?: string;
+    promo_end?: string;
 }

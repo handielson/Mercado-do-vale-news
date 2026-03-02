@@ -273,6 +273,119 @@ export function ProductPricing({ watch, setValue, modelId }: ProductPricingProps
                     );
                 })}
             </div>
+
+            {/* ── Promoção por Tempo Limitado ── */}
+            <PromoSection watch={watch} setValue={setValue} />
+        </div>
+    );
+}
+
+// ── Componente interno de promoção ──
+function PromoSection({ watch, setValue }: { watch: UseFormWatch<ProductInput>; setValue: UseFormSetValue<ProductInput> }) {
+    const pricePromo = watch('price_promo') || 0;
+    const promoStart = watch('promo_start') || '';
+    const promoEnd = watch('promo_end') || '';
+    const priceRetail = watch('price_retail') || 0;
+
+    const toLocalInput = (iso: string) => {
+        if (!iso) return '';
+        return iso.slice(0, 16); // "YYYY-MM-DDTHH:MM"
+    };
+
+    const fromLocalInput = (val: string) => {
+        if (!val) return '';
+        return new Date(val).toISOString();
+    };
+
+    const now = new Date();
+    const start = promoStart ? new Date(promoStart) : null;
+    const end = promoEnd ? new Date(promoEnd) : null;
+    const isActive = pricePromo > 0 && (!start || start <= now) && (!end || end >= now);
+    const isPending = pricePromo > 0 && start && start > now;
+    const isExpired = pricePromo > 0 && end && end < now;
+
+    const discountPct = priceRetail > 0 && pricePromo > 0
+        ? Math.round(((priceRetail - pricePromo) / priceRetail) * 100)
+        : 0;
+
+    return (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+            <div className="flex items-center gap-2 mb-3">
+                <span className="text-base">🏷️</span>
+                <div className="flex-1">
+                    <span className="text-sm font-semibold text-slate-800">Promoção por Tempo Limitado</span>
+                    <span className="ml-2 text-xs text-slate-400">Aparece no catálogo com preço riscado</span>
+                </div>
+                {isActive && (
+                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-semibold">✅ Ativa</span>
+                )}
+                {isPending && (
+                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-semibold">⏳ Agendada</span>
+                )}
+                {isExpired && (
+                    <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded-full font-semibold">⌛ Expirada</span>
+                )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Preço Promo */}
+                <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Preço Promocional (R$)
+                    </label>
+                    <CurrencyInput
+                        value={pricePromo}
+                        onChange={(val) => setValue('price_promo', val || undefined)}
+                    />
+                    {discountPct > 0 && (
+                        <p className="text-xs text-red-600 mt-1 font-semibold">
+                            -{discountPct}% de desconto sobre o varejo
+                        </p>
+                    )}
+                </div>
+
+                {/* Data Início */}
+                <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Início da Promoção
+                    </label>
+                    <input
+                        type="datetime-local"
+                        value={toLocalInput(promoStart)}
+                        onChange={(e) => setValue('promo_start', fromLocalInput(e.target.value) || undefined as any)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Deixe vazio = começa imediatamente</p>
+                </div>
+
+                {/* Data Fim */}
+                <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Fim da Promoção
+                    </label>
+                    <input
+                        type="datetime-local"
+                        value={toLocalInput(promoEnd)}
+                        onChange={(e) => setValue('promo_end', fromLocalInput(e.target.value) || undefined as any)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Deixe vazio = sem data limite</p>
+                </div>
+            </div>
+
+            {pricePromo > 0 && (
+                <button
+                    type="button"
+                    onClick={() => {
+                        setValue('price_promo', undefined as any);
+                        setValue('promo_start', undefined as any);
+                        setValue('promo_end', undefined as any);
+                    }}
+                    className="mt-3 text-xs text-red-500 hover:text-red-700 underline"
+                >
+                    Remover promoção
+                </button>
+            )}
         </div>
     );
 }

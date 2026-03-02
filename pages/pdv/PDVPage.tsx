@@ -24,6 +24,7 @@ import { validateCoupon, applyCoupon, type Coupon } from '../../services/couponS
 import { earnCoinsForPurchase } from '../../services/cashbackService';
 import { telegramBotService } from '../../services/telegramBot';
 import { teamService } from '../../services/team';
+import { getEffectiveRetailPrice } from '../../utils/promoPrice';
 
 interface Customer {
     id: string;
@@ -185,11 +186,11 @@ export default function PDVPage() {
                 })(),
                 product_sku: product.sku,
                 quantity,
-                unit_price: product.price_retail, // Preço varejo em centavos
-                unit_cost: product.price_cost, // Custo em centavos
-                discount: product.is_gift ? product.price_retail : 0, // Desconto integral para brindes
-                subtotal: product.price_retail * quantity,
-                total: product.is_gift ? 0 : product.price_retail * quantity,
+                unit_price: getEffectiveRetailPrice(product), // Usa promo se ativa, senão varejo
+                unit_cost: product.price_cost,
+                discount: product.is_gift ? product.price_retail : 0,
+                subtotal: getEffectiveRetailPrice(product) * quantity,
+                total: product.is_gift ? 0 : getEffectiveRetailPrice(product) * quantity,
                 is_gift: product.is_gift || false,
                 // Controle de estoque
                 track_inventory: product.track_inventory || false,
