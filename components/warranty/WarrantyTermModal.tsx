@@ -12,6 +12,7 @@
 import React, { useState } from 'react';
 import { FileText, Printer, X } from 'lucide-react';
 import { DeliveryTypeWarranty } from '../../types/warrantyDocument';
+import { renderWarrantyBothCopies } from '../../utils/warrantyTagReplacement';
 
 interface WarrantyTermModalProps {
     isOpen: boolean;
@@ -20,6 +21,9 @@ interface WarrantyTermModalProps {
     deliveryType: DeliveryTypeWarranty;
     onDeliveryTypeChange: (type: DeliveryTypeWarranty) => void;
     onGenerate: (signature: string) => Promise<void>;
+    // Optional: provide template + tagData for proper two-copy rendering
+    warrantyTemplate?: string;
+    warrantyTagData?: Record<string, string>;
 }
 
 export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
@@ -28,7 +32,9 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
     warrantyContent,
     deliveryType,
     onDeliveryTypeChange,
-    onGenerate
+    onGenerate,
+    warrantyTemplate,
+    warrantyTagData
 }) => {
     const [isGenerating, setIsGenerating] = useState(false);
 
@@ -46,6 +52,15 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
     const handlePrint = () => {
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
+
+        // Gerar as duas cópias diferenciadas
+        let copy1 = warrantyContent;
+        let copy2 = warrantyContent.replace(/Assinatura do Cliente/gi, 'Assinatura da Empresa');
+        if (warrantyTemplate && warrantyTagData) {
+            const copies = renderWarrantyBothCopies(warrantyTemplate, warrantyTagData);
+            copy1 = copies.copy1;
+            copy2 = copies.copy2;
+        }
 
         printWindow.document.write(`
             <!DOCTYPE html>
@@ -66,61 +81,22 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
                     .warranty-copy:last-child {
                         page-break-after: auto;
                     }
-                    .copy-header {
-                        text-align: center;
-                        font-weight: bold;
-                        font-size: 14px;
-                        margin-bottom: 20px;
-                        padding: 10px;
-                        background-color: #f3f4f6;
-                        border: 2px solid #d1d5db;
-                        border-radius: 8px;
-                    }
-                    .signature-line {
-                        margin-top: 60px;
-                        text-align: center;
-                    }
-                    .signature-line hr {
-                        width: 300px;
-                        margin: 0 auto 10px;
-                        border: none;
-                        border-top: 1px solid #000;
-                    }
                     @media print {
                         body {
                             padding: 10mm;
-                        }
-                        .copy-header {
-                            background-color: #f3f4f6 !important;
-                            -webkit-print-color-adjust: exact;
-                            print-color-adjust: exact;
                         }
                     }
                 </style>
             </head>
             <body>
-                <!-- VIA 1: EMPRESA (Cliente assina) -->
+                <!-- VIA 1: EMPRESA - Cliente assina -->
                 <div class="warranty-copy">
-                    <div class="copy-header">
-                        📋 VIA DA EMPRESA - Cliente deve assinar abaixo
-                    </div>
-                    ${warrantyContent}
-                    <div class="signature-line">
-                        <hr />
-                        <p><strong>Assinatura do Cliente</strong></p>
-                    </div>
+                    ${copy1}
                 </div>
 
-                <!-- VIA 2: CLIENTE (Empresa assina) -->
+                <!-- VIA 2: CLIENTE - Empresa assina -->
                 <div class="warranty-copy">
-                    <div class="copy-header">
-                        📄 VIA DO CLIENTE - Empresa deve assinar abaixo
-                    </div>
-                    ${warrantyContent}
-                    <div class="signature-line">
-                        <hr />
-                        <p><strong>Assinatura da Empresa</strong></p>
-                    </div>
+                    ${copy2}
                 </div>
             </body>
             </html>

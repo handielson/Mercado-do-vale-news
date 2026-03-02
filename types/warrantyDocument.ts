@@ -69,6 +69,12 @@ export interface WarrantyTagData {
 
     // Declaração (muda conforme tipo de entrega)
     declaracao_recebimento: string;
+
+    // Assinante (muda conforme a via: "Assinatura do Cliente" ou "Assinatura da Empresa")
+    assinatura_responsavel?: string;
+
+    // Nome que aparece na linha de assinatura (cliente na via1, loja na via2)
+    nome_assinante?: string;
 }
 
 /**
@@ -108,5 +114,11 @@ export const WARRANTY_TAGS: Record<string, string> = {
     tipo_garantia: 'Tipo de Garantia',
 
     // Declaração
-    declaracao_recebimento: 'Declaração de Recebimento'
+    declaracao_recebimento: 'Declaração de Recebimento',
+
+    // Assinante (Via 1 = Cliente assina, Via 2 = Empresa assina)
+    assinatura_responsavel: 'Responsável pela Assinatura (muda conforme a via)',
+
+    // Nome na linha de assinatura (cliente na via1, empresa na via2)
+    nome_assinante: 'Nome do Assinante (cliente na via da empresa, loja na via do cliente)'
 };

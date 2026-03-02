@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     reference_id UUID, -- ID da venda/compra relacionada (nullable)
     
     -- Audit Trail
-    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
     -- Constraints
@@ -47,18 +47,14 @@ ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY;
 CREATE POLICY stock_movements_select_policy ON stock_movements
     FOR SELECT
     USING (
-        company_id IN (
-            SELECT company_id FROM users WHERE id = auth.uid()
-        )
+        company_id::text = (auth.jwt() -> 'app_metadata' ->> 'company_id')
     );
 
 -- Policy: Users can insert movements for their company
 CREATE POLICY stock_movements_insert_policy ON stock_movements
     FOR INSERT
     WITH CHECK (
-        company_id IN (
-            SELECT company_id FROM users WHERE id = auth.uid()
-        )
+        company_id::text = (auth.jwt() -> 'app_metadata' ->> 'company_id')
     );
 
 -- Policy: Users cannot update or delete movements (audit trail)

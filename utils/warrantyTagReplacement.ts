@@ -84,3 +84,54 @@ export function formatWarrantyCpfCnpj(cpfCnpj: string): string {
 
     return cpfCnpj;
 }
+
+/**
+ * Render both warranty copies with different signing party.
+ * Copy 1 (via da empresa): client signs → assinatura_responsavel = 'Assinatura do Cliente'
+ * Copy 2 (via do cliente): company signs → assinatura_responsavel = 'Assinatura da Empresa'
+ */
+export function renderWarrantyBothCopies(
+    template: string,
+    tagData: Record<string, string>
+): { copy1: string; copy2: string } {
+    const dataForCopy1 = {
+        ...tagData,
+        assinatura_responsavel: 'Assinatura do Cliente',
+        nome_assinante: tagData.nome_cliente || ''
+    };
+    const dataForCopy2 = {
+        ...tagData,
+        assinatura_responsavel: 'Assinatura da Empresa',
+        nome_assinante: tagData.nome_loja || ''
+    };
+    return {
+        copy1: replaceWarrantyTags(template, dataForCopy1 as any),
+        copy2: replaceWarrantyTags(template, dataForCopy2 as any),
+    };
+}
+
+/**
+ * Apply display flags from company settings to the tag data.
+ * When a flag is false, the corresponding tag value is cleared so it
+ * disappears from the rendered template.
+ */
+export function applyWarrantyDisplayFlags(
+    tagData: Record<string, string>,
+    settings: {
+        warranty_show_logo?: boolean;
+        warranty_show_company_name?: boolean;
+        warranty_show_cnpj?: boolean;
+        warranty_show_phone?: boolean;
+        warranty_show_email?: boolean;
+        warranty_show_address?: boolean;
+    }
+): Record<string, string> {
+    const data = { ...tagData };
+    if (!settings.warranty_show_logo) data.logo = '';
+    if (!settings.warranty_show_company_name) data.nome_loja = '';
+    if (!settings.warranty_show_cnpj) data.cnpj = '';
+    if (!settings.warranty_show_phone) data.telefone = '';
+    if (!settings.warranty_show_email) data.email = '';
+    if (!settings.warranty_show_address) data.endereco = '';
+    return data;
+}

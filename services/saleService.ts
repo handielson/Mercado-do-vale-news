@@ -86,6 +86,18 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             throw itemsError;
         }
 
+        // Deduzir estoque dos produtos com track_inventory = true
+        const itemsWithInventory = saleInput.items.filter(item => item.track_inventory && item.product_id);
+        for (const item of itemsWithInventory) {
+            const { error: stockError } = await supabase.rpc('decrement_stock', {
+                p_product_id: item.product_id,
+                p_quantity: item.quantity
+            });
+            if (stockError) {
+                console.error(`Falha ao atualizar estoque do produto ${item.product_id}:`, stockError);
+            }
+        }
+
         // Create delivery credit if applicable
         if (saleInput.delivery_person_id && saleInput.delivery_total && saleInput.delivery_total > 0) {
             const deliveryCredit = {
@@ -175,7 +187,7 @@ export const getSaleById = async (id: string): Promise<SaleWithItems | null> => 
             .select(`
                 *,
                 customer:customers(id, name, cpf_cnpj),
-                seller:team_members(id, name)
+                seller:team_members!seller_id(id, name)
             `)
             .eq('id', id)
             .single();
@@ -210,7 +222,7 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
             .select(`
                 *,
                 customer:customers(id, name, cpf_cnpj),
-                seller:team_members(id, name)
+                seller:team_members!seller_id(id, name)
             `)
             .order('created_at', { ascending: false });
 
@@ -269,12 +281,28 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
  */
 export const cancelSale = async (id: string): Promise<void> => {
     try {
+        // Fetch items before cancelling to restore stock
+        const { data: items } = await supabase
+            .from('sale_items')
+            .select('product_id, quantity')
+            .eq('sale_id', id);
+
         const { error } = await supabase
             .from('sales')
             .update({ status: 'cancelled' })
             .eq('id', id);
 
         if (error) throw error;
+
+        // Restore stock for each item
+        if (items) {
+            for (const item of items) {
+                await supabase.rpc('increment_stock', {
+                    p_product_id: item.product_id,
+                    p_quantity: item.quantity
+                });
+            }
+        }
 
         // Cancel associated delivery credits
         await supabase
@@ -292,12 +320,28 @@ export const cancelSale = async (id: string): Promise<void> => {
  */
 export const refundSale = async (id: string): Promise<void> => {
     try {
+        // Fetch items before refunding to restore stock
+        const { data: items } = await supabase
+            .from('sale_items')
+            .select('product_id, quantity')
+            .eq('sale_id', id);
+
         const { error } = await supabase
             .from('sales')
             .update({ status: 'refunded' })
             .eq('id', id);
 
         if (error) throw error;
+
+        // Restore stock for each item
+        if (items) {
+            for (const item of items) {
+                await supabase.rpc('increment_stock', {
+                    p_product_id: item.product_id,
+                    p_quantity: item.quantity
+                });
+            }
+        }
 
         // Cancel associated delivery credits
         await supabase
@@ -306,6 +350,39 @@ export const refundSale = async (id: string): Promise<void> => {
             .eq('sale_id', id);
     } catch (error) {
         console.error('Error refunding sale:', error);
+        throw error;
+    }
+};
+
+/**
+ * Delete a sale permanently
+ */
+export const deleteSale = async (id: string): Promise<void> => {
+    try {
+        // Restore stock before deleting
+        const { data: items } = await supabase
+            .from('sale_items')
+            .select('product_id, quantity')
+            .eq('sale_id', id);
+
+        if (items) {
+            for (const item of items) {
+                await supabase.rpc('increment_stock', {
+                    p_product_id: item.product_id,
+                    p_quantity: item.quantity
+                });
+            }
+        }
+
+        // Delete sale (cascade will delete sale_items and delivery_credits)
+        const { error } = await supabase
+            .from('sales')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error('Error deleting sale:', error);
         throw error;
     }
 };

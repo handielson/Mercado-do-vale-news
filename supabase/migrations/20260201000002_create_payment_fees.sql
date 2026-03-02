@@ -25,19 +25,19 @@ ALTER TABLE payment_fees ENABLE ROW LEVEL SECURITY;
 -- RLS Policies
 CREATE POLICY "Users can view their company's payment fees"
     ON payment_fees FOR SELECT
-    USING (company_id = get_company_id());
+    USING (company_id::text = (auth.jwt() -> 'app_metadata' ->> 'company_id'));
 
 CREATE POLICY "Users can insert their company's payment fees"
     ON payment_fees FOR INSERT
-    WITH CHECK (company_id = get_company_id());
+    WITH CHECK (company_id::text = (auth.jwt() -> 'app_metadata' ->> 'company_id'));
 
 CREATE POLICY "Users can update their company's payment fees"
     ON payment_fees FOR UPDATE
-    USING (company_id = get_company_id());
+    USING (company_id::text = (auth.jwt() -> 'app_metadata' ->> 'company_id'));
 
 CREATE POLICY "Users can delete their company's payment fees"
     ON payment_fees FOR DELETE
-    USING (company_id = get_company_id());
+    USING (company_id::text = (auth.jwt() -> 'app_metadata' ->> 'company_id'));
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_payment_fees_company ON payment_fees(company_id);

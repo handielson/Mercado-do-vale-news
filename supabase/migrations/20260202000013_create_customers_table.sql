@@ -32,11 +32,11 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_customers_company_id ON customers(company_id);
-CREATE INDEX idx_customers_cpf_cnpj ON customers(cpf_cnpj);
-CREATE INDEX idx_customers_email ON customers(email);
-CREATE INDEX idx_customers_name ON customers USING gin(to_tsvector('portuguese', name));
-CREATE INDEX idx_customers_is_active ON customers(is_active);
+CREATE INDEX IF NOT EXISTS idx_customers_company_id ON customers(company_id);
+CREATE INDEX IF NOT EXISTS idx_customers_cpf_cnpj ON customers(cpf_cnpj);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_customers_name_search ON customers USING gin(to_tsvector('portuguese', name));
+CREATE INDEX IF NOT EXISTS idx_customers_is_active ON customers(is_active);
 
 -- RLS Policies
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;

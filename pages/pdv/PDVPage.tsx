@@ -15,7 +15,7 @@ import { WarrantyTermModal } from '../../components/warranty/WarrantyTermModal';
 import { createSale } from '../../services/saleService';
 import { warrantyDocumentService } from '../../services/warrantyDocumentService';
 import { companySettingsService } from '../../services/companySettingsService';
-import { replaceWarrantyTags, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
+import { replaceWarrantyTags, applyWarrantyDisplayFlags, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
 import { WarrantyTagData, DeliveryTypeWarranty } from '../../types/warrantyDocument';
 import { WarrantyOption } from '../../types/companySettings';
 import { toast } from 'sonner';
@@ -77,6 +77,8 @@ export default function PDVPage() {
     const [lastSaleData, setLastSaleData] = useState<any>(null);
     const [warrantyContent, setWarrantyContent] = useState('');
     const [warrantyDeliveryType, setWarrantyDeliveryType] = useState<DeliveryTypeWarranty>('store_pickup');
+    const [warrantyTemplate, setWarrantyTemplate] = useState('');
+    const [warrantyTagData, setWarrantyTagData] = useState<Record<string, string>>({});
 
     // Entregadores reais do Supabase (role = 'delivery')
     const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string }[]>([]);
@@ -169,7 +171,17 @@ export default function PDVPage() {
             const newItem: SaleItem = {
                 id: crypto.randomUUID(), // ID temporário para o frontend
                 product_id: product.id,
-                product_name: product.name,
+                product_name: (() => {
+                    const specs = (product as any).specs;
+                    if (!specs) return product.name;
+                    const memPart = specs.ram && specs.storage
+                        ? `, ${specs.ram}/${specs.storage}`
+                        : specs.ram ? `, ${specs.ram}`
+                            : specs.storage ? `, ${specs.storage}`
+                                : '';
+                    const colorPart = specs.color ? ` - ${specs.color}` : '';
+                    return `${product.name}${memPart}${colorPart}`;
+                })(),
                 product_sku: product.sku,
                 quantity,
                 unit_price: product.price_retail, // Preço varejo em centavos
@@ -180,7 +192,11 @@ export default function PDVPage() {
                 is_gift: product.is_gift || false,
                 // Controle de estoque
                 track_inventory: product.track_inventory || false,
-                stock_quantity: product.stock_quantity
+                stock_quantity: product.stock_quantity,
+                // Specs para uso no termo de garantia (campo extra, não enviado ao banco)
+                product_specs: (product as any).specs || {},
+                product_brand: (product as any).brand || '',
+                product_model: product.model || product.name || '',
             };
             setCartItems([...cartItems, newItem]);
         }
@@ -422,7 +438,7 @@ export default function PDVPage() {
                 telefone: formatWarrantyPhone(settings.phone || ''),
                 email: settings.email || '',
                 cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
-                logo: settings.receipt_logo_url || '',
+                logo: (settings as any).logo || settings.receipt_logo_url || '',
 
                 // Cliente
                 nome_cliente: customer.name,
@@ -436,13 +452,13 @@ export default function PDVPage() {
 
                 // Produto (primeiro item)
                 produto: firstItem.product_name,
-                marca: '', // TODO: buscar do produto
-                modelo: '',
-                cor: '',
-                ram: '',
-                memoria: '',
-                imei1: '',
-                imei2: '',
+                marca: (firstItem as any).product_brand || '',
+                modelo: (firstItem as any).product_model || '',
+                cor: (firstItem as any).product_specs?.color || '',
+                ram: (firstItem as any).product_specs?.ram || '',
+                memoria: (firstItem as any).product_specs?.storage || '',
+                imei1: (firstItem as any).product_specs?.imei1 || '',
+                imei2: (firstItem as any).product_specs?.imei2 || '',
 
                 // Garantia
                 dias_garantia: '90', // TODO: calcular baseado no produto
@@ -454,10 +470,15 @@ export default function PDVPage() {
                 )
             };
 
+            // Aplicar flags de exibição das configurações antes de substituir
+            const filteredTagData = applyWarrantyDisplayFlags(tagData as any, settings);
+
             // Substituir tags no template
-            const content = replaceWarrantyTags(settings.warranty_template, tagData);
+            const content = replaceWarrantyTags(settings.warranty_template, filteredTagData);
 
             setWarrantyContent(content);
+            setWarrantyTemplate(settings.warranty_template);
+            setWarrantyTagData(filteredTagData as any);
             setWarrantyDeliveryType(deliveryType === 'delivery' ? 'delivery' : 'store_pickup');
             setShowWarrantyModal(true);
         } catch (error) {
@@ -482,7 +503,7 @@ export default function PDVPage() {
                 telefone: formatWarrantyPhone(settings.phone || ''),
                 email: settings.email || '',
                 cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
-                logo: settings.receipt_logo_url || '',
+                logo: (settings as any).logo || settings.receipt_logo_url || '',
                 nome_cliente: lastSaleData.customer.name,
                 cpf_cliente: formatWarrantyCpfCnpj(lastSaleData.customer.cpf_cnpj || ''),
                 telefone_cliente: formatWarrantyPhone(lastSaleData.customer.phone || ''),
@@ -490,19 +511,20 @@ export default function PDVPage() {
                 numero_venda: lastSaleData.sale.id.slice(0, 8),
                 data_compra: formatWarrantyDate(new Date()),
                 produto: firstItem.product_name,
-                marca: '',
-                modelo: '',
-                cor: '',
-                ram: '',
-                memoria: '',
-                imei1: '',
-                imei2: '',
+                marca: (firstItem as any).product_brand || '',
+                modelo: (firstItem as any).product_model || '',
+                cor: (firstItem as any).product_specs?.color || '',
+                ram: (firstItem as any).product_specs?.ram || '',
+                memoria: (firstItem as any).product_specs?.storage || '',
+                imei1: (firstItem as any).product_specs?.imei1 || '',
+                imei2: (firstItem as any).product_specs?.imei2 || '',
                 dias_garantia: '90',
                 tipo_garantia: 'Garantia Legal',
                 declaracao_recebimento: getWarrantyDeclaration(type)
             };
 
-            const content = replaceWarrantyTags(settings.warranty_template, tagData);
+            const filteredTagData = applyWarrantyDisplayFlags(tagData as any, settings);
+            const content = replaceWarrantyTags(settings.warranty_template, filteredTagData);
             setWarrantyContent(content);
         }
     };
@@ -671,6 +693,8 @@ export default function PDVPage() {
                 deliveryType={warrantyDeliveryType}
                 onDeliveryTypeChange={handleWarrantyDeliveryTypeChange}
                 onGenerate={handleGenerateWarranty}
+                warrantyTemplate={warrantyTemplate}
+                warrantyTagData={warrantyTagData}
             />
         </div>
     );

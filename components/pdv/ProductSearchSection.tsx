@@ -12,6 +12,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     const [searchResults, setSearchResults] = useState<Product[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [quantities, setQuantities] = useState<Record<string, number>>({});
+    const [skuStockMap, setSkuStockMap] = useState<Record<string, number>>({});
 
     // Busca automática com debounce
     useEffect(() => {
@@ -55,7 +56,25 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                 return product.stock_quantity !== undefined && product.stock_quantity > 0;
             });
 
+            // Calcular total de unidades disponíveis agrupando por:
+            // - Produtos serializados (IMEI/Serial): SKU + RAM + Storage + Cor (chave composta)
+            // - Produtos normais: SKU apenas
+            const skuStockMap: Record<string, number> = {};
+            for (const p of availableProducts) {
+                if (p.track_inventory && p.sku) {
+                    const specs = (p as any).specs;
+                    const isSerialized = specs?.imei1 || specs?.imei2 || specs?.serial;
+                    const key = isSerialized
+                        ? `${p.model_id}|${specs?.ram || ''}|${specs?.storage || ''}|${specs?.color || ''}`
+                        : p.sku;
+                    skuStockMap[key] = (skuStockMap[key] || 0) + 1;
+                    // Armazenar a chave no próprio produto para uso no display
+                    (p as any)._stockKey = key;
+                }
+            }
+
             setSearchResults(availableProducts);
+            setSkuStockMap(skuStockMap);
 
             // Não mostrar toast em busca automática, apenas em Enter
         } catch (error) {
@@ -168,7 +187,23 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                 {/* Informações */}
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
-                                        <h4 className="font-medium text-slate-800">{product.name}</h4>
+                                        <h4 className="font-medium text-slate-800">
+                                            {product.name}
+                                            {(product.specs?.ram || product.specs?.storage || product.specs?.color) && (
+                                                <span className="text-slate-500 font-normal">
+                                                    {[
+                                                        product.specs?.ram && product.specs?.storage
+                                                            ? `, ${product.specs.ram}/${product.specs.storage}`
+                                                            : product.specs?.ram
+                                                                ? `, ${product.specs.ram}`
+                                                                : product.specs?.storage
+                                                                    ? `, ${product.specs.storage}`
+                                                                    : '',
+                                                        product.specs?.color ? ` - ${product.specs.color}` : '',
+                                                    ].join('')}
+                                                </span>
+                                            )}
+                                        </h4>
                                         {isGift && (
                                             <span className="px-2 py-0.5 bg-green-600 text-white text-xs rounded font-medium">
                                                 🎁 BRINDE
@@ -176,7 +211,15 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                         )}
                                     </div>
                                     <p className="text-sm text-slate-500">
-                                        SKU: {product.sku}
+                                        {((product as any).specs?.imei1 || (product as any).specs?.imei2 || (product as any).specs?.serial) ? (
+                                            [
+                                                (product as any).specs?.imei1 && `IMEI 1: ${(product as any).specs.imei1}`,
+                                                (product as any).specs?.imei2 && `IMEI 2: ${(product as any).specs.imei2}`,
+                                                (product as any).specs?.serial && `Serial: ${(product as any).specs.serial}`,
+                                            ].filter(Boolean).join(' | ')
+                                        ) : (
+                                            `SKU: ${product.sku}`
+                                        )}
                                     </p>
                                     <div className="flex items-center gap-4 mt-1">
                                         <p className={`text-lg font-bold ${isGift ? 'text-green-700' : 'text-blue-700'}`}>
@@ -193,7 +236,13 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                         </p>
                                         {product.track_inventory && (
                                             <p className={`text-sm ${product.stock_quantity === 0 ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
-                                                Estoque: {product.stock_quantity || 0} un.
+                                                {(() => {
+                                                    const key = (product as any)._stockKey || product.sku;
+                                                    const count = key ? skuStockMap[key] : undefined;
+                                                    return count !== undefined
+                                                        ? `${count} disponíveis`
+                                                        : `Estoque: ${product.stock_quantity || 0} un.`;
+                                                })()}
                                             </p>
                                         )}
                                     </div>

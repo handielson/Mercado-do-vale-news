@@ -122,21 +122,22 @@ export const TypeUpgradeTab: React.FC = () => {
                 )}
             </div>
 
-            {/* Pending Request */}
-            {upgradeRequest && upgradeRequest.status === 'pending' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3 mb-6">
-                    <Clock className="text-blue-600 flex-shrink-0 mt-0.5" size={20} />
-                    <div>
-                        <p className="font-semibold text-blue-900 mb-1">Solicitação Pendente</p>
-                        <p className="text-sm text-blue-800">
-                            Sua solicitação de upgrade para <strong>{getTypeLabel(upgradeRequest.requested_type)}</strong> está em análise.
-                        </p>
-                        <p className="text-xs text-blue-700 mt-1">
-                            Solicitado em: {formatDate(upgradeRequest.requested_at)}
-                        </p>
+            {/* Pending Request - only show if upgrade hasn't been applied yet */}
+            {upgradeRequest && upgradeRequest.status === 'pending' &&
+                customer?.customer_type !== upgradeRequest.requested_type && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3 mb-6">
+                        <Clock className="text-blue-600 flex-shrink-0 mt-0.5" size={20} />
+                        <div>
+                            <p className="font-semibold text-blue-900 mb-1">Solicitação Pendente</p>
+                            <p className="text-sm text-blue-800">
+                                Sua solicitação de upgrade para <strong>{getTypeLabel(upgradeRequest.requested_type)}</strong> está em análise.
+                            </p>
+                            <p className="text-xs text-blue-700 mt-1">
+                                Solicitado em: {formatDate(upgradeRequest.requested_at)}
+                            </p>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
             {/* Rejected Request */}
             {upgradeRequest && upgradeRequest.status === 'rejected' && (

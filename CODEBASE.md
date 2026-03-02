@@ -7429,3 +7429,114 @@ Todos os CEPs exibem endereço completo buscado da ViaCEP: `logradouro, bairro, 
 
 `pages/admin/AdminDashboardPage.tsx` exibe 6 cards de acesso rápido. O card **Calcular Frete** navega para `/admin/settings/shipping?tab=calcular` (inicializa direto na aba correta via `useSearchParams`).
 
+---
+
+## 👤 MÓDULO DE CLIENTES
+
+### `pages/customers/CustomerDetailsPage.tsx` — Ficha do Cliente (Admin)
+**Rota:** `/admin/customers/:id`
+
+Interface de detalhes do cliente organizada em **3 abas**:
+
+| Aba | Conteúdo |
+|-----|---------|
+| **Informações** | Dados básicos (nome, CPF/CNPJ), contato (email, telefone), endereço, campos personalizados (`custom_data`), sistema (datas de cadastro/atualização) |
+| **Compras (N)** | Histórico completo de vendas com card por pedido: header (ID, data, status), itens com IMEI1/IMEI2/Serial ou SKU, resumo financeiro (descontos, entrega, total), formas de pagamento, botões **Recibo** e **Termo de Garantia** |
+| **Benefícios (N)** | Benefícios ativos (película grátis), meses restantes, status do mês atual, histórico de resgates, botão "Autorizar Resgate" |
+
+**Estados locais:**
+- `activeTab` — aba ativa (`'info' | 'compras' | 'beneficios'`)
+- `salesHistory` — lista de `SaleWithItems` do cliente
+- `saleProductSpecs` — mapa `product_id → specs` para exibir IMEI/Serial nos itens
+- `printingSaleId` — ID da venda em impressão de garantia
+- `printingReceiptId` — ID da venda em impressão de recibo
+
+**Handlers:**
+- `loadSalesHistory()` — busca vendas + specs dos produtos em paralelo
+- `handleReprintWarrantyForSale(sale)` — gera e imprime o termo de garantia
+- `handlePrintReceiptForSale(sale)` — chama `printSaleReceipt()` com specs carregadas
+
+**⚠️ Specs de IMEI/Serial** são buscadas da tabela `products` separadamente (a tabela `sale_items` não contém specs).
+
+---
+
+### `components/admin/sales/SaleDetailsModal.tsx` — Modal de Detalhes de Venda (Admin)
+**Usado por:** `SalesPage`
+
+**Header:** ID do pedido, badge de status, data, vendedor, botão **X** (único fechamento)
+
+**Conteúdo (scrollável):**
+1. Dados do cliente (nome, CPF/CNPJ)
+2. Itens do pedido com IMEI1/IMEI2/Serial ou SKU
+3. Resumo Financeiro + Formas de Pagamento (grid 2 colunas)
+4. Dados de Logística
+5. Bloco de confirmação (Cancelar/Estornar/Excluir)
+
+**Footer reorganizado (2 grupos):**
+- **Esquerda:** botões `Garantia` (azul) e `Recibo` (cinza)
+- **Direita:** `Estornar Venda` (laranja) e `Cancelar Venda` (vermelho) — apenas se `status === 'completed'`; `Excluir Venda` (vermelho escuro) — apenas se cancelada/estornada
+
+**⚠️ Specs (IMEI/Serial)** carregadas via `useEffect` ao abrir o modal, buscando da tabela `products` pelos `product_id` dos itens.
+
+---
+
+### `utils/printSaleReceipt.ts` — Gerador de Recibo de Venda
+**Exporta:** `printSaleReceipt(sale, settings, productSpecs?)`
+
+Gera HTML completo do recibo de venda e abre janela de impressão (`window.open`).
+
+**Parâmetros:**
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `sale` | `SaleWithItems` | Dados da venda com itens |
+| `settings` | `CompanySettings` | Configurações da empresa (nome, CNPJ, logo, telefone) |
+| `productSpecs?` | `Record<string, Record<string, string>>` | Mapa product_id → specs (IMEI/Serial) |
+
+**Conteúdo do recibo:**
+- Logo + dados da empresa (nome, CNPJ, telefone)
+- Número do pedido + data/hora
+- Dados do cliente (nome, CPF/CNPJ)
+- Itens com IMEI1/IMEI2/Serial ou SKU
+- Resumo financeiro (descontos, entrega, total)
+- Formas de pagamento
+
+**⚠️ Usado por:** `SaleDetailsModal` (footer), `CustomerDetailsPage` (aba Compras), `PurchaseHistoryTab` (portal do cliente)
+
+---
+
+## 👤 MÓDULO DO PORTAL DO CLIENTE
+
+### `components/customer/profile/PurchaseHistoryTab.tsx` — Histórico de Compras (Portal Cliente)
+**Usado por:** `CustomerProfilePage` (aba "Histórico de Compras")
+
+**Funcionalidade:** Busca e exibe as vendas do cliente logado com cards detalhados.
+
+**Dados carregados:**
+1. `getSales({ customer_id })` — vendas do cliente
+2. Specs dos produtos (`products` → `id, specs`) para exibir IMEI/Serial
+
+**Card por compra:**
+- Header: número do pedido (8 chars), data longa, botão **Recibo**, badge de status
+- Itens: nome, IMEI1/IMEI2/Serial (ou SKU), valor por item
+- Resumo: descontos, entrega, total
+- Pagamento: método(s) com parcelas
+
+**⚠️ Estado vazio:** mostra botão "Ver Catálogo" se não houver compras
+
+---
+
+### `components/customer/profile/TypeUpgradeTab.tsx` — Tipo de Conta (Portal Cliente)
+
+**Fix aplicado (2026-03-01):** O banner "Solicitação Pendente" era exibido mesmo após o upgrade ter sido aprovado (quando `customer_type` já correspondia ao `requested_type`).
+
+**Condição corrigida:**
+```ts
+// Antes:
+upgradeRequest?.status === 'pending'
+
+// Depois:
+upgradeRequest?.status === 'pending' && customer?.customer_type !== upgradeRequest.requested_type
+```
+
+Isso garante que o banner desaparece quando o admin aprova o upgrade (mesmo que o registro de solicitação ainda mostre `status: 'pending'`).
+
