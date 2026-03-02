@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText, ExternalLink, MessageCircle, DollarSign } from 'lucide-react';
+import { ArrowLeft, Save, User, Mail, Phone, MapPin, FileText, ExternalLink, MessageCircle, DollarSign, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { teamService } from '../../services/team';
 import { TeamMember, TeamMemberInput, TeamMemberAddress, Role, EmploymentType } from '../../types/team';
@@ -157,6 +157,61 @@ export default function TeamFormPage() {
     // Get WhatsAppUrl moved to utils/customerFormUtils.ts
     const getWhatsAppUrl = () => getWhatsAppUrlUtil(formData.phone || '', formData.name);
 
+    const handlePrintProfile = () => {
+        const addr = formData.address;
+        const fullAddr = addr?.street
+            ? `${addr.street}, ${addr.number}${addr.complement ? ' – ' + addr.complement : ''}, ${addr.neighborhood} – ${addr.city}/${addr.state} – CEP ${addr.zipCode}`
+            : '—';
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Ficha — ${formData.name}</title>
+<style>
+    body{font-family:Arial,sans-serif;padding:32px;color:#111;max-width:700px;margin:auto}
+    h1{font-size:20px;margin-bottom:2px}p.sub{font-size:12px;color:#666;margin-bottom:20px}
+    .section{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #e5e7eb}
+    .section h2{font-size:13px;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:0.05em}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px}
+    .field label{font-size:11px;color:#9ca3af;display:block}
+    .field span{font-size:13px;font-weight:600}
+    @media print{@page{size:A4;margin:16mm}}
+</style></head><body>
+<h1>${formData.name}</h1>
+<p class="sub">Ficha de Membro da Equipe — Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+<div class="section">
+    <h2>Dados Pessoais</h2>
+    <div class="grid">
+        <div class="field"><label>Cargo</label><span>${formData.role || '—'}</span></div>
+        <div class="field"><label>Vínculo</label><span>${formData.employment_type || '—'}</span></div>
+        <div class="field"><label>CPF/CNPJ</label><span>${formData.cpf_cnpj || '—'}</span></div>
+        <div class="field"><label>Nascimento</label><span>${formData.birth_date ? new Date(formData.birth_date).toLocaleDateString('pt-BR') : '—'}</span></div>
+        <div class="field"><label>Admissão</label><span>${formData.hire_date ? new Date(formData.hire_date).toLocaleDateString('pt-BR') : '—'}</span></div>
+        <div class="field"><label>Status</label><span>${formData.is_active ? 'Ativo' : 'Inativo'}</span></div>
+    </div>
+</div>
+<div class="section">
+    <h2>Contato</h2>
+    <div class="grid">
+        <div class="field"><label>Telefone</label><span>${formData.phone || '—'}</span></div>
+        <div class="field"><label>E-mail</label><span>${formData.email || '—'}</span></div>
+    </div>
+    <div class="field" style="margin-top:8px"><label>Endereço</label><span>${fullAddr}</span></div>
+</div>
+<div class="section">
+    <h2>Dados Financeiros</h2>
+    <div class="grid">
+        <div class="field"><label>Banco</label><span>${(formData as any).bank_name || '—'}</span></div>
+        <div class="field"><label>Tipo Chave PIX</label><span>${formData.pix_key_type || '—'}</span></div>
+        <div class="field"><label>Chave PIX</label><span>${formData.pix_key || '—'}</span></div>
+    </div>
+</div>
+${formData.admin_notes ? `<div class="section"><h2>Observações</h2><p style="font-size:13px">${formData.admin_notes}</p></div>` : ''}
+<script>window.onload=()=>{window.print();}<\/script>
+</body></html>`;
+        const pw = window.open('', '_blank');
+        if (!pw) return;
+        pw.document.write(html);
+        pw.document.close();
+    };
+
     // Handle submit
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -278,6 +333,16 @@ export default function TeamFormPage() {
                         {isEditing ? 'Atualize as informações do membro' : 'Preencha os dados do novo membro'}
                     </p>
                 </div>
+                {isEditing && (
+                    <button
+                        type="button"
+                        onClick={handlePrintProfile}
+                        className="ml-auto flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm"
+                    >
+                        <Printer className="w-4 h-4" />
+                        Imprimir Ficha
+                    </button>
+                )}
             </div>
 
 
@@ -311,7 +376,7 @@ export default function TeamFormPage() {
 
             {/* Aba: Histórico de Entregas */}
             {isEditing && activeTab === 'deliveries' && id ? (
-                <TeamDeliveryHistoryTab memberId={id} />
+                <TeamDeliveryHistoryTab memberId={id} memberName={formData.name || 'Membro'} />
             ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Basic Info */}

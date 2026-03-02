@@ -5,7 +5,9 @@ import { getSales } from '../../../services/saleService';
 import { supabase } from '../../../services/supabase';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { SaleWithItems } from '../../../types/sale';
-import { printSaleReceipt } from '../../../utils/printSaleReceipt';
+import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
+import { getCoinBalance } from '../../../services/cashbackService';
+import { benefitService } from '../../../services/benefitService';
 
 const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v / 100);
@@ -23,8 +25,30 @@ export const PurchaseHistoryTab: React.FC = () => {
     const handlePrintReceipt = async (sale: SaleWithItems) => {
         setPrintingReceiptId(sale.id);
         try {
-            const settings = await companySettingsService.get();
-            if (settings) printSaleReceipt(sale, settings, productSpecs);
+            const customerId = customer?.id;
+            const [settings, coinBalance, benefitStatuses, coinsThisSale] = await Promise.all([
+                companySettingsService.get(),
+                customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
+                customerId ? benefitService.getCustomerBenefitsStatus(customerId).catch(() => []) : Promise.resolve([]),
+                customerId
+                    ? supabase
+                        .from('coin_transactions')
+                        .select('amount')
+                        .eq('customer_id', customerId)
+                        .eq('reference_id', sale.id)
+                        .eq('type', 'earn_purchase')
+                        .maybeSingle()
+                        .then(({ data }) => data?.amount ?? 0)
+                        .catch(() => 0)
+                    : Promise.resolve(0),
+            ]);
+            if (!settings) return;
+            const benefits: PrintReceiptBenefits = {
+                coinBalance,
+                coinsEarnedThisSale: coinsThisSale,
+                benefitStatuses,
+            };
+            printSaleReceipt(sale, settings, productSpecs, benefits);
         } catch (e) {
             console.error(e);
         } finally {
@@ -126,8 +150,8 @@ export const PurchaseHistoryTab: React.FC = () => {
                                             Recibo
                                         </button>
                                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${sale.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                                sale.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                                    'bg-orange-100 text-orange-800'
+                                            sale.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                                'bg-orange-100 text-orange-800'
                                             }`}>
                                             {sale.status === 'completed' ? 'Concluída' :
                                                 sale.status === 'cancelled' ? 'Cancelada' : 'Estornada'}

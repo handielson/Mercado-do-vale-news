@@ -59,8 +59,8 @@ export const telegramBotService = {
             // 4. Substituir TAGs dinâmicas baseadas no objeto `data` passado
             let message = template.content;
             Object.keys(data).forEach(key => {
-                const regex = new RegExp(`{${key} } `, 'g');
-                message = message.replace(regex, data[key]);
+                const regex = new RegExp(`\\{${key}\\}`, 'g');
+                message = message.replace(regex, data[key] ?? '');
             });
 
             // 5. Disparo usando fetch e bot API do telegram

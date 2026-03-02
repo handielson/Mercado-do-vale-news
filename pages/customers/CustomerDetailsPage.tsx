@@ -12,7 +12,8 @@ import { useSupabaseAuth } from '../../contexts/SupabaseAuthContext';
 import { supabase } from '../../services/supabase';
 import { companySettingsService } from '../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
-import { printSaleReceipt } from '../../utils/printSaleReceipt';
+import { printSaleReceipt, PrintReceiptBenefits } from '../../utils/printSaleReceipt';
+import { getCoinBalance } from '../../services/cashbackService';
 
 /**
  * Customer Details Page
@@ -43,9 +44,29 @@ export default function CustomerDetailsPage() {
     const handlePrintReceiptForSale = async (sale: SaleWithItems) => {
         setPrintingReceiptId(sale.id);
         try {
-            const settings = await companySettingsService.get();
+            const customerId = customer?.id;
+            const [settings, coinBalance, coinsThisSale] = await Promise.all([
+                companySettingsService.get(),
+                customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
+                customerId
+                    ? supabase
+                        .from('coin_transactions')
+                        .select('amount')
+                        .eq('customer_id', customerId)
+                        .eq('reference_id', sale.id)
+                        .eq('type', 'earn_purchase')
+                        .maybeSingle()
+                        .then(({ data }) => data?.amount ?? 0)
+                        .catch(() => 0)
+                    : Promise.resolve(0),
+            ]);
             if (!settings) { toast.error('Configurações não encontradas'); return; }
-            printSaleReceipt(sale, settings, saleProductSpecs);
+            const benefitsData: PrintReceiptBenefits = {
+                coinBalance,
+                coinsEarnedThisSale: coinsThisSale,
+                benefitStatuses: benefits,
+            };
+            printSaleReceipt(sale, settings, saleProductSpecs, benefitsData);
         } catch (e) {
             console.error(e); toast.error('Erro ao gerar o recibo');
         } finally {

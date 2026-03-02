@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingBag, X, Calendar, User, UserCheck, Package, DollarSign, CreditCard, Banknote, Truck, AlertCircle, RefreshCw, FileText, Receipt } from 'lucide-react';
-import { printSaleReceipt } from '../../../utils/printSaleReceipt';
+import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { SaleWithItems } from '../../../types/sale';
 import { cancelSale, refundSale, deleteSale } from '../../../services/saleService';
 import toast from 'react-hot-toast';
 import { supabase } from '../../../services/supabase';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../../utils/warrantyTagReplacement';
+import { getCoinBalance } from '../../../services/cashbackService';
+import { benefitService } from '../../../services/benefitService';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -22,6 +24,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const [confirmAction, setConfirmAction] = useState<'cancel' | 'refund' | 'delete' | null>(null);
     const [isPrintingWarranty, setIsPrintingWarranty] = useState(false);
     const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
+    const [isPrintingAll, setIsPrintingAll] = useState(false);
     // Map: product_id -> {imei1, imei2, serial}
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
 
@@ -118,14 +121,46 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         if (!sale) return;
         setIsPrintingReceipt(true);
         try {
-            const settings = await companySettingsService.get();
+            const customerId = sale.customer_id;
+            const [settings, coinBalance, benefitStatuses, coinsThisSale] = await Promise.all([
+                companySettingsService.get(),
+                customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
+                customerId ? benefitService.getCustomerBenefitsStatus(customerId).catch(() => []) : Promise.resolve([]),
+                customerId
+                    ? supabase
+                        .from('coin_transactions')
+                        .select('amount')
+                        .eq('customer_id', customerId)
+                        .eq('reference_id', sale.id)
+                        .eq('type', 'earn_purchase')
+                        .maybeSingle()
+                        .then(({ data }) => data?.amount ?? 0)
+                        .catch(() => 0)
+                    : Promise.resolve(0),
+            ]);
             if (!settings) { toast.error('Configurações da empresa não encontradas'); return; }
-            printSaleReceipt(sale, settings, productSpecs);
+            const benefits: PrintReceiptBenefits = {
+                coinBalance,
+                coinsEarnedThisSale: coinsThisSale,
+                benefitStatuses,
+            };
+            printSaleReceipt(sale, settings, productSpecs, benefits);
         } catch (e) {
             console.error(e);
             toast.error('Erro ao gerar o recibo');
         } finally {
             setIsPrintingReceipt(false);
+        }
+    };
+
+    const handlePrintAll = async () => {
+        if (!sale) return;
+        setIsPrintingAll(true);
+        try {
+            // Dispara os dois em paralelo — cada janela abre com seu @page size
+            await Promise.all([handleReprintWarranty(), handlePrintReceipt()]);
+        } finally {
+            setIsPrintingAll(false);
         }
     };
 
@@ -487,8 +522,20 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                         {/* Left: print actions */}
                         <div className="flex items-center gap-2">
                             <button
+                                onClick={handlePrintAll}
+                                disabled={isPrintingAll || isPrintingWarranty || isPrintingReceipt}
+                                title="Imprimir Garantia + Recibo simultaneamente"
+                                className="px-3 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                            >
+                                {isPrintingAll
+                                    ? <RefreshCw size={16} className="animate-spin" />
+                                    : <span>🖨️</span>}
+                                <span className="text-sm">Imprimir Tudo</span>
+                            </button>
+                            <div className="w-px h-6 bg-slate-200" />
+                            <button
                                 onClick={handleReprintWarranty}
-                                disabled={isPrintingWarranty}
+                                disabled={isPrintingWarranty || isPrintingAll}
                                 title="Reimprimir Termo de Garantia"
                                 className="px-3 py-2 bg-blue-50 text-blue-700 font-medium rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50 flex items-center gap-2 border border-blue-200"
                             >
@@ -499,7 +546,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                             </button>
                             <button
                                 onClick={handlePrintReceipt}
-                                disabled={isPrintingReceipt}
+                                disabled={isPrintingReceipt || isPrintingAll}
                                 title="Imprimir Recibo"
                                 className="px-3 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50 flex items-center gap-2 border border-slate-200"
                             >

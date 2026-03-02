@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw, TrendingUp } from 'lucide-react';
 import { SaleWithItems, SaleSummary, SaleFilters } from '../../../types/sale';
 import { getSales, getSalesSummary, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
@@ -18,6 +18,33 @@ export default function SalesPage() {
     // Modal Controle
     const [selectedSale, setSelectedSale] = useState<SaleWithItems | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Filtros de data
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [activePeriod, setActivePeriod] = useState<'day' | 'week' | 'month' | 'year' | 'custom' | null>(null);
+
+    const toISO = (d: Date) => d.toISOString().split('T')[0];
+    const startOf = (unit: 'day' | 'week' | 'month' | 'year') => {
+        const d = new Date();
+        if (unit === 'day') { d.setHours(0, 0, 0, 0); }
+        else if (unit === 'week') { d.setDate(d.getDate() - d.getDay()); d.setHours(0, 0, 0, 0); }
+        else if (unit === 'month') { d.setDate(1); d.setHours(0, 0, 0, 0); }
+        else if (unit === 'year') { d.setMonth(0, 1); d.setHours(0, 0, 0, 0); }
+        return d;
+    };
+
+    const applyPeriod = (p: 'day' | 'week' | 'month' | 'year') => {
+        setActivePeriod(p);
+        setDateFrom(toISO(startOf(p)));
+        setDateTo(toISO(new Date()));
+    };
+
+    const clearPeriod = () => {
+        setActivePeriod(null);
+        setDateFrom('');
+        setDateTo('');
+    };
 
     const loadData = async () => {
         setIsLoading(true);
@@ -81,15 +108,36 @@ export default function SalesPage() {
         }
     };
 
-    // Filtro local por busca textual
-    const filteredSales = sales.filter(sale => {
-        if (!searchTerm) return true;
-        const searchLower = searchTerm.toLowerCase();
-        return (
-            sale.customer?.name.toLowerCase().includes(searchLower) ||
-            sale.id.toLowerCase().includes(searchLower)
-        );
-    });
+    // Filtro local por busca textual e data
+    const filteredSales = useMemo(() => {
+        return sales.filter(sale => {
+            if (searchTerm) {
+                const s = searchTerm.toLowerCase();
+                if (!sale.customer?.name.toLowerCase().includes(s) && !sale.id.toLowerCase().includes(s)) return false;
+            }
+            if (dateFrom) {
+                if (new Date(sale.created_at) < new Date(dateFrom + 'T00:00:00')) return false;
+            }
+            if (dateTo) {
+                if (new Date(sale.created_at) > new Date(dateTo + 'T23:59:59')) return false;
+            }
+            return true;
+        });
+    }, [sales, searchTerm, dateFrom, dateTo]);
+
+    // Totais por período (calculados das vendas já carregadas)
+    const periodStats = useMemo(() => {
+        const calc = (from: Date) => {
+            const s = sales.filter(v => v.status === 'completed' && new Date(v.created_at) >= from);
+            return { count: s.length, total: s.reduce((acc, v) => acc + v.total, 0) };
+        };
+        return {
+            day: calc(startOf('day')),
+            week: calc(startOf('week')),
+            month: calc(startOf('month')),
+            year: calc(startOf('year')),
+        };
+    }, [sales]);
 
     return (
         <div className="animate-in fade-in duration-500">
@@ -181,31 +229,101 @@ export default function SalesPage() {
                 </div>
             </div>
 
-            {/* List and Filters */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
-                    <div className="relative w-full sm:max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input
-                            type="text"
-                            placeholder="Buscar por cliente ou ID da venda..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <Filter className="text-slate-400" size={18} />
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value as any)}
-                            className="w-full sm:w-auto px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            {/* Cards de Período */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                {([
+                    { key: 'day', label: 'Hoje', color: 'blue', icon: '📅' },
+                    { key: 'week', label: 'Esta Semana', color: 'violet', icon: '📆' },
+                    { key: 'month', label: 'Este Mês', color: 'emerald', icon: '🗓️' },
+                    { key: 'year', label: 'Este Ano', color: 'amber', icon: '📊' },
+                ] as const).map(({ key, label, icon }) => {
+                    const s = periodStats[key];
+                    const isActive = activePeriod === key;
+                    return (
+                        <button
+                            key={key}
+                            onClick={() => isActive ? clearPeriod() : applyPeriod(key)}
+                            className={`text-left p-4 rounded-xl border-2 transition-all ${isActive
+                                    ? 'border-blue-500 bg-blue-50 shadow-md'
+                                    : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'
+                                }`}
                         >
-                            <option value="all">Todos os Status</option>
-                            <option value="completed">Apenas Concluídas</option>
-                            <option value="cancelled">Canceladas</option>
-                            <option value="refunded">Estornadas</option>
-                        </select>
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-base">{icon}</span>
+                                {isActive && <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">ATIVO</span>}
+                            </div>
+                            <p className="text-xs font-medium text-slate-500 mb-0.5">{label}</p>
+                            <p className="text-lg font-bold text-slate-800">{formatCurrency(s.total)}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{s.count} {s.count === 1 ? 'venda' : 'vendas'}</p>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Filtros de Data + Busca + Status */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col gap-3">
+                    {/* Linha 1: busca + status */}
+                    <div className="flex flex-col sm:flex-row gap-3 items-center">
+                        <div className="relative w-full sm:max-w-md">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input
+                                type="text"
+                                placeholder="Buscar por cliente ou ID da venda..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <Filter className="text-slate-400" size={18} />
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value as any)}
+                                className="w-full sm:w-auto px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                            >
+                                <option value="all">Todos os Status</option>
+                                <option value="completed">Apenas Concluídas</option>
+                                <option value="cancelled">Canceladas</option>
+                                <option value="refunded">Estornadas</option>
+                            </select>
+                        </div>
+                    </div>
+                    {/* Linha 2: filtros de data */}
+                    <div className="flex flex-wrap gap-3 items-center">
+                        <Calendar className="text-slate-400" size={18} />
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm text-slate-500 whitespace-nowrap">De:</label>
+                            <input
+                                type="date"
+                                value={dateFrom}
+                                onChange={(e) => { setDateFrom(e.target.value); setActivePeriod('custom'); }}
+                                className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm text-slate-500 whitespace-nowrap">Até:</label>
+                            <input
+                                type="date"
+                                value={dateTo}
+                                onChange={(e) => { setDateTo(e.target.value); setActivePeriod('custom'); }}
+                                className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                        </div>
+                        {(dateFrom || dateTo) && (
+                            <button
+                                onClick={clearPeriod}
+                                className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                                <XCircle size={14} />
+                                Limpar filtro
+                            </button>
+                        )}
+                        {filteredSales.length !== sales.length && (
+                            <span className="text-xs text-slate-500 ml-auto">
+                                Exibindo <strong>{filteredSales.length}</strong> de <strong>{sales.length}</strong> vendas
+                            </span>
+                        )}
                     </div>
                 </div>
 

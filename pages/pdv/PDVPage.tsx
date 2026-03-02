@@ -12,6 +12,7 @@ import DeliverySection from '../../components/pdv/DeliverySection';
 import ReceiptPreview from '../../components/pdv/ReceiptPreview';
 import InstallmentCalculator from '../../components/pdv/InstallmentCalculator';
 import { WarrantyTermModal } from '../../components/warranty/WarrantyTermModal';
+import { printSaleReceipt } from '../../utils/printSaleReceipt';
 import { createSale } from '../../services/saleService';
 import { warrantyDocumentService } from '../../services/warrantyDocumentService';
 import { companySettingsService } from '../../services/companySettingsService';
@@ -400,7 +401,7 @@ export default function PDVPage() {
             // Gerar termo de garantia
             await generateWarrantyTerm(sale, selectedCustomer, cartItems);
 
-            // Limpar carrinho
+            // Limpar todo o PDV
             setCartItems([]);
             setSelectedCustomer(undefined);
             setPayments([]);
@@ -408,6 +409,7 @@ export default function PDVPage() {
             setDeliveryPersonId(undefined);
             setDeliveryCostStore(0);
             setDeliveryCostCustomer(0);
+            setPromotionalDiscount(0);
             setReferralCode('');
             handleClearCoupon();
         } catch (error) {
@@ -526,6 +528,17 @@ export default function PDVPage() {
             const filteredTagData = applyWarrantyDisplayFlags(tagData as any, settings);
             const content = replaceWarrantyTags(settings.warranty_template, filteredTagData);
             setWarrantyContent(content);
+        }
+    };
+
+    // Imprimir recibo a partir do modal (dados da última venda)
+    const handlePrintReceiptFromModal = async () => {
+        if (!lastSaleData) return;
+        try {
+            const settings = await companySettingsService.get();
+            if (settings) printSaleReceipt(lastSaleData.sale, settings, {});
+        } catch (e) {
+            console.error(e);
         }
     };
 
@@ -690,11 +703,10 @@ export default function PDVPage() {
                 isOpen={showWarrantyModal}
                 onClose={() => setShowWarrantyModal(false)}
                 warrantyContent={warrantyContent}
-                deliveryType={warrantyDeliveryType}
-                onDeliveryTypeChange={handleWarrantyDeliveryTypeChange}
                 onGenerate={handleGenerateWarranty}
                 warrantyTemplate={warrantyTemplate}
                 warrantyTagData={warrantyTagData}
+                onPrintReceipt={handlePrintReceiptFromModal}
             />
         </div>
     );

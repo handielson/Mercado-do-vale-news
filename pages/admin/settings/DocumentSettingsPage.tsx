@@ -455,7 +455,9 @@ export default function DocumentSettingsPage() {
 
                                         <div className="mt-3 bg-slate-50 p-3 rounded border border-slate-200">
                                             <p className="text-xs font-semibold text-slate-700 mb-2">Tags Disponíveis (clique para copiar):</p>
-                                            <div className="flex flex-wrap gap-2 text-xs font-mono">
+
+                                            <p className="text-xs text-slate-500 mb-1 mt-0">📋 Geral</p>
+                                            <div className="flex flex-wrap gap-2 text-xs font-mono mb-3">
                                                 {[
                                                     '{{cliente_nome}}', '{{cliente_documento}}', '{{cliente_telefone}}', '{{cliente_email}}',
                                                     '{{empresa_nome}}', '{{empresa_telefone}}', '{{empresa_email}}', '{{empresa_cnpj}}', '{{empresa_endereco}}',
@@ -466,6 +468,40 @@ export default function DocumentSettingsPage() {
                                                         type="button"
                                                         onClick={() => handleCopyTag(tag)}
                                                         className="bg-slate-200 hover:bg-slate-300 border border-slate-300 px-2 py-1 rounded text-slate-700 transition-colors cursor-copy shadow-sm active:scale-95"
+                                                        title={`Copiar ${tag}`}
+                                                    >
+                                                        {tag}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <p className="text-xs text-slate-500 mb-1">🎬 Películas</p>
+                                            <div className="flex flex-wrap gap-2 text-xs font-mono mb-3">
+                                                {[
+                                                    '{{pelicula_saldo}}', '{{pelicula_usadas}}', '{{pelicula_ganhas}}'
+                                                ].map((tag) => (
+                                                    <button
+                                                        key={tag}
+                                                        type="button"
+                                                        onClick={() => handleCopyTag(tag)}
+                                                        className="bg-purple-100 hover:bg-purple-200 border border-purple-300 px-2 py-1 rounded text-purple-800 transition-colors cursor-copy shadow-sm active:scale-95"
+                                                        title={`Copiar ${tag}`}
+                                                    >
+                                                        {tag}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <p className="text-xs text-slate-500 mb-1">🪙 Moedas do Vale</p>
+                                            <div className="flex flex-wrap gap-2 text-xs font-mono">
+                                                {[
+                                                    '{{moedas_saldo}}', '{{moedas_ganhas_venda}}', '{{moedas_ganhas_total}}'
+                                                ].map((tag) => (
+                                                    <button
+                                                        key={tag}
+                                                        type="button"
+                                                        onClick={() => handleCopyTag(tag)}
+                                                        className="bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2 py-1 rounded text-amber-800 transition-colors cursor-copy shadow-sm active:scale-95"
                                                         title={`Copiar ${tag}`}
                                                     >
                                                         {tag}
