@@ -69,6 +69,7 @@ import { FreeScreenProtectorRulesPage } from '../pages/customer/FreeScreenProtec
 import { FeedbackListPage } from '../pages/admin/feedbacks/FeedbackListPage';
 import { PromotionsPage as AdminPromotionsPage } from '../pages/admin/promotions/PromotionsPage';
 import BlingPage from '../pages/admin/settings/BlingPage';
+import BlingCallbackPage from '../pages/admin/settings/BlingCallbackPage';
 
 
 import { feedbackService } from '../services/feedbackService';
@@ -705,6 +706,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><BlingPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/bling/callback",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <BlingCallbackPage />
       </ProtectedRoute>
     )
   },
