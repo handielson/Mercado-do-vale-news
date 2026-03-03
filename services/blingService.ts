@@ -212,26 +212,33 @@ async function fetchStockMap(accessToken: string): Promise<Map<number, number>> 
 function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>, categoryId: string): Record<string, any> {
     const has = (key: string) => enabledFields.has(key);
 
-    // Campos sempre obrigatórios
+    // Campos sempre obrigatórios — defaults seguros para todos os NOT NULL do banco
     const row: Record<string, any> = {
         company_id: companyId,
         bling_id: item.id,
         category_id: categoryId,
-        name: item.nome || 'Produto sem nome',   // 'name' sempre incluído (required)
+        name: item.nome || 'Produto sem nome',
+        // Preços: Bling usa centavos inteiros — default 0 para campos sem mapeamento direto
+        price_retail: item.preco ? Math.round(item.preco * 100) : 0,
+        price_reseller: item.preco ? Math.round(item.preco * 100) : 0,
+        price_wholesale: item.preco ? Math.round(item.preco * 100) : 0,
+        price_cost: item.precoCusto ? Math.round(item.precoCusto * 100) : null,
+        status: item.situacao === 'A' ? 'active' : 'inactive',
         specs: {},
-        stock_quantity: 0,
+        stock_quantity: item.stock_quantity ?? 0,
         track_inventory: true,
         is_gift: false,
         warranty_type: 'brand',
+        alternative_eans: [],
     };
 
+    // Campos opcionais controlados pelo admin
     if (has('sku')) row.sku = item.codigo || null;
     if (has('ean')) { row.ean = item.gtin || null; row.alternative_eans = item.gtin ? [item.gtin] : []; }
     if (has('description')) row.description = item.descricaoComplementar || item.descricaoCurta || null;
-    if (has('status')) row.status = item.situacao === 'A' ? 'active' : 'inactive';
 
-    if (has('price_retail')) row.price_retail = item.preco ? Math.round(item.preco * 100) : null;
-    if (has('price_cost')) row.price_cost = item.precoCusto ? Math.round(item.precoCusto * 100) : null;
+    // Preços sobrescritos pelo mapeamento (se habilitado, já foram incluídos nos defaults acima)
+    // Aqui permitimos que o admin desabilite um preço (mas não podemos remover o default 0)
 
     if (has('ncm')) row.ncm = item.ncm || null;
     if (has('cest')) row.cest = item.cest || null;
