@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2 } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -79,6 +79,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           {/* AJUSTES DA EMPRESA */}
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Ajustes da Empresa</div>
           <NavItem to="/admin/settings/company" icon={<Settings size={18} />} label="Dados da Empresa" active={location.pathname.startsWith('/admin/settings/company')} />
+          <NavItem to="/admin/settings/bling" icon={<Link2 size={18} />} label="Bling" active={location.pathname.startsWith('/admin/settings/bling')} />
           <NavItem to="/admin/settings/shipping" icon={<Truck size={18} />} label="Frete" active={location.pathname.startsWith('/admin/settings/shipping')} />
           <NavItem to="/admin/settings/payment-fees" icon={<CreditCard size={18} />} label="Taxas" active={location.pathname.startsWith('/admin/settings/payment-fees')} />
           <NavItem to="/admin/settings/documents" icon={<FileText size={18} />} label="Documentos" active={location.pathname.startsWith('/admin/settings/documents')} />

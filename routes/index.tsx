@@ -68,6 +68,7 @@ import { PromotionsPage as CustomerPromotionsPage } from '../pages/customer/Prom
 import { FreeScreenProtectorRulesPage } from '../pages/customer/FreeScreenProtectorRulesPage';
 import { FeedbackListPage } from '../pages/admin/feedbacks/FeedbackListPage';
 import { PromotionsPage as AdminPromotionsPage } from '../pages/admin/promotions/PromotionsPage';
+import BlingPage from '../pages/admin/settings/BlingPage';
 
 
 import { feedbackService } from '../services/feedbackService';
@@ -696,6 +697,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><AdminPromotionsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/bling",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><BlingPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
