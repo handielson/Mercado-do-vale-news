@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Save, Eye, EyeOff, CheckCircle, AlertCircle, Copy, ExternalLink, Download, Loader2, Search, RefreshCw } from 'lucide-react';
+import {
+    Settings, Package, Save, Eye, EyeOff, CheckCircle, AlertCircle,
+    Copy, ExternalLink, Download, Loader2, Search, RefreshCw, Link2
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
 import { fetchAllBlingProducts, importBlingProducts, BlingProduct, ImportResult } from '../../../services/blingService';
+
+// ─────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────
 
 interface BlingCredentials {
     bling_client_id: string;
@@ -10,7 +17,16 @@ interface BlingCredentials {
     bling_callback_url: string;
 }
 
+type Tab = 'config' | 'products';
+
+// ─────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────
+
 export default function BlingPage() {
+    const [activeTab, setActiveTab] = useState<Tab>('config');
+
+    // ── Credentials ──
     const [credentials, setCredentials] = useState<BlingCredentials>({
         bling_client_id: '',
         bling_client_secret: '',
@@ -22,7 +38,7 @@ export default function BlingPage() {
     const [isConnected, setIsConnected] = useState(false);
     const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
-    // Import state
+    // ── Products import ──
     const [fetching, setFetching] = useState(false);
     const [importing, setImporting] = useState(false);
     const [blingProducts, setBlingProducts] = useState<BlingProduct[]>([]);
@@ -31,23 +47,24 @@ export default function BlingPage() {
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
+    // ─────────────────────────────────────────────────────
+    // Load
+    // ─────────────────────────────────────────────────────
+
     useEffect(() => {
         loadCredentials();
 
-        // Feedback do callback OAuth2
         const params = new URLSearchParams(window.location.search);
         if (params.get('connected') === 'true') {
-            toast.success('✅ Bling conectado com sucesso!');
-            window.history.replaceState({}, '', window.location.pathname);
+            toast.success('Bling conectado com sucesso!');
             setIsConnected(true);
+            window.history.replaceState({}, '', window.location.pathname);
         } else if (params.get('error')) {
             const errMap: Record<string, string> = {
                 missing_code: 'Código de autorização não recebido.',
-                missing_credentials: 'Credenciais não encontradas. Salve o Client ID e Secret.',
-                token_exchange_failed: 'Erro ao trocar o código pelo token. Verifique as credenciais.',
+                token_exchange_failed: 'Falha ao trocar o token com o Bling.',
                 server_config: 'Erro de configuração do servidor.',
-                network_error: 'Erro de rede ao conectar com o Bling.',
-                save_failed: 'Token obtido mas falhou ao salvar. Tente novamente.',
+                callback_failed: 'Erro ao processar o callback.',
             };
             const msg = errMap[params.get('error')!] || `Erro: ${params.get('error')}`;
             toast.error(msg);
@@ -57,7 +74,6 @@ export default function BlingPage() {
 
     async function loadCredentials() {
         try {
-            setLoading(true);
             const { data, error } = await supabase
                 .from('company_settings')
                 .select('bling_client_id, bling_client_secret, bling_access_token, bling_token_expires_at, bling_callback_url')
@@ -65,7 +81,6 @@ export default function BlingPage() {
                 .maybeSingle();
 
             if (error) throw error;
-
             if (data) {
                 setCredentials({
                     bling_client_id: data.bling_client_id || '',
@@ -75,28 +90,25 @@ export default function BlingPage() {
                 setIsConnected(!!data.bling_access_token);
                 setTokenExpiresAt(data.bling_token_expires_at || null);
             }
-        } catch (err) {
-            console.error('Erro ao carregar credenciais Bling:', err);
-            toast.error('Erro ao carregar configurações do Bling.');
+        } catch (err: any) {
+            toast.error('Erro ao carregar configurações: ' + err.message);
         } finally {
             setLoading(false);
         }
     }
 
+    // ─────────────────────────────────────────────────────
+    // Config handlers
+    // ─────────────────────────────────────────────────────
+
     async function handleSave() {
-        if (!credentials.bling_client_id.trim()) {
-            toast.error('Client ID é obrigatório.');
-            return;
-        }
-        if (!credentials.bling_client_secret.trim()) {
-            toast.error('Client Secret é obrigatório.');
+        if (!credentials.bling_client_id.trim() || !credentials.bling_client_secret.trim()) {
+            toast.error('Preencha o Client ID e o Client Secret.');
             return;
         }
 
+        setSaving(true);
         try {
-            setSaving(true);
-
-            // Check if record exists
             const { data: existing } = await supabase
                 .from('company_settings')
                 .select('id')
@@ -109,7 +121,7 @@ export default function BlingPage() {
                     .update({
                         bling_client_id: credentials.bling_client_id.trim(),
                         bling_client_secret: credentials.bling_client_secret.trim(),
-                        bling_callback_url: credentials.bling_callback_url.trim() || `${window.location.origin}/admin/settings/bling/callback`,
+                        bling_callback_url: credentials.bling_callback_url.trim(),
                     })
                     .eq('id', existing.id);
                 if (error) throw error;
@@ -119,15 +131,13 @@ export default function BlingPage() {
                     .insert({
                         bling_client_id: credentials.bling_client_id.trim(),
                         bling_client_secret: credentials.bling_client_secret.trim(),
-                        bling_callback_url: credentials.bling_callback_url.trim() || `${window.location.origin}/admin/settings/bling/callback`,
+                        bling_callback_url: credentials.bling_callback_url.trim(),
                     });
                 if (error) throw error;
             }
-
-            toast.success('Credenciais salvas com sucesso!');
+            toast.success('Credenciais salvas!');
         } catch (err: any) {
-            console.error('Erro ao salvar credenciais:', err);
-            toast.error('Erro ao salvar credenciais: ' + (err.message || 'Tente novamente.'));
+            toast.error('Erro ao salvar: ' + err.message);
         } finally {
             setSaving(false);
         }
@@ -149,6 +159,15 @@ export default function BlingPage() {
         window.location.href = authUrl.toString();
     }
 
+    function copyCallbackUrl() {
+        navigator.clipboard.writeText(credentials.bling_callback_url);
+        toast.success('URL copiada!');
+    }
+
+    // ─────────────────────────────────────────────────────
+    // Products handlers
+    // ─────────────────────────────────────────────────────
+
     async function handleFetchBlingProducts() {
         setFetching(true);
         setBlingProducts([]);
@@ -157,7 +176,6 @@ export default function BlingPage() {
         try {
             const products = await fetchAllBlingProducts();
             setBlingProducts(products);
-            // Pre-select all active products
             const activeIds = new Set(products.filter(p => p.situacao === 'A').map(p => p.id));
             setSelectedIds(activeIds);
             toast.success(`${products.length} produtos encontrados no Bling.`);
@@ -170,10 +188,7 @@ export default function BlingPage() {
 
     async function handleImport() {
         const toImport = blingProducts.filter(p => selectedIds.has(p.id));
-        if (toImport.length === 0) {
-            toast.error('Selecione ao menos um produto.');
-            return;
-        }
+        if (toImport.length === 0) { toast.error('Selecione ao menos um produto.'); return; }
 
         setImporting(true);
         setImportResult(null);
@@ -183,7 +198,6 @@ export default function BlingPage() {
             const result = await importBlingProducts(toImport, (current, total) => {
                 setImportProgress({ current, total });
             });
-
             setImportResult(result);
 
             if (result.errors.length === 0) {
@@ -206,310 +220,341 @@ export default function BlingPage() {
         });
     }
 
+    const filteredProducts = blingProducts.filter(p =>
+        !productSearch ||
+        p.nome.toLowerCase().includes(productSearch.toLowerCase()) ||
+        (p.codigo || '').toLowerCase().includes(productSearch.toLowerCase())
+    );
+
     function toggleSelectAll() {
-        const filtered = blingProducts.filter(p =>
-            !productSearch || p.nome.toLowerCase().includes(productSearch.toLowerCase()) || (p.codigo && p.codigo.toLowerCase().includes(productSearch.toLowerCase()))
-        );
-        const allSelected = filtered.every(p => selectedIds.has(p.id));
+        const allSelected = filteredProducts.every(p => selectedIds.has(p.id));
         setSelectedIds(prev => {
             const next = new Set(prev);
-            filtered.forEach(p => allSelected ? next.delete(p.id) : next.add(p.id));
+            filteredProducts.forEach(p => allSelected ? next.delete(p.id) : next.add(p.id));
             return next;
         });
     }
 
-    function copyCallbackUrl() {
-        navigator.clipboard.writeText(credentials.bling_callback_url);
-        toast.success('URL copiada!');
-    }
+    // ─────────────────────────────────────────────────────
+    // Derived
+    // ─────────────────────────────────────────────────────
 
     const tokenExpired = tokenExpiresAt ? new Date(tokenExpiresAt) < new Date() : false;
-    const tokenStatusLabel = !isConnected
-        ? 'Não conectado'
-        : tokenExpired
-            ? 'Token expirado — reconecte'
-            : `Conectado até ${new Date(tokenExpiresAt!).toLocaleString('pt-BR')}`;
 
     if (loading) {
         return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-green-500" />
             </div>
         );
     }
 
+    // ─────────────────────────────────────────────────────
+    // Render
+    // ─────────────────────────────────────────────────────
+
     return (
-        <div className="animate-in fade-in duration-500 max-w-3xl mx-auto space-y-6">
+        <div className="max-w-3xl mx-auto space-y-6 p-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold flex items-center gap-3">
-                        <Package className="w-8 h-8 text-green-500" />
-                        Integração Bling
-                    </h1>
-                    <p className="text-slate-500 mt-1">
-                        Conecte sua conta Bling para importar produtos e sincronizar estoque.
-                    </p>
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                    <Link2 className="w-5 h-5 text-green-700" />
                 </div>
+                <div>
+                    <h1 className="text-xl font-bold text-slate-800">Integração Bling</h1>
+                    <p className="text-sm text-slate-500">Conecte e sincronize seus produtos com o Bling ERP</p>
+                </div>
+                {isConnected && (
+                    <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1.5 rounded-full">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        {tokenExpired ? 'Token expirado' : 'Conectado'}
+                    </span>
+                )}
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200">
                 <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="bg-green-600 text-white px-6 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-green-700 transition-colors disabled:opacity-50"
+                    onClick={() => setActiveTab('config')}
+                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'config'
+                            ? 'border-green-600 text-green-700'
+                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        }`}
                 >
-                    {saving ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                        <Save className="w-5 h-5" />
+                    <Settings className="w-4 h-4" />
+                    Configuração
+                </button>
+                <button
+                    onClick={() => setActiveTab('products')}
+                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'products'
+                            ? 'border-green-600 text-green-700'
+                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        }`}
+                >
+                    <Package className="w-4 h-4" />
+                    Produtos
+                    {blingProducts.length > 0 && (
+                        <span className="ml-1 bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                            {blingProducts.length}
+                        </span>
                     )}
-                    Salvar Credenciais
                 </button>
             </div>
 
-            {/* Status */}
-            <div className={`flex items-center gap-3 p-4 rounded-xl border ${isConnected && !tokenExpired
-                ? 'bg-green-50 border-green-200 text-green-800'
-                : tokenExpired
-                    ? 'bg-amber-50 border-amber-200 text-amber-800'
-                    : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}>
-                {isConnected && !tokenExpired ? (
-                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                ) : (
-                    <AlertCircle className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                )}
-                <p className="text-sm font-medium">{tokenStatusLabel}</p>
-            </div>
-
-            {/* Credenciais */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">1</span>
-                    Credenciais do Aplicativo Bling
-                </h2>
-
-                <p className="text-sm text-slate-500">
-                    Acesse{' '}
-                    <a
-                        href="https://www.bling.com.br/aplicativos.php"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-green-600 hover:underline font-medium inline-flex items-center gap-1"
-                    >
-                        Bling → Aplicativos <ExternalLink className="w-3 h-3" />
-                    </a>{' '}
-                    e copie as credenciais do seu app privado.
-                </p>
-
+            {/* ══════════════════════════════════════ */}
+            {/* TAB: CONFIGURAÇÃO                      */}
+            {/* ══════════════════════════════════════ */}
+            {activeTab === 'config' && (
                 <div className="space-y-4">
-                    {/* Client ID */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                            Client ID <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                            type="text"
-                            value={credentials.bling_client_id}
-                            onChange={(e) => setCredentials({ ...credentials, bling_client_id: e.target.value })}
-                            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm bg-slate-50"
-                            placeholder="Ex: a1b2c3d4e5f6..."
-                            autoComplete="off"
-                        />
+                    {/* Credenciais */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                        <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">1</span>
+                            Credenciais do App Bling
+                        </h2>
+                        <p className="text-sm text-slate-500">
+                            Crie um app em{' '}
+                            <a href="https://developer.bling.com.br/aplicativos#/" target="_blank" rel="noreferrer" className="text-green-600 underline">
+                                developer.bling.com.br
+                            </a>{' '}
+                            e cole o <strong>Client ID</strong> e <strong>Client Secret</strong> abaixo.
+                        </p>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Client ID</label>
+                                <input
+                                    type="text"
+                                    value={credentials.bling_client_id}
+                                    onChange={e => setCredentials({ ...credentials, bling_client_id: e.target.value })}
+                                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm"
+                                    placeholder="Cole o Client ID aqui"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Client Secret</label>
+                                <div className="relative">
+                                    <input
+                                        type={showSecret ? 'text' : 'password'}
+                                        value={credentials.bling_client_secret}
+                                        onChange={e => setCredentials({ ...credentials, bling_client_secret: e.target.value })}
+                                        className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm"
+                                        placeholder="Cole o Client Secret aqui"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSecret(!showSecret)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    >
+                                        {showSecret ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            {saving ? 'Salvando...' : 'Salvar Credenciais'}
+                        </button>
                     </div>
 
-                    {/* Client Secret */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                            Client Secret <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
+                    {/* Callback URL */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
+                        <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">2</span>
+                            URL de Callback (Redirecionamento)
+                        </h2>
+                        <p className="text-sm text-slate-500">
+                            Cadastre esta URL no campo <strong>"Link de Redirecionamento"</strong> do seu app no Bling:
+                        </p>
+                        <div className="flex items-center gap-2">
                             <input
-                                type={showSecret ? 'text' : 'password'}
-                                value={credentials.bling_client_secret}
-                                onChange={(e) => setCredentials({ ...credentials, bling_client_secret: e.target.value })}
-                                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm bg-slate-50"
-                                placeholder="Cole o Client Secret aqui"
-                                autoComplete="off"
+                                type="text"
+                                value={credentials.bling_callback_url}
+                                onChange={e => setCredentials({ ...credentials, bling_callback_url: e.target.value })}
+                                className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm bg-slate-50"
+                                placeholder="https://seudominio.com/admin/settings/bling/callback"
                             />
-                            <button
-                                type="button"
-                                onClick={() => setShowSecret(!showSecret)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                            >
-                                {showSecret ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            <button onClick={copyCallbackUrl} className="flex-shrink-0 p-3 hover:bg-slate-100 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700">
+                                <Copy className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            {/* Callback URL */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">2</span>
-                    URL de Callback (Redirecionamento)
-                </h2>
-                <p className="text-sm text-slate-500">
-                    Defina e cadastre esta URL no campo <strong>"Link de Redirecionamento"</strong> do seu aplicativo no Bling:
-                </p>
-                <div className="flex items-center gap-2">
-                    <input
-                        type="text"
-                        value={credentials.bling_callback_url}
-                        onChange={(e) => setCredentials({ ...credentials, bling_callback_url: e.target.value })}
-                        className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm bg-slate-50"
-                        placeholder="https://seudominio.com/admin/settings/bling/callback"
-                    />
-                    <button
-                        onClick={copyCallbackUrl}
-                        className="flex-shrink-0 p-3 hover:bg-slate-100 rounded-xl transition-colors text-slate-500 hover:text-slate-700 border border-slate-200"
-                        title="Copiar URL"
-                    >
-                        <Copy className="w-4 h-4" />
-                    </button>
-                </div>
-                <p className="text-xs text-slate-400">💡 Para produção use a URL do Vercel. Para desenvolvimento local use <code>http://localhost:3000/...</code></p>
-            </div>
-
-            {/* Conectar */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">3</span>
-                    Autorizar Acesso
-                </h2>
-                <p className="text-sm text-slate-500">
-                    Após salvar as credenciais acima, clique em <strong>"Conectar com Bling"</strong> para autorizar o acesso via OAuth2.
-                    Você será redirecionado para o Bling e voltará automaticamente.
-                </p>
-                <button
-                    onClick={handleConnectBling}
-                    disabled={!credentials.bling_client_id}
-                    className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <ExternalLink className="w-5 h-5" />
-                    {isConnected && !tokenExpired ? 'Reconectar com Bling' : 'Conectar com Bling'}
-                </button>
-            </div>
-
-            {/* Importar Produtos */}
-            {isConnected && (
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">4</span>
-                        Importar Produtos do Bling
-                    </h2>
-
-                    {/* Step 1: Buscar */}
-                    <div className="flex items-center gap-3">
+                    {/* Autorizar */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                        <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">3</span>
+                            Autorizar Acesso
+                        </h2>
+                        <p className="text-sm text-slate-500">
+                            Clique em <strong>"Conectar com Bling"</strong> para autorizar via OAuth2. Você será redirecionado para o Bling e voltará automaticamente.
+                        </p>
                         <button
-                            onClick={handleFetchBlingProducts}
-                            disabled={fetching || importing}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50"
+                            onClick={handleConnectBling}
+                            disabled={!credentials.bling_client_id}
+                            className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                            {fetching ? 'Buscando...' : 'Buscar Produtos do Bling'}
+                            <ExternalLink className="w-5 h-5" />
+                            {isConnected && !tokenExpired ? 'Reconectar com Bling' : 'Conectar com Bling'}
                         </button>
-                        {blingProducts.length > 0 && (
-                            <span className="text-sm text-slate-500">{blingProducts.length} produtos encontrados · {selectedIds.size} selecionados</span>
-                        )}
                     </div>
 
-                    {/* Step 2: Selecionar */}
-                    {blingProducts.length > 0 && (
-                        <div className="border border-slate-200 rounded-xl overflow-hidden">
-                            {/* Search + select all */}
-                            <div className="flex items-center gap-2 p-3 bg-slate-50 border-b border-slate-200">
-                                <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                                <input
-                                    type="text"
-                                    value={productSearch}
-                                    onChange={e => setProductSearch(e.target.value)}
-                                    placeholder="Filtrar por nome ou SKU..."
-                                    className="flex-1 bg-transparent text-sm outline-none text-slate-700"
-                                />
-                                <button
-                                    onClick={toggleSelectAll}
-                                    className="text-xs text-blue-600 hover:underline font-medium whitespace-nowrap"
-                                >
-                                    {blingProducts.filter(p => !productSearch || p.nome.toLowerCase().includes(productSearch.toLowerCase()) || (p.codigo || '').toLowerCase().includes(productSearch.toLowerCase())).every(p => selectedIds.has(p.id))
-                                        ? 'Desmarcar todos' : 'Selecionar todos'}
-                                </button>
-                            </div>
-
-                            {/* Product list */}
-                            <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
-                                {blingProducts
-                                    .filter(p => !productSearch || p.nome.toLowerCase().includes(productSearch.toLowerCase()) || (p.codigo || '').toLowerCase().includes(productSearch.toLowerCase()))
-                                    .map(p => (
-                                        <label key={p.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedIds.has(p.id)}
-                                                onChange={() => toggleSelect(p.id)}
-                                                className="w-4 h-4 accent-green-600 flex-shrink-0"
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-slate-800 truncate">{p.nome}</p>
-                                                <p className="text-xs text-slate-400">{p.codigo ? `SKU: ${p.codigo}` : ''}{p.gtin ? ` · EAN: ${p.gtin}` : ''}</p>
-                                            </div>
-                                            <div className="text-right flex-shrink-0">
-                                                {p.preco != null && <p className="text-sm font-semibold text-slate-700">R$ {p.preco.toFixed(2).replace('.', ',')}</p>}
-                                                <span className={`text-xs font-medium ${p.situacao === 'A' ? 'text-green-600' : 'text-slate-400'}`}>
-                                                    {p.situacao === 'A' ? 'Ativo' : 'Inativo'}
-                                                </span>
-                                            </div>
-                                        </label>
-                                    ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 3: Importar */}
-                    {selectedIds.size > 0 && (
-                        <button
-                            onClick={handleImport}
-                            disabled={importing}
-                            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {importing ? <><Loader2 className="w-5 h-5 animate-spin" /> Importando {importProgress.current}/{importProgress.total}...</> : <><Download className="w-5 h-5" /> Importar {selectedIds.size} produto{selectedIds.size !== 1 ? 's' : ''}</>}
-                        </button>
-                    )}
-
-                    {/* Progress */}
-                    {importing && importProgress.total > 0 && (
-                        <div className="space-y-1">
-                            <div className="w-full bg-slate-100 rounded-full h-2">
-                                <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }} />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Results */}
-                    {importResult && (
-                        <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-3">
-                            <p className="text-sm font-bold text-slate-700">Resultado</p>
-                            <div className="flex gap-6">
-                                <div className="text-center"><p className="text-2xl font-bold text-green-600">{importResult.created}</p><p className="text-xs text-slate-500">criados</p></div>
-                                <div className="text-center"><p className="text-2xl font-bold text-blue-600">{importResult.updated}</p><p className="text-xs text-slate-500">atualizados</p></div>
-                                <div className="text-center"><p className="text-2xl font-bold text-red-500">{importResult.errors.length}</p><p className="text-xs text-slate-500">erros</p></div>
-                            </div>
-                            {importResult.errors.length > 0 && (
-                                <div className="max-h-32 overflow-y-auto space-y-1">
-                                    {importResult.errors.map((e, i) => <p key={i} className="text-xs text-red-600 font-mono">{e}</p>)}
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    {/* Escopos */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <p className="text-sm font-semibold text-blue-800 mb-2">📋 Escopos necessários no app Bling</p>
+                        <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+                            <li><strong>Produtos</strong> — leitura e escrita</li>
+                            <li><strong>Estoques</strong> — leitura de saldos por depósito</li>
+                        </ul>
+                    </div>
                 </div>
             )}
 
-            {/* Escopos */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <p className="text-sm font-semibold text-blue-800 mb-2">📋 Escopos necessários no app Bling</p>
-                <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
-                    <li><strong>Produtos</strong> — leitura e escrita</li>
-                    <li><strong>Estoques</strong> — leitura de saldos por depósito</li>
-                </ul>
-            </div>
+            {/* ══════════════════════════════════════ */}
+            {/* TAB: PRODUTOS                          */}
+            {/* ══════════════════════════════════════ */}
+            {activeTab === 'products' && (
+                <div className="space-y-4">
+                    {!isConnected ? (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center space-y-3">
+                            <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
+                            <p className="font-semibold text-amber-800">Bling não conectado</p>
+                            <p className="text-sm text-amber-700">Configure as credenciais e conecte o Bling na aba <strong>Configuração</strong> primeiro.</p>
+                            <button onClick={() => setActiveTab('config')} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700">
+                                Ir para Configuração
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Importação */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <h2 className="text-base font-bold text-slate-800">Importar Produtos do Bling</h2>
+                                        <p className="text-sm text-slate-500 mt-0.5">
+                                            Busque, selecione e importe produtos do Bling para o sistema.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={handleFetchBlingProducts}
+                                        disabled={fetching || importing}
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 flex-shrink-0"
+                                    >
+                                        {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                        {fetching ? 'Buscando...' : 'Buscar do Bling'}
+                                    </button>
+                                </div>
+
+                                {/* Product list */}
+                                {blingProducts.length > 0 && (
+                                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                        <div className="flex items-center gap-2 p-3 bg-slate-50 border-b border-slate-200">
+                                            <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                                            <input
+                                                type="text"
+                                                value={productSearch}
+                                                onChange={e => setProductSearch(e.target.value)}
+                                                placeholder="Filtrar por nome ou SKU..."
+                                                className="flex-1 bg-transparent text-sm outline-none text-slate-700"
+                                            />
+                                            <span className="text-xs text-slate-400 whitespace-nowrap">{selectedIds.size} selecionados</span>
+                                            <button onClick={toggleSelectAll} className="text-xs text-blue-600 hover:underline font-medium whitespace-nowrap ml-2">
+                                                {filteredProducts.every(p => selectedIds.has(p.id)) ? 'Desmarcar' : 'Todos'}
+                                            </button>
+                                        </div>
+                                        <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                                            {filteredProducts.map(p => (
+                                                <label key={p.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedIds.has(p.id)}
+                                                        onChange={() => toggleSelect(p.id)}
+                                                        className="w-4 h-4 accent-green-600 flex-shrink-0"
+                                                    />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-slate-800 truncate">{p.nome}</p>
+                                                        <p className="text-xs text-slate-400">
+                                                            {p.codigo ? `SKU: ${p.codigo}` : ''}
+                                                            {p.gtin ? ` · EAN: ${p.gtin}` : ''}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right flex-shrink-0">
+                                                        {p.preco != null && (
+                                                            <p className="text-sm font-semibold text-slate-700">R$ {p.preco.toFixed(2).replace('.', ',')}</p>
+                                                        )}
+                                                        <span className={`text-xs font-medium ${p.situacao === 'A' ? 'text-green-600' : 'text-slate-400'}`}>
+                                                            {p.situacao === 'A' ? 'Ativo' : 'Inativo'}
+                                                        </span>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                            {filteredProducts.length === 0 && (
+                                                <p className="text-sm text-slate-400 text-center py-6">Nenhum produto encontrado.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Import button */}
+                                {selectedIds.size > 0 && (
+                                    <button
+                                        onClick={handleImport}
+                                        disabled={importing}
+                                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                    >
+                                        {importing
+                                            ? <><Loader2 className="w-5 h-5 animate-spin" /> Importando {importProgress.current}/{importProgress.total}...</>
+                                            : <><Download className="w-5 h-5" /> Importar {selectedIds.size} produto{selectedIds.size !== 1 ? 's' : ''}</>}
+                                    </button>
+                                )}
+
+                                {/* Progress bar */}
+                                {importing && importProgress.total > 0 && (
+                                    <div className="w-full bg-slate-100 rounded-full h-2">
+                                        <div
+                                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                            style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Results */}
+                                {importResult && (
+                                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-3">
+                                        <p className="text-sm font-bold text-slate-700">Resultado</p>
+                                        <div className="flex gap-6">
+                                            <div className="text-center">
+                                                <p className="text-2xl font-bold text-green-600">{importResult.created}</p>
+                                                <p className="text-xs text-slate-500">criados</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-2xl font-bold text-blue-600">{importResult.updated}</p>
+                                                <p className="text-xs text-slate-500">atualizados</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-2xl font-bold text-red-500">{importResult.errors.length}</p>
+                                                <p className="text-xs text-slate-500">erros</p>
+                                            </div>
+                                        </div>
+                                        {importResult.errors.length > 0 && (
+                                            <div className="max-h-32 overflow-y-auto space-y-1">
+                                                {importResult.errors.map((e, i) => (
+                                                    <p key={i} className="text-xs text-red-600 font-mono">{e}</p>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
