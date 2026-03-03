@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Save, Eye, EyeOff, CheckCircle, AlertCircle, Copy, ExternalLink, Download, Loader2, RefreshCw } from 'lucide-react';
+import { Package, Save, Eye, EyeOff, CheckCircle, AlertCircle, Copy, ExternalLink, Download, Loader2, Search, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
-import { importBlingProducts, ImportResult } from '../../../services/blingService';
+import { fetchAllBlingProducts, importBlingProducts, BlingProduct, ImportResult } from '../../../services/blingService';
 
 interface BlingCredentials {
     bling_client_id: string;
@@ -23,7 +23,11 @@ export default function BlingPage() {
     const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
     // Import state
+    const [fetching, setFetching] = useState(false);
     const [importing, setImporting] = useState(false);
+    const [blingProducts, setBlingProducts] = useState<BlingProduct[]>([]);
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [productSearch, setProductSearch] = useState('');
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
@@ -145,13 +149,38 @@ export default function BlingPage() {
         window.location.href = authUrl.toString();
     }
 
+    async function handleFetchBlingProducts() {
+        setFetching(true);
+        setBlingProducts([]);
+        setSelectedIds(new Set());
+        setImportResult(null);
+        try {
+            const products = await fetchAllBlingProducts();
+            setBlingProducts(products);
+            // Pre-select all active products
+            const activeIds = new Set(products.filter(p => p.situacao === 'A').map(p => p.id));
+            setSelectedIds(activeIds);
+            toast.success(`${products.length} produtos encontrados no Bling.`);
+        } catch (err: any) {
+            toast.error('Erro ao buscar produtos: ' + err.message);
+        } finally {
+            setFetching(false);
+        }
+    }
+
     async function handleImport() {
+        const toImport = blingProducts.filter(p => selectedIds.has(p.id));
+        if (toImport.length === 0) {
+            toast.error('Selecione ao menos um produto.');
+            return;
+        }
+
         setImporting(true);
         setImportResult(null);
-        setImportProgress({ current: 0, total: 0 });
+        setImportProgress({ current: 0, total: toImport.length });
 
         try {
-            const result = await importBlingProducts((current, total, partial) => {
+            const result = await importBlingProducts(toImport, (current, total) => {
                 setImportProgress({ current, total });
             });
 
@@ -167,6 +196,26 @@ export default function BlingPage() {
         } finally {
             setImporting(false);
         }
+    }
+
+    function toggleSelect(id: number) {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    }
+
+    function toggleSelectAll() {
+        const filtered = blingProducts.filter(p =>
+            !productSearch || p.nome.toLowerCase().includes(productSearch.toLowerCase()) || (p.codigo && p.codigo.toLowerCase().includes(productSearch.toLowerCase()))
+        );
+        const allSelected = filtered.every(p => selectedIds.has(p.id));
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            filtered.forEach(p => allSelected ? next.delete(p.id) : next.add(p.id));
+            return next;
+        });
     }
 
     function copyCallbackUrl() {
@@ -348,43 +397,88 @@ export default function BlingPage() {
                         <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">4</span>
                         Importar Produtos do Bling
                     </h2>
-                    <p className="text-sm text-slate-500">
-                        Busca todos os produtos cadastrados no Bling e synchroniza com o sistema.
-                        Produtos existentes são atualizados; novos são criados automaticamente.
-                    </p>
 
-                    {/* SQL warning */}
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                        <p className="text-xs font-semibold text-amber-800 mb-1">⚠️ Pré-requisito: rode este SQL no Supabase antes de importar</p>
-                        <code className="text-xs text-amber-700 block font-mono">
-                            ALTER TABLE products ADD COLUMN IF NOT EXISTS bling_id BIGINT;
-                        </code>
+                    {/* Step 1: Buscar */}
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleFetchBlingProducts}
+                            disabled={fetching || importing}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50"
+                        >
+                            {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                            {fetching ? 'Buscando...' : 'Buscar Produtos do Bling'}
+                        </button>
+                        {blingProducts.length > 0 && (
+                            <span className="text-sm text-slate-500">{blingProducts.length} produtos encontrados · {selectedIds.size} selecionados</span>
+                        )}
                     </div>
 
-                    <button
-                        onClick={handleImport}
-                        disabled={importing}
-                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {importing ? (
-                            <><Loader2 className="w-5 h-5 animate-spin" /> Importando...</>
-                        ) : (
-                            <><Download className="w-5 h-5" /> Importar Produtos</>
-                        )}
-                    </button>
+                    {/* Step 2: Selecionar */}
+                    {blingProducts.length > 0 && (
+                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                            {/* Search + select all */}
+                            <div className="flex items-center gap-2 p-3 bg-slate-50 border-b border-slate-200">
+                                <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                                <input
+                                    type="text"
+                                    value={productSearch}
+                                    onChange={e => setProductSearch(e.target.value)}
+                                    placeholder="Filtrar por nome ou SKU..."
+                                    className="flex-1 bg-transparent text-sm outline-none text-slate-700"
+                                />
+                                <button
+                                    onClick={toggleSelectAll}
+                                    className="text-xs text-blue-600 hover:underline font-medium whitespace-nowrap"
+                                >
+                                    {blingProducts.filter(p => !productSearch || p.nome.toLowerCase().includes(productSearch.toLowerCase()) || (p.codigo || '').toLowerCase().includes(productSearch.toLowerCase())).every(p => selectedIds.has(p.id))
+                                        ? 'Desmarcar todos' : 'Selecionar todos'}
+                                </button>
+                            </div>
+
+                            {/* Product list */}
+                            <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                                {blingProducts
+                                    .filter(p => !productSearch || p.nome.toLowerCase().includes(productSearch.toLowerCase()) || (p.codigo || '').toLowerCase().includes(productSearch.toLowerCase()))
+                                    .map(p => (
+                                        <label key={p.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.has(p.id)}
+                                                onChange={() => toggleSelect(p.id)}
+                                                className="w-4 h-4 accent-green-600 flex-shrink-0"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-slate-800 truncate">{p.nome}</p>
+                                                <p className="text-xs text-slate-400">{p.codigo ? `SKU: ${p.codigo}` : ''}{p.gtin ? ` · EAN: ${p.gtin}` : ''}</p>
+                                            </div>
+                                            <div className="text-right flex-shrink-0">
+                                                {p.preco != null && <p className="text-sm font-semibold text-slate-700">R$ {p.preco.toFixed(2).replace('.', ',')}</p>}
+                                                <span className={`text-xs font-medium ${p.situacao === 'A' ? 'text-green-600' : 'text-slate-400'}`}>
+                                                    {p.situacao === 'A' ? 'Ativo' : 'Inativo'}
+                                                </span>
+                                            </div>
+                                        </label>
+                                    ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 3: Importar */}
+                    {selectedIds.size > 0 && (
+                        <button
+                            onClick={handleImport}
+                            disabled={importing}
+                            className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {importing ? <><Loader2 className="w-5 h-5 animate-spin" /> Importando {importProgress.current}/{importProgress.total}...</> : <><Download className="w-5 h-5" /> Importar {selectedIds.size} produto{selectedIds.size !== 1 ? 's' : ''}</>}
+                        </button>
+                    )}
 
                     {/* Progress */}
                     {importing && importProgress.total > 0 && (
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-xs text-slate-500">
-                                <span>Processando...</span>
-                                <span>{importProgress.current} / {importProgress.total}</span>
-                            </div>
+                        <div className="space-y-1">
                             <div className="w-full bg-slate-100 rounded-full h-2">
-                                <div
-                                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
-                                />
+                                <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }} />
                             </div>
                         </div>
                     )}
@@ -392,26 +486,15 @@ export default function BlingPage() {
                     {/* Results */}
                     {importResult && (
                         <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-3">
-                            <p className="text-sm font-bold text-slate-700">Resultado da Importação</p>
-                            <div className="flex gap-4">
-                                <div className="text-center">
-                                    <p className="text-2xl font-bold text-green-600">{importResult.created}</p>
-                                    <p className="text-xs text-slate-500">criados</p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-2xl font-bold text-blue-600">{importResult.updated}</p>
-                                    <p className="text-xs text-slate-500">atualizados</p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-2xl font-bold text-red-500">{importResult.errors.length}</p>
-                                    <p className="text-xs text-slate-500">erros</p>
-                                </div>
+                            <p className="text-sm font-bold text-slate-700">Resultado</p>
+                            <div className="flex gap-6">
+                                <div className="text-center"><p className="text-2xl font-bold text-green-600">{importResult.created}</p><p className="text-xs text-slate-500">criados</p></div>
+                                <div className="text-center"><p className="text-2xl font-bold text-blue-600">{importResult.updated}</p><p className="text-xs text-slate-500">atualizados</p></div>
+                                <div className="text-center"><p className="text-2xl font-bold text-red-500">{importResult.errors.length}</p><p className="text-xs text-slate-500">erros</p></div>
                             </div>
                             {importResult.errors.length > 0 && (
                                 <div className="max-h-32 overflow-y-auto space-y-1">
-                                    {importResult.errors.map((e, i) => (
-                                        <p key={i} className="text-xs text-red-600 font-mono">{e}</p>
-                                    ))}
+                                    {importResult.errors.map((e, i) => <p key={i} className="text-xs text-red-600 font-mono">{e}</p>)}
                                 </div>
                             )}
                         </div>

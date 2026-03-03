@@ -5,6 +5,17 @@ const COMPANY_SLUG = 'mercado-do-vale';
 
 // ------- Types -------
 
+export interface BlingProduct {
+    id: number;
+    nome: string;
+    codigo: string | null;
+    gtin: string | null;
+    preco: number | null;
+    precoCusto: number | null;
+    situacao: string;
+    imagens?: Array<{ link?: string; url?: string }>;
+}
+
 export interface ImportResult {
     created: number;
     updated: number;
@@ -155,85 +166,99 @@ function mapBlingToDb(item: any, companyId: string): Record<string, any> {
     };
 }
 
-// ------- Main: Import all products -------
+// ------- Fetch all products (for selection UI) -------
+
+export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
+    const accessToken = await getValidToken();
+    const all: BlingProduct[] = [];
+    let page = 1;
+
+    do {
+        const { items } = await fetchProductsPage(accessToken, page);
+        if (items.length === 0) break;
+        all.push(...items.map((item: any) => ({
+            id: item.id,
+            nome: item.nome || 'Produto sem nome',
+            codigo: item.codigo || null,
+            gtin: item.gtin || null,
+            preco: item.preco || null,
+            precoCusto: item.precoCusto || null,
+            situacao: item.situacao || 'A',
+            imagens: item.imagens || [],
+        })));
+        if (items.length < 100) break;
+        page++;
+    } while (true);
+
+    return all;
+}
+
+// ------- Import selected products -------
 
 export async function importBlingProducts(
+    selectedProducts: BlingProduct[],
     onProgress: (current: number, total: number, result: Partial<ImportResult>) => void
 ): Promise<ImportResult> {
     const accessToken = await getValidToken();
     const companyId = await getCompanyId();
 
     const result: ImportResult = { created: 0, updated: 0, errors: [] };
-    let page = 1;
-    let processed = 0;
-    let total = 0;
+    const total = selectedProducts.length;
 
-    do {
-        const { items, total: pageTotal } = await fetchProductsPage(accessToken, page);
-        if (page === 1) total = pageTotal || items.length;
-        if (items.length === 0) break;
+    for (let i = 0; i < selectedProducts.length; i++) {
+        const item = selectedProducts[i];
+        try {
+            const row = mapBlingToDb(item, companyId);
 
-        for (const item of items) {
-            try {
-                const row = mapBlingToDb(item, companyId);
+            const { data: existing } = await supabase
+                .from('products')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq('bling_id', item.id)
+                .maybeSingle();
 
-                // Check if product already exists by bling_id
-                const { data: existing } = await supabase
+            if (existing) {
+                const { error } = await supabase
                     .from('products')
-                    .select('id')
-                    .eq('company_id', companyId)
-                    .eq('bling_id', item.id)
-                    .maybeSingle();
+                    .update({
+                        name: row.name,
+                        sku: row.sku,
+                        ean: row.ean,
+                        alternative_eans: row.alternative_eans,
+                        description: row.description,
+                        price_retail: row.price_retail,
+                        price_cost: row.price_cost,
+                        ncm: row.ncm,
+                        cest: row.cest,
+                        weight_kg: row.weight_kg,
+                        dimensions: row.dimensions,
+                        images: row.images,
+                        status: row.status,
+                    })
+                    .eq('id', existing.id);
 
-                if (existing) {
-                    // Update without overwriting model_id or stock
-                    const { error } = await supabase
-                        .from('products')
-                        .update({
-                            name: row.name,
-                            sku: row.sku,
-                            ean: row.ean,
-                            alternative_eans: row.alternative_eans,
-                            description: row.description,
-                            price_retail: row.price_retail,
-                            price_cost: row.price_cost,
-                            ncm: row.ncm,
-                            cest: row.cest,
-                            weight_kg: row.weight_kg,
-                            dimensions: row.dimensions,
-                            images: row.images,
-                            status: row.status,
-                        })
-                        .eq('id', existing.id);
+                if (error) throw new Error(error.message);
+                result.updated++;
+            } else {
+                const { error } = await supabase
+                    .from('products')
+                    .insert(row);
 
-                    if (error) throw new Error(error.message);
-                    result.updated++;
-                } else {
-                    // Insert new product
-                    const { error } = await supabase
-                        .from('products')
-                        .insert(row);
-
-                    if (error) throw new Error(error.message);
-                    result.created++;
-                }
-            } catch (err: any) {
-                result.errors.push(`[${item.nome || item.id}]: ${err.message}`);
+                if (error) throw new Error(error.message);
+                result.created++;
             }
-
-            processed++;
-            onProgress(processed, total, result);
+        } catch (err: any) {
+            result.errors.push(`[${item.nome}]: ${err.message}`);
         }
 
-        // Check if there are more pages
-        if (items.length < 100) break;
-        page++;
-    } while (true);
+        onProgress(i + 1, total, result);
+    }
 
     return result;
 }
 
 export const blingService = {
     getValidToken,
+    fetchAllBlingProducts,
     importBlingProducts,
 };
