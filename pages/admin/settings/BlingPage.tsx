@@ -19,6 +19,42 @@ interface BlingCredentials {
 
 type Tab = 'config' | 'products';
 
+const CACHE_KEY = 'bling_products_cache';
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
+interface BlingCache {
+    timestamp: number;
+    products: BlingProduct[];
+}
+
+function loadCache(): BlingCache | null {
+    try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return null;
+        const cache: BlingCache = JSON.parse(raw);
+        if (Date.now() - cache.timestamp > CACHE_TTL_MS) return null; // expirado
+        return cache;
+    } catch { return null; }
+}
+
+function saveCache(products: BlingProduct[]) {
+    try {
+        const cache: BlingCache = { timestamp: Date.now(), products };
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    } catch { /* quota exceeded - ignora */ }
+}
+
+function clearCache() {
+    localStorage.removeItem(CACHE_KEY);
+}
+
+function formatCacheAge(timestamp: number): string {
+    const mins = Math.floor((Date.now() - timestamp) / 60000);
+    if (mins < 1) return 'agora';
+    if (mins === 1) return 'há 1 min';
+    return `há ${mins} min`;
+}
+
 // ─────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────
@@ -48,6 +84,7 @@ export default function BlingPage() {
     const [enabledFields, setEnabledFields] = useState<Set<string>>(new Set(DEFAULT_ENABLED_FIELDS));
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
+    const [cacheInfo, setCacheInfo] = useState<{ timestamp: number } | null>(null);
 
     // ─────────────────────────────────────────────────────
     // Load
@@ -170,20 +207,45 @@ export default function BlingPage() {
     // Products handlers
     // ─────────────────────────────────────────────────────
 
-    async function handleFetchBlingProducts() {
+    async function handleFetchBlingProducts(forceRefresh = false) {
         setFetching(true);
         setBlingProducts([]);
         setSelectedIds(new Set());
         setImportResult(null);
         try {
-            const products = blingSearch.trim()
-                ? await searchBlingProducts(blingSearch.trim())
-                : await fetchAllBlingProducts();
+            let products: BlingProduct[];
+
+            if (blingSearch.trim()) {
+                // Busca específica → vai direto ao Bling, sem cache
+                products = await searchBlingProducts(blingSearch.trim());
+                setCacheInfo(null);
+            } else if (!forceRefresh) {
+                // Sem filtro → tenta usar cache primeiro
+                const cached = loadCache();
+                if (cached) {
+                    products = cached.products;
+                    setCacheInfo({ timestamp: cached.timestamp });
+                    toast.success(`${products.length} produtos carregados do cache (${formatCacheAge(cached.timestamp)}).`);
+                } else {
+                    products = await fetchAllBlingProducts();
+                    saveCache(products);
+                    setCacheInfo({ timestamp: Date.now() });
+                    if (products.length === 0) toast.error('Nenhum produto encontrado.');
+                    else toast.success(`${products.length} produtos carregados do Bling.`);
+                }
+            } else {
+                // Forçar atualização → limpa cache e recarrega
+                clearCache();
+                products = await fetchAllBlingProducts();
+                saveCache(products);
+                setCacheInfo({ timestamp: Date.now() });
+                if (products.length === 0) toast.error('Nenhum produto encontrado.');
+                else toast.success(`${products.length} produtos atualizados do Bling.`);
+            }
+
             setBlingProducts(products);
             const activeIds = new Set(products.filter(p => p.situacao === 'A').map(p => p.id));
             setSelectedIds(activeIds);
-            if (products.length === 0) toast.error('Nenhum produto encontrado.');
-            else toast.success(`${products.length} produtos encontrados no Bling.`);
         } catch (err: any) {
             toast.error('Erro ao buscar produtos: ' + err.message);
         } finally {
@@ -446,7 +508,7 @@ export default function BlingPage() {
                                 </div>
 
                                 {/* Field selection */}
-                                <details className="border border-slate-200 rounded-xl overflow-hidden">
+                                <details open className="border border-slate-200 rounded-xl overflow-hidden">
                                     <summary className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer text-sm font-semibold text-slate-700 select-none hover:bg-slate-100">
                                         <span>⚙️ Configurar campos a importar</span>
                                         <span className="text-xs font-normal text-slate-400">{enabledFields.size} de {BLING_FIELD_MAPPINGS.length} campos ativos</span>
@@ -490,6 +552,17 @@ export default function BlingPage() {
                                 </details>
 
                                 {/* Search bar */}
+                                {/* Cache banner */}
+                                {cacheInfo && (
+                                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs">
+                                        <span className="text-amber-700">📦 Lista carregada do cache · {formatCacheAge(cacheInfo.timestamp)}</span>
+                                        <button onClick={() => handleFetchBlingProducts(true)} disabled={fetching} className="text-amber-700 font-semibold underline hover:no-underline disabled:opacity-50">
+                                            Atualizar do Bling
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Search bar */}
                                 <div className="flex gap-2">
                                     <div className="relative flex-1">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -503,7 +576,7 @@ export default function BlingPage() {
                                         />
                                     </div>
                                     <button
-                                        onClick={handleFetchBlingProducts}
+                                        onClick={() => handleFetchBlingProducts()}
                                         disabled={fetching || importing}
                                         className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 flex-shrink-0"
                                     >
