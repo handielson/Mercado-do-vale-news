@@ -115,8 +115,17 @@ async function blingGet(path: string, accessToken: string): Promise<any> {
 }
 
 async function fetchProductsPage(accessToken: string, page: number): Promise<{ items: any[]; total: number }> {
-    // criterio=5 = todos os produtos (ativos e inativos)
-    const json = await blingGet(`/produtos?pagina=${page}&limite=100&criterio=5`, accessToken);
+    // Usa proxy serverless para evitar CORS
+    const res = await fetch(`/api/bling-products?page=${page}`, {
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+        },
+    });
+
+    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+    if (!res.ok) throw new Error(`Bling API error ${res.status}: ${await res.text()}`);
+
+    const json = await res.json();
     return {
         items: json.data || [],
         total: json.total ?? (json.data?.length || 0),
