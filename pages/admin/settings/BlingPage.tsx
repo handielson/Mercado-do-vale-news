@@ -6,6 +6,8 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
 import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, BlingProduct, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS } from '../../../services/blingService';
+import { categoryService } from '../../../services/categories';
+import { Category } from '../../../types/category';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -85,6 +87,8 @@ export default function BlingPage() {
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
     const [cacheInfo, setCacheInfo] = useState<{ timestamp: number } | null>(null);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [importCategoryId, setImportCategoryId] = useState('');
 
     // ─────────────────────────────────────────────────────
     // Load
@@ -92,6 +96,10 @@ export default function BlingPage() {
 
     useEffect(() => {
         loadCredentials();
+        categoryService.list().then(cats => {
+            setCategories(cats);
+            if (cats.length > 0) setImportCategoryId(cats[0].id);
+        }).catch(() => { });
 
         const params = new URLSearchParams(window.location.search);
         if (params.get('connected') === 'true') {
@@ -256,13 +264,14 @@ export default function BlingPage() {
     async function handleImport() {
         const toImport = blingProducts.filter(p => selectedIds.has(p.id));
         if (toImport.length === 0) { toast.error('Selecione ao menos um produto.'); return; }
+        if (!importCategoryId) { toast.error('Selecione uma categoria padrão para importação.'); return; }
 
         setImporting(true);
         setImportResult(null);
         setImportProgress({ current: 0, total: toImport.length });
 
         try {
-            const result = await importBlingProducts(toImport, enabledFields, (current, total) => {
+            const result = await importBlingProducts(toImport, enabledFields, importCategoryId, (current, total) => {
                 setImportProgress({ current, total });
             });
             setImportResult(result);
@@ -505,6 +514,21 @@ export default function BlingPage() {
                                     <p className="text-sm text-slate-500 mt-0.5">
                                         Busque, selecione e importe produtos do Bling para o sistema.
                                     </p>
+                                </div>
+
+                                {/* Default category selector */}
+                                <div className={`flex items-center gap-3 p-3 rounded-xl border ${!importCategoryId ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
+                                    <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📂 Categoria padrão:</label>
+                                    <select
+                                        value={importCategoryId}
+                                        onChange={e => setImportCategoryId(e.target.value)}
+                                        className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                    >
+                                        <option value="">-- Selecione uma categoria --</option>
+                                        {categories.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 {/* Field selection */}

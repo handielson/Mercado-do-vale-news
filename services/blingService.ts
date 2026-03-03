@@ -209,13 +209,14 @@ async function fetchStockMap(accessToken: string): Promise<Map<number, number>> 
 // ------- Mapping: Bling → DB row -------
 
 /** Monta o objeto de DB incluindo apenas os campos habilitados pelo admin */
-function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>): Record<string, any> {
+function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>, categoryId: string): Record<string, any> {
     const has = (key: string) => enabledFields.has(key);
 
     // Campos sempre obrigatórios
     const row: Record<string, any> = {
         company_id: companyId,
         bling_id: item.id,
+        category_id: categoryId,
         name: item.nome || 'Produto sem nome',   // 'name' sempre incluído (required)
         specs: {},
         stock_quantity: 0,
@@ -318,6 +319,7 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
 export async function importBlingProducts(
     selectedProducts: BlingProduct[],
     enabledFields: Set<string>,
+    categoryId: string,
     onProgress: (current: number, total: number, result: Partial<ImportResult>) => void
 ): Promise<ImportResult> {
     const companyId = await getCompanyId();
@@ -329,7 +331,7 @@ export async function importBlingProducts(
         const item = selectedProducts[i];
         let operation = 'verificação';
         try {
-            const row = mapBlingToDb(item, companyId, enabledFields);
+            const row = mapBlingToDb(item, companyId, enabledFields, categoryId);
 
             operation = 'verificação de duplicata';
             const { data: existing, error: checkError } = await supabase
