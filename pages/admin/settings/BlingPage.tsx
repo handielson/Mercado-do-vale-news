@@ -549,6 +549,9 @@ export default function BlingPage() {
                                                         {p.preco != null && (
                                                             <p className="text-sm font-semibold text-slate-700">R$ {p.preco.toFixed(2).replace('.', ',')}</p>
                                                         )}
+                                                        <p className={`text-xs font-medium ${p.stock_quantity > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                            {p.stock_quantity} em estoque
+                                                        </p>
                                                         <span className={`text-xs font-medium ${p.situacao === 'A' ? 'text-green-600' : 'text-slate-400'}`}>
                                                             {p.situacao === 'A' ? 'Ativo' : 'Inativo'}
                                                         </span>

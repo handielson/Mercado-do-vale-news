@@ -13,6 +13,7 @@ export interface BlingProduct {
     preco: number | null;
     precoCusto: number | null;
     situacao: string;
+    stock_quantity: number;
     imagens?: Array<{ link?: string; url?: string }>;
 }
 
@@ -56,6 +57,7 @@ export const BLING_FIELD_MAPPINGS: BlingFieldMapping[] = [
     // Físico
     { key: 'weight_kg', blingField: 'pesoBruto', localField: 'weight_kg', label: 'Peso bruto (kg)', group: 'fisico', required: false },
     { key: 'dimensions', blingField: 'largura / altura / profundidade', localField: 'dimensions', label: 'Dimensões (L×A×P cm)', group: 'fisico', required: false },
+    { key: 'stock_quantity', blingField: 'estoques/saldos (saldoFisico)', localField: 'stock_quantity', label: 'Estoque (saldo físico)', group: 'fisico', required: false },
     // Mídia
     { key: 'images', blingField: 'imagens', localField: 'images', label: 'Imagens', group: 'midia', required: false },
 ];
@@ -175,6 +177,35 @@ async function fetchProductsPage(accessToken: string, page: number): Promise<{ i
     };
 }
 
+/** Busca todos os saldos de estoque e retorna Map<productId, saldoFisico total> */
+async function fetchStockMap(accessToken: string): Promise<Map<number, number>> {
+    const map = new Map<number, number>();
+    let page = 1;
+
+    do {
+        const res = await fetch(`/api/bling-stock?page=${page}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        if (!res.ok) break;
+
+        const json = await res.json();
+        const items: any[] = json.data || [];
+        if (items.length === 0) break;
+
+        for (const item of items) {
+            const productId = item.produto?.id;
+            if (!productId) continue;
+            const qty = item.saldoFisico ?? 0;
+            map.set(productId, (map.get(productId) || 0) + qty);
+        }
+
+        if (items.length < 100) break;
+        page++;
+    } while (true);
+
+    return map;
+}
+
 // ------- Mapping: Bling → DB row -------
 
 /** Monta o objeto de DB incluindo apenas os campos habilitados pelo admin */
@@ -211,6 +242,7 @@ function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>):
             ? { width_cm: item.largura || null, height_cm: item.altura || null, depth_cm: item.profundidade || null }
             : null;
     }
+    if (has('stock_quantity')) row.stock_quantity = item.stock_quantity ?? 0;
 
     if (has('images')) {
         const first = item.imagens?.[0]?.link || item.imagens?.[0]?.url || null;
@@ -227,6 +259,12 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
     const all: BlingProduct[] = [];
     let page = 1;
 
+    // Busca produtos e saldos em paralelo
+    const [, stockMap] = await Promise.all([
+        Promise.resolve(),
+        fetchStockMap(accessToken),
+    ]);
+
     do {
         const { items } = await fetchProductsPage(accessToken, page);
         if (items.length === 0) break;
@@ -238,6 +276,7 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
             preco: item.preco || null,
             precoCusto: item.precoCusto || null,
             situacao: item.situacao || 'A',
+            stock_quantity: stockMap.get(item.id) ?? 0,
             imagens: item.imagens || [],
         })));
         if (items.length < 100) break;
@@ -252,9 +291,12 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
 export async function searchBlingProducts(query: string): Promise<BlingProduct[]> {
     const accessToken = await getValidToken();
 
-    const res = await fetch(`/api/bling-products?page=1&search=${encodeURIComponent(query)}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-    });
+    const [res, stockMap] = await Promise.all([
+        fetch(`/api/bling-products?page=1&search=${encodeURIComponent(query)}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        }),
+        fetchStockMap(accessToken),
+    ]);
 
     if (!res.ok) throw new Error(`Bling API error ${res.status}`);
     const json = await res.json();
@@ -267,6 +309,7 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
         preco: item.preco || null,
         precoCusto: item.precoCusto || null,
         situacao: item.situacao || 'A',
+        stock_quantity: stockMap.get(item.id) ?? 0,
         imagens: item.imagens || [],
     }));
 }
