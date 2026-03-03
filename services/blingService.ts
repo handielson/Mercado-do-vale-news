@@ -158,6 +158,78 @@ export type FieldKey = typeof BLING_FIELD_MAPPINGS[number]['key'];
 // Default: all fields enabled
 export const DEFAULT_ENABLED_FIELDS: Set<string> = new Set(BLING_FIELD_MAPPINGS.map(f => f.key));
 
+// ------- Campo-a-campo: mapeamento configurável -------
+
+/** Par de mapeamento: campo Bling → campo do nosso banco */
+export interface FieldMappingConfig {
+    blingKey: string;         // chave interna do BLING_FIELD_MAPPINGS (ex: 'price_retail')
+    blingField: string;       // nome do campo no Bling (ex: 'preco')
+    blingLabel: string;       // rótulo legível (ex: 'Preço Venda')
+    systemField: string;      // campo do banco que vai receber (ex: 'price_retail')
+    enabled: boolean;         // se esse mapeamento está ativo
+}
+
+/** Campos disponíveis no nosso sistema que podem receber dados do Bling */
+export const SYSTEM_FIELDS: Array<{ field: string; label: string; group: string }> = [
+    // Básico
+    { field: 'name', label: 'Nome do produto', group: 'Básico' },
+    { field: 'sku', label: 'SKU / Código', group: 'Básico' },
+    { field: 'ean', label: 'EAN / GTIN', group: 'Básico' },
+    { field: 'description', label: 'Descrição', group: 'Básico' },
+    { field: 'brand', label: 'Marca (texto)', group: 'Básico' },
+    { field: 'status', label: 'Status', group: 'Básico' },
+    // Preços
+    { field: 'price_retail', label: 'Preço varejo', group: 'Preços' },
+    { field: 'price_cost', label: 'Preço custo', group: 'Preços' },
+    { field: 'price_reseller', label: 'Preço revenda', group: 'Preços' },
+    { field: 'price_wholesale', label: 'Preço atacado', group: 'Preços' },
+    // Fiscal
+    { field: 'ncm', label: 'NCM', group: 'Fiscal' },
+    { field: 'cest', label: 'CEST', group: 'Fiscal' },
+    { field: 'origin', label: 'Origem', group: 'Fiscal' },
+    // Físico
+    { field: 'weight_kg', label: 'Peso bruto (kg)', group: 'Físico' },
+    { field: 'stock_quantity', label: 'Estoque', group: 'Físico' },
+    // Mídia
+    { field: 'images', label: 'Imagens', group: 'Mídia' },
+];
+
+const FIELD_MAPPING_KEY = 'bling_field_mappings';
+
+/** Gera os mapeamentos padrão a partir de BLING_FIELD_MAPPINGS */
+export function getDefaultFieldMappings(): FieldMappingConfig[] {
+    return BLING_FIELD_MAPPINGS.map(f => ({
+        blingKey: f.key,
+        blingField: f.blingField,
+        blingLabel: f.label,
+        systemField: f.localField,
+        enabled: true,
+    }));
+}
+
+export function loadFieldMappings(): FieldMappingConfig[] {
+    try {
+        const saved = localStorage.getItem(FIELD_MAPPING_KEY);
+        return saved ? JSON.parse(saved) : getDefaultFieldMappings();
+    } catch { return getDefaultFieldMappings(); }
+}
+
+export function saveFieldMappings(mappings: FieldMappingConfig[]): void {
+    localStorage.setItem(FIELD_MAPPING_KEY, JSON.stringify(mappings));
+}
+
+/**
+ * Retorna um Map<blingKey, systemField> apenas para os mapeamentos habilitados.
+ * Usado em mapBlingToDb para construir o row dinamicamente.
+ */
+export function getEffectiveMapping(): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const m of loadFieldMappings()) {
+        if (m.enabled && m.systemField) map.set(m.blingKey, m.systemField);
+    }
+    return map;
+}
+
 interface BlingTokenData {
     id: string;
     bling_access_token: string;

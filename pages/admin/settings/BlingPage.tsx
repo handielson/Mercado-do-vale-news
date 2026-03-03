@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
-import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings } from '../../../services/blingService';
+import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, FieldMappingConfig, ImportResult, BLING_FIELD_MAPPINGS, SYSTEM_FIELDS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings } from '../../../services/blingService';
 import { categoryService } from '../../../services/categories';
 import { Category } from '../../../types/category';
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
@@ -100,6 +100,9 @@ export default function BlingPage() {
     const [expandedProductId, setExpandedProductId] = useState<number | null>(null);
     const [productDetails, setProductDetails] = useState<Map<number, BlingProductDetail>>(new Map());
     const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
+
+    // ── Field mappings ──
+    const [fieldMappings, setFieldMappings] = useState<FieldMappingConfig[]>(loadFieldMappings);
 
     // ─────────────────────────────────────────────────────
     // Load
@@ -971,14 +974,164 @@ export default function BlingPage() {
                                         >
                                             <Save className="w-4 h-4" />
                                             Salvar Mapeamentos
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {categoryMappings.map((mapping, idx) => (
+                                                <tr key={mapping.blingCategoryId} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3">
+                                                        <div>
+                                                            <p className="font-medium text-slate-700">{mapping.blingCategoryName}</p>
+                                                            <p className="text-xs text-slate-400">ID Bling: {mapping.blingCategoryId}</p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="text-center text-slate-300 px-2">→</td>
+                                                    <td className="px-4 py-3">
+                                                        <select
+                                                            value={mapping.ourCategoryId}
+                                                            onChange={e => {
+                                                                const cat = categories.find(c => c.id === e.target.value);
+                                                                const updated = [...categoryMappings];
+                                                                updated[idx] = {
+                                                                    ...mapping,
+                                                                    ourCategoryId: e.target.value,
+                                                                    ourCategoryName: cat?.name || '',
+                                                                };
+                                                                setCategoryMappings(updated);
+                                                            }}
+                                                            className={`w-full text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${mapping.ourCategoryId ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
+                                                        >
+                                                            <option value="">-- Sem mapeamento (usa padrão) --</option>
+                                                            {categories.map(c => (
+                                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs text-slate-500">
+                                    💡 Produtos sem categoria mapeada usarão a "Categoria padrão" selecionada na aba Produtos.
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        const valid = categoryMappings.filter(m => m.ourCategoryId);
+                                        saveCategoryMappings(valid);
+                                        setCategoryMappings(categoryMappings); // força re-render
+                                        toast.success(`${valid.length} mapeamentos salvos!`);
+                                    }}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
+                                >
+                                    <Save className="w-4 h-4" />
+                                    Salvar Mapeamentos
+                                </button>
+                            </div>
+                        </>
                     )}
                 </div>
-            )}
-        </div>
-    );
+
+                            {/* ── Seção 2: Mapeamento de Campos ── */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h2 className="text-base font-bold text-slate-800">Mapeamento de Campos</h2>
+                        <p className="text-sm text-slate-500 mt-0.5">
+                            Configure qual campo do Bling alimenta qual campo do sistema. Desabilite campos que não deseja importar.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const defaults = getDefaultFieldMappings();
+                            setFieldMappings(defaults);
+                            saveFieldMappings(defaults);
+                            toast.success('Mapeamentos restaurados para o padrão.');
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 flex-shrink-0"
+                    >
+                        <RefreshCw className="w-3 h-3" />
+                        Restaurar Padrão
+                    </button>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th className="text-center px-3 py-3 font-semibold text-slate-600 w-10">Ativo</th>
+                                <th className="text-left px-4 py-3 font-semibold text-slate-600 w-2/5">Campo no Bling</th>
+                                <th className="text-center px-2 py-3 text-slate-400 w-8">→</th>
+                                <th className="text-left px-4 py-3 font-semibold text-slate-600">Campo no Sistema</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {fieldMappings.map((mapping, idx) => (
+                                <tr key={mapping.blingKey} className={`hover:bg-slate-50 ${!mapping.enabled ? 'opacity-50' : ''}`}>
+                                    <td className="px-3 py-2.5 text-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={mapping.enabled}
+                                            onChange={e => {
+                                                const updated = [...fieldMappings];
+                                                updated[idx] = { ...mapping, enabled: e.target.checked };
+                                                setFieldMappings(updated);
+                                            }}
+                                            className="w-4 h-4 accent-green-600"
+                                        />
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                        <p className="font-medium text-slate-700">{mapping.blingLabel}</p>
+                                        <p className="text-xs text-slate-400 font-mono">{mapping.blingField}</p>
+                                    </td>
+                                    <td className="text-center text-slate-300 px-2">→</td>
+                                    <td className="px-4 py-2.5">
+                                        <select
+                                            value={mapping.systemField}
+                                            disabled={!mapping.enabled}
+                                            onChange={e => {
+                                                const updated = [...fieldMappings];
+                                                updated[idx] = { ...mapping, systemField: e.target.value };
+                                                setFieldMappings(updated);
+                                            }}
+                                            className={`w-full text-sm border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:cursor-not-allowed ${mapping.systemField ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
+                                        >
+                                            <option value="">-- Não importar --</option>
+                                            {Object.entries(
+                                                SYSTEM_FIELDS.reduce((acc: Record<string, typeof SYSTEM_FIELDS>, f) => {
+                                                    if (!acc[f.group]) acc[f.group] = [];
+                                                    acc[f.group].push(f);
+                                                    return acc;
+                                                }, {})
+                                            ).map(([group, fields]) => (
+                                                <optgroup key={group} label={group}>
+                                                    {fields.map(f => (
+                                                        <option key={f.field} value={f.field}>{f.label}</option>
+                                                    ))}
+                                                </optgroup>
+                                            ))}
+                                        </select>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="flex justify-end">
+                    <button
+                        onClick={() => {
+                            saveFieldMappings(fieldMappings);
+                            toast.success('Mapeamentos de campos salvos!');
+                        }}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
+                    >
+                        <Save className="w-4 h-4" />
+                        Salvar Mapeamentos de Campos
+                    </button>
+                </div>
+            </div>
+        </>
+    )
 }
