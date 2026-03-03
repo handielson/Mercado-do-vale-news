@@ -760,19 +760,40 @@ export default function BlingPage() {
                                                                         );
                                                                     })}
                                                                 </div>
-                                                                <div>
-                                                                    <p className="text-xs text-slate-400 mb-0.5">Descrição</p>
-                                                                    <textarea
-                                                                        defaultValue={detail.descricaoComplementar || detail.descricaoCurta || ''}
-                                                                        rows={2}
-                                                                        onChange={e => setProductDetails(prev => {
-                                                                            const updated = new Map(prev);
-                                                                            updated.set(p.id, { ...updated.get(p.id)!, descricaoComplementar: e.target.value });
-                                                                            return updated;
-                                                                        })}
-                                                                        placeholder="Sem descrição no Bling"
-                                                                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500"
-                                                                    />
+                                                                <div className="col-span-2 sm:col-span-3">
+                                                                    <div className="flex items-center justify-between mb-0.5">
+                                                                        <p className="text-xs text-slate-400">Descrição</p>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setProductDetails(prev => {
+                                                                                const updated = new Map(prev);
+                                                                                const cur = updated.get(p.id)!;
+                                                                                updated.set(p.id, { ...cur, _edited: !cur._edited });
+                                                                                return updated;
+                                                                            })}
+                                                                            className="text-xs text-blue-500 hover:underline"
+                                                                        >
+                                                                            {detail._edited ? 'Ver preview' : 'Editar HTML'}
+                                                                        </button>
+                                                                    </div>
+                                                                    {detail._edited ? (
+                                                                        <textarea
+                                                                            defaultValue={detail.descricaoComplementar || detail.descricaoCurta || ''}
+                                                                            rows={5}
+                                                                            onChange={e => setProductDetails(prev => {
+                                                                                const updated = new Map(prev);
+                                                                                updated.set(p.id, { ...updated.get(p.id)!, descricaoComplementar: e.target.value });
+                                                                                return updated;
+                                                                            })}
+                                                                            placeholder="Sem descrição no Bling"
+                                                                            className="w-full px-2 py-1 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:ring-2 focus:ring-green-500"
+                                                                        />
+                                                                    ) : (
+                                                                        <div
+                                                                            className="w-full min-h-[80px] max-h-48 overflow-y-auto px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white prose prose-sm max-w-none"
+                                                                            dangerouslySetInnerHTML={{ __html: detail.descricaoComplementar || detail.descricaoCurta || '<p class="text-slate-400">Sem descrição no Bling</p>' }}
+                                                                        />
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         )}
