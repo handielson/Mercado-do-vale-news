@@ -192,6 +192,8 @@ export const SYSTEM_FIELDS: Array<{ field: string; label: string; group: string 
     // Físico
     { field: 'weight_kg', label: 'Peso bruto (kg)', group: 'Físico' },
     { field: 'stock_quantity', label: 'Estoque', group: 'Físico' },
+    // Classificação
+    { field: 'color_id', label: 'Cor (pelo nome)', group: 'Classificação' },
     // Mídia
     { field: 'images', label: 'Imagens', group: 'Mídia' },
 ];

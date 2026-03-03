@@ -760,21 +760,20 @@ export default function BlingPage() {
                                                                         );
                                                                     })}
                                                                 </div>
-                                                                {detail.descricaoComplementar && (
-                                                                    <div>
-                                                                        <p className="text-xs text-slate-400 mb-0.5">Descrição</p>
-                                                                        <textarea
-                                                                            defaultValue={detail.descricaoComplementar}
-                                                                            rows={2}
-                                                                            onChange={e => setProductDetails(prev => {
-                                                                                const updated = new Map(prev);
-                                                                                updated.set(p.id, { ...updated.get(p.id)!, descricaoComplementar: e.target.value });
-                                                                                return updated;
-                                                                            })}
-                                                                            className="w-full px-2 py-1 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500"
-                                                                        />
-                                                                    </div>
-                                                                )}
+                                                                <div>
+                                                                    <p className="text-xs text-slate-400 mb-0.5">Descrição</p>
+                                                                    <textarea
+                                                                        defaultValue={detail.descricaoComplementar || detail.descricaoCurta || ''}
+                                                                        rows={2}
+                                                                        onChange={e => setProductDetails(prev => {
+                                                                            const updated = new Map(prev);
+                                                                            updated.set(p.id, { ...updated.get(p.id)!, descricaoComplementar: e.target.value });
+                                                                            return updated;
+                                                                        })}
+                                                                        placeholder="Sem descrição no Bling"
+                                                                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500"
+                                                                    />
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
