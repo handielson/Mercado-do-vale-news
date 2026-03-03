@@ -77,6 +77,8 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         });
         if (!res.ok) return null;
         const data = await res.json();
+        const trib = data.tributacao || {};
+        const dim = data.dimensoes || {};
         return {
             id: data.id,
             nome: data.nome || '',
@@ -90,16 +92,16 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             marca: data.marca || undefined,
             descricaoCurta: data.descricaoCurta || undefined,
             descricaoComplementar: data.descricaoComplementar || undefined,
-            ncm: data.ncm || undefined,
-            cest: data.cest || undefined,
-            origem: data.origem ?? undefined,
-            pesoBruto: data.pesoBruto || undefined,
-            largura: data.largura || undefined,
-            altura: data.altura || undefined,
-            profundidade: data.profundidade || undefined,
-            volumes: data.volumes || undefined,
-            itensPorCaixa: data.itensPorCaixa || undefined,
-            unidade: data.unidade || undefined,
+            ncm: trib.ncm || undefined,
+            cest: trib.cest || undefined,
+            origem: trib.origem ?? undefined,
+            pesoBruto: dim.pesoBruto || undefined,
+            largura: dim.largura || undefined,
+            altura: dim.altura || undefined,
+            profundidade: dim.profundidade || undefined,
+            volumes: dim.volumes || undefined,
+            itensPorCaixa: dim.itensPorCaixa || undefined,
+            unidade: dim.unidade || undefined,
             tipoProducao: data.tipoProducao || undefined,
             imagens: data.imagens || [],
         };
@@ -426,14 +428,15 @@ function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>, 
     // Preços sobrescritos pelo mapeamento (se habilitado, já foram incluídos nos defaults acima)
     // Aqui permitimos que o admin desabilite um preço (mas não podemos remover o default 0)
 
-    if (has('ncm')) row.ncm = item.ncm || null;
-    if (has('cest')) row.cest = item.cest || null;
-    if (has('origin')) row.origin = item.origem != null ? String(item.origem) : null;
+    if (has('ncm')) row.ncm = item.tributacao?.ncm || null;
+    if (has('cest')) row.cest = item.tributacao?.cest || null;
+    if (has('origin')) row.origin = item.tributacao?.origem != null ? String(item.tributacao.origem) : null;
 
-    if (has('weight_kg')) row.weight_kg = item.pesoBruto || null;
+    if (has('weight_kg')) row.weight_kg = item.dimensoes?.pesoBruto || null;
     if (has('dimensions')) {
-        row.dimensions = (item.largura || item.altura || item.profundidade)
-            ? { width_cm: item.largura || null, height_cm: item.altura || null, depth_cm: item.profundidade || null }
+        const d = item.dimensoes || {};
+        row.dimensions = (d.largura || d.altura || d.profundidade)
+            ? { width_cm: d.largura || null, height_cm: d.altura || null, depth_cm: d.profundidade || null }
             : null;
     }
     if (has('stock_quantity')) row.stock_quantity = item.stock_quantity ?? 0;
