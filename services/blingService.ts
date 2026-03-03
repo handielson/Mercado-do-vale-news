@@ -5,6 +5,36 @@ const COMPANY_SLUG = 'mercado-do-vale';
 
 // ------- Types -------
 
+export interface BlingCategory {
+    id: number;
+    descricao: string;
+}
+
+export interface CategoryMapping {
+    blingCategoryId: number;
+    blingCategoryName: string;
+    ourCategoryId: string;
+    ourCategoryName: string;
+}
+
+const CATEGORY_MAPPING_KEY = 'bling_category_mappings';
+
+export function loadCategoryMappings(): CategoryMapping[] {
+    try { return JSON.parse(localStorage.getItem(CATEGORY_MAPPING_KEY) || '[]'); } catch { return []; }
+}
+
+export function saveCategoryMappings(mappings: CategoryMapping[]): void {
+    localStorage.setItem(CATEGORY_MAPPING_KEY, JSON.stringify(mappings));
+}
+
+/** Resolve o category_id local a partir do objeto categoria do Bling */
+export function resolveCategoryId(blingCategoryId: number | undefined, fallbackId: string): string {
+    if (!blingCategoryId) return fallbackId;
+    const mappings = loadCategoryMappings();
+    const found = mappings.find(m => m.blingCategoryId === blingCategoryId);
+    return found ? found.ourCategoryId : fallbackId;
+}
+
 export interface BlingProduct {
     id: number;
     nome: string;
@@ -14,6 +44,8 @@ export interface BlingProduct {
     precoCusto: number | null;
     situacao: string;
     stock_quantity: number;
+    categoria?: { id: number; descricao: string };
+    marca?: string;
     imagens?: Array<{ link?: string; url?: string }>;
 }
 
@@ -177,6 +209,28 @@ async function fetchProductsPage(accessToken: string, page: number): Promise<{ i
     };
 }
 
+/** Busca todas as categorias de produtos do Bling */
+export async function fetchBlingCategories(): Promise<BlingCategory[]> {
+    const accessToken = await getValidToken();
+    const all: BlingCategory[] = [];
+    let page = 1;
+
+    do {
+        const res = await fetch(`/api/bling-categories?page=${page}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        if (!res.ok) break;
+        const json = await res.json();
+        const items: any[] = json.data || [];
+        if (items.length === 0) break;
+        all.push(...items.map((c: any) => ({ id: c.id, descricao: c.descricao })));
+        if (items.length < 100) break;
+        page++;
+    } while (true);
+
+    return all;
+}
+
 /** Busca todos os saldos de estoque e retorna Map<productId, saldoFisico total> */
 async function fetchStockMap(accessToken: string): Promise<Map<number, number>> {
     const map = new Map<number, number>();
@@ -216,9 +270,10 @@ function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>, 
     const row: Record<string, any> = {
         company_id: companyId,
         bling_id: item.id,
-        category_id: categoryId,
+        category_id: resolveCategoryId(item.categoria?.id, categoryId),
         name: item.nome || 'Produto sem nome',
-        // Preços: Bling usa centavos inteiros — default 0 para campos sem mapeamento direto
+        brand: item.marca || null,   // marca do Bling mapeada para o campo string
+        // Preços convertidos para centavos
         price_retail: item.preco ? Math.round(item.preco * 100) : 0,
         price_reseller: item.preco ? Math.round(item.preco * 100) : 0,
         price_wholesale: item.preco ? Math.round(item.preco * 100) : 0,
@@ -285,6 +340,8 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
             precoCusto: item.precoCusto || null,
             situacao: item.situacao || 'A',
             stock_quantity: stockMap.get(item.id) ?? 0,
+            categoria: item.categoria || undefined,
+            marca: item.marca || undefined,
             imagens: item.imagens || [],
         })));
         if (items.length < 100) break;
@@ -318,6 +375,8 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
         precoCusto: item.precoCusto || null,
         situacao: item.situacao || 'A',
         stock_quantity: stockMap.get(item.id) ?? 0,
+        categoria: item.categoria || undefined,
+        marca: item.marca || undefined,
         imagens: item.imagens || [],
     }));
 }
