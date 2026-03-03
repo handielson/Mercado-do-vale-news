@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
-import { fetchAllBlingProducts, importBlingProducts, BlingProduct, ImportResult } from '../../../services/blingService';
+import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, BlingProduct, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS } from '../../../services/blingService';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -44,6 +44,8 @@ export default function BlingPage() {
     const [blingProducts, setBlingProducts] = useState<BlingProduct[]>([]);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [productSearch, setProductSearch] = useState('');
+    const [blingSearch, setBlingSearch] = useState('');
+    const [enabledFields, setEnabledFields] = useState<Set<string>>(new Set(DEFAULT_ENABLED_FIELDS));
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
@@ -174,11 +176,14 @@ export default function BlingPage() {
         setSelectedIds(new Set());
         setImportResult(null);
         try {
-            const products = await fetchAllBlingProducts();
+            const products = blingSearch.trim()
+                ? await searchBlingProducts(blingSearch.trim())
+                : await fetchAllBlingProducts();
             setBlingProducts(products);
             const activeIds = new Set(products.filter(p => p.situacao === 'A').map(p => p.id));
             setSelectedIds(activeIds);
-            toast.success(`${products.length} produtos encontrados no Bling.`);
+            if (products.length === 0) toast.error('Nenhum produto encontrado.');
+            else toast.success(`${products.length} produtos encontrados no Bling.`);
         } catch (err: any) {
             toast.error('Erro ao buscar produtos: ' + err.message);
         } finally {
@@ -195,7 +200,7 @@ export default function BlingPage() {
         setImportProgress({ current: 0, total: toImport.length });
 
         try {
-            const result = await importBlingProducts(toImport, (current, total) => {
+            const result = await importBlingProducts(toImport, enabledFields, (current, total) => {
                 setImportProgress({ current, total });
             });
             setImportResult(result);
@@ -277,8 +282,8 @@ export default function BlingPage() {
                 <button
                     onClick={() => setActiveTab('config')}
                     className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'config'
-                            ? 'border-green-600 text-green-700'
-                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        ? 'border-green-600 text-green-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
                         }`}
                 >
                     <Settings className="w-4 h-4" />
@@ -287,8 +292,8 @@ export default function BlingPage() {
                 <button
                     onClick={() => setActiveTab('products')}
                     className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'products'
-                            ? 'border-green-600 text-green-700'
-                            : 'border-transparent text-slate-500 hover:text-slate-700'
+                        ? 'border-green-600 text-green-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
                         }`}
                 >
                     <Package className="w-4 h-4" />
@@ -433,20 +438,77 @@ export default function BlingPage() {
                         <>
                             {/* Importação */}
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <h2 className="text-base font-bold text-slate-800">Importar Produtos do Bling</h2>
-                                        <p className="text-sm text-slate-500 mt-0.5">
-                                            Busque, selecione e importe produtos do Bling para o sistema.
-                                        </p>
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800">Importar Produtos do Bling</h2>
+                                    <p className="text-sm text-slate-500 mt-0.5">
+                                        Busque, selecione e importe produtos do Bling para o sistema.
+                                    </p>
+                                </div>
+
+                                {/* Field selection */}
+                                <details className="border border-slate-200 rounded-xl overflow-hidden">
+                                    <summary className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer text-sm font-semibold text-slate-700 select-none hover:bg-slate-100">
+                                        <span>⚙️ Configurar campos a importar</span>
+                                        <span className="text-xs font-normal text-slate-400">{enabledFields.size} de {BLING_FIELD_MAPPINGS.length} campos ativos</span>
+                                    </summary>
+                                    <div className="p-4 space-y-4">
+                                        {(['basico', 'preco', 'fiscal', 'fisico', 'midia'] as const).map(group => {
+                                            const groupLabels: Record<string, string> = { basico: 'Dados Básicos', preco: 'Preços', fiscal: 'Fiscal (NCM/CEST)', fisico: 'Físico (Peso/Dim.)', midia: 'Mídia' };
+                                            const fields = BLING_FIELD_MAPPINGS.filter(f => f.group === group);
+                                            return (
+                                                <div key={group}>
+                                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">{groupLabels[group]}</p>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                        {fields.map(f => (
+                                                            <label key={f.key} className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${enabledFields.has(f.key) ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 opacity-60'} ${f.required ? 'cursor-not-allowed' : ''}`}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={enabledFields.has(f.key)}
+                                                                    disabled={f.required}
+                                                                    onChange={() => {
+                                                                        if (f.required) return;
+                                                                        setEnabledFields(prev => {
+                                                                            const next = new Set(prev);
+                                                                            next.has(f.key) ? next.delete(f.key) : next.add(f.key);
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    className="mt-0.5 accent-green-600 flex-shrink-0"
+                                                                />
+                                                                <div>
+                                                                    <p className="text-xs font-semibold text-slate-700">{f.label}</p>
+                                                                    <p className="text-xs text-slate-400 font-mono">{f.blingField} → {f.localField}</p>
+                                                                    {f.required && <p className="text-xs text-green-600">obrigatório</p>}
+                                                                </div>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </details>
+
+                                {/* Search bar */}
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            value={blingSearch}
+                                            onChange={e => setBlingSearch(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleFetchBlingProducts()}
+                                            placeholder="Pesquisar produto no Bling (nome ou SKU)..."
+                                            className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                        />
                                     </div>
                                     <button
                                         onClick={handleFetchBlingProducts}
                                         disabled={fetching || importing}
-                                        className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 flex-shrink-0"
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 flex-shrink-0"
                                     >
                                         {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                        {fetching ? 'Buscando...' : 'Buscar do Bling'}
+                                        {fetching ? 'Buscando...' : blingProducts.length > 0 ? 'Atualizar' : 'Buscar'}
                                     </button>
                                 </div>
 
@@ -525,8 +587,8 @@ export default function BlingPage() {
 
                                 {/* Results */}
                                 {importResult && (
-                                    <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-3">
-                                        <p className="text-sm font-bold text-slate-700">Resultado</p>
+                                    <div className={`rounded-lg border p-4 space-y-3 ${importResult.errors.length > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                                        <p className="text-sm font-bold text-slate-700">Resultado da Importação</p>
                                         <div className="flex gap-6">
                                             <div className="text-center">
                                                 <p className="text-2xl font-bold text-green-600">{importResult.created}</p>
@@ -538,14 +600,25 @@ export default function BlingPage() {
                                             </div>
                                             <div className="text-center">
                                                 <p className="text-2xl font-bold text-red-500">{importResult.errors.length}</p>
-                                                <p className="text-xs text-slate-500">erros</p>
+                                                <p className="text-xs text-slate-500">com erro</p>
                                             </div>
                                         </div>
                                         {importResult.errors.length > 0 && (
-                                            <div className="max-h-32 overflow-y-auto space-y-1">
-                                                {importResult.errors.map((e, i) => (
-                                                    <p key={i} className="text-xs text-red-600 font-mono">{e}</p>
-                                                ))}
+                                            <div className="space-y-2">
+                                                <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Detalhes dos Erros</p>
+                                                <div className="max-h-48 overflow-y-auto space-y-1.5">
+                                                    {importResult.errors.map((e, i) => (
+                                                        <div key={i} className="bg-white border border-red-200 rounded-lg px-3 py-2">
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs font-semibold text-slate-800 truncate">{e.name}</p>
+                                                                    {e.sku && <p className="text-xs text-slate-400">SKU: {e.sku}</p>}
+                                                                </div>
+                                                            </div>
+                                                            <p className="text-xs text-red-600 mt-1">⚠️ {e.reason}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
                                     </div>

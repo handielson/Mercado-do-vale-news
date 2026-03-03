@@ -10,10 +10,11 @@ export default async function handler(req: any, res: any) {
     }
 
     const page = req.query.page || 1;
+    const search = req.query.search ? `&nome=${encodeURIComponent(req.query.search)}` : '';
 
     try {
         const blingRes = await fetch(
-            `https://www.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`,
+            `https://www.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5${search}`,
             {
                 headers: {
                     'Authorization': authHeader,

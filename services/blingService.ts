@@ -16,11 +16,54 @@ export interface BlingProduct {
     imagens?: Array<{ link?: string; url?: string }>;
 }
 
+export interface ImportErrorDetail {
+    name: string;
+    sku: string | null;
+    reason: string;
+}
+
 export interface ImportResult {
     created: number;
     updated: number;
-    errors: string[];
+    errors: ImportErrorDetail[];
 }
+
+// ------- Field Mappings -------
+
+export interface BlingFieldMapping {
+    key: string;           // identificador interno
+    blingField: string;    // campo(s) na API Bling (pode mostrar múltiplos)
+    localField: string;    // campo na nossa tabela products
+    label: string;         // nome amigável para o admin
+    group: 'basico' | 'preco' | 'fiscal' | 'fisico' | 'midia';
+    required: boolean;     // sempre importado, sem opção de desmarcar
+}
+
+export const BLING_FIELD_MAPPINGS: BlingFieldMapping[] = [
+    // Básico
+    { key: 'name', blingField: 'nome', localField: 'name', label: 'Nome do produto', group: 'basico', required: true },
+    { key: 'sku', blingField: 'codigo', localField: 'sku', label: 'SKU / Código', group: 'basico', required: false },
+    { key: 'ean', blingField: 'gtin', localField: 'ean', label: 'EAN / GTIN', group: 'basico', required: false },
+    { key: 'description', blingField: 'descricaoComplementar', localField: 'description', label: 'Descrição complementar', group: 'basico', required: false },
+    { key: 'status', blingField: 'situacao', localField: 'status', label: 'Status (ativo/inativo)', group: 'basico', required: false },
+    // Preço
+    { key: 'price_retail', blingField: 'preco', localField: 'price_retail', label: 'Preço de Venda (R$)', group: 'preco', required: false },
+    { key: 'price_cost', blingField: 'precoCusto', localField: 'price_cost', label: 'Preço de Custo (R$)', group: 'preco', required: false },
+    // Fiscal
+    { key: 'ncm', blingField: 'ncm', localField: 'ncm', label: 'NCM', group: 'fiscal', required: false },
+    { key: 'cest', blingField: 'cest', localField: 'cest', label: 'CEST', group: 'fiscal', required: false },
+    { key: 'origin', blingField: 'origem', localField: 'origin', label: 'Origem (nacional/importado)', group: 'fiscal', required: false },
+    // Físico
+    { key: 'weight_kg', blingField: 'pesoBruto', localField: 'weight_kg', label: 'Peso bruto (kg)', group: 'fisico', required: false },
+    { key: 'dimensions', blingField: 'largura / altura / profundidade', localField: 'dimensions', label: 'Dimensões (L×A×P cm)', group: 'fisico', required: false },
+    // Mídia
+    { key: 'images', blingField: 'imagens', localField: 'images', label: 'Imagens', group: 'midia', required: false },
+];
+
+export type FieldKey = typeof BLING_FIELD_MAPPINGS[number]['key'];
+
+// Default: all fields enabled
+export const DEFAULT_ENABLED_FIELDS: Set<string> = new Set(BLING_FIELD_MAPPINGS.map(f => f.key));
 
 interface BlingTokenData {
     id: string;
@@ -134,45 +177,47 @@ async function fetchProductsPage(accessToken: string, page: number): Promise<{ i
 
 // ------- Mapping: Bling → DB row -------
 
-function mapBlingToDb(item: any, companyId: string): Record<string, any> {
-    const status = item.situacao === 'A' ? 'active' : 'inactive';
+/** Monta o objeto de DB incluindo apenas os campos habilitados pelo admin */
+function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>): Record<string, any> {
+    const has = (key: string) => enabledFields.has(key);
 
-    const dimensions = (item.largura || item.altura || item.profundidade)
-        ? {
-            width_cm: item.largura || null,
-            height_cm: item.altura || null,
-            depth_cm: item.profundidade || null,
-        }
-        : null;
-
-    const firstImage = item.imagens?.[0]?.link || item.imagens?.[0]?.url || null;
-    const images = firstImage ? [firstImage] : [];
-
-    const priceRetail = item.preco ? Math.round(item.preco * 100) : null;
-    const priceCost = item.precoCusto ? Math.round(item.precoCusto * 100) : null;
-
-    return {
+    // Campos sempre obrigatórios
+    const row: Record<string, any> = {
         company_id: companyId,
         bling_id: item.id,
-        name: item.nome || 'Produto sem nome',
-        sku: item.codigo || null,
-        ean: item.gtin || null,
-        alternative_eans: item.gtin ? [item.gtin] : [],
-        description: item.descricaoComplementar || item.descricaoCurta || null,
-        price_retail: priceRetail,
-        price_cost: priceCost,
-        ncm: item.ncm || null,
-        cest: item.cest || null,
-        weight_kg: item.pesoBruto || null,
-        dimensions,
-        images,
-        status,
+        name: item.nome || 'Produto sem nome',   // 'name' sempre incluído (required)
         specs: {},
         stock_quantity: 0,
         track_inventory: true,
         is_gift: false,
         warranty_type: 'brand',
     };
+
+    if (has('sku')) row.sku = item.codigo || null;
+    if (has('ean')) { row.ean = item.gtin || null; row.alternative_eans = item.gtin ? [item.gtin] : []; }
+    if (has('description')) row.description = item.descricaoComplementar || item.descricaoCurta || null;
+    if (has('status')) row.status = item.situacao === 'A' ? 'active' : 'inactive';
+
+    if (has('price_retail')) row.price_retail = item.preco ? Math.round(item.preco * 100) : null;
+    if (has('price_cost')) row.price_cost = item.precoCusto ? Math.round(item.precoCusto * 100) : null;
+
+    if (has('ncm')) row.ncm = item.ncm || null;
+    if (has('cest')) row.cest = item.cest || null;
+    if (has('origin')) row.origin = item.origem != null ? String(item.origem) : null;
+
+    if (has('weight_kg')) row.weight_kg = item.pesoBruto || null;
+    if (has('dimensions')) {
+        row.dimensions = (item.largura || item.altura || item.profundidade)
+            ? { width_cm: item.largura || null, height_cm: item.altura || null, depth_cm: item.profundidade || null }
+            : null;
+    }
+
+    if (has('images')) {
+        const first = item.imagens?.[0]?.link || item.imagens?.[0]?.url || null;
+        row.images = first ? [first] : [];
+    }
+
+    return row;
 }
 
 // ------- Fetch all products (for selection UI) -------
@@ -202,13 +247,36 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
     return all;
 }
 
-// ------- Import selected products -------
+// ------- Search specific products in Bling -------
+
+export async function searchBlingProducts(query: string): Promise<BlingProduct[]> {
+    const accessToken = await getValidToken();
+
+    const res = await fetch(`/api/bling-products?page=1&search=${encodeURIComponent(query)}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+
+    if (!res.ok) throw new Error(`Bling API error ${res.status}`);
+    const json = await res.json();
+
+    return (json.data || []).map((item: any) => ({
+        id: item.id,
+        nome: item.nome || 'Produto sem nome',
+        codigo: item.codigo || null,
+        gtin: item.gtin || null,
+        preco: item.preco || null,
+        precoCusto: item.precoCusto || null,
+        situacao: item.situacao || 'A',
+        imagens: item.imagens || [],
+    }));
+}
+
 
 export async function importBlingProducts(
     selectedProducts: BlingProduct[],
+    enabledFields: Set<string>,
     onProgress: (current: number, total: number, result: Partial<ImportResult>) => void
 ): Promise<ImportResult> {
-    const accessToken = await getValidToken();
     const companyId = await getCompanyId();
 
     const result: ImportResult = { created: 0, updated: 0, errors: [] };
@@ -216,48 +284,44 @@ export async function importBlingProducts(
 
     for (let i = 0; i < selectedProducts.length; i++) {
         const item = selectedProducts[i];
+        let operation = 'verificação';
         try {
-            const row = mapBlingToDb(item, companyId);
+            const row = mapBlingToDb(item, companyId, enabledFields);
 
-            const { data: existing } = await supabase
+            operation = 'verificação de duplicata';
+            const { data: existing, error: checkError } = await supabase
                 .from('products')
                 .select('id')
                 .eq('company_id', companyId)
                 .eq('bling_id', item.id)
                 .maybeSingle();
 
+            if (checkError) throw new Error(checkError.message);
+
             if (existing) {
+                operation = 'atualização';
+                // Remove campos que não devem ser sobrescritos em updates
+                const { company_id, bling_id, specs, stock_quantity, track_inventory, is_gift, warranty_type, ...updateFields } = row;
                 const { error } = await supabase
                     .from('products')
-                    .update({
-                        name: row.name,
-                        sku: row.sku,
-                        ean: row.ean,
-                        alternative_eans: row.alternative_eans,
-                        description: row.description,
-                        price_retail: row.price_retail,
-                        price_cost: row.price_cost,
-                        ncm: row.ncm,
-                        cest: row.cest,
-                        weight_kg: row.weight_kg,
-                        dimensions: row.dimensions,
-                        images: row.images,
-                        status: row.status,
-                    })
+                    .update(updateFields)
                     .eq('id', existing.id);
-
                 if (error) throw new Error(error.message);
                 result.updated++;
             } else {
+                operation = 'criação';
                 const { error } = await supabase
                     .from('products')
                     .insert(row);
-
                 if (error) throw new Error(error.message);
                 result.created++;
             }
         } catch (err: any) {
-            result.errors.push(`[${item.nome}]: ${err.message}`);
+            result.errors.push({
+                name: item.nome,
+                sku: item.codigo,
+                reason: `Erro na ${operation}: ${err.message}`,
+            });
         }
 
         onProgress(i + 1, total, result);
@@ -269,5 +333,12 @@ export async function importBlingProducts(
 export const blingService = {
     getValidToken,
     fetchAllBlingProducts,
+    searchBlingProducts,
+    importBlingProducts,
+};
+export const blingService = {
+    getValidToken,
+    fetchAllBlingProducts,
+    searchBlingProducts,
     importBlingProducts,
 };
