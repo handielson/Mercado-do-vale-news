@@ -379,9 +379,3 @@ export const blingService = {
     searchBlingProducts,
     importBlingProducts,
 };
-export const blingService = {
-    getValidToken,
-    fetchAllBlingProducts,
-    searchBlingProducts,
-    importBlingProducts,
-};
