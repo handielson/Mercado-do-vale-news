@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
     Settings, Package, Save, Eye, EyeOff, CheckCircle, AlertCircle,
     Copy, ExternalLink, Download, Loader2, Search, RefreshCw, Link2
@@ -10,9 +10,9 @@ import { categoryService } from '../../../services/categories';
 import { Category } from '../../../types/category';
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 
-// ─────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Types
-// ─────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface BlingCredentials {
     bling_client_id: string;
@@ -54,18 +54,18 @@ function clearCache() {
 function formatCacheAge(timestamp: number): string {
     const mins = Math.floor((Date.now() - timestamp) / 60000);
     if (mins < 1) return 'agora';
-    if (mins === 1) return 'há 1 min';
-    return `há ${mins} min`;
+    if (mins === 1) return 'hÃ¡ 1 min';
+    return `hÃ¡ ${mins} min`;
 }
 
-// ─────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Page
-// ─────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function BlingPage() {
     const [activeTab, setActiveTab] = useState<Tab>('config');
 
-    // ── Credentials ──
+    // â”€â”€ Credentials â”€â”€
     const [credentials, setCredentials] = useState<BlingCredentials>({
         bling_client_id: '',
         bling_client_secret: '',
@@ -77,7 +77,7 @@ export default function BlingPage() {
     const [isConnected, setIsConnected] = useState(false);
     const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
-    // ── Products import ──
+    // â”€â”€ Products import â”€â”€
     const [fetching, setFetching] = useState(false);
     const [importing, setImporting] = useState(false);
     const [blingProducts, setBlingProducts] = useState<BlingProduct[]>([]);
@@ -91,22 +91,22 @@ export default function BlingPage() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [importCategoryId, setImportCategoryId] = useState('');
 
-    // ── Mappings ──
+    // â”€â”€ Mappings â”€â”€
     const [blingCategories, setBlingCategories] = useState<BlingCategory[]>([]);
     const [categoryMappings, setCategoryMappings] = useState<CategoryMapping[]>(loadCategoryMappings);
     const [loadingMappings, setLoadingMappings] = useState(false);
 
-    // ── Product detail preview ──
+    // â”€â”€ Product detail preview â”€â”€
     const [expandedProductId, setExpandedProductId] = useState<number | null>(null);
     const [productDetails, setProductDetails] = useState<Map<number, BlingProductDetail>>(new Map());
     const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
 
-    // ── Field mappings ──
+    // â”€â”€ Field mappings â”€â”€
     const [fieldMappings, setFieldMappings] = useState<FieldMappingConfig[]>(loadFieldMappings);
 
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Load
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     useEffect(() => {
         loadCredentials();
@@ -122,9 +122,9 @@ export default function BlingPage() {
             window.history.replaceState({}, '', window.location.pathname);
         } else if (params.get('error')) {
             const errMap: Record<string, string> = {
-                missing_code: 'Código de autorização não recebido.',
+                missing_code: 'CÃ³digo de autorizaÃ§Ã£o nÃ£o recebido.',
                 token_exchange_failed: 'Falha ao trocar o token com o Bling.',
-                server_config: 'Erro de configuração do servidor.',
+                server_config: 'Erro de configuraÃ§Ã£o do servidor.',
                 callback_failed: 'Erro ao processar o callback.',
             };
             const msg = errMap[params.get('error')!] || `Erro: ${params.get('error')}`;
@@ -152,15 +152,15 @@ export default function BlingPage() {
                 setTokenExpiresAt(data.bling_token_expires_at || null);
             }
         } catch (err: any) {
-            toast.error('Erro ao carregar configurações: ' + err.message);
+            toast.error('Erro ao carregar configuraÃ§Ãµes: ' + err.message);
         } finally {
             setLoading(false);
         }
     }
 
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Config handlers
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async function handleSave() {
         if (!credentials.bling_client_id.trim() || !credentials.bling_client_secret.trim()) {
@@ -225,9 +225,9 @@ export default function BlingPage() {
         toast.success('URL copiada!');
     }
 
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Products handlers
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async function handleFetchBlingProducts(forceRefresh = false) {
         setFetching(true);
@@ -238,11 +238,11 @@ export default function BlingPage() {
             let products: BlingProduct[];
 
             if (blingSearch.trim()) {
-                // Busca específica → vai direto ao Bling, sem cache
+                // Busca especÃ­fica â†’ vai direto ao Bling, sem cache
                 products = await searchBlingProducts(blingSearch.trim());
                 setCacheInfo(null);
             } else if (!forceRefresh) {
-                // Sem filtro → tenta usar cache primeiro
+                // Sem filtro â†’ tenta usar cache primeiro
                 const cached = loadCache();
                 if (cached) {
                     products = cached.products;
@@ -256,7 +256,7 @@ export default function BlingPage() {
                     else toast.success(`${products.length} produtos carregados do Bling.`);
                 }
             } else {
-                // Forçar atualização → limpa cache e recarrega
+                // ForÃ§ar atualizaÃ§Ã£o â†’ limpa cache e recarrega
                 clearCache();
                 products = await fetchAllBlingProducts();
                 saveCache(products);
@@ -278,7 +278,7 @@ export default function BlingPage() {
     async function handleImport() {
         const toImport = blingProducts.filter(p => selectedIds.has(p.id));
         if (toImport.length === 0) { toast.error('Selecione ao menos um produto.'); return; }
-        if (!importCategoryId) { toast.error('Selecione uma categoria padrão para importação.'); return; }
+        if (!importCategoryId) { toast.error('Selecione uma categoria padrÃ£o para importaÃ§Ã£o.'); return; }
 
         setImporting(true);
         setImportResult(null);
@@ -291,12 +291,12 @@ export default function BlingPage() {
             setImportResult(result);
 
             if (result.errors.length === 0) {
-                toast.success(`Importação concluída! ${result.created} criados, ${result.updated} atualizados.`);
+                toast.success(`ImportaÃ§Ã£o concluÃ­da! ${result.created} criados, ${result.updated} atualizados.`);
             } else {
-                toast.warning(`Importação com erros: ${result.errors.length} falhas.`);
+                toast.warning(`ImportaÃ§Ã£o com erros: ${result.errors.length} falhas.`);
             }
         } catch (err: any) {
-            toast.error('Erro na importação: ' + (err.message || 'Tente novamente.'));
+            toast.error('Erro na importaÃ§Ã£o: ' + (err.message || 'Tente novamente.'));
         } finally {
             setImporting(false);
         }
@@ -325,9 +325,9 @@ export default function BlingPage() {
         });
     }
 
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Derived
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     const tokenExpired = tokenExpiresAt ? new Date(tokenExpiresAt) < new Date() : false;
 
@@ -339,9 +339,9 @@ export default function BlingPage() {
         );
     }
 
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Render
-    // ─────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     return (
         <div className="max-w-3xl mx-auto space-y-6 p-6">
@@ -351,7 +351,7 @@ export default function BlingPage() {
                     <Link2 className="w-5 h-5 text-green-700" />
                 </div>
                 <div>
-                    <h1 className="text-xl font-bold text-slate-800">Integração Bling</h1>
+                    <h1 className="text-xl font-bold text-slate-800">IntegraÃ§Ã£o Bling</h1>
                     <p className="text-sm text-slate-500">Conecte e sincronize seus produtos com o Bling ERP</p>
                 </div>
                 {isConnected && (
@@ -372,7 +372,7 @@ export default function BlingPage() {
                         }`}
                 >
                     <Settings className="w-4 h-4" />
-                    Configuração
+                    ConfiguraÃ§Ã£o
                 </button>
                 <button
                     onClick={() => setActiveTab('products')}
@@ -406,9 +406,9 @@ export default function BlingPage() {
                 </button>
             </div>
 
-            {/* ══════════════════════════════════════ */}
-            {/* TAB: CONFIGURAÇÃO                      */}
-            {/* ══════════════════════════════════════ */}
+            {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+            {/* TAB: CONFIGURAÃ‡ÃƒO                      */}
+            {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
             {activeTab === 'config' && (
                 <div className="space-y-4">
                     {/* Credenciais */}
@@ -497,7 +497,7 @@ export default function BlingPage() {
                             Autorizar Acesso
                         </h2>
                         <p className="text-sm text-slate-500">
-                            Clique em <strong>"Conectar com Bling"</strong> para autorizar via OAuth2. Você será redirecionado para o Bling e voltará automaticamente.
+                            Clique em <strong>"Conectar com Bling"</strong> para autorizar via OAuth2. VocÃª serÃ¡ redirecionado para o Bling e voltarÃ¡ automaticamente.
                         </p>
                         <button
                             onClick={handleConnectBling}
@@ -511,32 +511,32 @@ export default function BlingPage() {
 
                     {/* Escopos */}
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                        <p className="text-sm font-semibold text-blue-800 mb-2">📋 Escopos necessários no app Bling</p>
+                        <p className="text-sm font-semibold text-blue-800 mb-2">ðŸ“‹ Escopos necessÃ¡rios no app Bling</p>
                         <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
-                            <li><strong>Produtos</strong> — leitura e escrita</li>
-                            <li><strong>Estoques</strong> — leitura de saldos por depósito</li>
+                            <li><strong>Produtos</strong> â€” leitura e escrita</li>
+                            <li><strong>Estoques</strong> â€” leitura de saldos por depÃ³sito</li>
                         </ul>
                     </div>
                 </div>
             )}
 
-            {/* ══════════════════════════════════════ */}
+            {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
             {/* TAB: PRODUTOS                          */}
-            {/* ══════════════════════════════════════ */}
+            {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
             {activeTab === 'products' && (
                 <div className="space-y-4">
                     {!isConnected ? (
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center space-y-3">
                             <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
-                            <p className="font-semibold text-amber-800">Bling não conectado</p>
-                            <p className="text-sm text-amber-700">Configure as credenciais e conecte o Bling na aba <strong>Configuração</strong> primeiro.</p>
+                            <p className="font-semibold text-amber-800">Bling nÃ£o conectado</p>
+                            <p className="text-sm text-amber-700">Configure as credenciais e conecte o Bling na aba <strong>ConfiguraÃ§Ã£o</strong> primeiro.</p>
                             <button onClick={() => setActiveTab('config')} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700">
-                                Ir para Configuração
+                                Ir para ConfiguraÃ§Ã£o
                             </button>
                         </div>
                     ) : (
                         <>
-                            {/* Importação */}
+                            {/* ImportaÃ§Ã£o */}
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
                                 <div>
                                     <h2 className="text-base font-bold text-slate-800">Importar Produtos do Bling</h2>
@@ -547,7 +547,7 @@ export default function BlingPage() {
 
                                 {/* Default category selector */}
                                 <div className={`flex items-center gap-3 p-3 rounded-xl border ${!importCategoryId ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
-                                    <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📂 Categoria padrão:</label>
+                                    <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">ðŸ“‚ Categoria padrÃ£o:</label>
                                     <select
                                         value={importCategoryId}
                                         onChange={e => setImportCategoryId(e.target.value)}
@@ -563,12 +563,12 @@ export default function BlingPage() {
                                 {/* Field selection */}
                                 <details open className="border border-slate-200 rounded-xl overflow-hidden">
                                     <summary className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer text-sm font-semibold text-slate-700 select-none hover:bg-slate-100">
-                                        <span>⚙️ Configurar campos a importar</span>
+                                        <span>âš™ï¸ Configurar campos a importar</span>
                                         <span className="text-xs font-normal text-slate-400">{enabledFields.size} de {BLING_FIELD_MAPPINGS.length} campos ativos</span>
                                     </summary>
                                     <div className="p-4 space-y-4">
                                         {(['basico', 'preco', 'fiscal', 'fisico', 'midia'] as const).map(group => {
-                                            const groupLabels: Record<string, string> = { basico: 'Dados Básicos', preco: 'Preços', fiscal: 'Fiscal (NCM/CEST)', fisico: 'Físico (Peso/Dim.)', midia: 'Mídia' };
+                                            const groupLabels: Record<string, string> = { basico: 'Dados BÃ¡sicos', preco: 'PreÃ§os', fiscal: 'Fiscal (NCM/CEST)', fisico: 'FÃ­sico (Peso/Dim.)', midia: 'MÃ­dia' };
                                             const fields = BLING_FIELD_MAPPINGS.filter(f => f.group === group);
                                             return (
                                                 <div key={group}>
@@ -592,8 +592,8 @@ export default function BlingPage() {
                                                                 />
                                                                 <div>
                                                                     <p className="text-xs font-semibold text-slate-700">{f.label}</p>
-                                                                    <p className="text-xs text-slate-400 font-mono">{f.blingField} → {f.localField}</p>
-                                                                    {f.required && <p className="text-xs text-green-600">obrigatório</p>}
+                                                                    <p className="text-xs text-slate-400 font-mono">{f.blingField} â†’ {f.localField}</p>
+                                                                    {f.required && <p className="text-xs text-green-600">obrigatÃ³rio</p>}
                                                                 </div>
                                                             </label>
                                                         ))}
@@ -608,7 +608,7 @@ export default function BlingPage() {
                                 {/* Cache banner */}
                                 {cacheInfo && (
                                     <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs">
-                                        <span className="text-amber-700">📦 Lista carregada do cache · {formatCacheAge(cacheInfo.timestamp)}</span>
+                                        <span className="text-amber-700">ðŸ“¦ Lista carregada do cache Â· {formatCacheAge(cacheInfo.timestamp)}</span>
                                         <button onClick={() => handleFetchBlingProducts(true)} disabled={fetching} className="text-amber-700 font-semibold underline hover:no-underline disabled:opacity-50">
                                             Atualizar do Bling
                                         </button>
@@ -675,8 +675,8 @@ export default function BlingPage() {
                                                                 <p className="text-sm font-medium text-slate-800 truncate">{displayProduct.nome}</p>
                                                                 <p className="text-xs text-slate-400">
                                                                     {displayProduct.codigo ? `SKU: ${displayProduct.codigo}` : ''}
-                                                                    {displayProduct.gtin ? ` · EAN: ${displayProduct.gtin}` : ''}
-                                                                    {displayProduct.marca ? ` · ${displayProduct.marca}` : ''}
+                                                                    {displayProduct.gtin ? ` Â· EAN: ${displayProduct.gtin}` : ''}
+                                                                    {displayProduct.marca ? ` Â· ${displayProduct.marca}` : ''}
                                                                 </p>
                                                             </div>
                                                             <div className="text-right flex-shrink-0 mr-1">
@@ -712,17 +712,17 @@ export default function BlingPage() {
                                                         {/* Expandable detail panel */}
                                                         {isExpanded && detail && (
                                                             <div className="mx-4 mb-3 border border-slate-200 rounded-xl bg-slate-50 p-4 space-y-3">
-                                                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Dados do Bling — edite antes de importar</p>
+                                                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Dados do Bling â€” edite antes de importar</p>
                                                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 text-sm">
                                                                     {[
                                                                         { label: 'Nome', field: 'nome', type: 'text' },
-                                                                        { label: 'SKU (código)', field: 'codigo', type: 'text' },
+                                                                        { label: 'SKU (cÃ³digo)', field: 'codigo', type: 'text' },
                                                                         { label: 'EAN/GTIN', field: 'gtin', type: 'text' },
                                                                         { label: 'Marca', field: 'marca', type: 'text' },
                                                                         { label: 'Categoria Bling', field: 'categoria_nome', type: 'readonly' },
-                                                                        { label: 'Situação', field: 'situacao', type: 'readonly' },
-                                                                        { label: 'Preço venda (R$)', field: 'preco', type: 'number' },
-                                                                        { label: 'Preço custo (R$)', field: 'precoCusto', type: 'number' },
+                                                                        { label: 'SituaÃ§Ã£o', field: 'situacao', type: 'readonly' },
+                                                                        { label: 'PreÃ§o venda (R$)', field: 'preco', type: 'number' },
+                                                                        { label: 'PreÃ§o custo (R$)', field: 'precoCusto', type: 'number' },
                                                                         { label: 'Estoque', field: 'stock_quantity', type: 'number' },
                                                                         { label: 'NCM', field: 'ncm', type: 'text' },
                                                                         { label: 'CEST', field: 'cest', type: 'text' },
@@ -733,14 +733,14 @@ export default function BlingPage() {
                                                                         { label: 'Prof. (cm)', field: 'profundidade', type: 'number' },
                                                                     ].map(({ label, field, type }) => {
                                                                         const rawVal = field === 'categoria_nome'
-                                                                            ? (detail.categoria?.descricao || '—')
+                                                                            ? (detail.categoria?.descricao || 'â€”')
                                                                             : (detail as any)[field];
                                                                         const val = rawVal ?? '';
                                                                         return (
                                                                             <div key={field}>
                                                                                 <p className="text-xs text-slate-400 mb-0.5">{label}</p>
                                                                                 {type === 'readonly' ? (
-                                                                                    <p className="text-sm text-slate-700 font-medium">{val || '—'}</p>
+                                                                                    <p className="text-sm text-slate-700 font-medium">{val || 'â€”'}</p>
                                                                                 ) : (
                                                                                     <input
                                                                                         type={type}
@@ -763,7 +763,7 @@ export default function BlingPage() {
                                                                 </div>
                                                                 {detail.descricaoComplementar && (
                                                                     <div>
-                                                                        <p className="text-xs text-slate-400 mb-0.5">Descrição</p>
+                                                                        <p className="text-xs text-slate-400 mb-0.5">DescriÃ§Ã£o</p>
                                                                         <textarea
                                                                             defaultValue={detail.descricaoComplementar}
                                                                             rows={2}
@@ -814,7 +814,7 @@ export default function BlingPage() {
                                 {/* Results */}
                                 {importResult && (
                                     <div className={`rounded-lg border p-4 space-y-3 ${importResult.errors.length > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
-                                        <p className="text-sm font-bold text-slate-700">Resultado da Importação</p>
+                                        <p className="text-sm font-bold text-slate-700">Resultado da ImportaÃ§Ã£o</p>
                                         <div className="flex gap-6">
                                             <div className="text-center">
                                                 <p className="text-2xl font-bold text-green-600">{importResult.created}</p>
@@ -841,7 +841,7 @@ export default function BlingPage() {
                                                                     {e.sku && <p className="text-xs text-slate-400">SKU: {e.sku}</p>}
                                                                 </div>
                                                             </div>
-                                                            <p className="text-xs text-red-600 mt-1">⚠️ {e.reason}</p>
+                                                            <p className="text-xs text-red-600 mt-1">âš ï¸ {e.reason}</p>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -855,154 +855,201 @@ export default function BlingPage() {
                 </div>
             )}
 
-            {/* ══════════════════════════════════════ */}
+            {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
             {/* TAB: MAPEAMENTOS                       */}
-            {/* ══════════════════════════════════════ */}
+            {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
             {activeTab === 'mappings' && (
                 <div className="space-y-4">
                     {!isConnected ? (
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center space-y-3">
                             <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
-                            <p className="font-semibold text-amber-800">Bling não conectado</p>
-                            <p className="text-sm text-amber-700">Configure as credenciais na aba <strong>Configuração</strong> primeiro.</p>
+                            <p className="font-semibold text-amber-800">Bling nÃ£o conectado</p>
+                            <p className="text-sm text-amber-700">Configure as credenciais na aba <strong>ConfiguraÃ§Ã£o</strong> primeiro.</p>
                         </div>
                     ) : (
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <h2 className="text-base font-bold text-slate-800">Mapeamento de Categorias</h2>
-                                    <p className="text-sm text-slate-500 mt-0.5">
-                                        Relacione cada categoria do Bling com uma categoria do sistema. Produtos importados serão classificados automaticamente.
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={async () => {
-                                        setLoadingMappings(true);
-                                        try {
-                                            const cats = await fetchBlingCategories();
-                                            setBlingCategories(cats);
-                                            // Inicializa mapeamentos para novas categorias que ainda não têm mapeamento
-                                            const existing = loadCategoryMappings();
-                                            const merged: CategoryMapping[] = [...existing];
-                                            for (const bc of cats) {
-                                                if (!merged.find(m => m.blingCategoryId === bc.id)) {
-                                                    merged.push({ blingCategoryId: bc.id, blingCategoryName: bc.descricao, ourCategoryId: '', ourCategoryName: '' });
+                        <>
+                            {/* â”€â”€ SeÃ§Ã£o 1: Mapeamento de Categorias â”€â”€ */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <h2 className="text-base font-bold text-slate-800">Mapeamento de Categorias</h2>
+                                        <p className="text-sm text-slate-500 mt-0.5">
+                                            Relacione cada categoria do Bling com uma categoria do sistema. Produtos importados serÃ£o classificados automaticamente.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            setLoadingMappings(true);
+                                            try {
+                                                const cats = await fetchBlingCategories();
+                                                setBlingCategories(cats);
+                                                const existing = loadCategoryMappings();
+                                                const merged: CategoryMapping[] = [...existing];
+                                                for (const bc of cats) {
+                                                    if (!merged.find(m => m.blingCategoryId === bc.id)) {
+                                                        merged.push({ blingCategoryId: bc.id, blingCategoryName: bc.descricao, ourCategoryId: '', ourCategoryName: '' });
+                                                    }
                                                 }
+                                                setCategoryMappings(merged);
+                                                toast.success(`${cats.length} categorias carregadas do Bling.`);
+                                            } catch (err: any) {
+                                                toast.error('Erro ao carregar categorias: ' + err.message);
+                                            } finally {
+                                                setLoadingMappings(false);
                                             }
-                                            setCategoryMappings(merged);
-                                            toast.success(`${cats.length} categorias carregadas do Bling.`);
-                                        } catch (err: any) {
-                                            toast.error('Erro ao carregar categorias: ' + err.message);
-                                        } finally {
-                                            setLoadingMappings(false);
-                                        }
-                                    }}
-                                    disabled={loadingMappings}
-                                    className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 flex-shrink-0"
-                                >
-                                    {loadingMappings ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                    {loadingMappings ? 'Carregando...' : 'Carregar Categorias do Bling'}
-                                </button>
-                            </div>
-
-                            {categoryMappings.length === 0 && !loadingMappings && (
-                                <div className="text-center py-8 text-slate-400 text-sm">
-                                    Clique em <strong>"Carregar Categorias do Bling"</strong> para começar a mapear.
+                                        }}
+                                        disabled={loadingMappings}
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 flex-shrink-0"
+                                    >
+                                        {loadingMappings ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                        {loadingMappings ? 'Carregando...' : 'Carregar Categorias do Bling'}
+                                    </button>
                                 </div>
-                            )}
 
-                            {categoryMappings.length > 0 && (
-                                <>
-                                    <div className="rounded-xl border border-slate-200 overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-slate-50 border-b border-slate-200">
-                                                <tr>
-                                                    <th className="text-left px-4 py-3 font-semibold text-slate-600 w-1/2">Categoria no Bling</th>
-                                                    <th className="text-center px-2 py-3 text-slate-400">→</th>
-                                                    <th className="text-left px-4 py-3 font-semibold text-slate-600 w-1/2">Categoria no Sistema</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {categoryMappings.map((mapping, idx) => (
-                                                    <tr key={mapping.blingCategoryId} className="hover:bg-slate-50">
-                                                        <td className="px-4 py-3">
-                                                            <div>
+                                {categoryMappings.length === 0 && !loadingMappings && (
+                                    <div className="text-center py-8 text-slate-400 text-sm">
+                                        Clique em <strong>"Carregar Categorias do Bling"</strong> para comeÃ§ar a mapear.
+                                    </div>
+                                )}
+
+                                {categoryMappings.length > 0 && (
+                                    <>
+                                        <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-slate-50 border-b border-slate-200">
+                                                    <tr>
+                                                        <th className="text-left px-4 py-3 font-semibold text-slate-600 w-1/2">Categoria no Bling</th>
+                                                        <th className="text-center px-2 py-3 text-slate-400">â†’</th>
+                                                        <th className="text-left px-4 py-3 font-semibold text-slate-600 w-1/2">Categoria no Sistema</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {categoryMappings.map((mapping, idx) => (
+                                                        <tr key={mapping.blingCategoryId} className="hover:bg-slate-50">
+                                                            <td className="px-4 py-3">
                                                                 <p className="font-medium text-slate-700">{mapping.blingCategoryName}</p>
                                                                 <p className="text-xs text-slate-400">ID Bling: {mapping.blingCategoryId}</p>
-                                                            </div>
-                                                        </td>
-                                                        <td className="text-center text-slate-300 px-2">→</td>
-                                                        <td className="px-4 py-3">
-                                                            <select
-                                                                value={mapping.ourCategoryId}
-                                                                onChange={e => {
-                                                                    const cat = categories.find(c => c.id === e.target.value);
-                                                                    const updated = [...categoryMappings];
-                                                                    updated[idx] = {
-                                                                        ...mapping,
-                                                                        ourCategoryId: e.target.value,
-                                                                        ourCategoryName: cat?.name || '',
-                                                                    };
-                                                                    setCategoryMappings(updated);
-                                                                }}
-                                                                className={`w-full text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${mapping.ourCategoryId ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
-                                                            >
-                                                                <option value="">-- Sem mapeamento (usa padrão) --</option>
-                                                                {categories.map(c => (
-                                                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                                                ))}
-                                                            </select>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                                            </td>
+                                                            <td className="text-center text-slate-300 px-2">â†’</td>
+                                                            <td className="px-4 py-3">
+                                                                <select
+                                                                    value={mapping.ourCategoryId}
+                                                                    onChange={e => {
+                                                                        const cat = categories.find(c => c.id === e.target.value);
+                                                                        const updated = [...categoryMappings];
+                                                                        updated[idx] = { ...mapping, ourCategoryId: e.target.value, ourCategoryName: cat?.name || '' };
+                                                                        setCategoryMappings(updated);
+                                                                    }}
+                                                                    className={`w-full text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${mapping.ourCategoryId ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
+                                                                >
+                                                                    <option value="">-- Sem mapeamento (usa padrÃ£o) --</option>
+                                                                    {categories.map(c => (
+                                                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs text-slate-500">
+                                                ðŸ’¡ Produtos sem categoria mapeada usarÃ£o a "Categoria padrÃ£o" selecionada na aba Produtos.
+                                            </p>
+                                            <button
+                                                onClick={() => {
+                                                    const valid = categoryMappings.filter(m => m.ourCategoryId);
+                                                    saveCategoryMappings(valid);
+                                                    toast.success(`${valid.length} mapeamentos de categoria salvos!`);
+                                                }}
+                                                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
+                                            >
+                                                <Save className="w-4 h-4" />
+                                                Salvar Categorias
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
 
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-xs text-slate-500">
-                                            💡 Produtos sem categoria mapeada usarão a "Categoria padrão" selecionada na aba Produtos.
+                            {/* â”€â”€ SeÃ§Ã£o 2: Mapeamento de Campos â”€â”€ */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <h2 className="text-base font-bold text-slate-800">Mapeamento de Campos</h2>
+                                        <p className="text-sm text-slate-500 mt-0.5">
+                                            Configure qual campo do Bling alimenta qual campo do sistema. Desabilite campos que nÃ£o deseja importar.
                                         </p>
-                                        <button
-                                            onClick={() => {
-                                                const valid = categoryMappings.filter(m => m.ourCategoryId);
-                                                saveCategoryMappings(valid);
-                                                setCategoryMappings(categoryMappings); // força re-render
-                                                toast.success(`${valid.length} mapeamentos salvos!`);
-                                            }}
-                                            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
-                                        >
-                                            <Save className="w-4 h-4" />
-                                            Salvar Mapeamentos
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const defaults = getDefaultFieldMappings();
+                                            setFieldMappings(defaults);
+                                            saveFieldMappings(defaults);
+                                            toast.success('Mapeamentos de campos restaurados para o padrÃ£o.');
+                                        }}
+                                        className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 flex-shrink-0"
+                                    >
+                                        <RefreshCw className="w-3 h-3" />
+                                        Restaurar PadrÃ£o
+                                    </button>
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                                <th className="text-center px-3 py-3 font-semibold text-slate-600 w-10">Ativo</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-600 w-2/5">Campo no Bling</th>
+                                                <th className="text-center px-2 py-3 text-slate-400 w-8">â†’</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-600">Campo no Sistema</th>
+                                            </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {categoryMappings.map((mapping, idx) => (
-                                                <tr key={mapping.blingCategoryId} className="hover:bg-slate-50">
-                                                    <td className="px-4 py-3">
-                                                        <div>
-                                                            <p className="font-medium text-slate-700">{mapping.blingCategoryName}</p>
-                                                            <p className="text-xs text-slate-400">ID Bling: {mapping.blingCategoryId}</p>
-                                                        </div>
-                                                    </td>
-                                                    <td className="text-center text-slate-300 px-2">→</td>
-                                                    <td className="px-4 py-3">
-                                                        <select
-                                                            value={mapping.ourCategoryId}
+                                            {fieldMappings.map((mapping, idx) => (
+                                                <tr key={mapping.blingKey} className={`hover:bg-slate-50 ${!mapping.enabled ? 'opacity-50' : ''}`}>
+                                                    <td className="px-3 py-2.5 text-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={mapping.enabled}
                                                             onChange={e => {
-                                                                const cat = categories.find(c => c.id === e.target.value);
-                                                                const updated = [...categoryMappings];
-                                                                updated[idx] = {
-                                                                    ...mapping,
-                                                                    ourCategoryId: e.target.value,
-                                                                    ourCategoryName: cat?.name || '',
-                                                                };
-                                                                setCategoryMappings(updated);
+                                                                const updated = [...fieldMappings];
+                                                                updated[idx] = { ...mapping, enabled: e.target.checked };
+                                                                setFieldMappings(updated);
                                                             }}
-                                                            className={`w-full text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${mapping.ourCategoryId ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
+                                                            className="w-4 h-4 accent-green-600"
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-2.5">
+                                                        <p className="font-medium text-slate-700">{mapping.blingLabel}</p>
+                                                        <p className="text-xs text-slate-400 font-mono">{mapping.blingField}</p>
+                                                    </td>
+                                                    <td className="text-center text-slate-300 px-2">â†’</td>
+                                                    <td className="px-4 py-2.5">
+                                                        <select
+                                                            value={mapping.systemField}
+                                                            disabled={!mapping.enabled}
+                                                            onChange={e => {
+                                                                const updated = [...fieldMappings];
+                                                                updated[idx] = { ...mapping, systemField: e.target.value };
+                                                                setFieldMappings(updated);
+                                                            }}
+                                                            className={`w-full text-sm border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed ${mapping.systemField ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
                                                         >
-                                                            <option value="">-- Sem mapeamento (usa padrão) --</option>
-                                                            {categories.map(c => (
-                                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                                            <option value="">-- NÃ£o importar --</option>
+                                                            {Object.entries(
+                                                                SYSTEM_FIELDS.reduce((acc: Record<string, typeof SYSTEM_FIELDS>, f) => {
+                                                                    if (!acc[f.group]) acc[f.group] = [];
+                                                                    acc[f.group].push(f);
+                                                                    return acc;
+                                                                }, {})
+                                                            ).map(([group, fields]) => (
+                                                                <optgroup key={group} label={group}>
+                                                                    {fields.map(f => (
+                                                                        <option key={f.field} value={f.field}>{f.label}</option>
+                                                                    ))}
+                                                                </optgroup>
                                                             ))}
                                                         </select>
                                                     </td>
@@ -1012,126 +1059,23 @@ export default function BlingPage() {
                                     </table>
                                 </div>
 
-                            <div className="flex items-center justify-between">
-                                <p className="text-xs text-slate-500">
-                                    💡 Produtos sem categoria mapeada usarão a "Categoria padrão" selecionada na aba Produtos.
-                                </p>
-                                <button
-                                    onClick={() => {
-                                        const valid = categoryMappings.filter(m => m.ourCategoryId);
-                                        saveCategoryMappings(valid);
-                                        setCategoryMappings(categoryMappings); // força re-render
-                                        toast.success(`${valid.length} mapeamentos salvos!`);
-                                    }}
-                                    className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
-                                >
-                                    <Save className="w-4 h-4" />
-                                    Salvar Mapeamentos
-                                </button>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={() => {
+                                            saveFieldMappings(fieldMappings);
+                                            toast.success('Mapeamentos de campos salvos!');
+                                        }}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
+                                    >
+                                        <Save className="w-4 h-4" />
+                                        Salvar Mapeamentos de Campos
+                                    </button>
+                                </div>
                             </div>
                         </>
                     )}
                 </div>
-
-                            {/* ── Seção 2: Mapeamento de Campos ── */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
-                <div className="flex items-start justify-between">
-                    <div>
-                        <h2 className="text-base font-bold text-slate-800">Mapeamento de Campos</h2>
-                        <p className="text-sm text-slate-500 mt-0.5">
-                            Configure qual campo do Bling alimenta qual campo do sistema. Desabilite campos que não deseja importar.
-                        </p>
-                    </div>
-                    <button
-                        onClick={() => {
-                            const defaults = getDefaultFieldMappings();
-                            setFieldMappings(defaults);
-                            saveFieldMappings(defaults);
-                            toast.success('Mapeamentos restaurados para o padrão.');
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 flex-shrink-0"
-                    >
-                        <RefreshCw className="w-3 h-3" />
-                        Restaurar Padrão
-                    </button>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200">
-                            <tr>
-                                <th className="text-center px-3 py-3 font-semibold text-slate-600 w-10">Ativo</th>
-                                <th className="text-left px-4 py-3 font-semibold text-slate-600 w-2/5">Campo no Bling</th>
-                                <th className="text-center px-2 py-3 text-slate-400 w-8">→</th>
-                                <th className="text-left px-4 py-3 font-semibold text-slate-600">Campo no Sistema</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {fieldMappings.map((mapping, idx) => (
-                                <tr key={mapping.blingKey} className={`hover:bg-slate-50 ${!mapping.enabled ? 'opacity-50' : ''}`}>
-                                    <td className="px-3 py-2.5 text-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={mapping.enabled}
-                                            onChange={e => {
-                                                const updated = [...fieldMappings];
-                                                updated[idx] = { ...mapping, enabled: e.target.checked };
-                                                setFieldMappings(updated);
-                                            }}
-                                            className="w-4 h-4 accent-green-600"
-                                        />
-                                    </td>
-                                    <td className="px-4 py-2.5">
-                                        <p className="font-medium text-slate-700">{mapping.blingLabel}</p>
-                                        <p className="text-xs text-slate-400 font-mono">{mapping.blingField}</p>
-                                    </td>
-                                    <td className="text-center text-slate-300 px-2">→</td>
-                                    <td className="px-4 py-2.5">
-                                        <select
-                                            value={mapping.systemField}
-                                            disabled={!mapping.enabled}
-                                            onChange={e => {
-                                                const updated = [...fieldMappings];
-                                                updated[idx] = { ...mapping, systemField: e.target.value };
-                                                setFieldMappings(updated);
-                                            }}
-                                            className={`w-full text-sm border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:cursor-not-allowed ${mapping.systemField ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
-                                        >
-                                            <option value="">-- Não importar --</option>
-                                            {Object.entries(
-                                                SYSTEM_FIELDS.reduce((acc: Record<string, typeof SYSTEM_FIELDS>, f) => {
-                                                    if (!acc[f.group]) acc[f.group] = [];
-                                                    acc[f.group].push(f);
-                                                    return acc;
-                                                }, {})
-                                            ).map(([group, fields]) => (
-                                                <optgroup key={group} label={group}>
-                                                    {fields.map(f => (
-                                                        <option key={f.field} value={f.field}>{f.label}</option>
-                                                    ))}
-                                                </optgroup>
-                                            ))}
-                                        </select>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div className="flex justify-end">
-                    <button
-                        onClick={() => {
-                            saveFieldMappings(fieldMappings);
-                            toast.success('Mapeamentos de campos salvos!');
-                        }}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
-                    >
-                        <Save className="w-4 h-4" />
-                        Salvar Mapeamentos de Campos
-                    </button>
-                </div>
-            </div>
-        </>
-    )
+            )}
+        </div>
+    );
 }
