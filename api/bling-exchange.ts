@@ -1,17 +1,29 @@
-// Vercel Serverless Function: troca o authorization_code por access_token
-// Simples — sem Supabase. O cliente (React) salva os tokens.
+// Vercel Serverless Function: troca authorization_code OU refresh_token por access_token
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { code, client_id, client_secret, redirect_uri } = req.body;
+    const { code, client_id, client_secret, redirect_uri, grant_type } = req.body;
 
-    if (!code || !client_id || !client_secret || !redirect_uri) {
-        return res.status(400).json({ error: 'Missing required fields: code, client_id, client_secret, redirect_uri' });
+    if (!client_id || !client_secret) {
+        return res.status(400).json({ error: 'Missing client_id or client_secret' });
+    }
+
+    const isRefresh = grant_type === 'refresh_token';
+
+    if (isRefresh && !code) {
+        return res.status(400).json({ error: 'Missing refresh_token (pass as code field)' });
+    }
+    if (!isRefresh && (!code || !redirect_uri)) {
+        return res.status(400).json({ error: 'Missing required fields: code, redirect_uri' });
     }
 
     const credentials = Buffer.from(`${client_id}:${client_secret}`).toString('base64');
+
+    const body = isRefresh
+        ? new URLSearchParams({ grant_type: 'refresh_token', refresh_token: String(code) })
+        : new URLSearchParams({ grant_type: 'authorization_code', code: String(code), redirect_uri: String(redirect_uri) });
 
     try {
         const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
@@ -20,11 +32,7 @@ export default async function handler(req: any, res: any) {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': `Basic ${credentials}`,
             },
-            body: new URLSearchParams({
-                grant_type: 'authorization_code',
-                code: String(code),
-                redirect_uri: String(redirect_uri),
-            }).toString(),
+            body: body.toString(),
         });
 
         const data = await tokenRes.json();

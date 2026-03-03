@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Save, Eye, EyeOff, CheckCircle, AlertCircle, Copy, ExternalLink } from 'lucide-react';
+import { Package, Save, Eye, EyeOff, CheckCircle, AlertCircle, Copy, ExternalLink, Download, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
+import { importBlingProducts, ImportResult } from '../../../services/blingService';
 
 interface BlingCredentials {
     bling_client_id: string;
@@ -20,6 +21,11 @@ export default function BlingPage() {
     const [showSecret, setShowSecret] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
     const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
+
+    // Import state
+    const [importing, setImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+    const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
     useEffect(() => {
         loadCredentials();
@@ -137,6 +143,30 @@ export default function BlingPage() {
         authUrl.searchParams.set('state', 'bling_oauth');
 
         window.location.href = authUrl.toString();
+    }
+
+    async function handleImport() {
+        setImporting(true);
+        setImportResult(null);
+        setImportProgress({ current: 0, total: 0 });
+
+        try {
+            const result = await importBlingProducts((current, total, partial) => {
+                setImportProgress({ current, total });
+            });
+
+            setImportResult(result);
+
+            if (result.errors.length === 0) {
+                toast.success(`Importação concluída! ${result.created} criados, ${result.updated} atualizados.`);
+            } else {
+                toast.warning(`Importação com erros: ${result.errors.length} falhas.`);
+            }
+        } catch (err: any) {
+            toast.error('Erro na importação: ' + (err.message || 'Tente novamente.'));
+        } finally {
+            setImporting(false);
+        }
     }
 
     function copyCallbackUrl() {
@@ -310,6 +340,84 @@ export default function BlingPage() {
                     {isConnected && !tokenExpired ? 'Reconectar com Bling' : 'Conectar com Bling'}
                 </button>
             </div>
+
+            {/* Importar Produtos */}
+            {isConnected && !tokenExpired && (
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">4</span>
+                        Importar Produtos do Bling
+                    </h2>
+                    <p className="text-sm text-slate-500">
+                        Busca todos os produtos cadastrados no Bling e synchroniza com o sistema.
+                        Produtos existentes são atualizados; novos são criados automaticamente.
+                    </p>
+
+                    {/* SQL warning */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p className="text-xs font-semibold text-amber-800 mb-1">⚠️ Pré-requisito: rode este SQL no Supabase antes de importar</p>
+                        <code className="text-xs text-amber-700 block font-mono">
+                            ALTER TABLE products ADD COLUMN IF NOT EXISTS bling_id BIGINT;
+                        </code>
+                    </div>
+
+                    <button
+                        onClick={handleImport}
+                        disabled={importing}
+                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {importing ? (
+                            <><Loader2 className="w-5 h-5 animate-spin" /> Importando...</>
+                        ) : (
+                            <><Download className="w-5 h-5" /> Importar Produtos</>
+                        )}
+                    </button>
+
+                    {/* Progress */}
+                    {importing && importProgress.total > 0 && (
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-xs text-slate-500">
+                                <span>Processando...</span>
+                                <span>{importProgress.current} / {importProgress.total}</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2">
+                                <div
+                                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Results */}
+                    {importResult && (
+                        <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 space-y-3">
+                            <p className="text-sm font-bold text-slate-700">Resultado da Importação</p>
+                            <div className="flex gap-4">
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-green-600">{importResult.created}</p>
+                                    <p className="text-xs text-slate-500">criados</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-blue-600">{importResult.updated}</p>
+                                    <p className="text-xs text-slate-500">atualizados</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-red-500">{importResult.errors.length}</p>
+                                    <p className="text-xs text-slate-500">erros</p>
+                                </div>
+                            </div>
+                            {importResult.errors.length > 0 && (
+                                <div className="max-h-32 overflow-y-auto space-y-1">
+                                    {importResult.errors.map((e, i) => (
+                                        <p key={i} className="text-xs text-red-600 font-mono">{e}</p>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Escopos */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
