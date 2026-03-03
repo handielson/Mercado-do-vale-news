@@ -5,10 +5,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
-import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, BlingProduct, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings } from '../../../services/blingService';
+import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings } from '../../../services/blingService';
 import { categoryService } from '../../../services/categories';
 import { Category } from '../../../types/category';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -95,6 +95,11 @@ export default function BlingPage() {
     const [blingCategories, setBlingCategories] = useState<BlingCategory[]>([]);
     const [categoryMappings, setCategoryMappings] = useState<CategoryMapping[]>(loadCategoryMappings);
     const [loadingMappings, setLoadingMappings] = useState(false);
+
+    // ── Product detail preview ──
+    const [expandedProductId, setExpandedProductId] = useState<number | null>(null);
+    const [productDetails, setProductDetails] = useState<Map<number, BlingProductDetail>>(new Map());
+    const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
 
     // ─────────────────────────────────────────────────────
     // Load
@@ -648,34 +653,131 @@ export default function BlingPage() {
                                             </button>
                                         </div>
                                         <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
-                                            {filteredProducts.map(p => (
-                                                <label key={p.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedIds.has(p.id)}
-                                                        onChange={() => toggleSelect(p.id)}
-                                                        className="w-4 h-4 accent-green-600 flex-shrink-0"
-                                                    />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-slate-800 truncate">{p.nome}</p>
-                                                        <p className="text-xs text-slate-400">
-                                                            {p.codigo ? `SKU: ${p.codigo}` : ''}
-                                                            {p.gtin ? ` · EAN: ${p.gtin}` : ''}
-                                                        </p>
-                                                    </div>
-                                                    <div className="text-right flex-shrink-0">
-                                                        {p.preco != null && (
-                                                            <p className="text-sm font-semibold text-slate-700">R$ {p.preco.toFixed(2).replace('.', ',')}</p>
+                                            {filteredProducts.map(p => {
+                                                const isExpanded = expandedProductId === p.id;
+                                                const detail = productDetails.get(p.id);
+                                                const isLoadingDetail = loadingDetailId === p.id;
+                                                const displayProduct = detail || p;
+                                                return (
+                                                    <div key={p.id} className="border-b border-slate-100 last:border-0">
+                                                        {/* Summary row */}
+                                                        <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedIds.has(p.id)}
+                                                                onChange={() => toggleSelect(p.id)}
+                                                                className="w-4 h-4 accent-green-600 flex-shrink-0"
+                                                            />
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-slate-800 truncate">{displayProduct.nome}</p>
+                                                                <p className="text-xs text-slate-400">
+                                                                    {displayProduct.codigo ? `SKU: ${displayProduct.codigo}` : ''}
+                                                                    {displayProduct.gtin ? ` · EAN: ${displayProduct.gtin}` : ''}
+                                                                    {displayProduct.marca ? ` · ${displayProduct.marca}` : ''}
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right flex-shrink-0 mr-1">
+                                                                {displayProduct.preco != null && (
+                                                                    <p className="text-sm font-semibold text-slate-700">R$ {displayProduct.preco.toFixed(2).replace('.', ',')}</p>
+                                                                )}
+                                                                <p className={`text-xs font-medium ${displayProduct.stock_quantity > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                                    {detail ? displayProduct.stock_quantity : p.stock_quantity} estoque
+                                                                </p>
+                                                                <span className={`text-xs font-medium ${displayProduct.situacao === 'A' ? 'text-green-600' : 'text-slate-400'}`}>
+                                                                    {displayProduct.situacao === 'A' ? 'Ativo' : 'Inativo'}
+                                                                </span>
+                                                            </div>
+                                                            {/* Expand button */}
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (isExpanded) { setExpandedProductId(null); return; }
+                                                                    setExpandedProductId(p.id);
+                                                                    if (!productDetails.has(p.id)) {
+                                                                        setLoadingDetailId(p.id);
+                                                                        const d = await fetchBlingProductDetail(p.id);
+                                                                        if (d) setProductDetails(prev => new Map(prev).set(p.id, d));
+                                                                        setLoadingDetailId(null);
+                                                                    }
+                                                                }}
+                                                                className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 flex-shrink-0"
+                                                                title="Ver todos os campos"
+                                                            >
+                                                                {isLoadingDetail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Expandable detail panel */}
+                                                        {isExpanded && detail && (
+                                                            <div className="mx-4 mb-3 border border-slate-200 rounded-xl bg-slate-50 p-4 space-y-3">
+                                                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Dados do Bling — edite antes de importar</p>
+                                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 text-sm">
+                                                                    {[
+                                                                        { label: 'Nome', field: 'nome', type: 'text' },
+                                                                        { label: 'SKU (código)', field: 'codigo', type: 'text' },
+                                                                        { label: 'EAN/GTIN', field: 'gtin', type: 'text' },
+                                                                        { label: 'Marca', field: 'marca', type: 'text' },
+                                                                        { label: 'Categoria Bling', field: 'categoria_nome', type: 'readonly' },
+                                                                        { label: 'Situação', field: 'situacao', type: 'readonly' },
+                                                                        { label: 'Preço venda (R$)', field: 'preco', type: 'number' },
+                                                                        { label: 'Preço custo (R$)', field: 'precoCusto', type: 'number' },
+                                                                        { label: 'Estoque', field: 'stock_quantity', type: 'number' },
+                                                                        { label: 'NCM', field: 'ncm', type: 'text' },
+                                                                        { label: 'CEST', field: 'cest', type: 'text' },
+                                                                        { label: 'Origem', field: 'origem', type: 'number' },
+                                                                        { label: 'Peso bruto (kg)', field: 'pesoBruto', type: 'number' },
+                                                                        { label: 'Larg. (cm)', field: 'largura', type: 'number' },
+                                                                        { label: 'Alt. (cm)', field: 'altura', type: 'number' },
+                                                                        { label: 'Prof. (cm)', field: 'profundidade', type: 'number' },
+                                                                    ].map(({ label, field, type }) => {
+                                                                        const rawVal = field === 'categoria_nome'
+                                                                            ? (detail.categoria?.descricao || '—')
+                                                                            : (detail as any)[field];
+                                                                        const val = rawVal ?? '';
+                                                                        return (
+                                                                            <div key={field}>
+                                                                                <p className="text-xs text-slate-400 mb-0.5">{label}</p>
+                                                                                {type === 'readonly' ? (
+                                                                                    <p className="text-sm text-slate-700 font-medium">{val || '—'}</p>
+                                                                                ) : (
+                                                                                    <input
+                                                                                        type={type}
+                                                                                        defaultValue={val}
+                                                                                        onChange={e => {
+                                                                                            const newVal = type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
+                                                                                            setProductDetails(prev => {
+                                                                                                const updated = new Map(prev);
+                                                                                                const cur = updated.get(p.id)!;
+                                                                                                updated.set(p.id, { ...cur, [field]: newVal });
+                                                                                                return updated;
+                                                                                            });
+                                                                                        }}
+                                                                                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                                                    />
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                                {detail.descricaoComplementar && (
+                                                                    <div>
+                                                                        <p className="text-xs text-slate-400 mb-0.5">Descrição</p>
+                                                                        <textarea
+                                                                            defaultValue={detail.descricaoComplementar}
+                                                                            rows={2}
+                                                                            onChange={e => setProductDetails(prev => {
+                                                                                const updated = new Map(prev);
+                                                                                updated.set(p.id, { ...updated.get(p.id)!, descricaoComplementar: e.target.value });
+                                                                                return updated;
+                                                                            })}
+                                                                            className="w-full px-2 py-1 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500"
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         )}
-                                                        <p className={`text-xs font-medium ${p.stock_quantity > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
-                                                            {p.stock_quantity} em estoque
-                                                        </p>
-                                                        <span className={`text-xs font-medium ${p.situacao === 'A' ? 'text-green-600' : 'text-slate-400'}`}>
-                                                            {p.situacao === 'A' ? 'Ativo' : 'Inativo'}
-                                                        </span>
                                                     </div>
-                                                </label>
-                                            ))}
+                                                );
+                                            })}
                                             {filteredProducts.length === 0 && (
                                                 <p className="text-sm text-slate-400 text-center py-6">Nenhum produto encontrado.</p>
                                             )}

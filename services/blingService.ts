@@ -49,6 +49,65 @@ export interface BlingProduct {
     imagens?: Array<{ link?: string; url?: string }>;
 }
 
+/** Detalhes completos de um produto do Bling (retornados pelo endpoint individual) */
+export interface BlingProductDetail extends BlingProduct {
+    descricaoCurta?: string;
+    descricaoComplementar?: string;
+    ncm?: string;
+    cest?: string;
+    origem?: number;
+    pesoBruto?: number;
+    largura?: number;
+    altura?: number;
+    profundidade?: number;
+    volumes?: number;
+    itensPorCaixa?: number;
+    unidade?: string;
+    tipoProducao?: string;
+    // Campos editáveis pelo admin antes do import
+    _edited?: boolean;
+}
+
+/** Busca todos os campos de um produto Bling + estoque real por depósito */
+export async function fetchBlingProductDetail(productId: number): Promise<BlingProductDetail | null> {
+    try {
+        const accessToken = await getValidToken();
+        const res = await fetch(`/api/bling-product-detail?id=${productId}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return {
+            id: data.id,
+            nome: data.nome || '',
+            codigo: data.codigo || null,
+            gtin: data.gtin || null,
+            preco: data.preco || null,
+            precoCusto: data.precoCusto || null,
+            situacao: data.situacao || 'A',
+            stock_quantity: data.stock_quantity ?? 0,
+            categoria: data.categoria || undefined,
+            marca: data.marca || undefined,
+            descricaoCurta: data.descricaoCurta || undefined,
+            descricaoComplementar: data.descricaoComplementar || undefined,
+            ncm: data.ncm || undefined,
+            cest: data.cest || undefined,
+            origem: data.origem ?? undefined,
+            pesoBruto: data.pesoBruto || undefined,
+            largura: data.largura || undefined,
+            altura: data.altura || undefined,
+            profundidade: data.profundidade || undefined,
+            volumes: data.volumes || undefined,
+            itensPorCaixa: data.itensPorCaixa || undefined,
+            unidade: data.unidade || undefined,
+            tipoProducao: data.tipoProducao || undefined,
+            imagens: data.imagens || [],
+        };
+    } catch {
+        return null;
+    }
+}
+
 export interface ImportErrorDetail {
     name: string;
     sku: string | null;
