@@ -18,6 +18,12 @@ export default async function handler(req: any, res: any) {
             }
         );
 
+        // Bling retorna 400 quando chamado sem filtros obrigatórios (idDeposito).
+        // Nesse caso, retornamos lista vazia com 200 para não poluir o console.
+        if (blingRes.status === 400) {
+            return res.status(200).json({ data: [] });
+        }
+
         if (!blingRes.ok) {
             const text = await blingRes.text();
             return res.status(blingRes.status).json({ error: `Bling stock error: ${blingRes.status}`, detail: text });
