@@ -19,6 +19,35 @@ export interface CategoryMapping {
 
 const CATEGORY_MAPPING_KEY = 'bling_category_mappings';
 
+export interface ColorMapping {
+    blingColorName: string;   // ex: "Vermelho" (extraído de variacao.nome)
+    systemColorId: string;    // id da cor no sistema
+    systemColorName: string;  // nome da cor no sistema (para exibição)
+}
+
+const COLOR_MAPPING_KEY = 'bling_color_mappings';
+
+export function loadColorMappings(): ColorMapping[] {
+    try {
+        const saved = localStorage.getItem(COLOR_MAPPING_KEY);
+        return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+}
+
+export function saveColorMappings(mappings: ColorMapping[]): void {
+    localStorage.setItem(COLOR_MAPPING_KEY, JSON.stringify(mappings));
+}
+
+function resolveColorId(blingColorName: string | undefined): string | null {
+    if (!blingColorName) return null;
+    const mappings = loadColorMappings();
+    const found = mappings.find(m =>
+        m.blingColorName.toLowerCase() === blingColorName.toLowerCase()
+    );
+    return found?.systemColorId || null;
+}
+
+
 export function loadCategoryMappings(): CategoryMapping[] {
     try { return JSON.parse(localStorage.getItem(CATEGORY_MAPPING_KEY) || '[]'); } catch { return []; }
 }
@@ -533,9 +562,12 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         // Estoque
         stock_quantity: item.stock_quantity ?? 0,
         track_inventory: true,
+        // Cor mapeada (variacao.nome → sistema)
+        color_id: resolveColorId(variacaoNome ? variacaoNome.split(';').find((p: string) => p.toLowerCase().startsWith('cor'))?.split(':')[1]?.trim() : undefined) || null,
         // Specs (variação: color, size...)
         specs,
         // Mídia
+
         images: firstImg ? [firstImg] : [],
         // Modelo padrão (quando selecionado na importação)
         ...(modelId ? { model_id: modelId } : {}),
