@@ -34,6 +34,11 @@ export default async function handler(req: any, res: any) {
                 stock_quantity += item.saldoFisico ?? 0;
             }
         }
+        // Fallback para variações: o endpoint de saldos pode não retornar nada
+        // para IDs de variação — nesse caso usa o campo embutido no produto
+        if (stock_quantity === 0 && produto.estoque?.saldoVirtualTotal) {
+            stock_quantity = produto.estoque.saldoVirtualTotal;
+        }
 
         return res.status(200).json({ ...produto, stock_quantity });
     } catch (err: any) {

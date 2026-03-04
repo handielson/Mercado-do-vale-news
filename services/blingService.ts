@@ -47,6 +47,7 @@ export interface BlingProduct {
     categoria?: { id: number; descricao: string };
     marca?: string;
     imagens?: Array<{ link?: string; url?: string }>;
+    variacao?: { nome: string; produtoPai?: { id: number } };
 }
 
 /** Detalhes completos de um produto do Bling (retornados pelo endpoint individual) */
@@ -77,19 +78,31 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         });
         if (!res.ok) return null;
         const data = await res.json();
-        const trib = data.tributacao || {};
-        const dim = data.dimensoes || {};
+
+        // Se for variação, busca o pai para herdar campos que o Bling só retorna no pai
+        const parentId: number | undefined = data.variacao?.produtoPai?.id;
+        let parentData: any = null;
+        if (parentId) {
+            const parentRes = await fetch(`/api/bling-product-detail?id=${parentId}`, {
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+            });
+            if (parentRes.ok) parentData = await parentRes.json();
+        }
+
+        const trib = data.tributacao || parentData?.tributacao || {};
+        const dim = data.dimensoes || parentData?.dimensoes || {};
+
         return {
             id: data.id,
             nome: data.nome || '',
             codigo: data.codigo || null,
             gtin: data.gtin || null,
-            preco: data.preco ?? null,
-            precoCusto: data.precoCusto ?? null,
+            preco: data.preco ?? parentData?.preco ?? null,
+            precoCusto: data.precoCusto ?? parentData?.precoCusto ?? null,
             situacao: data.situacao || 'A',
             stock_quantity: data.stock_quantity ?? 0,
-            categoria: data.categoria || undefined,
-            marca: data.marca || undefined,
+            categoria: data.categoria || parentData?.categoria || undefined,
+            marca: data.marca || parentData?.marca || undefined,
             descricaoCurta: data.descricaoCurta || undefined,
             descricaoComplementar: data.descricaoComplementar || undefined,
             ncm: trib.ncm || undefined,
@@ -103,7 +116,7 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             itensPorCaixa: dim.itensPorCaixa ?? undefined,
             unidade: dim.unidade || undefined,
             tipoProducao: data.tipoProducao || undefined,
-            imagens: data.imagens || [],
+            imagens: data.imagens?.length ? data.imagens : (parentData?.imagens || []),
         };
     } catch {
         return null;
@@ -395,6 +408,32 @@ async function fetchStockMap(accessToken: string): Promise<Map<number, number>> 
     return map;
 }
 
+// ------- Helpers de variação -------
+
+/** Parseia "Cor:Vinho;Tamanho:G" → { cor: "Vinho", tamanho: "G" } */
+function parseVariacaoAtributos(variacaoNome?: string): Record<string, string> {
+    if (!variacaoNome) return {};
+    const result: Record<string, string> = {};
+    for (const part of variacaoNome.split(';')) {
+        const colonIdx = part.indexOf(':');
+        if (colonIdx > 0) {
+            const key = part.substring(0, colonIdx).trim().toLowerCase();
+            const value = part.substring(colonIdx + 1).trim();
+            if (key && value) result[key] = value;
+        }
+    }
+    return result;
+}
+
+/** Remove "Cor:Vinho;Tamanho:G" do final do nome do produto */
+function cleanVariacaoNome(nome: string, variacaoNome?: string): string {
+    if (!variacaoNome) return nome;
+    const firstKey = variacaoNome.split(';')[0].split(':')[0].trim();
+    const idx = nome.indexOf(firstKey + ':');
+    if (idx > 0) return nome.substring(0, idx).trim().replace(/,\s*$/, '').trim();
+    return nome;
+}
+
 // ------- Mapping: Bling → DB row -------
 
 /** Monta o objeto de DB incluindo apenas os campos habilitados pelo admin */
@@ -421,6 +460,16 @@ function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>, 
         warranty_type: 'brand',
         alternative_eans: [],
     };
+
+    // Variação: extrai atributos (cor, tamanho etc.) e define bling_parent_id
+    const variacaoNome: string | undefined = item.variacao?.nome;
+    const parentId: number | undefined = item.variacao?.produtoPai?.id;
+    if (variacaoNome) {
+        const atributos = parseVariacaoAtributos(variacaoNome);
+        row.name = cleanVariacaoNome(row.name, variacaoNome);
+        row.specs = { ...atributos };
+    }
+    if (parentId) row.bling_parent_id = parentId;
 
     // Campos opcionais controlados pelo admin
     if (has('sku')) row.sku = item.codigo || null;
@@ -479,6 +528,7 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
             categoria: item.categoria || undefined,
             marca: item.marca || undefined,
             imagens: item.imagens || [],
+            variacao: item.variacao || undefined,
         })));
         if (items.length < 100) break;
         page++;
@@ -514,6 +564,7 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
         categoria: item.categoria || undefined,
         marca: item.marca || undefined,
         imagens: item.imagens || [],
+        variacao: item.variacao || undefined,
     }));
 }
 
@@ -533,7 +584,28 @@ export async function importBlingProducts(
         const item = selectedProducts[i];
         let operation = 'verificação';
         try {
-            const row = mapBlingToDb(item, companyId, enabledFields, categoryId);
+            // Busca detalhe completo: herda campos do pai quando for variação
+            const detail = await fetchBlingProductDetail(item.id);
+            const enriched = detail ? {
+                ...item,
+                categoria: detail.categoria ?? item.categoria,
+                precoCusto: detail.precoCusto ?? item.precoCusto,
+                tributacao: {
+                    ncm: detail.ncm,
+                    cest: detail.cest,
+                    origem: detail.origem,
+                },
+                dimensoes: {
+                    pesoBruto: detail.pesoBruto,
+                    largura: detail.largura,
+                    altura: detail.altura,
+                    profundidade: detail.profundidade,
+                },
+                imagens: detail.imagens?.length ? detail.imagens : item.imagens,
+                stock_quantity: detail.stock_quantity ?? item.stock_quantity,
+            } : item;
+
+            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId);
 
             operation = 'verificação de duplicata';
             const { data: existing, error: checkError } = await supabase

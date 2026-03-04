@@ -109,6 +109,10 @@ export interface Product {
     promo_start?: string;          // Início da promoção (ISO 8601)
     promo_end?: string;            // Fim da promoção (ISO 8601)
 
+    // Bling ERP Integration
+    bling_id?: number;         // ID do produto no Bling
+    bling_parent_id?: number;  // ID do produto pai no Bling (para variações)
+
     // Timestamps
     created: string;
     updated: string;

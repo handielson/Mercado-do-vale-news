@@ -31,13 +31,16 @@ export interface ProductVariants {
 }
 
 /**
- * Group products by model_id
+ * Group products by model_id (or bling_parent_id for Bling variations)
  */
 export function groupProductsByModel(products: CatalogProduct[]): Map<string, CatalogProduct[]> {
     const grouped = new Map<string, CatalogProduct[]>();
 
     for (const product of products) {
-        const modelId = product.model_id || product.id;
+        // Variações Bling: agrupar pelo pai; outros: agrupar pelo model_id
+        const modelId = product.bling_parent_id
+            ? `bling_${product.bling_parent_id}`
+            : product.model_id || product.id;
         const existing = grouped.get(modelId) || [];
         existing.push(product);
         grouped.set(modelId, existing);
