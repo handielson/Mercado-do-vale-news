@@ -568,7 +568,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         ean: item.gtin || null,
         alternative_eans: item.gtin ? [item.gtin] : [],
         brand: item.marca || null,
-        description: item.descricaoComplementar || item.descricaoCurta || null,
+        description: item.descricao || item.descricaoComplementar || item.descricaoCurta || null,
         status: item.situacao === 'A' ? 'active' : 'inactive',
         // Categoria
         category_id: resolveCategoryId(item.categoria?.id, categoryId),
