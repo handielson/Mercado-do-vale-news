@@ -831,7 +831,7 @@ export default function BlingPage() {
                                                                             />
                                                                         ) : (
                                                                             <div
-                                                                                className="w-full min-h-[60px] max-h-32 overflow-y-auto px-2 py-1.5 border border-slate-200 rounded text-xs bg-slate-50 prose prose-sm max-w-none"
+                                                                                className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-slate-50 prose prose-sm max-w-none"
                                                                                 dangerouslySetInnerHTML={{ __html: detail.descricaoComplementar || detail.descricaoCurta || '<span class="text-slate-400">Sem descrição no Bling</span>' }}
                                                                             />
                                                                         )}
