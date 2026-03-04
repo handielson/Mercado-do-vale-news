@@ -102,14 +102,15 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         const childDim = data.dimensoes || {};
         const parentDim = parentData?.dimensoes || {};
         const dim = {
-            pesoBruto: childDim.pesoBruto ?? parentDim.pesoBruto,
-            largura: childDim.largura ?? parentDim.largura,
-            altura: childDim.altura ?? parentDim.altura,
-            profundidade: childDim.profundidade ?? parentDim.profundidade,
+            pesoBruto: childDim.pesoBruto || parentDim.pesoBruto,
+            largura: childDim.largura || parentDim.largura,
+            altura: childDim.altura || parentDim.altura,
+            profundidade: childDim.profundidade || parentDim.profundidade,
             volumes: childDim.volumes ?? parentDim.volumes,
             itensPorCaixa: childDim.itensPorCaixa ?? parentDim.itensPorCaixa,
-            unidade: childDim.unidade ?? parentDim.unidade,
+            unidade: childDim.unidade || parentDim.unidade,
         };
+
 
         // Imagens: filho > pai > buscar via endpoint de variações do pai
         let imagens: any[] = [];
