@@ -654,7 +654,7 @@ export default function BlingPage() {
                                                 {filteredProducts.every(p => selectedIds.has(p.id)) ? 'Desmarcar' : 'Todos'}
                                             </button>
                                         </div>
-                                        <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                                        <div className="divide-y divide-slate-100">
                                             {filteredProducts.map(p => {
                                                 const isExpanded = expandedProductId === p.id;
                                                 const detail = productDetails.get(p.id);
