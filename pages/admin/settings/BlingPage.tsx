@@ -562,7 +562,7 @@ export default function BlingPage() {
                                 </div>
 
                                 {/* Default category selector */}
-                                <div className={`flex items-center gap-3 p-3 rounded-xl border ${!importCategoryId ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
+                                <div className={`flex items-center gap-2 p-3 rounded-xl border ${!importCategoryId ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
                                     <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📂 Categoria padrão:</label>
                                     <select
                                         value={importCategoryId}
@@ -574,10 +574,29 @@ export default function BlingPage() {
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
+                                    {/* Atualizar lista */}
+                                    <button
+                                        type="button"
+                                        title="Atualizar categorias"
+                                        onClick={() => categoryService.list().then(cats => { setCategories(cats); if (cats.length > 0 && !importCategoryId) setImportCategoryId(cats[0].id); }).catch(() => { })}
+                                        className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                    </button>
+                                    {/* Atalho para criar categoria */}
+                                    <a
+                                        href="/admin/settings/categories"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        title="Cadastrar nova categoria (abre em nova aba)"
+                                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-colors text-xs font-semibold text-blue-600 whitespace-nowrap flex-shrink-0"
+                                    >
+                                        + Categoria
+                                    </a>
                                 </div>
 
                                 {/* Default model selector */}
-                                <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50">
+                                <div className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50">
                                     <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📱 Modelo padrão:</label>
                                     <select
                                         value={importModelId}
@@ -589,6 +608,25 @@ export default function BlingPage() {
                                             <option key={m.id} value={m.id}>{m.name}</option>
                                         ))}
                                     </select>
+                                    {/* Atualizar lista */}
+                                    <button
+                                        type="button"
+                                        title="Atualizar modelos"
+                                        onClick={() => modelService.list().then(mods => setModels(mods)).catch(() => { })}
+                                        className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                    </button>
+                                    {/* Atalho para criar modelo */}
+                                    <a
+                                        href="/admin/settings/models"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        title="Cadastrar novo modelo (abre em nova aba)"
+                                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-colors text-xs font-semibold text-blue-600 whitespace-nowrap flex-shrink-0"
+                                    >
+                                        + Modelo
+                                    </a>
                                 </div>
 
 
