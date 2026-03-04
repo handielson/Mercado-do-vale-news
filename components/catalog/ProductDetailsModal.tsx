@@ -142,6 +142,7 @@ export function ProductDetailsModal({
     // UUID → name map for version resolution
     const [versionsMap, setVersionsMap] = useState<Map<string, string>>(new Map());
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
+    const [modelDescription, setModelDescription] = useState<string | null>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -187,14 +188,16 @@ export function ProductDetailsModal({
                 setLoadingTemplate(true);
 
                 const [{ data, error }, { data: versionsData }] = await Promise.all([
-                    supabase.from('models').select('template_values').eq('id', product.model_id).single(),
+                    supabase.from('models').select('template_values, description').eq('id', product.model_id).single(),
                     supabase.from('versions').select('id, name')
                 ]);
 
                 if (cancelled) return;
 
-                if (!error && data?.template_values) {
-                    setTemplateValues(data.template_values);
+                if (!error && data) {
+                    if (data.template_values) setTemplateValues(data.template_values);
+                    else setTemplateValues(null);
+                    setModelDescription(data.description || null);
                 } else {
                     setTemplateValues(null);
                 }
@@ -313,12 +316,12 @@ export function ProductDetailsModal({
                         )}
 
                         {/* Description */}
-                        {product.description && (
+                        {(product.description || modelDescription) && (
                             <div>
                                 <h3 className="text-lg font-semibold text-slate-900 mb-2">Descrição</h3>
                                 <div
                                     className="text-slate-700 prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: product.description }}
+                                    dangerouslySetInnerHTML={{ __html: product.description || modelDescription! }}
                                 />
                             </div>
                         )}
