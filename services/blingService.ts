@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { modelColorImagesService } from './model-color-images';
 
 const BLING_API_BASE = 'https://www.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -517,7 +518,9 @@ function cleanVariacaoNome(nome: string, variacaoNome?: string): string {
 
 // ------- Mapping: Bling → DB row -------
 
-/** Mapeia TODOS os campos disponíveis do Bling para o banco — sem condicional */
+/** Mapeia TODOS os campos disponíveis do Bling para o banco — sem condicional.
+ *  O campo `_color_id` é auxiliar (não vai para a tabela products).
+ */
 function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string, modelId?: string): Record<string, any> {
     const variacaoNome: string | undefined = item.variacao?.nome;
     const parentId: number | undefined = item.variacao?.produtoPai?.id;
@@ -562,8 +565,8 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         // Estoque
         stock_quantity: item.stock_quantity ?? 0,
         track_inventory: true,
-        // Cor mapeada (variacao.nome → sistema)
-        color_id: resolveColorId(variacaoNome ? variacaoNome.split(';').find((p: string) => p.toLowerCase().startsWith('cor'))?.split(':')[1]?.trim() : undefined) || null,
+        // Cor mapeada — armazenada em _color_id (auxiliar, não vai para products)
+        _color_id: resolveColorId(variacaoNome ? variacaoNome.split(';').find((p: string) => p.toLowerCase().startsWith('cor'))?.split(':')[1]?.trim() : undefined) || null,
         // Specs (variação: color, size...)
         specs,
         // Mídia
@@ -730,10 +733,13 @@ export async function importBlingProducts(
 
             if (checkError) throw new Error(checkError.message);
 
+            // Extrai _color_id auxiliar antes de enviar para o banco
+            const { _color_id: resolvedColorId, ...dbRow } = row;
+
             if (existing) {
                 operation = 'atualização';
                 // Remove campos que não devem ser sobrescritos em updates
-                const { company_id, bling_id, specs, stock_quantity, track_inventory, is_gift, warranty_type, ...updateFields } = row;
+                const { company_id, bling_id, specs, stock_quantity, track_inventory, is_gift, warranty_type, ...updateFields } = dbRow;
                 const { error } = await supabase
                     .from('products')
                     .update(updateFields)
@@ -744,9 +750,23 @@ export async function importBlingProducts(
                 operation = 'criação';
                 const { error } = await supabase
                     .from('products')
-                    .insert(row);
+                    .insert(dbRow);
                 if (error) throw new Error(error.message);
                 result.created++;
+            }
+
+            // Associa cor ao model_color_images se o produto tiver model_id e cor mapeada
+            if (resolvedColorId && dbRow.model_id && dbRow.images?.length) {
+                try {
+                    await modelColorImagesService.upsert({
+                        model_id: dbRow.model_id,
+                        color_id: resolvedColorId,
+                        images: dbRow.images,
+                    });
+                } catch (colorErr: any) {
+                    // Não bloqueia a importação — apenas avisa no console
+                    console.warn('[importBlingProducts] Falha ao salvar model_color_images:', colorErr.message);
+                }
             }
         } catch (err: any) {
             result.errors.push({
