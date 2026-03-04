@@ -92,9 +92,10 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         const trib = data.tributacao || parentData?.tributacao || {};
         const dim = data.dimensoes || parentData?.dimensoes || {};
 
+        const variacaoNomeDetalhe = data.variacao?.nome;
         return {
             id: data.id,
-            nome: data.nome || '',
+            nome: cleanVariacaoNome(data.nome || '', variacaoNomeDetalhe),
             codigo: data.codigo || null,
             gtin: data.gtin || null,
             preco: data.preco ?? parentData?.preco ?? null,
@@ -425,13 +426,16 @@ function parseVariacaoAtributos(variacaoNome?: string): Record<string, string> {
     return result;
 }
 
-/** Remove "Cor:Vinho;Tamanho:G" do final do nome do produto */
+/** Remove sufixos de variação do nome do produto.
+ *  Exemplos: "Capa Cor:Vinho" → "Capa",
+ *             "Redmi Note 15 - Rosa COR:ROSA" → "Redmi Note 15"
+ */
 function cleanVariacaoNome(nome: string, variacaoNome?: string): string {
     if (!variacaoNome) return nome;
+    // Remove tudo a partir da primeira chave do variacaoNome no nome (case-insensitive)
     const firstKey = variacaoNome.split(';')[0].split(':')[0].trim();
-    const idx = nome.indexOf(firstKey + ':');
-    if (idx > 0) return nome.substring(0, idx).trim().replace(/,\s*$/, '').trim();
-    return nome;
+    const regex = new RegExp(`[\\s,\\-]*${firstKey}:.*$`, 'i');
+    return nome.replace(regex, '').trim();
 }
 
 // ------- Mapping: Bling → DB row -------
