@@ -708,95 +708,145 @@ export default function BlingPage() {
                                                             </button>
                                                         </div>
 
-                                                        {/* Expandable detail panel */}
-                                                        {isExpanded && detail && (
-                                                            <div className="mx-4 mb-3 border border-slate-200 rounded-xl bg-slate-50 p-4 space-y-3">
-                                                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Dados do Bling — edite antes de importar</p>
-                                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 text-sm">
-                                                                    {[
-                                                                        { label: 'Nome', field: 'nome', type: 'text' },
-                                                                        { label: 'SKU (código)', field: 'codigo', type: 'text' },
-                                                                        { label: 'EAN/GTIN', field: 'gtin', type: 'text' },
-                                                                        { label: 'Marca', field: 'marca', type: 'text' },
-                                                                        { label: 'Categoria Bling', field: 'categoria_nome', type: 'readonly' },
-                                                                        { label: 'Situação', field: 'situacao', type: 'readonly' },
-                                                                        { label: 'Preço venda (R$)', field: 'preco', type: 'number' },
-                                                                        { label: 'Preço custo (R$)', field: 'precoCusto', type: 'number' },
-                                                                        { label: 'Estoque', field: 'stock_quantity', type: 'number' },
-                                                                        { label: 'NCM', field: 'ncm', type: 'text' },
-                                                                        { label: 'CEST', field: 'cest', type: 'text' },
-                                                                        { label: 'Origem', field: 'origem', type: 'number' },
-                                                                        { label: 'Peso bruto (kg)', field: 'pesoBruto', type: 'number' },
-                                                                        { label: 'Larg. (cm)', field: 'largura', type: 'number' },
-                                                                        { label: 'Alt. (cm)', field: 'altura', type: 'number' },
-                                                                        { label: 'Prof. (cm)', field: 'profundidade', type: 'number' },
-                                                                    ].map(({ label, field, type }) => {
-                                                                        const rawVal = field === 'categoria_nome'
-                                                                            ? (detail.categoria?.descricao || '—')
-                                                                            : (detail as any)[field];
-                                                                        const val = rawVal ?? '';
+                                                        {/* Expandable detail panel — Comparação Bling ↔ Sistema */}
+                                                        {isExpanded && detail && (() => {
+                                                            const varNome = (detail as any).variacao?.nome || '';
+                                                            const cor = varNome ? varNome.split(';').find((p: string) => p.toLowerCase().startsWith('cor'))?.split(':')[1]?.trim() : null;
+
+                                                            const MAPPING_ROWS: Array<{
+                                                                systemField: string;
+                                                                systemLabel: string;
+                                                                blingPath: string;
+                                                                editField: string;
+                                                                type: 'text' | 'number' | 'readonly';
+                                                                getValue: (d: BlingProductDetail) => any;
+                                                            }> = [
+                                                                    { systemField: 'name', systemLabel: 'Nome do produto', blingPath: 'nome (limpo)', editField: 'nome', type: 'text', getValue: d => d.nome },
+                                                                    { systemField: 'sku', systemLabel: 'SKU / Código', blingPath: 'codigo', editField: 'codigo', type: 'text', getValue: d => d.codigo },
+                                                                    { systemField: 'ean', systemLabel: 'EAN / GTIN', blingPath: 'gtin', editField: 'gtin', type: 'text', getValue: d => d.gtin },
+                                                                    { systemField: 'brand', systemLabel: 'Marca', blingPath: 'marca', editField: 'marca', type: 'text', getValue: d => d.marca },
+                                                                    { systemField: 'category_id', systemLabel: 'Categoria Bling', blingPath: 'categoria.descricao', editField: 'categoria_nome', type: 'readonly', getValue: d => d.categoria?.descricao },
+                                                                    { systemField: 'specs.color', systemLabel: 'Cor (variação)', blingPath: 'variacao.nome → COR:', editField: '_cor', type: 'readonly', getValue: () => cor },
+                                                                    { systemField: 'price_retail', systemLabel: 'Preço venda (R$)', blingPath: 'preco', editField: 'preco', type: 'number', getValue: d => d.preco },
+                                                                    { systemField: 'price_cost', systemLabel: 'Preço custo (R$)', blingPath: 'precoCusto (pai)', editField: 'precoCusto', type: 'number', getValue: d => d.precoCusto },
+                                                                    { systemField: 'stock_quantity', systemLabel: 'Estoque', blingPath: 'estoques/saldos', editField: 'stock_quantity', type: 'number', getValue: d => d.stock_quantity },
+                                                                    { systemField: 'ncm', systemLabel: 'NCM', blingPath: 'tributacao.ncm (pai)', editField: 'ncm', type: 'text', getValue: d => d.ncm },
+                                                                    { systemField: 'cest', systemLabel: 'CEST', blingPath: 'tributacao.cest (pai)', editField: 'cest', type: 'text', getValue: d => d.cest },
+                                                                    { systemField: 'origin', systemLabel: 'Origem (0-8)', blingPath: 'tributacao.origem (pai)', editField: 'origem', type: 'number', getValue: d => d.origem },
+                                                                    { systemField: 'weight_kg', systemLabel: 'Peso bruto (kg)', blingPath: 'dimensoes.pesoBruto (pai)', editField: 'pesoBruto', type: 'number', getValue: d => d.pesoBruto },
+                                                                    { systemField: 'dimensions.width_cm', systemLabel: 'Largura (cm)', blingPath: 'dimensoes.largura (pai)', editField: 'largura', type: 'number', getValue: d => d.largura },
+                                                                    { systemField: 'dimensions.height_cm', systemLabel: 'Altura (cm)', blingPath: 'dimensoes.altura (pai)', editField: 'altura', type: 'number', getValue: d => d.altura },
+                                                                    { systemField: 'dimensions.depth_cm', systemLabel: 'Profundidade (cm)', blingPath: 'dimensoes.profundidade (pai)', editField: 'profundidade', type: 'number', getValue: d => d.profundidade },
+                                                                    { systemField: 'images', systemLabel: 'Imagem (1ª)', blingPath: 'imagens[0].link (pai)', editField: '_img', type: 'readonly', getValue: d => d.imagens?.[0]?.link || d.imagens?.[0]?.url },
+                                                                ];
+
+                                                            return (
+                                                                <div className="mx-4 mb-3 border border-slate-200 rounded-xl bg-white overflow-hidden">
+                                                                    {/* Header */}
+                                                                    <div className="grid grid-cols-[2fr_2fr_3fr_1.5rem] gap-0 bg-slate-100 border-b border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                                                                        <span>Campo do Sistema</span>
+                                                                        <span>Origem no Bling</span>
+                                                                        <span>Valor / Editar</span>
+                                                                        <span></span>
+                                                                    </div>
+
+                                                                    {/* Rows */}
+                                                                    {MAPPING_ROWS.map(({ systemLabel, blingPath, editField, type, getValue }) => {
+                                                                        const val = getValue(detail);
+                                                                        const isEmpty = val === null || val === undefined || val === '' || val === 0;
                                                                         return (
-                                                                            <div key={field}>
-                                                                                <p className="text-xs text-slate-400 mb-0.5">{label}</p>
+                                                                            <div
+                                                                                key={editField}
+                                                                                className={`grid grid-cols-[2fr_2fr_3fr_1.5rem] gap-0 items-center px-3 py-1.5 border-b border-slate-100 text-sm ${isEmpty ? 'bg-red-50' : ''}`}
+                                                                            >
+                                                                                {/* Campo sistema */}
+                                                                                <span className="text-slate-700 font-medium text-xs">{systemLabel}</span>
+
+                                                                                {/* Origem Bling */}
+                                                                                <span className="text-slate-400 text-xs font-mono truncate pr-2">{blingPath}</span>
+
+                                                                                {/* Valor / Input */}
                                                                                 {type === 'readonly' ? (
-                                                                                    <p className="text-sm text-slate-700 font-medium">{val || '—'}</p>
+                                                                                    <span className={`text-xs truncate ${isEmpty ? 'text-red-400 italic' : 'text-slate-700'}`}>
+                                                                                        {isEmpty ? '— não disponível no Bling' : String(val)}
+                                                                                    </span>
                                                                                 ) : (
                                                                                     <input
                                                                                         type={type}
-                                                                                        defaultValue={val}
+                                                                                        defaultValue={val ?? ''}
+                                                                                        placeholder={isEmpty ? 'Preencher manualmente...' : ''}
                                                                                         onChange={e => {
                                                                                             const newVal = type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
                                                                                             setProductDetails(prev => {
                                                                                                 const updated = new Map(prev);
                                                                                                 const cur = updated.get(p.id)!;
-                                                                                                updated.set(p.id, { ...cur, [field]: newVal });
+                                                                                                updated.set(p.id, { ...cur, [editField]: newVal });
                                                                                                 return updated;
                                                                                             });
                                                                                         }}
-                                                                                        className="w-full px-2 py-1 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                                                        className={`w-full px-2 py-0.5 border rounded text-xs bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${isEmpty ? 'border-red-300 placeholder-red-300' : 'border-slate-200'}`}
                                                                                     />
                                                                                 )}
+
+                                                                                {/* Status */}
+                                                                                <span className="text-center">
+                                                                                    {type === 'readonly'
+                                                                                        ? (isEmpty ? '❌' : '✅')
+                                                                                        : (isEmpty ? '⚠️' : '✅')
+                                                                                    }
+                                                                                </span>
                                                                             </div>
                                                                         );
                                                                     })}
-                                                                </div>
-                                                                <div className="col-span-2 sm:col-span-3">
-                                                                    <div className="flex items-center justify-between mb-0.5">
-                                                                        <p className="text-xs text-slate-400">Descrição</p>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => setProductDetails(prev => {
-                                                                                const updated = new Map(prev);
-                                                                                const cur = updated.get(p.id)!;
-                                                                                updated.set(p.id, { ...cur, _edited: !cur._edited });
-                                                                                return updated;
-                                                                            })}
-                                                                            className="text-xs text-blue-500 hover:underline"
-                                                                        >
-                                                                            {detail._edited ? 'Ver preview' : 'Editar HTML'}
-                                                                        </button>
+
+                                                                    {/* Descrição */}
+                                                                    <div className="px-3 py-2 border-b border-slate-100">
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <span className="text-xs font-medium text-slate-700">Descrição</span>
+                                                                            <span className="text-xs text-slate-400 font-mono">descricaoComplementar</span>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setProductDetails(prev => {
+                                                                                    const updated = new Map(prev);
+                                                                                    const cur = updated.get(p.id)!;
+                                                                                    updated.set(p.id, { ...cur, _edited: !cur._edited });
+                                                                                    return updated;
+                                                                                })}
+                                                                                className="text-xs text-blue-500 hover:underline ml-auto"
+                                                                            >
+                                                                                {detail._edited ? 'Ver preview' : 'Editar HTML'}
+                                                                            </button>
+                                                                        </div>
+                                                                        {detail._edited ? (
+                                                                            <textarea
+                                                                                defaultValue={detail.descricaoComplementar || detail.descricaoCurta || ''}
+                                                                                rows={4}
+                                                                                onChange={e => setProductDetails(prev => {
+                                                                                    const updated = new Map(prev);
+                                                                                    updated.set(p.id, { ...updated.get(p.id)!, descricaoComplementar: e.target.value });
+                                                                                    return updated;
+                                                                                })}
+                                                                                placeholder="Sem descrição no Bling"
+                                                                                className="w-full px-2 py-1 border border-slate-300 rounded text-xs font-mono bg-white focus:ring-1 focus:ring-blue-500"
+                                                                            />
+                                                                        ) : (
+                                                                            <div
+                                                                                className="w-full min-h-[60px] max-h-32 overflow-y-auto px-2 py-1.5 border border-slate-200 rounded text-xs bg-slate-50 prose prose-sm max-w-none"
+                                                                                dangerouslySetInnerHTML={{ __html: detail.descricaoComplementar || detail.descricaoCurta || '<span class="text-slate-400">Sem descrição no Bling</span>' }}
+                                                                            />
+                                                                        )}
                                                                     </div>
-                                                                    {detail._edited ? (
-                                                                        <textarea
-                                                                            defaultValue={detail.descricaoComplementar || detail.descricaoCurta || ''}
-                                                                            rows={5}
-                                                                            onChange={e => setProductDetails(prev => {
-                                                                                const updated = new Map(prev);
-                                                                                updated.set(p.id, { ...updated.get(p.id)!, descricaoComplementar: e.target.value });
-                                                                                return updated;
-                                                                            })}
-                                                                            placeholder="Sem descrição no Bling"
-                                                                            className="w-full px-2 py-1 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:ring-2 focus:ring-green-500"
-                                                                        />
-                                                                    ) : (
-                                                                        <div
-                                                                            className="w-full min-h-[80px] max-h-48 overflow-y-auto px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white prose prose-sm max-w-none"
-                                                                            dangerouslySetInnerHTML={{ __html: detail.descricaoComplementar || detail.descricaoCurta || '<p class="text-slate-400">Sem descrição no Bling</p>' }}
-                                                                        />
-                                                                    )}
+
+                                                                    {/* Legenda */}
+                                                                    <div className="px-3 py-1.5 flex gap-4 text-xs text-slate-400">
+                                                                        <span>✅ Preenchido</span>
+                                                                        <span>⚠️ Vazio — edite antes de importar</span>
+                                                                        <span>❌ Indisponível no Bling</span>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        )}
+                                                            );
+                                                        })()}
+
                                                     </div>
                                                 );
                                             })}
