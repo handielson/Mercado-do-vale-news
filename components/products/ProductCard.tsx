@@ -47,7 +47,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         if (!product.model_id) return;
 
         const fetchModelImage = async () => {
-            // Buscar company_id (necessário para RLS)
             const { data: company } = await supabase
                 .from('companies')
                 .select('id')
@@ -56,20 +55,47 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
             if (!company?.id) return;
 
-            const { data, error } = await supabase
-                .from('model_color_images')
-                .select('images')
-                .eq('company_id', company.id)
-                .eq('model_id', product.model_id)
-                .maybeSingle();
+            // Tenta buscar pela cor do produto primeiro, depois qualquer foto do modelo
+            const colorName = product.specs?.color;
+            let imageUrl: string | null = null;
 
-            if (error) console.warn('[ProductCard] Erro ao buscar foto do modelo:', error.message);
-            if (data?.images && data.images.length > 0) setModelImageUrl(data.images[0]);
+            if (colorName) {
+                // Busca a cor pelo nome para obter o color_id
+                const { data: colorData } = await supabase
+                    .from('colors')
+                    .select('id')
+                    .eq('company_id', company.id)
+                    .ilike('name', colorName)
+                    .maybeSingle();
+
+                if (colorData?.id) {
+                    const { data } = await supabase
+                        .from('model_color_images')
+                        .select('images')
+                        .eq('company_id', company.id)
+                        .eq('model_id', product.model_id)
+                        .eq('color_id', colorData.id)
+                        .maybeSingle();
+                    if (data?.images?.length) imageUrl = data.images[0];
+                }
+            }
+
+            // Fallback: qualquer foto do modelo
+            if (!imageUrl) {
+                const { data } = await supabase
+                    .from('model_color_images')
+                    .select('images')
+                    .eq('company_id', company.id)
+                    .eq('model_id', product.model_id)
+                    .maybeSingle();
+                if (data?.images?.length) imageUrl = data.images[0];
+            }
+
+            if (imageUrl) setModelImageUrl(imageUrl);
         };
 
-
         fetchModelImage();
-    }, [product.model_id]);
+    }, [product.model_id, product.specs?.color]);
 
     const coverImage = (product.images && product.images.length > 0)
         ? product.images[0]
@@ -150,8 +176,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-slate-900 truncate">{product.name}</h3>
-                        <p className="font-mono text-xs text-slate-500 mt-0.5">{product.sku}</p>
+                        <h3 className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2">{product.name}</h3>
+                        {/* Specs: cor + memória/RAM */}
+                        <p className="font-mono text-xs text-slate-500 mt-0.5">
+                            {[
+                                product.specs?.color,
+                                product.specs?.storage,
+                                product.specs?.ram ? `${product.specs.ram} RAM` : undefined,
+                            ].filter(Boolean).join(' · ') || product.sku || ''}
+                        </p>
                     </div>
                     <div className="flex items-center gap-1">
                         <button
