@@ -7,7 +7,9 @@ import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
 import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings } from '../../../services/blingService';
 import { categoryService } from '../../../services/categories';
+import { modelService } from '../../../services/models-new';
 import { Category } from '../../../types/category';
+import { Model } from '../../../types/model-architecture';
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────
@@ -90,6 +92,8 @@ export default function BlingPage() {
     const [cacheInfo, setCacheInfo] = useState<{ timestamp: number } | null>(null);
     const [categories, setCategories] = useState<Category[]>([]);
     const [importCategoryId, setImportCategoryId] = useState('');
+    const [models, setModels] = useState<Model[]>([]);
+    const [importModelId, setImportModelId] = useState('');
 
     // ── Mappings ──
     const [blingCategories, setBlingCategories] = useState<BlingCategory[]>([]);
@@ -113,6 +117,7 @@ export default function BlingPage() {
             setCategories(cats);
             if (cats.length > 0) setImportCategoryId(cats[0].id);
         }).catch(() => { });
+        modelService.list().then(mods => setModels(mods)).catch(() => { });
 
         const params = new URLSearchParams(window.location.search);
         if (params.get('connected') === 'true') {
@@ -286,7 +291,8 @@ export default function BlingPage() {
         try {
             const result = await importBlingProducts(toImport, enabledFields, importCategoryId, (current, total) => {
                 setImportProgress({ current, total });
-            });
+            }, importModelId || undefined);
+
             setImportResult(result);
 
             if (result.errors.length === 0) {
@@ -555,6 +561,21 @@ export default function BlingPage() {
                                         <option value="">-- Selecione uma categoria --</option>
                                         {categories.map(c => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Default model selector */}
+                                <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50">
+                                    <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📱 Modelo padrão:</label>
+                                    <select
+                                        value={importModelId}
+                                        onChange={e => setImportModelId(e.target.value)}
+                                        className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                    >
+                                        <option value="">-- Nenhum modelo --</option>
+                                        {models.map(m => (
+                                            <option key={m.id} value={m.id}>{m.name}</option>
                                         ))}
                                     </select>
                                 </div>

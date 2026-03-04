@@ -489,7 +489,7 @@ function cleanVariacaoNome(nome: string, variacaoNome?: string): string {
 // ------- Mapping: Bling → DB row -------
 
 /** Mapeia TODOS os campos disponíveis do Bling para o banco — sem condicional */
-function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string): Record<string, any> {
+function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string, modelId?: string): Record<string, any> {
     const variacaoNome: string | undefined = item.variacao?.nome;
     const parentId: number | undefined = item.variacao?.produtoPai?.id;
 
@@ -537,6 +537,8 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         specs,
         // Mídia
         images: firstImg ? [firstImg] : [],
+        // Modelo padrão (quando selecionado na importação)
+        ...(modelId ? { model_id: modelId } : {}),
         // Defaults
         is_gift: false,
         warranty_type: 'brand',
@@ -649,7 +651,8 @@ export async function importBlingProducts(
     selectedProducts: BlingProduct[],
     enabledFields: Set<string>,
     categoryId: string,
-    onProgress: (current: number, total: number, result: Partial<ImportResult>) => void
+    onProgress: (current: number, total: number, result: Partial<ImportResult>) => void,
+    modelId?: string
 ): Promise<ImportResult> {
     const companyId = await getCompanyId();
 
@@ -682,7 +685,8 @@ export async function importBlingProducts(
                 stock_quantity: detail.stock_quantity ?? item.stock_quantity,
             } : item;
 
-            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId);
+            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId);
+
 
             operation = 'verificação de duplicata';
             const { data: existing, error: checkError } = await supabase
