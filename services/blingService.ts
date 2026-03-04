@@ -764,8 +764,6 @@ export async function importBlingProducts(
 
             // Fallback: if Bling didn't provide a brand, use the one from the selected model
             if (!row.brand && modelBrandName) row.brand = modelBrandName;
-            // Ensure model name is saved (needed by ModelSelect which uses name not model_id)
-            if (!row.model && modelName) row.model = modelName;
 
             operation = 'verificação de duplicata';
             const { data: existing, error: checkError } = await supabase
