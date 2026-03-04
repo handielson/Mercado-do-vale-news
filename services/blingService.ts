@@ -118,6 +118,11 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
 
         // Imagens: filho > pai > buscar via endpoint de variações do pai
         let imagens: any[] = [];
+
+        // [DEBUG] Log temporário para ver o que vem em cada etapa
+        console.log('[Bling Debug] data.imagens (filho):', JSON.stringify(data.imagens));
+        console.log('[Bling Debug] parentData?.imagens (pai):', JSON.stringify(parentData?.imagens));
+
         if (data.imagens?.length) {
             imagens = data.imagens;
         } else if (parentData?.imagens?.length) {
@@ -132,9 +137,12 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
                     const varData = await varRes.json();
                     const myVariacao = (varData.variacoes || []).find((v: any) => v.id === productId);
                     imagens = myVariacao?.imagens || varData.imagens || [];
+                    console.log('[Bling Debug] imagens via variacoes do pai:', JSON.stringify(imagens));
                 }
             } catch { /* ignora */ }
         }
+
+        console.log('[Bling Debug] imagens FINAL resolvido:', JSON.stringify(imagens));
 
         const variacaoNomeDetalhe = data.variacao?.nome;
 
