@@ -450,15 +450,24 @@ async function fetchStockMap(accessToken: string): Promise<Map<number, number>> 
 
 // ------- Helpers de variação -------
 
-/** Parseia "Cor:Vinho;Tamanho:G" → { cor: "Vinho", tamanho: "G" } */
+/** Mapeia chaves PT do Bling para inglês usado no sistema */
+const VARIACAO_KEY_MAP: Record<string, string> = {
+    cor: 'color', cores: 'color',
+    tamanho: 'size', tam: 'size',
+    capacidade: 'capacity', armazenamento: 'storage',
+    voltagem: 'voltage', material: 'material',
+};
+
+/** Parseia "COR:ROSA;TAMANHO:G" → { color: "ROSA", size: "G" } */
 function parseVariacaoAtributos(variacaoNome?: string): Record<string, string> {
     if (!variacaoNome) return {};
     const result: Record<string, string> = {};
     for (const part of variacaoNome.split(';')) {
         const colonIdx = part.indexOf(':');
         if (colonIdx > 0) {
-            const key = part.substring(0, colonIdx).trim().toLowerCase();
+            const rawKey = part.substring(0, colonIdx).trim().toLowerCase();
             const value = part.substring(colonIdx + 1).trim();
+            const key = VARIACAO_KEY_MAP[rawKey] ?? rawKey;
             if (key && value) result[key] = value;
         }
     }
