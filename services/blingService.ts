@@ -101,6 +101,13 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
 
         const childDim = data.dimensoes || {};
         const parentDim = parentData?.dimensoes || {};
+
+        // [DEBUG] Log temporário para ver o que o Bling retorna no pai
+        if (parentId) {
+            console.log('[Bling Debug] Child dimensoes:', JSON.stringify(childDim));
+            console.log('[Bling Debug] Parent dimensoes:', JSON.stringify(parentDim));
+        }
+
         const dim = {
             pesoBruto: childDim.pesoBruto || parentDim.pesoBruto,
             largura: childDim.largura || parentDim.largura,
