@@ -35,7 +35,8 @@ export const productSchema = z.object({
     specs: z.record(z.any()).optional(),
 
     // SEO Fields
-    description: z.string().optional(),
+    description: z.string().nullable().optional()
+        .transform(val => !val ? undefined : val),
     slug: z.string().optional(),
     meta_title: z.string().max(60, 'Título SEO deve ter no máximo 60 caracteres').optional(),
     meta_description: z.string().max(160, 'Meta descrição deve ter no máximo 160 caracteres').optional(),
@@ -50,10 +51,10 @@ export const productSchema = z.object({
     is_gift: z.boolean().optional().default(false),
 
     // Fiscal Fields - Accept null, empty strings, and undefined
-    ncm: z.string().max(8).nullable().optional()
-        .transform(val => !val || val === '' ? undefined : val),
-    cest: z.string().max(7).nullable().optional()
-        .transform(val => !val || val === '' ? undefined : val),
+    ncm: z.string().nullable().optional()
+        .transform(val => !val ? undefined : val.replace(/\D/g, '').slice(0, 8) || undefined),
+    cest: z.string().nullable().optional()
+        .transform(val => !val ? undefined : val.replace(/\D/g, '').slice(0, 7) || undefined),
     origin: z.string().nullable().optional()
         .transform(val => !val || val === '' ? undefined : val),
 
