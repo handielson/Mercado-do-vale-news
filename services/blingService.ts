@@ -718,7 +718,21 @@ export async function importBlingProducts(
     const result: ImportResult = { created: 0, updated: 0, errors: [] };
     const total = selectedProducts.length;
 
+    // Resolve brand and model name for use as fallback values
+    let modelBrandName: string | null = null;
+    let modelName: string | null = null;
+    if (modelId) {
+        const { data: modelData } = await supabase
+            .from('models')
+            .select('name, brand_id, brands(name)')
+            .eq('id', modelId)
+            .maybeSingle();
+        modelBrandName = (modelData?.brands as any)?.name || null;
+        modelName = modelData?.name || null;
+    }
+
     for (let i = 0; i < selectedProducts.length; i++) {
+
         const item = selectedProducts[i];
         let operation = 'verificação';
         try {
@@ -746,6 +760,10 @@ export async function importBlingProducts(
 
             const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId);
 
+            // Fallback: if Bling didn't provide a brand, use the one from the selected model
+            if (!row.brand && modelBrandName) row.brand = modelBrandName;
+            // Ensure model name is saved (needed by ModelSelect which uses name not model_id)
+            if (!row.model && modelName) row.model = modelName;
 
             operation = 'verificação de duplicata';
             const { data: existing, error: checkError } = await supabase
