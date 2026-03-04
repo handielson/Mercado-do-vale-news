@@ -251,18 +251,47 @@ class CatalogSectionsService {
 
             if (productsNeedingImages.length > 0) {
                 const modelIds = [...new Set(productsNeedingImages.map(p => p.model_id))];
-                const { data: modelImages } = await supabase
-                    .from('model_color_images')
-                    .select('model_id, color_id, images')
-                    .in('model_id', modelIds);
+
+                // Collect unique color names to resolve to IDs
+                const colorNames = [...new Set(
+                    productsNeedingImages.map(p => p.specs?.color).filter(Boolean) as string[]
+                )];
+
+                const [{ data: modelImages }, { data: colorRows }] = await Promise.all([
+                    supabase
+                        .from('model_color_images')
+                        .select('model_id, color_id, images')
+                        .in('model_id', modelIds),
+                    colorNames.length > 0
+                        ? supabase.from('colors').select('id, name').in('name', colorNames)
+                        : Promise.resolve({ data: [] })
+                ]);
 
                 if (modelImages && modelImages.length > 0) {
+                    // Build color name → id map
+                    const colorNameToId = new Map<string, string>(
+                        (colorRows || []).map(c => [c.name, c.id])
+                    );
+
                     products = products.map(product => {
                         if (product.images && product.images.length > 0) return product;
                         if (!product.model_id) return product;
-                        const modelImgEntry = modelImages.find(mi => mi.model_id === product.model_id);
-                        if (modelImgEntry && modelImgEntry.images?.length > 0) {
-                            return { ...product, images: modelImgEntry.images };
+
+                        const entriesForModel = modelImages.filter(mi => mi.model_id === product.model_id);
+                        if (entriesForModel.length === 0) return product;
+
+                        // Try to find entry matching the product's color
+                        const colorName = product.specs?.color;
+                        const colorId = colorName ? colorNameToId.get(colorName) : undefined;
+                        let chosen = colorId
+                            ? entriesForModel.find(mi => mi.color_id === colorId)
+                            : undefined;
+
+                        // Fallback: first available entry for the model
+                        if (!chosen) chosen = entriesForModel[0];
+
+                        if (chosen?.images?.length > 0) {
+                            return { ...product, images: chosen.images };
                         }
                         return product;
                     });
