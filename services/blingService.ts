@@ -97,6 +97,8 @@ export interface BlingProductDetail extends BlingProduct {
     tipoProducao?: string;
     // Campos editáveis pelo admin antes do import
     _edited?: boolean;
+    _precoRevenda?: number;
+    _precoAtacado?: number;
 }
 
 /** Busca todos os campos de um produto Bling + estoque real por depósito */
@@ -574,8 +576,8 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         category_id: resolveCategoryId(item.categoria?.id, categoryId),
         // Preços (em centavos)
         price_retail: item.preco ? Math.round(item.preco * 100) : 0,
-        price_reseller: item.preco ? Math.round(item.preco * 100) : 0,
-        price_wholesale: item.preco ? Math.round(item.preco * 100) : 0,
+        price_reseller: item._precoRevenda ? Math.round(item._precoRevenda * 100) : (item.preco ? Math.round(item.preco * 100) : 0),
+        price_wholesale: item._precoAtacado ? Math.round(item._precoAtacado * 100) : (item.preco ? Math.round(item.preco * 100) : 0),
         price_cost: item.precoCusto ? Math.round(item.precoCusto * 100) : null,
         // Fiscal
         ncm: trib.ncm || null,

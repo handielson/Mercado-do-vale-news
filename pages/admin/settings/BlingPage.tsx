@@ -710,8 +710,10 @@ export default function BlingPage() {
                                                                     { systemField: 'brand', systemLabel: 'Marca', blingPath: 'marca', editField: 'marca', type: 'text', getValue: d => d.marca },
                                                                     { systemField: 'category_id', systemLabel: 'Categoria Bling', blingPath: 'categoria.descricao', editField: 'categoria_nome', type: 'readonly', getValue: d => d.categoria?.descricao },
                                                                     { systemField: 'specs.color', systemLabel: 'Cor (variação)', blingPath: 'variacao.nome → COR:', editField: '_cor', type: 'readonly', getValue: () => cor },
-                                                                    { systemField: 'price_retail', systemLabel: 'Preço venda (R$)', blingPath: 'preco', editField: 'preco', type: 'number', getValue: d => d.preco },
                                                                     { systemField: 'price_cost', systemLabel: 'Preço custo (R$)', blingPath: 'precoCusto (pai)', editField: 'precoCusto', type: 'number', getValue: d => d.precoCusto },
+                                                                    { systemField: 'price_retail', systemLabel: 'Preço Varejo (R$)', blingPath: 'preco', editField: 'preco', type: 'number', getValue: d => d.preco },
+                                                                    { systemField: 'price_reseller', systemLabel: 'Preço Revenda (R$)', blingPath: '— (Manual)', editField: '_precoRevenda', type: 'number', getValue: d => d._precoRevenda ?? d.preco },
+                                                                    { systemField: 'price_wholesale', systemLabel: 'Preço Atacado (R$)', blingPath: '— (Manual)', editField: '_precoAtacado', type: 'number', getValue: d => d._precoAtacado ?? d.preco },
                                                                     { systemField: 'stock_quantity', systemLabel: 'Estoque', blingPath: 'estoques/saldos', editField: 'stock_quantity', type: 'number', getValue: d => d.stock_quantity },
                                                                     { systemField: 'ncm', systemLabel: 'NCM', blingPath: 'tributacao.ncm (pai)', editField: 'ncm', type: 'text', getValue: d => d.ncm },
                                                                     { systemField: 'cest', systemLabel: 'CEST', blingPath: 'tributacao.cest (pai)', editField: 'cest', type: 'text', getValue: d => d.cest },
@@ -726,11 +728,64 @@ export default function BlingPage() {
                                                             return (
                                                                 <div className="mx-4 mb-3 border border-slate-200 rounded-xl bg-white overflow-hidden">
                                                                     {/* Header */}
-                                                                    <div className="grid grid-cols-[2fr_2fr_3fr_1.5rem] gap-0 bg-slate-100 border-b border-slate-200 px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wide">
-                                                                        <span>Campo do Sistema</span>
-                                                                        <span>Origem no Bling</span>
-                                                                        <span>Valor / Editar</span>
-                                                                        <span></span>
+                                                                    <div className="flex items-center justify-between bg-slate-100 border-b border-slate-200 px-3 py-2">
+                                                                        <div className="grid grid-cols-[2fr_2fr_3fr_1.5rem] gap-0 w-full text-xs font-bold text-slate-500 uppercase tracking-wide">
+                                                                            <span>Campo do Sistema</span>
+                                                                            <span>Origem no Bling</span>
+                                                                            <span>Valor / Editar</span>
+                                                                            <span></span>
+                                                                        </div>
+                                                                        {detail.variacao?.produtoPai?.id && (
+                                                                            (() => {
+                                                                                const paiId = detail.variacao.produtoPai.id;
+                                                                                // Conta quantos "irmãos" estão na lista atual de blingProducts
+                                                                                const irmaosCount = blingProducts.filter(x => x.variacao?.produtoPai?.id === paiId && x.id !== p.id).length;
+
+                                                                                if (irmaosCount > 0) {
+                                                                                    return (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            title="Copiar os 4 preços abaixo para as outras variações desta capinha/produto selecionadas na lista"
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                const source = productDetails.get(p.id);
+                                                                                                if (!source) return;
+
+                                                                                                const precoCusto = source.precoCusto;
+                                                                                                const preco = source.preco;
+                                                                                                const _precoRevenda = source._precoRevenda ?? source.preco;
+                                                                                                const _precoAtacado = source._precoAtacado ?? source.preco;
+
+                                                                                                setProductDetails(prev => {
+                                                                                                    const next = new Map(prev);
+                                                                                                    let copiedCount = 0;
+                                                                                                    for (const sibling of blingProducts) {
+                                                                                                        if (sibling.variacao?.produtoPai?.id === paiId && sibling.id !== p.id) {
+                                                                                                            const sibCurrent = next.get(sibling.id) || sibling as any;
+                                                                                                            next.set(sibling.id, {
+                                                                                                                ...sibCurrent,
+                                                                                                                precoCusto,
+                                                                                                                preco,
+                                                                                                                _precoRevenda,
+                                                                                                                _precoAtacado
+                                                                                                            });
+                                                                                                            copiedCount++;
+                                                                                                        }
+                                                                                                    }
+                                                                                                    toast.success(`Preços copiados para ${copiedCount} variação(ões)!`, { icon: '✨' });
+                                                                                                    return next;
+                                                                                                });
+                                                                                            }}
+                                                                                            className="ml-4 flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors"
+                                                                                        >
+                                                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                                                            Copiar p/ {irmaosCount} irmãos
+                                                                                        </button>
+                                                                                    );
+                                                                                }
+                                                                                return null;
+                                                                            })()
+                                                                        )}
                                                                     </div>
 
                                                                     {/* Rows */}

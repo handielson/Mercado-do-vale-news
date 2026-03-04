@@ -20,7 +20,7 @@ export default async function handler(req: any, res: any) {
         const supabase = createClient(supabaseUrl, supabaseKey);
         const { data: settings } = await supabase
             .from('company_settings')
-            .select('bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
+            .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
             .single();
 
         if (!settings?.bling_access_token) {
