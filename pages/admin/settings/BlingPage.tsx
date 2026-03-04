@@ -559,52 +559,9 @@ export default function BlingPage() {
                                     </select>
                                 </div>
 
-                                {/* Field selection */}
-                                <details open className="border border-slate-200 rounded-xl overflow-hidden">
-                                    <summary className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer text-sm font-semibold text-slate-700 select-none hover:bg-slate-100">
-                                        <span>⚙️ Configurar campos a importar</span>
-                                        <span className="text-xs font-normal text-slate-400">{enabledFields.size} de {BLING_FIELD_MAPPINGS.length} campos ativos</span>
-                                    </summary>
-                                    <div className="p-4 space-y-4">
-                                        {(['basico', 'preco', 'fiscal', 'fisico', 'midia'] as const).map(group => {
-                                            const groupLabels: Record<string, string> = { basico: 'Dados Básicos', preco: 'Preços', fiscal: 'Fiscal (NCM/CEST)', fisico: 'Físico (Peso/Dim.)', midia: 'Mídia' };
-                                            const fields = BLING_FIELD_MAPPINGS.filter(f => f.group === group);
-                                            return (
-                                                <div key={group}>
-                                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">{groupLabels[group]}</p>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                        {fields.map(f => (
-                                                            <label key={f.key} className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${enabledFields.has(f.key) ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 opacity-60'} ${f.required ? 'cursor-not-allowed' : ''}`}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={enabledFields.has(f.key)}
-                                                                    disabled={f.required}
-                                                                    onChange={() => {
-                                                                        if (f.required) return;
-                                                                        setEnabledFields(prev => {
-                                                                            const next = new Set(prev);
-                                                                            next.has(f.key) ? next.delete(f.key) : next.add(f.key);
-                                                                            return next;
-                                                                        });
-                                                                    }}
-                                                                    className="mt-0.5 accent-green-600 flex-shrink-0"
-                                                                />
-                                                                <div>
-                                                                    <p className="text-xs font-semibold text-slate-700">{f.label}</p>
-                                                                    <p className="text-xs text-slate-400 font-mono">{f.blingField} → {f.localField}</p>
-                                                                    {f.required && <p className="text-xs text-green-600">obrigatório</p>}
-                                                                </div>
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </details>
 
-                                {/* Search bar */}
                                 {/* Cache banner */}
+
                                 {cacheInfo && (
                                     <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs">
                                         <span className="text-amber-700">📦 Lista carregada do cache · {formatCacheAge(cacheInfo.timestamp)}</span>
@@ -929,6 +886,51 @@ export default function BlingPage() {
             {/* ══════════════════════════════════════ */}
             {activeTab === 'mappings' && (
                 <div className="space-y-4">
+                    {/* Configurar campos a importar — movido da aba Produtos */}
+                    {isConnected && (
+                        <details open className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                            <summary className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer text-sm font-semibold text-slate-700 select-none hover:bg-slate-100">
+                                <span>⚙️ Configurar campos a importar</span>
+                                <span className="text-xs font-normal text-slate-400">{enabledFields.size} de {BLING_FIELD_MAPPINGS.length} campos ativos</span>
+                            </summary>
+                            <div className="p-4 space-y-4">
+                                {(['basico', 'preco', 'fiscal', 'fisico', 'midia'] as const).map(group => {
+                                    const groupLabels: Record<string, string> = { basico: 'Dados Básicos', preco: 'Preços', fiscal: 'Fiscal (NCM/CEST)', fisico: 'Físico (Peso/Dim.)', midia: 'Mídia' };
+                                    const fields = BLING_FIELD_MAPPINGS.filter(f => f.group === group);
+                                    return (
+                                        <div key={group}>
+                                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">{groupLabels[group]}</p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {fields.map(f => (
+                                                    <label key={f.key} className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${enabledFields.has(f.key) ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 opacity-60'} ${f.required ? 'cursor-not-allowed' : ''}`}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={enabledFields.has(f.key)}
+                                                            disabled={f.required}
+                                                            onChange={() => {
+                                                                if (f.required) return;
+                                                                setEnabledFields(prev => {
+                                                                    const next = new Set(prev);
+                                                                    next.has(f.key) ? next.delete(f.key) : next.add(f.key);
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            className="mt-0.5 accent-green-600 flex-shrink-0"
+                                                        />
+                                                        <div>
+                                                            <p className="text-xs font-semibold text-slate-700">{f.label}</p>
+                                                            <p className="text-xs text-slate-400 font-mono">{f.blingField} → {f.localField}</p>
+                                                            {f.required && <p className="text-xs text-green-600">obrigatório</p>}
+                                                        </div>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </details>
+                    )}
                     {!isConnected ? (
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center space-y-3">
                             <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
