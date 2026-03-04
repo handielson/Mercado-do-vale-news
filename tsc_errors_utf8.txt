@@ -1,0 +1,28 @@
+﻿components/pdv/ReceiptPreview.tsx(502,42): error TS2339: Property 'logo_url' does not exist on type 'CompanySettings'.
+components/pdv/ReceiptPreview.tsx(504,54): error TS2339: Property 'logo_url' does not exist on type 'CompanySettings'.
+components/products/LabelPrintModal.tsx(33,9): error TS2353: Object literal may only specify known properties, and 'content' does not exist in type 'UseReactToPrintOptions'.
+components/settings/AIAssistantsPanel.tsx(58,53): error TS2345: Argument of type '{ ai_prompts: { prompt1: { title: string; content: string; }; prompt2: { title: string; content: string; }; prompt3: { title: string; content: string; }; }; }' is not assignable to parameter of type 'CompanySettingsInput'.
+  Property 'company_name' is missing in type '{ ai_prompts: { prompt1: { title: string; content: string; }; prompt2: { title: string; content: string; }; prompt3: { title: string; content: string; }; }; }' but required in type 'CompanySettingsInput'.
+components/settings/BusinessHoursPanel.tsx(91,49): error TS2345: Argument of type '{ business_hours: BusinessHours; holiday_overrides: string[]; }' is not assignable to parameter of type 'CompanySettingsInput'.
+  Property 'company_name' is missing in type '{ business_hours: BusinessHours; holiday_overrides: string[]; }' but required in type 'CompanySettingsInput'.
+components/settings/CustomFieldModal.tsx(170,26): error TS2367: This comparison appears to be unintentional because the types 'FieldFormat' and '"select"' have no overlap.
+components/settings/CustomFieldModal.tsx(243,42): error TS2367: This comparison appears to be unintentional because the types 'FieldFormat' and '"select"' have no overlap.
+pages/admin/CashbackPage.tsx(25,7): error TS2741: Property 'earn_referral' is missing in type '{ earn_purchase: { label: string; color: string; }; earn_checkin: { label: string; color: string; }; earn_streak: { label: string; color: string; }; earn_manual: { label: string; color: string; }; spend_discount: { ...; }; refund_cancel: { ...; }; expire: { ...; }; admin_adjust: { ...; }; }' but required in type 'Record<CoinTransactionType, { label: string; color: string; }>'.
+pages/admin/settings/DocumentSettingsPage.tsx(533,59): error TS2339: Property 'logo_url' does not exist on type 'CompanySettingsInput'.
+pages/admin/settings/DocumentSettingsPage.tsx(535,71): error TS2339: Property 'logo_url' does not exist on type 'CompanySettingsInput'.
+pages/admin/settings/DocumentSettingsPage.tsx(610,55): error TS2339: Property 'logo_url' does not exist on type 'CompanySettingsInput'.
+pages/admin/settings/DocumentSettingsPage.tsx(612,67): error TS2339: Property 'logo_url' does not exist on type 'CompanySettingsInput'.
+pages/admin/settings/MarketingPage.tsx(307,17): error TS2561: Object literal may only specify known properties, but 'fetchRequest' does not exist in type 'Options'. Did you mean to write 'fetchRequestInit'?
+pages/admin/settings/MarketingPage.tsx(363,21): error TS2561: Object literal may only specify known properties, but 'fetchRequest' does not exist in type 'Options'. Did you mean to write 'fetchRequestInit'?
+pages/admin/settings/MarketingPage.tsx(833,93): error TS2339: Property 'logo_url' does not exist on type 'ThemeSettings'.
+pages/admin/settings/MarketingPage.tsx(835,104): error TS2339: Property 'logo_url' does not exist on type 'ThemeSettings'.
+pages/admin/settings/MarketingPage.tsx(939,59): error TS2339: Property 'logo_url' does not exist on type 'ThemeSettings'.
+pages/admin/settings/MarketingPage.tsx(939,90): error TS2339: Property 'logo_url' does not exist on type 'ThemeSettings'.
+pages/admin/settings/MarketingPage.tsx(983,63): error TS2339: Property 'logo_url' does not exist on type 'ThemeSettings'.
+pages/admin/settings/MarketingPage.tsx(983,94): error TS2339: Property 'logo_url' does not exist on type 'ThemeSettings'.
+pages/pdv/PDVPage.tsx(199,17): error TS2353: Object literal may only specify known properties, and 'product_specs' does not exist in type 'SaleItem'.
+pages/pdv/PDVPage.tsx(494,77): error TS2345: Argument of type 'Record<string, string>' is not assignable to parameter of type 'WarrantyTagData'.
+  Type 'Record<string, string>' is missing the following properties from type 'WarrantyTagData': nome_loja, endereco, telefone, email, and 17 more.
+pages/pdv/PDVPage.tsx(544,77): error TS2345: Argument of type 'Record<string, string>' is not assignable to parameter of type 'WarrantyTagData'.
+  Type 'Record<string, string>' is missing the following properties from type 'WarrantyTagData': nome_loja, endereco, telefone, email, and 17 more.
+services/checkinService.ts(122,9): error TS2353: Object literal may only specify known properties, and 'is_cycle_complete' does not exist in type 'CheckinResult'.

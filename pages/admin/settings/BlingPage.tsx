@@ -285,9 +285,15 @@ export default function BlingPage() {
     }
 
     async function handleImport() {
-        const toImport = blingProducts.filter(p => selectedIds.has(p.id));
-        if (toImport.length === 0) { toast.error('Selecione ao menos um produto.'); return; }
+        const toImportBase = blingProducts.filter(p => selectedIds.has(p.id));
+        if (toImportBase.length === 0) { toast.error('Selecione ao menos um produto.'); return; }
         if (!importCategoryId) { toast.error('Selecione uma categoria padrão para importação.'); return; }
+
+        // Merge productDetails (edited fields) over original blingProducts
+        const toImport = toImportBase.map(p => {
+            const detail = productDetails.get(p.id);
+            return detail ? { ...p, ...detail } : p;
+        });
 
         setImporting(true);
         setImportResult(null);

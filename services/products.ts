@@ -1,6 +1,7 @@
 import { Product, ProductInput } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
 import { supabase } from './supabase';
+import { logPriceChange } from './priceHistoryService';
 
 /**
  * PRODUCT SERVICE - Supabase Implementation
@@ -232,6 +233,29 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         .single();
 
     if (error) throw new Error(`Failed to update product: ${error.message}`);
+
+    // Log price change if any price field changed
+    try {
+        const oldProduct = await getById(id);
+        if (oldProduct) {
+            const pricesChanged =
+                oldProduct.price_cost !== input.price_cost ||
+                oldProduct.price_retail !== input.price_retail ||
+                oldProduct.price_reseller !== input.price_reseller ||
+                oldProduct.price_wholesale !== input.price_wholesale;
+
+            if (pricesChanged) {
+                await logPriceChange(id, {
+                    price_cost: input.price_cost,
+                    price_retail: input.price_retail,
+                    price_reseller: input.price_reseller,
+                    price_wholesale: input.price_wholesale,
+                });
+            }
+        }
+    } catch (logErr) {
+        console.warn('[productService] Failed to log price change:', logErr);
+    }
 
     return transformFromDB(data);
 }

@@ -1,11 +1,12 @@
 
 import React, { useEffect, useState } from 'react';
-import { Smartphone, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, DollarSign } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
+import { ModelPricesPanel } from '../../../components/settings/ModelPricesPanel';
 import { NextStepBanner } from '../../../components/ui/NextStepBanner';
 import { AIAssistantsPanel } from '../../../components/settings/AIAssistantsPanel';
 
@@ -26,6 +27,7 @@ export function ModelsPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
+    const [pricesPanelModel, setPricesPanelModel] = useState<Model | null>(null);
 
     const loadData = async () => {
         try {
@@ -178,6 +180,13 @@ export function ModelsPage() {
                                     <td className="px-6 py-4 text-sm text-right">
                                         <div className="flex items-center justify-end gap-2">
                                             <button
+                                                onClick={() => setPricesPanelModel(model)}
+                                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                title="Gestão de Preços"
+                                            >
+                                                <DollarSign size={16} />
+                                            </button>
+                                            <button
                                                 onClick={() => handleEdit(model)}
                                                 className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                 title="Editar"
@@ -238,6 +247,15 @@ export function ModelsPage() {
                 onSave={handleSave}
                 model={editingModel}
             />
+
+            {/* Painel de Preços */}
+            {pricesPanelModel && (
+                <ModelPricesPanel
+                    modelId={pricesPanelModel.id}
+                    modelName={pricesPanelModel.name}
+                    onClose={() => setPricesPanelModel(null)}
+                />
+            )}
         </div>
     );
 }
