@@ -145,7 +145,13 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         }
 
         const variacaoNomeDetalhe = data.variacao?.nome;
+
+        // [DEBUG] Log temporário para ver o objeto variacao completo
+        console.log('[Bling Debug] data.variacao completo:', JSON.stringify(data.variacao));
+        console.log('[Bling Debug] variacao.nome:', variacaoNomeDetalhe);
+
         return {
+
             id: data.id,
             nome: cleanVariacaoNome(data.nome || '', variacaoNomeDetalhe),
             codigo: data.codigo || null,
