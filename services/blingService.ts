@@ -116,36 +116,16 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         };
 
 
-        // Imagens: filho > pai > buscar via endpoint de variações do pai
-        let imagens: any[] = [];
+        // Imagens: resolução a partir de midia.imagens.internas (estrutura real do Bling API v3)
+        // Filho > Pai (ambos usam data.midia.imagens.internas)
+        const extractImagens = (d: any): any[] => {
+            const internas = d?.midia?.imagens?.internas || [];
+            const externas = d?.midia?.imagens?.imagensURL || [];
+            return [...internas, ...externas];
+        };
 
-        // [DEBUG] Log temporário para ver o que vem em cada etapa
-        console.log('[Bling Debug] data.imagens (filho):', JSON.stringify(data.imagens));
-        console.log('[Bling Debug] parentData?.imagens (pai):', JSON.stringify(parentData?.imagens));
-        console.log('[Bling Debug] Campos disponíveis no filho:', Object.keys(data));
-        console.log('[Bling Debug] data.midia:', JSON.stringify((data as any).midia));
-        console.log('[Bling Debug] data.fotos:', JSON.stringify((data as any).fotos));
-
-        if (data.imagens?.length) {
-            imagens = data.imagens;
-        } else if (parentData?.imagens?.length) {
-            imagens = parentData.imagens;
-        } else if (parentId) {
-            // Último recurso: buscar a imagem diretamente das variações do pai
-            try {
-                const varRes = await fetch(`/api/bling-product-detail?id=${parentId}&variacoes=1`, {
-                    headers: { 'Authorization': `Bearer ${accessToken}` },
-                });
-                if (varRes.ok) {
-                    const varData = await varRes.json();
-                    const myVariacao = (varData.variacoes || []).find((v: any) => v.id === productId);
-                    imagens = myVariacao?.imagens || varData.imagens || [];
-                    console.log('[Bling Debug] imagens via variacoes do pai:', JSON.stringify(imagens));
-                }
-            } catch { /* ignora */ }
-        }
-
-        console.log('[Bling Debug] imagens FINAL resolvido:', JSON.stringify(imagens));
+        let imagens: any[] = extractImagens(data);
+        if (!imagens.length) imagens = extractImagens(parentData);
 
         const variacaoNomeDetalhe = data.variacao?.nome;
 
@@ -518,7 +498,8 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
 
     const dim = item.dimensoes || {};
     const trib = item.tributacao || {};
-    const firstImg = item.imagens?.[0]?.link || item.imagens?.[0]?.url || null;
+    const imagens = item.midia?.imagens?.internas || [];
+    const firstImg = imagens[0]?.link || imagens[0]?.url || null;
 
     return {
         // Identificação
