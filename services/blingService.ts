@@ -520,10 +520,12 @@ function cleanVariacaoNome(nome: string, variacaoNome?: string): string {
  * Fallback: extrai padrões CHAVE:VALOR do próprio nome do produto
  * quando variacao.nome não é retornado pela API Bling.
  * Ex: "Capa de silicone Cor:Preto" → "Cor:Preto"
+ * Usa \b (word boundary) para não dar match em substrings (ex: "decor")
  */
 function extractVariacaoFromName(nome: string): string | undefined {
     const knownKeys = Object.keys(VARIACAO_KEY_MAP).join('|');
-    const regex = new RegExp(`((?:${knownKeys})[^;]*:[^;]+(?:;(?:${knownKeys})[^;]*:[^;]+)*)`, 'i');
+    // \b garante que "cor" não vai dar match dentro de "decoração", etc.
+    const regex = new RegExp(`\\b((?:${knownKeys}):[^;\\s][^;]*)`, 'i');
     const match = nome.match(regex);
     return match ? match[1].trim() : undefined;
 }
@@ -540,8 +542,15 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         item.variacao?.nome || extractVariacaoFromName(item.nome || '');
     const parentId: number | undefined = item.variacao?.produtoPai?.id;
 
+    console.log('[mapBlingToDb] nome bruto:', item.nome);
+    console.log('[mapBlingToDb] variacao?.nome da API:', item.variacao?.nome);
+    console.log('[mapBlingToDb] variacaoNome resolvido:', variacaoNome);
+
     const nomeLimpo = cleanVariacaoNome(item.nome || 'Produto sem nome', variacaoNome);
     const specs = variacaoNome ? parseVariacaoAtributos(variacaoNome) : {};
+
+    console.log('[mapBlingToDb] nomeLimpo:', nomeLimpo);
+    console.log('[mapBlingToDb] specs:', specs);
 
     const dim = item.dimensoes || {};
     const trib = item.tributacao || {};
