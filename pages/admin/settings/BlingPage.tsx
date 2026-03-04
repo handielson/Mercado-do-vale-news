@@ -1070,220 +1070,220 @@ export default function BlingPage() {
                                 )}
                             </div>
 
-                        </div>
-
-                    {/* ── Seção: Mapeamento de Cores ── */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <h2 className="text-base font-bold text-slate-800">🎨 Mapeamento de Cores</h2>
-                                <p className="text-sm text-slate-500 mt-0.5">
-                                    Relacione cada cor encontrada no Bling com uma cor do sistema.
-                                </p>
-                            </div>
-                        </div>
-
-                        {blingProducts.length === 0 ? (
-                            <div className="text-center py-6 text-slate-400 text-sm">
-                                Busque produtos na aba <strong>Produtos</strong> primeiro para extrair as cores do Bling.
-                            </div>
-                        ) : (() => {
-                            // Extrai cores únicas dos produtos carregados
-                            const uniqueColors = Array.from(new Set(
-                                blingProducts
-                                    .map(p => p.variacao?.nome)
-                                    .filter(Boolean)
-                                    .map(nome => nome!.split(';').find(p => p.toLowerCase().startsWith('cor'))?.split(':')[1]?.trim())
-                                    .filter(Boolean) as string[]
-                            )).sort();
-
-                            if (uniqueColors.length === 0) {
-                                return (
-                                    <div className="text-center py-6 text-slate-400 text-sm">
-                                        Nenhuma cor encontrada nos produtos carregados. Verifique se há variações com "Cor:" nos nomes.
-                                    </div>
-                                );
-                            }
-
-                            return (
-                                <>
-                                    <div className="rounded-xl border border-slate-200 overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-slate-50 border-b border-slate-200">
-                                                <tr>
-                                                    <th className="text-left px-4 py-3 font-semibold text-slate-600 w-1/2">Cor no Bling</th>
-                                                    <th className="text-center px-2 py-3 text-slate-400">→</th>
-                                                    <th className="text-left px-4 py-3 font-semibold text-slate-600 w-1/2">Cor no Sistema</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {uniqueColors.map(blingColor => {
-                                                    const mapping = colorMappings.find(m => m.blingColorName.toLowerCase() === blingColor.toLowerCase());
-                                                    const idx = colorMappings.findIndex(m => m.blingColorName.toLowerCase() === blingColor.toLowerCase());
-                                                    const isMapped = !!mapping?.systemColorId;
-                                                    return (
-                                                        <tr key={blingColor} className="hover:bg-slate-50">
-                                                            <td className="px-4 py-3">
-                                                                <p className="font-medium text-slate-700">{blingColor}</p>
-                                                            </td>
-                                                            <td className="text-center text-slate-300 px-2">→</td>
-                                                            <td className="px-4 py-3 space-y-1">
-                                                                <select
-                                                                    value={mapping?.systemColorId || ''}
-                                                                    onChange={e => {
-                                                                        const col = systemColors.find(c => c.id === e.target.value);
-                                                                        const updated = [...colorMappings];
-                                                                        if (idx >= 0) {
-                                                                            updated[idx] = { blingColorName: blingColor, systemColorId: e.target.value, systemColorName: col?.name || '' };
-                                                                        } else {
-                                                                            updated.push({ blingColorName: blingColor, systemColorId: e.target.value, systemColorName: col?.name || '' });
-                                                                        }
-                                                                        setColorMappings(updated);
-                                                                    }}
-                                                                    className={`w-full text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${isMapped ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}
-                                                                >
-                                                                    <option value="">-- Sem mapeamento --</option>
-                                                                    {systemColors.map(c => (
-                                                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                                                    ))}
-                                                                </select>
-                                                                {!isMapped && (
-                                                                    <p className="text-xs text-amber-600">
-                                                                        ⚠️ Cor não mapeada.{' '}
-                                                                        <a href="/admin/cores" className="underline font-medium hover:text-amber-800">Cadastrar nova cor</a>
-                                                                        {' '}e volte aqui para mapear.
-                                                                    </p>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-xs text-slate-500">
-                                            {colorMappings.filter(m => m.systemColorId).length} de {uniqueColors.length} cores mapeadas.
+                            {/* ── Seção: Mapeamento de Cores ── */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <h2 className="text-base font-bold text-slate-800">🎨 Mapeamento de Cores</h2>
+                                        <p className="text-sm text-slate-500 mt-0.5">
+                                            Relacione cada cor encontrada no Bling com uma cor do sistema.
                                         </p>
-                                        <button
-                                            onClick={() => {
-                                                const valid = colorMappings.filter(m => m.systemColorId);
-                                                saveColorMappings(valid);
-                                                toast.success(`${valid.length} mapeamentos de cor salvos!`);
-                                            }}
-                                            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
-                                        >
-                                            <Save className="w-4 h-4" />
-                                            Salvar Cores
-                                        </button>
                                     </div>
-                                </>
-                            );
-                        })()}
-                    </div>
+                                </div>
 
-                    {/* Secao 2: Mapeamento de Campos */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <h2 className="text-base font-bold text-slate-800">Mapeamento de Campos</h2>
-                                <p className="text-sm text-slate-500 mt-0.5">
-                                    Configure qual campo do Bling alimenta qual campo do sistema.
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    const defaults = getDefaultFieldMappings();
-                                    setFieldMappings(defaults);
-                                    saveFieldMappings(defaults);
-                                    toast.success('Mapeamentos restaurados.');
-                                }}
-                                className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 flex-shrink-0"
-                            >
-                                <RefreshCw className="w-3 h-3" />
-                                Restaurar Padrao
-                            </button>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 overflow-hidden">
-                            <table className="w-full text-sm">
-                                <thead className="bg-slate-50 border-b border-slate-200">
-                                    <tr>
-                                        <th className="text-center px-3 py-3 font-semibold text-slate-600 w-10">Ativo</th>
-                                        <th className="text-left px-4 py-3 font-semibold text-slate-600 w-2/5">Campo no Bling</th>
-                                        <th className="text-center px-2 py-3 text-slate-400 w-8">-</th>
-                                        <th className="text-left px-4 py-3 font-semibold text-slate-600">Campo no Sistema</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {fieldMappings.map((mapping, idx) => (
-                                        <tr key={mapping.blingKey} className={`hover:bg-slate-50 ${!mapping.enabled ? 'opacity-50' : ''}`}>
-                                            <td className="px-3 py-2.5 text-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={mapping.enabled}
-                                                    onChange={e => {
-                                                        const updated = [...fieldMappings];
-                                                        updated[idx] = { ...mapping, enabled: e.target.checked };
-                                                        setFieldMappings(updated);
+                                {blingProducts.length === 0 ? (
+                                    <div className="text-center py-6 text-slate-400 text-sm">
+                                        Busque produtos na aba <strong>Produtos</strong> primeiro para extrair as cores do Bling.
+                                    </div>
+                                ) : (() => {
+                                    // Extrai cores únicas dos produtos carregados
+                                    const uniqueColors = Array.from(new Set(
+                                        blingProducts
+                                            .map(p => p.variacao?.nome)
+                                            .filter(Boolean)
+                                            .map(nome => nome!.split(';').find(p => p.toLowerCase().startsWith('cor'))?.split(':')[1]?.trim())
+                                            .filter(Boolean) as string[]
+                                    )).sort();
+
+                                    if (uniqueColors.length === 0) {
+                                        return (
+                                            <div className="text-center py-6 text-slate-400 text-sm">
+                                                Nenhuma cor encontrada nos produtos carregados. Verifique se há variações com "Cor:" nos nomes.
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <>
+                                            <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-slate-50 border-b border-slate-200">
+                                                        <tr>
+                                                            <th className="text-left px-4 py-3 font-semibold text-slate-600 w-1/2">Cor no Bling</th>
+                                                            <th className="text-center px-2 py-3 text-slate-400">→</th>
+                                                            <th className="text-left px-4 py-3 font-semibold text-slate-600 w-1/2">Cor no Sistema</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {uniqueColors.map(blingColor => {
+                                                            const mapping = colorMappings.find(m => m.blingColorName.toLowerCase() === blingColor.toLowerCase());
+                                                            const idx = colorMappings.findIndex(m => m.blingColorName.toLowerCase() === blingColor.toLowerCase());
+                                                            const isMapped = !!mapping?.systemColorId;
+                                                            return (
+                                                                <tr key={blingColor} className="hover:bg-slate-50">
+                                                                    <td className="px-4 py-3">
+                                                                        <p className="font-medium text-slate-700">{blingColor}</p>
+                                                                    </td>
+                                                                    <td className="text-center text-slate-300 px-2">→</td>
+                                                                    <td className="px-4 py-3 space-y-1">
+                                                                        <select
+                                                                            value={mapping?.systemColorId || ''}
+                                                                            onChange={e => {
+                                                                                const col = systemColors.find(c => c.id === e.target.value);
+                                                                                const updated = [...colorMappings];
+                                                                                if (idx >= 0) {
+                                                                                    updated[idx] = { blingColorName: blingColor, systemColorId: e.target.value, systemColorName: col?.name || '' };
+                                                                                } else {
+                                                                                    updated.push({ blingColorName: blingColor, systemColorId: e.target.value, systemColorName: col?.name || '' });
+                                                                                }
+                                                                                setColorMappings(updated);
+                                                                            }}
+                                                                            className={`w-full text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${isMapped ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}
+                                                                        >
+                                                                            <option value="">-- Sem mapeamento --</option>
+                                                                            {systemColors.map(c => (
+                                                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                        {!isMapped && (
+                                                                            <p className="text-xs text-amber-600">
+                                                                                ⚠️ Cor não mapeada.{' '}
+                                                                                <a href="/admin/cores" className="underline font-medium hover:text-amber-800">Cadastrar nova cor</a>
+                                                                                {' '}e volte aqui para mapear.
+                                                                            </p>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs text-slate-500">
+                                                    {colorMappings.filter(m => m.systemColorId).length} de {uniqueColors.length} cores mapeadas.
+                                                </p>
+                                                <button
+                                                    onClick={() => {
+                                                        const valid = colorMappings.filter(m => m.systemColorId);
+                                                        saveColorMappings(valid);
+                                                        toast.success(`${valid.length} mapeamentos de cor salvos!`);
                                                     }}
-                                                    className="w-4 h-4 accent-green-600"
-                                                />
-                                            </td>
-                                            <td className="px-4 py-2.5">
-                                                <p className="font-medium text-slate-700">{mapping.blingLabel}</p>
-                                                <p className="text-xs text-slate-400 font-mono">{mapping.blingField}</p>
-                                            </td>
-                                            <td className="text-center text-slate-300 px-2">-</td>
-                                            <td className="px-4 py-2.5">
-                                                <select
-                                                    value={mapping.systemField}
-                                                    disabled={!mapping.enabled}
-                                                    onChange={e => {
-                                                        const updated = [...fieldMappings];
-                                                        updated[idx] = { ...mapping, systemField: e.target.value };
-                                                        setFieldMappings(updated);
-                                                    }}
-                                                    className={`w-full text-sm border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed ${mapping.systemField ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
+                                                    className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
                                                 >
-                                                    <option value="">-- Nao importar --</option>
-                                                    {Object.entries(
-                                                        SYSTEM_FIELDS.reduce((acc, f) => {
-                                                            if (!acc[f.group]) acc[f.group] = [];
-                                                            acc[f.group].push(f);
-                                                            return acc;
-                                                        }, {} as Record<string, typeof SYSTEM_FIELDS>)
-                                                    ).map(([group, fields]) => (
-                                                        <optgroup key={group} label={group}>
-                                                            {fields.map(f => (
-                                                                <option key={f.field} value={f.field}>{f.label}</option>
+                                                    <Save className="w-4 h-4" />
+                                                    Salvar Cores
+                                                </button>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* Secao 2: Mapeamento de Campos */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <h2 className="text-base font-bold text-slate-800">Mapeamento de Campos</h2>
+                                        <p className="text-sm text-slate-500 mt-0.5">
+                                            Configure qual campo do Bling alimenta qual campo do sistema.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const defaults = getDefaultFieldMappings();
+                                            setFieldMappings(defaults);
+                                            saveFieldMappings(defaults);
+                                            toast.success('Mapeamentos restaurados.');
+                                        }}
+                                        className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 flex-shrink-0"
+                                    >
+                                        <RefreshCw className="w-3 h-3" />
+                                        Restaurar Padrao
+                                    </button>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                                <th className="text-center px-3 py-3 font-semibold text-slate-600 w-10">Ativo</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-600 w-2/5">Campo no Bling</th>
+                                                <th className="text-center px-2 py-3 text-slate-400 w-8">-</th>
+                                                <th className="text-left px-4 py-3 font-semibold text-slate-600">Campo no Sistema</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {fieldMappings.map((mapping, idx) => (
+                                                <tr key={mapping.blingKey} className={`hover:bg-slate-50 ${!mapping.enabled ? 'opacity-50' : ''}`}>
+                                                    <td className="px-3 py-2.5 text-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={mapping.enabled}
+                                                            onChange={e => {
+                                                                const updated = [...fieldMappings];
+                                                                updated[idx] = { ...mapping, enabled: e.target.checked };
+                                                                setFieldMappings(updated);
+                                                            }}
+                                                            className="w-4 h-4 accent-green-600"
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-2.5">
+                                                        <p className="font-medium text-slate-700">{mapping.blingLabel}</p>
+                                                        <p className="text-xs text-slate-400 font-mono">{mapping.blingField}</p>
+                                                    </td>
+                                                    <td className="text-center text-slate-300 px-2">-</td>
+                                                    <td className="px-4 py-2.5">
+                                                        <select
+                                                            value={mapping.systemField}
+                                                            disabled={!mapping.enabled}
+                                                            onChange={e => {
+                                                                const updated = [...fieldMappings];
+                                                                updated[idx] = { ...mapping, systemField: e.target.value };
+                                                                setFieldMappings(updated);
+                                                            }}
+                                                            className={`w-full text-sm border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-green-500 disabled:cursor-not-allowed ${mapping.systemField ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
+                                                        >
+                                                            <option value="">-- Nao importar --</option>
+                                                            {Object.entries(
+                                                                SYSTEM_FIELDS.reduce((acc, f) => {
+                                                                    if (!acc[f.group]) acc[f.group] = [];
+                                                                    acc[f.group].push(f);
+                                                                    return acc;
+                                                                }, {} as Record<string, typeof SYSTEM_FIELDS>)
+                                                            ).map(([group, fields]) => (
+                                                                <optgroup key={group} label={group}>
+                                                                    {fields.map(f => (
+                                                                        <option key={f.field} value={f.field}>{f.label}</option>
+                                                                    ))}
+                                                                </optgroup>
                                                             ))}
-                                                        </optgroup>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="flex justify-end">
-                            <button
-                                onClick={() => {
-                                    saveFieldMappings(fieldMappings);
-                                    toast.success('Mapeamentos de campos salvos!');
-                                }}
-                                className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
-                            >
-                                <Save className="w-4 h-4" />
-                                Salvar Mapeamentos de Campos
-                            </button>
-                        </div>
-                    </div>
-                </>
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={() => {
+                                            saveFieldMappings(fieldMappings);
+                                            toast.success('Mapeamentos de campos salvos!');
+                                        }}
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700"
+                                    >
+                                        <Save className="w-4 h-4" />
+                                        Salvar Mapeamentos de Campos
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
             )}
+
         </div>
     )
 }
-        </div >
-    );
-}
+
+
