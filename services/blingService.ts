@@ -516,13 +516,28 @@ function cleanVariacaoNome(nome: string, variacaoNome?: string): string {
     return nome.replace(regex, '').trim();
 }
 
+/**
+ * Fallback: extrai padrões CHAVE:VALOR do próprio nome do produto
+ * quando variacao.nome não é retornado pela API Bling.
+ * Ex: "Capa de silicone Cor:Preto" → "Cor:Preto"
+ */
+function extractVariacaoFromName(nome: string): string | undefined {
+    const knownKeys = Object.keys(VARIACAO_KEY_MAP).join('|');
+    const regex = new RegExp(`((?:${knownKeys})[^;]*:[^;]+(?:;(?:${knownKeys})[^;]*:[^;]+)*)`, 'i');
+    const match = nome.match(regex);
+    return match ? match[1].trim() : undefined;
+}
+
 // ------- Mapping: Bling → DB row -------
 
 /** Mapeia TODOS os campos disponíveis do Bling para o banco — sem condicional.
  *  O campo `_color_id` é auxiliar (não vai para a tabela products).
  */
 function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string, modelId?: string): Record<string, any> {
-    const variacaoNome: string | undefined = item.variacao?.nome;
+    // variacaoNome vem da API quando o produto é uma variação explícita;
+    // se não vier, tenta extrair padrões CHAVE:VALOR do próprio nome
+    const variacaoNome: string | undefined =
+        item.variacao?.nome || extractVariacaoFromName(item.nome || '');
     const parentId: number | undefined = item.variacao?.produtoPai?.id;
 
     const nomeLimpo = cleanVariacaoNome(item.nome || 'Produto sem nome', variacaoNome);
