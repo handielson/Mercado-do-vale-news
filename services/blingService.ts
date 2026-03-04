@@ -745,6 +745,8 @@ export async function importBlingProducts(
                 gtin: detail.gtin ?? item.gtin,            // EAN do filho ou pai
                 categoria: detail.categoria ?? item.categoria,
                 precoCusto: detail.precoCusto ?? item.precoCusto,
+                descricaoComplementar: detail.descricaoComplementar || item.descricaoComplementar,
+                descricaoCurta: detail.descricaoCurta || item.descricaoCurta,
                 tributacao: {
                     ncm: detail.ncm,
                     cest: detail.cest,
