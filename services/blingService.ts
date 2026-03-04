@@ -122,6 +122,9 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         // [DEBUG] Log temporário para ver o que vem em cada etapa
         console.log('[Bling Debug] data.imagens (filho):', JSON.stringify(data.imagens));
         console.log('[Bling Debug] parentData?.imagens (pai):', JSON.stringify(parentData?.imagens));
+        console.log('[Bling Debug] Campos disponíveis no filho:', Object.keys(data));
+        console.log('[Bling Debug] data.midia:', JSON.stringify((data as any).midia));
+        console.log('[Bling Debug] data.fotos:', JSON.stringify((data as any).fotos));
 
         if (data.imagens?.length) {
             imagens = data.imagens;
