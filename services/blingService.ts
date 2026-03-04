@@ -106,10 +106,15 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         if (parentId) {
             console.log('[Bling Debug] Child dimensoes:', JSON.stringify(childDim));
             console.log('[Bling Debug] Parent dimensoes:', JSON.stringify(parentDim));
+            console.log('[Bling Debug] Child root pesoBruto:', data.pesoBruto);
+            console.log('[Bling Debug] Parent root pesoBruto:', parentData?.pesoBruto);
         }
 
+        // pesoBruto pode estar no nível raiz do produto (não dentro de dimensoes)
+        // na API Bling v3 — verificamos ambos os lugares
         const dim = {
-            pesoBruto: childDim.pesoBruto || parentDim.pesoBruto,
+            pesoBruto: childDim.pesoBruto || parentDim.pesoBruto
+                || data.pesoBruto || parentData?.pesoBruto,
             largura: childDim.largura || parentDim.largura,
             altura: childDim.altura || parentDim.altura,
             profundidade: childDim.profundidade || parentDim.profundidade,
