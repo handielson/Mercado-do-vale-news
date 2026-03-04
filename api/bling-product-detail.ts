@@ -5,10 +5,21 @@ export default async function handler(req: any, res: any) {
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
 
-    const { id } = req.query;
+    const { id, variacoes } = req.query;
     if (!id) return res.status(400).json({ error: 'Product ID required' });
 
     try {
+        // Modo variações: busca o endpoint /produtos/variacoes/{idPai} que retorna
+        // o produto pai + todas as variações com imagens individuais
+        if (variacoes === '1') {
+            const varRes = await fetch(`https://www.bling.com.br/Api/v3/produtos/variacoes/${id}`, {
+                headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
+            });
+            if (!varRes.ok) return res.status(varRes.status).json({ error: `Bling error: ${varRes.status}` });
+            const varData = await varRes.json();
+            return res.status(200).json(varData.data || {});
+        }
+
         // Busca produto e estoque em paralelo
         const [prodRes, stockRes] = await Promise.all([
             fetch(`https://www.bling.com.br/Api/v3/produtos/${id}`, {

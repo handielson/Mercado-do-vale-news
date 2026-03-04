@@ -89,15 +89,54 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             if (parentRes.ok) parentData = await parentRes.json();
         }
 
-        const trib = data.tributacao || parentData?.tributacao || {};
-        const dim = data.dimensoes || parentData?.dimensoes || {};
+        // Merge field-by-field: filho tem prioridade, pai preenche os nulos
+        // Evita o bug de objeto vazio {} (truthy) bloqueando o fallback
+        const childTrib = data.tributacao || {};
+        const parentTrib = parentData?.tributacao || {};
+        const trib = {
+            ncm: childTrib.ncm ?? parentTrib.ncm,
+            cest: childTrib.cest ?? parentTrib.cest,
+            origem: childTrib.origem ?? parentTrib.origem,
+        };
+
+        const childDim = data.dimensoes || {};
+        const parentDim = parentData?.dimensoes || {};
+        const dim = {
+            pesoBruto: childDim.pesoBruto ?? parentDim.pesoBruto,
+            largura: childDim.largura ?? parentDim.largura,
+            altura: childDim.altura ?? parentDim.altura,
+            profundidade: childDim.profundidade ?? parentDim.profundidade,
+            volumes: childDim.volumes ?? parentDim.volumes,
+            itensPorCaixa: childDim.itensPorCaixa ?? parentDim.itensPorCaixa,
+            unidade: childDim.unidade ?? parentDim.unidade,
+        };
+
+        // Imagens: filho > pai > buscar via endpoint de variações do pai
+        let imagens: any[] = [];
+        if (data.imagens?.length) {
+            imagens = data.imagens;
+        } else if (parentData?.imagens?.length) {
+            imagens = parentData.imagens;
+        } else if (parentId) {
+            // Último recurso: buscar a imagem diretamente das variações do pai
+            try {
+                const varRes = await fetch(`/api/bling-product-detail?id=${parentId}&variacoes=1`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
+                });
+                if (varRes.ok) {
+                    const varData = await varRes.json();
+                    const myVariacao = (varData.variacoes || []).find((v: any) => v.id === productId);
+                    imagens = myVariacao?.imagens || varData.imagens || [];
+                }
+            } catch { /* ignora */ }
+        }
 
         const variacaoNomeDetalhe = data.variacao?.nome;
         return {
             id: data.id,
             nome: cleanVariacaoNome(data.nome || '', variacaoNomeDetalhe),
             codigo: data.codigo || null,
-            gtin: data.gtin || null,
+            gtin: data.gtin || parentData?.gtin || null,
             preco: data.preco ?? parentData?.preco ?? null,
             precoCusto: data.precoCusto ?? parentData?.precoCusto ?? null,
             situacao: data.situacao || 'A',
@@ -106,8 +145,8 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             marca: data.marca || parentData?.marca || undefined,
             descricaoCurta: data.descricaoCurta || undefined,
             descricaoComplementar: data.descricaoComplementar || undefined,
-            ncm: trib.ncm || undefined,
-            cest: trib.cest || undefined,
+            ncm: trib.ncm ?? undefined,
+            cest: trib.cest ?? undefined,
             origem: trib.origem ?? undefined,
             pesoBruto: dim.pesoBruto ?? undefined,
             largura: dim.largura ?? undefined,
@@ -115,9 +154,9 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             profundidade: dim.profundidade ?? undefined,
             volumes: dim.volumes ?? undefined,
             itensPorCaixa: dim.itensPorCaixa ?? undefined,
-            unidade: dim.unidade || undefined,
+            unidade: dim.unidade ?? undefined,
             tipoProducao: data.tipoProducao || undefined,
-            imagens: data.imagens?.length ? data.imagens : (parentData?.imagens || []),
+            imagens,
         };
     } catch {
         return null;
@@ -592,6 +631,7 @@ export async function importBlingProducts(
             const detail = await fetchBlingProductDetail(item.id);
             const enriched = detail ? {
                 ...item,
+                gtin: detail.gtin ?? item.gtin,            // EAN do filho ou pai
                 categoria: detail.categoria ?? item.categoria,
                 precoCusto: detail.precoCusto ?? item.precoCusto,
                 tributacao: {
