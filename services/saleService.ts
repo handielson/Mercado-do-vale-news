@@ -15,6 +15,7 @@ import {
 import { calculateSaleTotals } from '../utils/saleCalculations';
 import { promotionService } from './promotionService';
 import { benefitService } from './benefitService';
+import { syncStockToBling } from './blingService';
 
 /**
  * Create a new sale
@@ -96,6 +97,15 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             if (stockError) {
                 console.error(`Falha ao atualizar estoque do produto ${item.product_id}:`, stockError);
             }
+        }
+
+        // Sync bidirecional: deduzir estoque no Bling (fire-and-forget, não bloqueia a venda)
+        for (const item of itemsWithInventory) {
+            syncStockToBling(
+                item.product_id!,
+                item.quantity,
+                `Venda #${sale.id} — PDV Mercado do Vale`
+            ).catch(() => { /* já logado internamente */ });
         }
 
         // Create delivery credit if applicable

@@ -488,69 +488,92 @@ function cleanVariacaoNome(nome: string, variacaoNome?: string): string {
 
 // ------- Mapping: Bling → DB row -------
 
-/** Monta o objeto de DB incluindo apenas os campos habilitados pelo admin */
-function mapBlingToDb(item: any, companyId: string, enabledFields: Set<string>, categoryId: string): Record<string, any> {
-    const has = (key: string) => enabledFields.has(key);
+/** Mapeia TODOS os campos disponíveis do Bling para o banco — sem condicional */
+function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string): Record<string, any> {
+    const variacaoNome: string | undefined = item.variacao?.nome;
+    const parentId: number | undefined = item.variacao?.produtoPai?.id;
 
-    // Campos sempre obrigatórios — defaults seguros para todos os NOT NULL do banco
-    const row: Record<string, any> = {
+    const nomeLimpo = cleanVariacaoNome(item.nome || 'Produto sem nome', variacaoNome);
+    const specs = variacaoNome ? parseVariacaoAtributos(variacaoNome) : {};
+
+    const dim = item.dimensoes || {};
+    const trib = item.tributacao || {};
+    const firstImg = item.imagens?.[0]?.link || item.imagens?.[0]?.url || null;
+
+    return {
+        // Identificação
         company_id: companyId,
         bling_id: item.id,
+        bling_parent_id: parentId ?? null,
+        // Básico
+        name: nomeLimpo,
+        sku: item.codigo || null,
+        ean: item.gtin || null,
+        alternative_eans: item.gtin ? [item.gtin] : [],
+        brand: item.marca || null,
+        description: item.descricaoComplementar || item.descricaoCurta || null,
+        status: item.situacao === 'A' ? 'active' : 'inactive',
+        // Categoria
         category_id: resolveCategoryId(item.categoria?.id, categoryId),
-        name: item.nome || 'Produto sem nome',
-        brand: item.marca || null,   // marca do Bling mapeada para o campo string
-        // Preços convertidos para centavos
+        // Preços (em centavos)
         price_retail: item.preco ? Math.round(item.preco * 100) : 0,
         price_reseller: item.preco ? Math.round(item.preco * 100) : 0,
         price_wholesale: item.preco ? Math.round(item.preco * 100) : 0,
         price_cost: item.precoCusto ? Math.round(item.precoCusto * 100) : null,
-        status: item.situacao === 'A' ? 'active' : 'inactive',
-        specs: {},
+        // Fiscal
+        ncm: trib.ncm || null,
+        cest: trib.cest || null,
+        origin: trib.origem != null ? String(trib.origem) : null,
+        // Físico
+        weight_kg: dim.pesoBruto || null,
+        dimensions: (dim.largura || dim.altura || dim.profundidade)
+            ? { width_cm: dim.largura || null, height_cm: dim.altura || null, depth_cm: dim.profundidade || null }
+            : null,
+        // Estoque
         stock_quantity: item.stock_quantity ?? 0,
         track_inventory: true,
+        // Specs (variação: color, size...)
+        specs,
+        // Mídia
+        images: firstImg ? [firstImg] : [],
+        // Defaults
         is_gift: false,
         warranty_type: 'brand',
-        alternative_eans: [],
     };
-
-    // Variação: extrai atributos (cor, tamanho etc.) e define bling_parent_id
-    const variacaoNome: string | undefined = item.variacao?.nome;
-    const parentId: number | undefined = item.variacao?.produtoPai?.id;
-    if (variacaoNome) {
-        const atributos = parseVariacaoAtributos(variacaoNome);
-        row.name = cleanVariacaoNome(row.name, variacaoNome);
-        row.specs = { ...atributos };
-    }
-    if (parentId) row.bling_parent_id = parentId;
-
-    // Campos opcionais controlados pelo admin
-    if (has('sku')) row.sku = item.codigo || null;
-    if (has('ean')) { row.ean = item.gtin || null; row.alternative_eans = item.gtin ? [item.gtin] : []; }
-    if (has('description')) row.description = item.descricaoComplementar || item.descricaoCurta || null;
-
-    // Preços sobrescritos pelo mapeamento (se habilitado, já foram incluídos nos defaults acima)
-    // Aqui permitimos que o admin desabilite um preço (mas não podemos remover o default 0)
-
-    if (has('ncm')) row.ncm = item.tributacao?.ncm || null;
-    if (has('cest')) row.cest = item.tributacao?.cest || null;
-    if (has('origin')) row.origin = item.tributacao?.origem != null ? String(item.tributacao.origem) : null;
-
-    if (has('weight_kg')) row.weight_kg = item.dimensoes?.pesoBruto || null;
-    if (has('dimensions')) {
-        const d = item.dimensoes || {};
-        row.dimensions = (d.largura || d.altura || d.profundidade)
-            ? { width_cm: d.largura || null, height_cm: d.altura || null, depth_cm: d.profundidade || null }
-            : null;
-    }
-    if (has('stock_quantity')) row.stock_quantity = item.stock_quantity ?? 0;
-
-    if (has('images')) {
-        const first = item.imagens?.[0]?.link || item.imagens?.[0]?.url || null;
-        row.images = first ? [first] : [];
-    }
-
-    return row;
 }
+
+// ------- Stock sync: PDV → Bling -------
+
+/**
+ * Deduz estoque de um produto no Bling após uma venda no PDV.
+ * Fire-and-forget: erros do Bling não bloqueiam a venda.
+ */
+export async function syncStockToBling(productId: string, quantity: number, notes?: string): Promise<void> {
+    try {
+        // Busca o bling_id do produto no banco
+        const { supabase } = await import('./supabase');
+        const { data: product } = await supabase
+            .from('products')
+            .select('bling_id')
+            .eq('id', productId)
+            .maybeSingle();
+
+        const blingId = product?.bling_id;
+        if (!blingId) return; // Produto não veio do Bling — ignora
+
+        // Chama o proxy server-side (CORS-safe)
+        await fetch('/api/bling-stock-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blingId, quantity, notes }),
+        });
+    } catch (err) {
+        // Não propaga o erro — a venda não deve falhar por problema no Bling
+        console.warn('[syncStockToBling] Falha ao sincronizar estoque:', err);
+    }
+}
+
+
 
 // ------- Fetch all products (for selection UI) -------
 
