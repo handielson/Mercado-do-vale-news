@@ -1,0 +1,172 @@
+import { ContaPagar, ContaReceber } from '../types/finance';
+
+const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',')}`;
+
+export function printContaReceipt(
+    conta: ContaPagar | ContaReceber,
+    companyName: string,
+    tipo: 'pagar' | 'receber'
+) {
+    const isPagar = tipo === 'pagar';
+    const title = isPagar ? 'Comprovante de Conta a Pagar' : 'Comprovante de Conta a Receber';
+    const mainColor = isPagar ? '#dc2626' : '#16a34a'; // Red for Pagar, Green for Receber
+
+    // Format dates
+    const formatBlingDate = (d: string) => {
+        if (!d) return '—';
+        const parts = d.split('-');
+        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        return d;
+    };
+
+    const vencimento = formatBlingDate(conta.vencimento);
+    const emissao = formatBlingDate(conta.dataEmissao || '');
+
+    const contatoNome = conta.contato?.nome || 'Não informado';
+    const categoriaDesc = conta.categoria?.descricao || 'Sem categoria';
+    const portadorDesc = conta.portador?.descricao || 'Não informado';
+
+    const situacaoMap: Record<string, string> = {
+        '1': 'Em aberto', 'em_aberto': 'Em aberto',
+        '2': 'Pago/Quitado', 'pago': 'Pago/Quitado', 'recebido': 'Pago/Quitado',
+        '3': 'Parcial', 'parcial': 'Parcial',
+        '4': 'Cancelado', 'cancelado': 'Cancelado',
+    };
+    const situacaoFormatada = situacaoMap[String(conta.situacao).toLowerCase()] || String(conta.situacao);
+
+    // Formatar histórico preservando quebras de linha
+    const historicoFormatado = (conta.historico || 'Sem histórico')
+        .replace(/\n/g, '<br>')
+        .replace(/\r/g, '');
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>${title} #${conta.id}</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f8fafc; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+    .receipt {
+        background: white;
+        width: 80mm; /* Tamanho padrão de impressora térmica */
+        padding: 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+    }
+    .header { text-align: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px dashed #e5e7eb; }
+    .company { font-size: 16px; font-weight: 800; color: #111827; margin-bottom: 4px; }
+    .doc-type { font-size: 12px; font-weight: 700; text-transform: uppercase; color: ${mainColor}; letter-spacing: 1px; }
+    
+    .section { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #e5e7eb; }
+    .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
+    
+    .row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #374151; line-height: 1.4; }
+    .row strong { font-weight: 600; color: #111827; }
+    .row.large { font-size: 14px; margin-top: 6px; }
+    .row.large strong { font-size: 16px; }
+    
+    .historico-box { 
+        background: #f8fafc; 
+        padding: 8px; 
+        border-radius: 4px; 
+        font-size: 12px; 
+        color: #111827; 
+        line-height: 1.5; 
+        font-family: monospace;
+        margin-top: 4px;
+        white-space: pre-wrap;
+    }
+    
+    .footer { text-align: center; margin-top: 16px; font-size: 10px; color: #9ca3af; }
+    
+    @media print {
+        @page { size: 80mm auto; margin: 0; }
+        body { background: white; padding: 0; display: block; }
+        .receipt { box-shadow: none; border-radius: 0; width: 100%; border: none; padding: 12px; }
+    }
+</style>
+</head>
+<body>
+<div class="receipt">
+    <div class="header">
+        <p class="company">${companyName}</p>
+        <p class="doc-type">${title}</p>
+        <p style="font-size:11px;color:#6b7280;margin-top:4px;">Ref. API Bling: #${conta.id}</p>
+    </div>
+
+    <div class="section">
+        <p class="section-title">Contatos e Detalhes</p>
+        <div class="row">
+            <span>${isPagar ? 'Favorecido' : 'Cliente'}:</span>
+            <strong>${contatoNome}</strong>
+        </div>
+        <div class="row">
+            <span>Categoria:</span>
+            <strong>${categoriaDesc}</strong>
+        </div>
+        <div class="row">
+            <span>Portador:</span>
+            <strong>${portadorDesc}</strong>
+        </div>
+        <div class="row">
+            <span>Situação:</span>
+            <strong>${situacaoFormatada}</strong>
+        </div>
+    </div>
+
+    <div class="section">
+        <p class="section-title">Datas</p>
+        <div class="row">
+            <span>Emissão:</span>
+            <strong>${emissao}</strong>
+        </div>
+        <div class="row">
+            <span>Vencimento:</span>
+            <strong>${vencimento}</strong>
+        </div>
+    </div>
+
+    <div class="section">
+        <p class="section-title">Valores</p>
+        <div class="row large">
+            <span>Valor Total:</span>
+            <strong>${fmt(conta.valor)}</strong>
+        </div>
+        ${conta.saldo !== undefined && conta.saldo !== conta.valor ?
+            `<div class="row">
+                <span>Saldo em aberto:</span>
+                <strong>${fmt(conta.saldo)}</strong>
+            </div>` : ''}
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+        <p class="section-title" style="margin-bottom:8px;">Histórico Detalhado</p>
+        <div class="historico-box">${historicoFormatado}</div>
+    </div>
+    
+    <div class="footer">
+        <p>Impresso em: ${new Date().toLocaleString('pt-BR')}</p>
+        <p style="margin-top:4px;">Mercado do Vale</p>
+    </div>
+</div>
+<script>
+window.onload = () => {
+    // Mede a altura real do conteúdo após renderização
+    const totalHeight = document.body.scrollHeight;
+    const heightMm = Math.ceil(totalHeight / 3.7795); // px → mm (96dpi: 1mm = 3.7795px)
+    // Injeta @page com tamanho exato (largura configurada + altura real)
+    const style = document.createElement('style');
+    style.textContent = '@page { size: 80mm ' + heightMm + 'mm; margin: 0; }';
+    document.head.appendChild(style);
+    setTimeout(() => { window.print(); }, 300);
+};
+</script>
+</body>
+</html>`;
+
+    const pw = window.open('', '_blank');
+    if (!pw) return;
+    pw.document.write(html);
+    pw.document.close();
+}

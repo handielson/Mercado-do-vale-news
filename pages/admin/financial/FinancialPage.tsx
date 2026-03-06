@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     DollarSign, TrendingDown, TrendingUp, RefreshCw, Plus, Check,
-    X, AlertCircle, Loader2, Calendar, Filter, Pencil, Search
+    X, AlertCircle, Loader2, Calendar, Filter, Pencil, Search, Printer
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { blingFinanceService } from '../../../services/blingFinanceService';
 import type { ContaPagar, ContaReceber, BaixaConta, CreateContaInput, FinancialSummary } from '../../../types/finance';
+import { useTheme } from '../../../contexts/ThemeContext';
+import { printContaReceipt } from '../../../utils/printContaReceipt';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function formatCurrency(v: number): string {
+    if (v == null) return 'R$ 0,00';
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
@@ -343,9 +346,10 @@ interface RowProps {
     onBaixar: (c: ContaPagar | ContaReceber) => void;
     onCancelar: (c: ContaPagar | ContaReceber) => void;
     onEditar: (c: ContaPagar | ContaReceber) => void;
+    onPrint: (c: ContaPagar | ContaReceber) => void;
 }
 
-function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar }: RowProps) {
+function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar, onPrint }: RowProps) {
     const vencido = isVencido(conta.vencimento, conta.situacao);
     const sit = situacaoLabel(vencido && normalizeSituacao(conta.situacao) === 'em_aberto' ? 'vencido' : conta.situacao);
     const vencDate = conta.vencimento.split('-').reverse().join('/');
@@ -399,6 +403,11 @@ function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar }: RowProps) {
                             Cancelar
                         </button>
                     )}
+                    <button onClick={() => onPrint(conta)}
+                        title="Imprimir Histórico Completo"
+                        className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors ml-1">
+                        <Printer size={14} />
+                    </button>
                     {isPaid && (
                         <span className="flex items-center gap-1 text-xs text-green-600 font-semibold">
                             <Check size={12} /> Quitado
@@ -415,6 +424,7 @@ function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar }: RowProps) {
 type Tab = 'pagar' | 'receber';
 
 export default function FinancialPage() {
+    const { settings } = useTheme();
     const range = getDefaultRange();
     const [tab, setTab] = useState<Tab>('pagar');
     const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
@@ -485,6 +495,10 @@ export default function FinancialPage() {
         } catch (err: any) {
             toast.error('Erro ao cancelar: ' + err.message);
         }
+    }
+
+    function handlePrint(conta: ContaPagar | ContaReceber) {
+        printContaReceipt(conta, settings.company_name || 'Mercado do Vale', tab);
     }
 
     async function handleLancar(input: CreateContaInput) {
@@ -672,6 +686,7 @@ export default function FinancialPage() {
                                         onBaixar={setBaixaTarget}
                                         onCancelar={handleCancelar}
                                         onEditar={setEditTarget}
+                                        onPrint={handlePrint}
                                     />
                                 ))}
                             </tbody>
