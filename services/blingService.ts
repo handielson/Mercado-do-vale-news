@@ -708,6 +708,73 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
 }
 
 
+/** Traduz erros técnicos do PostgreSQL/Supabase para mensagens amigáveis em português */
+function humanizeImportError(operation: string, rawMessage: string): string {
+    const msg = rawMessage.toLowerCase();
+
+    // Unique constraint violations
+    if (msg.includes('unique') || msg.includes('duplicate key')) {
+        if (msg.includes('ean') || msg.includes('gtin')) {
+            return `EAN/código de barras já cadastrado em outro produto do sistema.`;
+        }
+        if (msg.includes('sku') || msg.includes('codigo')) {
+            return `SKU já cadastrado em outro produto do sistema.`;
+        }
+        if (msg.includes('bling_id')) {
+            return `Este produto do Bling já foi importado anteriormente.`;
+        }
+        return `Dado duplicado: já existe outro produto com o mesmo identificador único.`;
+    }
+
+    // Foreign key violations
+    if (msg.includes('foreign key') || msg.includes('fk_')) {
+        if (msg.includes('category') || msg.includes('categoria')) {
+            return `Categoria selecionada não existe ou foi removida. Verifique o mapeamento de categorias.`;
+        }
+        if (msg.includes('model')) {
+            return `Modelo selecionado não existe ou foi removido.`;
+        }
+        if (msg.includes('color') || msg.includes('cor')) {
+            return `Cor mapeada não existe no sistema. Verifique o mapeamento de cores.`;
+        }
+        return `Referência inválida: um campo aponta para um registro que não existe.`;
+    }
+
+    // Not null violations
+    if (msg.includes('not null') || msg.includes('null value')) {
+        if (msg.includes('name') || msg.includes('nome')) {
+            return `Nome do produto ausente. Verifique se o produto tem nome no Bling.`;
+        }
+        if (msg.includes('company_id')) {
+            return `Empresa não identificada. Tente recarregar a página.`;
+        }
+        return `Campo obrigatório vazio: o produto está sem informação necessária para importar.`;
+    }
+
+    // Type errors
+    if (msg.includes('invalid input syntax') || msg.includes('invalid value')) {
+        return `Formato de dado inválido: verifique preço, peso ou dimensões do produto.`;
+    }
+
+    // Network / timeout
+    if (msg.includes('timeout') || msg.includes('network') || msg.includes('fetch')) {
+        return `Falha de conexão durante a ${operation}. Verifique sua internet e tente novamente.`;
+    }
+
+    // Token expired
+    if (msg.includes('token_expired') || msg.includes('401')) {
+        return `Token do Bling expirou. Acesse Configurações → Bling e reconecte.`;
+    }
+
+    // Bling API error
+    if (msg.includes('bling api error')) {
+        return `Erro ao buscar detalhes do produto no Bling. O produto pode ter sido excluído lá.`;
+    }
+
+    // Generic fallback with context
+    return `Falha na ${operation}: ${rawMessage}`;
+}
+
 export async function importBlingProducts(
     selectedProducts: BlingProduct[],
     enabledFields: Set<string>,
@@ -816,7 +883,7 @@ export async function importBlingProducts(
             result.errors.push({
                 name: item.nome,
                 sku: item.codigo,
-                reason: `Erro na ${operation}: ${err.message}`,
+                reason: humanizeImportError(operation, err.message || ''),
             });
         }
 
