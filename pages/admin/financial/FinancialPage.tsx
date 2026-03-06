@@ -371,13 +371,11 @@ function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar }: RowProps) {
                             {tipo === 'pagar' ? 'Pagar' : 'Receber'}
                         </button>
                     )}
-                    {(canBaixar || canCancelar) && (
-                        <button onClick={() => onEditar(conta)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
-                            <Pencil size={12} />
-                            Editar
-                        </button>
-                    )}
+                    <button onClick={() => onEditar(conta)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
+                        <Pencil size={12} />
+                        Editar
+                    </button>
                     {canCancelar && (
                         <button onClick={() => onCancelar(conta)}
                             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 transition-colors">
