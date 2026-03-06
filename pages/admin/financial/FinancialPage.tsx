@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     DollarSign, TrendingDown, TrendingUp, RefreshCw, Plus, Check,
-    X, AlertCircle, Loader2, Calendar, Filter, Pencil
+    X, AlertCircle, Loader2, Calendar, Filter, Pencil, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { blingFinanceService } from '../../../services/blingFinanceService';
@@ -423,12 +423,23 @@ export default function FinancialPage() {
     const [dataInicio, setDataInicio] = useState(range.inicio);
     const [dataFim, setDataFim] = useState(range.fim);
     const [filtroSituacao, setFiltroSituacao] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [baixaTarget, setBaixaTarget] = useState<(ContaPagar | ContaReceber) | null>(null);
     const [lancarTipo, setLancarTipo] = useState<Tab | null>(null);
     const [editTarget, setEditTarget] = useState<(ContaPagar | ContaReceber) | null>(null);
 
-    const contas = tab === 'pagar' ? contasPagar : contasReceber;
+    const contasOriginais = tab === 'pagar' ? contasPagar : contasReceber;
+
+    // Filtragem local por texto
+    const contas = contasOriginais.filter(c => {
+        if (!searchTerm) return true;
+        const term = searchTerm.toLowerCase();
+        const hist = (c.historico || '').toLowerCase();
+        const cont = (c.contato?.nome || '').toLowerCase();
+        return hist.includes(term) || cont.includes(term);
+    });
+
     const summary = calcSummary(contas);
 
     const load = useCallback(async () => {
@@ -539,32 +550,50 @@ export default function FinancialPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap gap-3 items-end">
-                <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Vencimento de</label>
-                    <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
-                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+            <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-4">
+                <div className="flex flex-wrap gap-3 items-end">
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Buscar por Descrição / Contato</label>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                placeholder="Digite para filtrar a lista..."
+                                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white"
+                            />
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">até</label>
-                    <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)}
-                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+                <div className="flex flex-wrap gap-3 items-end pt-3 border-t border-slate-100">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Vencimento de (Bling)</label>
+                        <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
+                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">até</label>
+                        <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)}
+                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Situação no Bling</label>
+                        <select value={filtroSituacao} onChange={e => setFiltroSituacao(e.target.value)}
+                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white">
+                            <option value="">Todas</option>
+                            <option value="em_aberto">Em aberto</option>
+                            <option value="pago">Pago</option>
+                            <option value="cancelado">Cancelado</option>
+                        </select>
+                    </div>
+                    <button onClick={load} disabled={loading}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50">
+                        <Filter size={14} />
+                        Buscar no Bling
+                    </button>
+                    <div className="flex-1"></div>
                 </div>
-                <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Situação</label>
-                    <select value={filtroSituacao} onChange={e => setFiltroSituacao(e.target.value)}
-                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white">
-                        <option value="">Todas</option>
-                        <option value="em_aberto">Em aberto</option>
-                        <option value="pago">Pago</option>
-                        <option value="cancelado">Cancelado</option>
-                    </select>
-                </div>
-                <button onClick={load} disabled={loading}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50">
-                    <Filter size={14} />
-                    Filtrar
-                </button>
             </div>
 
             {/* Tabs */}
