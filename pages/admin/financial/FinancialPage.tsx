@@ -13,19 +13,31 @@ function formatCurrency(v: number): string {
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function situacaoLabel(s: string): { label: string; cls: string } {
-    switch (s) {
+// Bling retorna situacao como número: 1=Em aberto, 2=Pago, 3=Parcial, 4=Cancelado
+function normalizeSituacao(s: any): string {
+    const map: Record<string, string> = {
+        '1': 'em_aberto', 'em_aberto': 'em_aberto',
+        '2': 'pago', 'pago': 'pago', 'recebido': 'pago',
+        '3': 'parcial', 'parcial': 'parcial',
+        '4': 'cancelado', 'cancelado': 'cancelado',
+    };
+    return map[String(s).toLowerCase()] ?? String(s);
+}
+
+function situacaoLabel(s: any): { label: string; cls: string } {
+    switch (normalizeSituacao(s)) {
         case 'em_aberto': return { label: 'Em aberto', cls: 'bg-blue-100 text-blue-700' };
         case 'pago': return { label: 'Pago', cls: 'bg-green-100 text-green-700' };
         case 'parcial': return { label: 'Parcial', cls: 'bg-amber-100 text-amber-700' };
         case 'cancelado': return { label: 'Cancelado', cls: 'bg-slate-100 text-slate-500' };
         case 'vencido': return { label: 'Vencido', cls: 'bg-red-100 text-red-700' };
-        default: return { label: s, cls: 'bg-slate-100 text-slate-600' };
+        default: return { label: String(s), cls: 'bg-slate-100 text-slate-600' };
     }
 }
 
-function isVencido(vencimento: string, situacao: string): boolean {
-    if (situacao === 'pago' || situacao === 'cancelado') return false;
+function isVencido(vencimento: string, situacao: any): boolean {
+    const norm = normalizeSituacao(situacao);
+    if (norm === 'pago' || norm === 'cancelado') return false;
     return new Date(vencimento) < new Date(new Date().toDateString());
 }
 
@@ -335,11 +347,11 @@ interface RowProps {
 
 function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar }: RowProps) {
     const vencido = isVencido(conta.vencimento, conta.situacao);
-    const sit = situacaoLabel(vencido && conta.situacao === 'em_aberto' ? 'vencido' : conta.situacao);
+    const sit = situacaoLabel(vencido && normalizeSituacao(conta.situacao) === 'em_aberto' ? 'vencido' : conta.situacao);
     const vencDate = conta.vencimento.split('-').reverse().join('/');
-    // Mostrar todos os botões independente da situacao (valores variam no Bling)
-    const isPaid = String(conta.situacao).toLowerCase().includes('pag') || conta.situacao === '2';
-    const isCancelled = String(conta.situacao).toLowerCase().includes('cancel') || conta.situacao === '4';
+    const normSit = normalizeSituacao(conta.situacao);
+    const isPaid = normSit === 'pago';
+    const isCancelled = normSit === 'cancelado';
     const canBaixar = !isPaid && !isCancelled;
     const canCancelar = !isPaid && !isCancelled;
 
@@ -387,7 +399,7 @@ function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar }: RowProps) {
                             Cancelar
                         </button>
                     )}
-                    {conta.situacao === 'pago' && (
+                    {isPaid && (
                         <span className="flex items-center gap-1 text-xs text-green-600 font-semibold">
                             <Check size={12} /> Quitado
                         </span>
