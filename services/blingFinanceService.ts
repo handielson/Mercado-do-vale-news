@@ -90,6 +90,12 @@ export const blingFinanceService = {
         return allContas.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     },
 
+    async getConta(tipo: 'pagar' | 'receber', id: number): Promise<ContaPagar | ContaReceber> {
+        const params = new URLSearchParams({ resource: tipo, action: 'get', id: String(id) });
+        const json = await blingFetch(`${BASE}?${params}`);
+        return json?.data;
+    },
+
     async createConta(input: CreateContaInput): Promise<void> {
         const params = new URLSearchParams({ resource: input.tipo, action: 'create' });
         const body: Record<string, any> = {

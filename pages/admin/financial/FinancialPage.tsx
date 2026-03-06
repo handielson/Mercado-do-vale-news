@@ -497,8 +497,17 @@ export default function FinancialPage() {
         }
     }
 
-    function handlePrint(conta: ContaPagar | ContaReceber) {
-        printContaReceipt(conta, settings.company_name || 'Mercado do Vale', tab);
+    async function handlePrint(conta: ContaPagar | ContaReceber) {
+        const tId = toast.loading('Carregando histórico detalhado do Bling...');
+        try {
+            const detalhe = await blingFinanceService.getConta(tab, (conta as any).id);
+            toast.dismiss(tId);
+            printContaReceipt(detalhe || conta, settings.company_name || 'Mercado do Vale', tab);
+        } catch (err: any) {
+            toast.dismiss(tId);
+            toast.error('Erro ao trazer detalhes (imprimindo resumo): ' + err.message);
+            printContaReceipt(conta, settings.company_name || 'Mercado do Vale', tab);
+        }
     }
 
     async function handleLancar(input: CreateContaInput) {
