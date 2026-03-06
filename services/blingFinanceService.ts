@@ -45,13 +45,17 @@ export const blingFinanceService = {
         dataVencimentoFim?: string;
         situacao?: string;
     }): Promise<ContaPagar[]> {
-        const params = new URLSearchParams({ resource: 'pagar', action: 'list', limite: '100' });
-        if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
-        if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
-        if (filters?.situacao) params.set('situacao', filters.situacao);
+        const fetchPage = async (page: number) => {
+            const params = new URLSearchParams({ resource: 'pagar', action: 'list', limite: '100', pagina: String(page) });
+            if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
+            if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
+            if (filters?.situacao) params.set('situacao', filters.situacao);
+            const json = await blingFetch(`${BASE}?${params}`);
+            return (json?.data || []) as ContaPagar[];
+        };
 
-        const json = await blingFetch(`${BASE}?${params}`);
-        return (json?.data || []) as ContaPagar[];
+        const [p1, p2, p3] = await Promise.all([fetchPage(1), fetchPage(2), fetchPage(3)]);
+        return [...p1, ...p2, ...p3].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     },
 
     async listContasReceber(filters?: {
@@ -59,13 +63,17 @@ export const blingFinanceService = {
         dataVencimentoFim?: string;
         situacao?: string;
     }): Promise<ContaReceber[]> {
-        const params = new URLSearchParams({ resource: 'receber', action: 'list', limite: '100' });
-        if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
-        if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
-        if (filters?.situacao) params.set('situacao', filters.situacao);
+        const fetchPage = async (page: number) => {
+            const params = new URLSearchParams({ resource: 'receber', action: 'list', limite: '100', pagina: String(page) });
+            if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
+            if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
+            if (filters?.situacao) params.set('situacao', filters.situacao);
+            const json = await blingFetch(`${BASE}?${params}`);
+            return (json?.data || []) as ContaReceber[];
+        };
 
-        const json = await blingFetch(`${BASE}?${params}`);
-        return (json?.data || []) as ContaReceber[];
+        const [p1, p2, p3] = await Promise.all([fetchPage(1), fetchPage(2), fetchPage(3)]);
+        return [...p1, ...p2, ...p3].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     },
 
     async createConta(input: CreateContaInput): Promise<void> {
