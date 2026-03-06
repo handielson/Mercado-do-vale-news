@@ -11,7 +11,8 @@ export default async function handler(req: any, res: any) {
         'Content-Type': 'application/json',
     };
 
-    const BASE = 'https://www.bling.com.br/Api/v3';
+    const BASE = 'https://api.bling.com.br/Api/v3';
+
 
     // Path: /api/bling-finance?resource=pagar|receber&action=list|get|create|update|baixar&id=...
     const { resource, action, id } = req.query as Record<string, string>;
