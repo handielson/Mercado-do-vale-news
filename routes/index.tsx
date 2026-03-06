@@ -76,7 +76,9 @@ import CheckoutPage from '../pages/store/CheckoutPage';
 import OrderConfirmationPage from '../pages/store/OrderConfirmationPage';
 import OrderTrackingPage from '../pages/store/OrderTrackingPage';
 import OnlineOrdersPage from '../pages/admin/orders/OnlineOrdersPage';
+import FinancialPage from '../pages/admin/financial/FinancialPage';
 import { CartProvider } from '../contexts/CartContext';
+
 
 
 
@@ -332,6 +334,15 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     )
   },
+  {
+    path: "/admin/financeiro",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><FinancialPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+
   {
     path: "/admin/products/new",
     element: (
