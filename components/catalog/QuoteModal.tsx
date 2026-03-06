@@ -90,7 +90,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant 
             if (settings?.address) {
                 setStoreAddress(settings.address);
             }
-            getStoreStatus(settings?.business_hours, settings?.holiday_overrides)
+            getStoreStatus(settings?.business_hours, settings?.holiday_overrides, settings?.local_holidays)
                 .then(setStoreStatus)
                 .catch(console.error);
         }).catch(() => { });

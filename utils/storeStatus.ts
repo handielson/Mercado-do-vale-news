@@ -1,4 +1,5 @@
-import { BusinessHours } from '../types/companySettings';
+import { BusinessHours, LocalHoliday } from '../types/companySettings';
+
 import { holidayService, Holiday } from './holidayService';
 
 export type StoreState = 'open' | 'closed' | 'holiday' | 'closing_soon';
@@ -24,25 +25,41 @@ const DEFAULT_HOURS: BusinessHours = {
     sunday: { isOpen: false, openTime: '08:00', closeTime: '12:00', hasLunchBreak: false, lunchStart: '12:00', lunchEnd: '13:30' },
 };
 
-export async function getStoreStatus(businessHours?: BusinessHours, holidayOverrides?: string[]): Promise<StoreStatus> {
+export async function getStoreStatus(
+    businessHours?: BusinessHours,
+    holidayOverrides?: string[],
+    localHolidays?: LocalHoliday[]
+): Promise<StoreStatus> {
     const hours = businessHours || DEFAULT_HOURS;
     const now = new Date();
 
-    // 1. Check holiday first
-    const holiday = await holidayService.isHoliday(now);
-
-    // Format date string to check against overrides
+    // Format date string
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const dateString = `${year}-${month}-${day}`;
+
+    // 0. Feriados locais têm prioridade máxima
+    if (localHolidays && localHolidays.length > 0) {
+        const localMatch = localHolidays.find(h => h.date === dateString);
+        if (localMatch) {
+            return {
+                status: 'holiday',
+                message: `Fechado - ${localMatch.label}`,
+                actionMessage: `A loja está fechada hoje (${localMatch.label}). Seu pedido será processado no próximo dia útil.`,
+            };
+        }
+    }
+
+    // 1. Check national holiday
+    const holiday = await holidayService.isHoliday(now);
 
     // If it's a holiday, but NOT in the overrides list, we are closed
     if (holiday && (!holidayOverrides || !holidayOverrides.includes(dateString))) {
         return {
             status: 'holiday',
             message: `Fechado - Feriado (${holiday.name})`,
-            actionMessage: 'A loja está fechada devido ao feriado. Seu pedido será processado no próximo dia útil.',
+            actionMessage: 'A loja está fechada devido ao feriádo. Seu pedido será processado no próximo dia útil.',
             holiday
         };
     }

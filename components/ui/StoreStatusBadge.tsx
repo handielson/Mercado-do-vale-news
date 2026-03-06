@@ -11,7 +11,7 @@ export function StoreStatusBadge() {
         const checkStatus = async () => {
             try {
                 const settings = await companySettingsService.get();
-                const currentStatus = await getStoreStatus(settings?.business_hours, settings?.holiday_overrides);
+                const currentStatus = await getStoreStatus(settings?.business_hours, settings?.holiday_overrides, settings?.local_holidays);
                 console.log('[StoreStatus Check]', {
                     dayOfWeek: new Date().getDay(),
                     currentTime: `${new Date().getHours()}:${new Date().getMinutes()}`,

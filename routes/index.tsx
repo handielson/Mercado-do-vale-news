@@ -71,6 +71,13 @@ import { PromotionsPage as AdminPromotionsPage } from '../pages/admin/promotions
 import BlingPage from '../pages/admin/settings/BlingPage';
 import BlingCallbackPage from '../pages/admin/settings/BlingCallbackPage';
 import { ProductImageBankPage } from '../pages/admin/products/ProductImageBankPage';
+import CartPage from '../pages/store/CartPage';
+import CheckoutPage from '../pages/store/CheckoutPage';
+import OrderConfirmationPage from '../pages/store/OrderConfirmationPage';
+import OrderTrackingPage from '../pages/store/OrderTrackingPage';
+import OnlineOrdersPage from '../pages/admin/orders/OnlineOrdersPage';
+import { CartProvider } from '../contexts/CartContext';
+
 
 
 import { feedbackService } from '../services/feedbackService';
@@ -737,7 +744,45 @@ export const router = createBrowserRouter([
   },
   {
     path: "/",
-    element: <CatalogPage />
+    element: (
+      <CartProvider>
+        <CatalogPage />
+      </CartProvider>
+    )
+  },
+  // ─── Loja / Checkout ───────────────────────────────────────────────────────
+  {
+    path: "/carrinho",
+    element: (
+      <CartProvider>
+        <CartPage />
+      </CartProvider>
+    )
+  },
+  {
+    path: "/checkout",
+    element: (
+      <CartProvider>
+        <CheckoutPage />
+      </CartProvider>
+    )
+  },
+  {
+    path: "/pedido/:id",
+    element: <OrderTrackingPage />
+  },
+  {
+    path: "/pedido/:id/confirmacao",
+    element: <OrderConfirmationPage />
+  },
+  // ─── Admin — Pedidos Online ────────────────────────────────────────────────
+  {
+    path: "/admin/pedidos-online",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><OnlineOrdersPage /></AdminLayout>
+      </ProtectedRoute>
+    )
   },
   {
     path: "*",

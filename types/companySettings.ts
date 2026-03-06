@@ -6,6 +6,12 @@ export interface WarrantyOption {
     active: boolean;
 }
 
+export interface LocalHoliday {
+    date: string;  // 'YYYY-MM-DD'
+    label: string; // ex: 'Rodeio de Petrolina'
+}
+
+
 export interface DaySchedule {
     isOpen: boolean;
     openTime: string; // "HH:MM" format
@@ -56,6 +62,8 @@ export interface CompanySettings {
     ai_prompts?: any;
     business_hours?: BusinessHours;
     holiday_overrides?: string[];
+    local_holidays?: LocalHoliday[];
+
     created_at: string;
     updated_at: string;
 }
@@ -90,4 +98,6 @@ export interface CompanySettingsInput {
     ai_prompts?: any;
     business_hours?: BusinessHours;
     holiday_overrides?: string[];
+    local_holidays?: LocalHoliday[];
+
 }

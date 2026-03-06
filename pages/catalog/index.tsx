@@ -27,11 +27,13 @@ import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { ShareCatalogButton } from '@/components/catalog/ShareCatalogButton';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import type { CustomerType } from '@/services/bannerService';
+import { CartIcon } from '@/components/store/CartIcon';
+
 
 function CatalogContent() {
     const [sections, setSections] = useState<CatalogSection[]>([]);
     const [sectionsLoading, setSectionsLoading] = useState(true);
-    const [isCartOpen, setIsCartOpen] = useState(false);
+
     const [footerText, setFooterText] = useState('');
     const [promoActive, setPromoActive] = useState(false);
     const [promoData, setPromoData] = useState<Promotion | null>(null);
@@ -168,14 +170,9 @@ function CatalogContent() {
         return groupProductsByVariants(products, isAdmin);
     }, [products, isAdmin]);
 
-    // Handle send quote (will implement multi-product message in next phase)
-    const handleSendQuote = async () => {
-        // Placeholder - will implement in Phase 3
-        alert('Funcionalidade de envio será implementada na próxima fase!');
-        setIsCartOpen(false);
-    };
 
     if (error) {
+
         return (
             <div className="min-h-screen bg-slate-50">
                 <PublicHeader />
@@ -339,18 +336,12 @@ function CatalogContent() {
                 />
             </div>
 
-            {/* Floating Cart Button */}
-            <FloatingCartButton onClick={() => setIsCartOpen(true)} />
+            {/* Carrinho de Compras Online */}
+            <CartIcon />
 
             {/* Feedback Button */}
             <FeedbackFloatingButton />
 
-            {/* Cart Sidebar */}
-            <QuoteCartSidebar
-                isOpen={isCartOpen}
-                onClose={() => setIsCartOpen(false)}
-                onSendQuote={handleSendQuote}
-            />
 
             {/* Rodapé do Catálogo */}
             {footerText && (

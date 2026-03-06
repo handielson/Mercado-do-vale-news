@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2 } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
@@ -45,6 +45,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <NavItem to="/admin" icon={<LayoutDashboard size={18} />} label="Dashboard" active={location.pathname === '/admin'} />
           <NavItem to="/admin/pdv" icon={<ShoppingCart size={18} />} label="PDV" active={location.pathname.startsWith('/admin/pdv')} />
           <NavItem to="/admin/sales" icon={<ShoppingBag size={18} />} label="Vendas" active={location.pathname.startsWith('/admin/sales')} />
+          <NavItem to="/admin/pedidos-online" icon={<Globe size={18} />} label="Pedidos Online" active={location.pathname.startsWith('/admin/pedidos-online')} />
+
           <NavItem to="/admin/products" icon={<Package size={18} />} label="Produtos" active={location.pathname.startsWith('/admin/products')} />
           <NavItem to="/admin/inventory" icon={<ClipboardList size={18} />} label="Estoque" active={location.pathname.startsWith('/admin/inventory')} />
           <NavItem to="/admin/customers" icon={<Users size={18} />} label="Clientes" active={location.pathname.startsWith('/admin/customers')} />

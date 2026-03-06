@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check, GitCompare } from 'lucide-react';
+import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check, GitCompare, ShoppingBag } from 'lucide-react';
+
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { ProductVariants } from '@/services/productVariants';
 import { extractVariants } from '@/services/productVariants';
@@ -11,8 +12,10 @@ import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { useCompare } from '@/contexts/CompareContext';
+import { useCart } from '@/contexts/CartContext';
 import { CashbackBadge } from './CashbackBadge';
 import { getActivePromoPrice } from '@/utils/promoPrice';
+
 
 interface ModernProductCardProps {
     product: CatalogProduct;
@@ -85,10 +88,19 @@ export function ModernProductCard({
         return product;
     }, [selectedVariant, currentColorIndex, product]);
 
-    // Get customer context for pricing
     const { customer } = useSupabaseAuth();
     const { items } = useQuoteCart();
+    const { addItem: addToCartContext } = useCart();
     const isAdmin = customer?.customer_type === 'ADMIN';
+    const [addedToCart, setAddedToCart] = useState(false);
+
+    const handleAddToCart = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        addToCartContext(currentProduct);
+        setAddedToCart(true);
+        setTimeout(() => setAddedToCart(false), 2000);
+    };
+
 
     // Check if this product is in cart (by variant, not just product ID)
     const isInCart = useMemo(() => {
@@ -555,27 +567,37 @@ export function ModernProductCard({
 
                     {/* CTA Buttons */}
                     <div className="space-y-2">
-                        <button
-                            onClick={handleCardClick}
-                            className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 ${isInCart
-                                ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
-                                : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
-                                }`}
-                        >
-                            {isInCart ? (
-                                <>
-                                    <Check className="w-4 h-4" />
-                                    Adicionado
-                                </>
-                            ) : isAdmin ? (
-                                <>
-                                    <ShoppingCart className="w-4 h-4" />
-                                    Adicionar ao Orçamento
-                                </>
-                            ) : (
-                                'Comprar'
-                            )}
-                        </button>
+                        {/* Botão principal: Admin → Orçar | Cliente → Adicionar ao Carrinho */}
+                        {isAdmin ? (
+                            <button
+                                onClick={handleCardClick}
+                                className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 ${isInCart
+                                        ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
+                                        : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+                                    }`}
+                            >
+                                {isInCart ? (
+                                    <><Check className="w-4 h-4" />Adicionado</>
+                                ) : (
+                                    <><ShoppingCart className="w-4 h-4" />Adicionar ao Orçamento</>
+                                )}
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleAddToCart}
+                                className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 ${addedToCart
+                                        ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                                        : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+                                    }`}
+                            >
+                                {addedToCart ? (
+                                    <><Check className="w-4 h-4" />Adicionado!</>
+                                ) : (
+                                    <><ShoppingBag className="w-4 h-4" />Comprar</>
+                                )}
+                            </button>
+                        )}
+
                         <div className="flex flex-col sm:flex-row gap-2">
                             <button
                                 onClick={handleInfoClick}

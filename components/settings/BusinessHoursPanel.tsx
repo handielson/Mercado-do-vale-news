@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CalendarDays, Check, AlertCircle } from 'lucide-react';
-import { BusinessHours, DaySchedule } from '../../types/companySettings';
+import { Clock, CalendarDays, Check, AlertCircle, Plus, Trash2, MapPin } from 'lucide-react';
+import { BusinessHours, DaySchedule, LocalHoliday } from '../../types/companySettings';
 import { companySettingsService } from '../../services/companySettingsService';
 import { holidayService, Holiday } from '../../utils/holidayService';
 import toast from 'react-hot-toast';
+
 
 const DEFAULT_HOURS: BusinessHours = {
     monday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
@@ -28,10 +29,13 @@ const DAY_LABELS: Record<keyof BusinessHours, string> = {
 export function BusinessHoursPanel() {
     const [hours, setHours] = useState<BusinessHours>(DEFAULT_HOURS);
     const [holidayOverrides, setHolidayOverrides] = useState<string[]>([]);
+    const [localHolidays, setLocalHolidays] = useState<LocalHoliday[]>([]);
+    const [newHoliday, setNewHoliday] = useState({ date: '', label: '' });
     const [availableHolidays, setAvailableHolidays] = useState<Holiday[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+
 
     useEffect(() => {
         const loadSettings = async () => {
@@ -61,6 +65,11 @@ export function BusinessHoursPanel() {
                     setHolidayOverrides(settings.holiday_overrides);
                 }
 
+                if (settings?.local_holidays) {
+                    setLocalHolidays(settings.local_holidays);
+                }
+
+
                 // Fetch current year holidays
                 const currentYear = new Date().getFullYear();
                 const holidays = await holidayService.getHolidays(currentYear);
@@ -85,14 +94,18 @@ export function BusinessHoursPanel() {
         loadSettings();
     }, []);
 
-    const handleSave = async (updatedHours: BusinessHours, updatedOverrides: string[]) => {
+    const handleSave = async (
+        updatedHours: BusinessHours,
+        updatedOverrides: string[],
+        updatedLocalHolidays?: LocalHoliday[]
+    ) => {
         setIsSaving(true);
         try {
             await companySettingsService.update({
                 business_hours: updatedHours,
-                holiday_overrides: updatedOverrides
+                holiday_overrides: updatedOverrides,
+                local_holidays: updatedLocalHolidays ?? localHolidays,
             });
-            // We keep it silent since it auto-saves constantly
         } catch (error) {
             console.error('Failed to save business hours:', error);
             toast.error('Erro ao salvar horários.');
@@ -132,6 +145,26 @@ export function BusinessHoursPanel() {
         const timeout = setTimeout(() => handleSave(hours, newOverrides), 1000);
         setSaveTimeout(timeout);
     };
+
+    const handleLocalHolidayAdd = () => {
+        if (!newHoliday.date || !newHoliday.label.trim()) return;
+        const updated = [...localHolidays, { date: newHoliday.date, label: newHoliday.label.trim() }]
+            .sort((a, b) => a.date.localeCompare(b.date));
+        setLocalHolidays(updated);
+        setNewHoliday({ date: '', label: '' });
+        if (saveTimeout) clearTimeout(saveTimeout);
+        const timeout = setTimeout(() => handleSave(hours, holidayOverrides, updated), 500);
+        setSaveTimeout(timeout);
+    };
+
+    const handleLocalHolidayRemove = (date: string) => {
+        const updated = localHolidays.filter(h => h.date !== date);
+        setLocalHolidays(updated);
+        if (saveTimeout) clearTimeout(saveTimeout);
+        const timeout = setTimeout(() => handleSave(hours, holidayOverrides, updated), 500);
+        setSaveTimeout(timeout);
+    };
+
 
     if (isLoading) {
         return <div className="p-6 text-center text-slate-500 animate-pulse bg-white rounded-xl border border-slate-200">Carregando horários...</div>;
@@ -275,6 +308,65 @@ export function BusinessHoursPanel() {
                                 Nenhum feriado futuro encontrado para este ano.
                             </div>
                         )}
+                    </div>
+                </div>
+                {/* Feriados Locais */}
+                <div className="bg-amber-50 border border-amber-100 p-4 rounded-lg flex items-start gap-3 mt-6">
+                    <MapPin className="text-amber-500 mt-0.5 flex-shrink-0" size={20} />
+                    <div className="w-full">
+                        <h4 className="font-semibold text-amber-800">Feriados Locais / Datas de Fechamento</h4>
+                        <p className="text-sm text-amber-600 mt-1">
+                            Adicione feriados municipais ou qualquer data em que a loja ficará fechada.
+                            Essas datas são sincronizadas com o cabeçalho da loja.
+                        </p>
+
+                        {/* Lista */}
+                        {localHolidays.length > 0 && (
+                            <div className="mt-3 space-y-2 max-h-52 overflow-y-auto pr-1">
+                                {localHolidays.map(h => {
+                                    const [y, m, d] = h.date.split('-');
+                                    return (
+                                        <div key={h.date} className="flex items-center justify-between bg-white bg-opacity-60 p-3 rounded border border-amber-100">
+                                            <div>
+                                                <p className="font-medium text-slate-800 text-sm">{d}/{m}/{y} — {h.label}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleLocalHolidayRemove(h.date)}
+                                                className="text-red-400 hover:text-red-600 transition-colors p-1"
+                                                title="Remover"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Formulário de adição */}
+                        <div className="mt-3 flex gap-2 flex-wrap">
+                            <input
+                                type="date"
+                                value={newHoliday.date}
+                                onChange={e => setNewHoliday(p => ({ ...p, date: e.target.value }))}
+                                className="px-3 py-2 border border-amber-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 bg-white"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Nome do feriado / motivo"
+                                value={newHoliday.label}
+                                onChange={e => setNewHoliday(p => ({ ...p, label: e.target.value }))}
+                                onKeyDown={e => e.key === 'Enter' && handleLocalHolidayAdd()}
+                                className="flex-1 min-w-[180px] px-3 py-2 border border-amber-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 bg-white"
+                            />
+                            <button
+                                onClick={handleLocalHolidayAdd}
+                                disabled={!newHoliday.date || !newHoliday.label.trim()}
+                                className="flex items-center gap-1 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <Plus size={14} /> Adicionar
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

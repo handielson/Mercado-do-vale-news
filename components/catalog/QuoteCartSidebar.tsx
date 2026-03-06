@@ -50,7 +50,7 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                     setStoreAddress(data.address);
                 }
 
-                const status = await getStoreStatus(data?.business_hours, data?.holiday_overrides);
+                const status = await getStoreStatus(data?.business_hours, data?.holiday_overrides, data?.local_holidays);
                 setStoreStatus(status);
             } catch (error) {
                 console.error('Error loading WhatsApp number:', error);
