@@ -30,8 +30,8 @@ export default async function handler(req: any, res: any) {
             // GET /contas-pagar?pagina=1&limite=100&dataVencimentoInicio=...&dataVencimentoFim=...&situacao=...
             const { pagina = '1', limite = '100', dataVencimentoInicio, dataVencimentoFim, situacao } = req.query;
             let url = `${BASE}/${endpoint}?pagina=${pagina}&limite=${limite}`;
-            if (dataVencimentoInicio) url += `&dataVencimentoInicial=${dataVencimentoInicio}`;
-            if (dataVencimentoFim) url += `&dataVencimentoFinal=${dataVencimentoFim}`;
+            if (dataVencimentoInicio) url += `&dataInicial=${dataVencimentoInicio}`;
+            if (dataVencimentoFim) url += `&dataFinal=${dataVencimentoFim}`;
             if (situacao) url += `&situacoes[]=${situacao === 'pago' ? 2 : situacao === 'cancelado' ? 4 : situacao === 'em_aberto' ? 1 : situacao}`;
 
             const r = await fetch(url, { headers });
