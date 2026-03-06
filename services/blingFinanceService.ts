@@ -87,7 +87,10 @@ export const blingFinanceService = {
 
     async baixarConta(tipo: 'pagar' | 'receber', id: number, baixa: BaixaConta): Promise<void> {
         const params = new URLSearchParams({ resource: tipo, action: 'baixar', id: String(id) });
-        await blingFetch(`${BASE}?${params}`, { method: 'POST', body: JSON.stringify(baixa) });
+        // Bling API v3 exige o campo 'valorRecebido' para baixas de pagamentos e recebimentos
+        const payload = { ...baixa, valorRecebido: baixa.valor };
+        delete (payload as any).valor;
+        await blingFetch(`${BASE}?${params}`, { method: 'POST', body: JSON.stringify(payload) });
     },
 
     async cancelarConta(tipo: 'pagar' | 'receber', id: number): Promise<void> {

@@ -83,7 +83,7 @@ export default async function handler(req: any, res: any) {
         }
 
         if (action === 'baixar' && req.method === 'POST' && id) {
-            const r = await fetch(`${BASE}/${endpoint}/${id}/baixas`, {
+            const r = await fetch(`${BASE}/${endpoint}/${id}/baixar`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(req.body),
