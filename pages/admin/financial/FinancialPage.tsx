@@ -337,8 +337,12 @@ function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar }: RowProps) {
     const vencido = isVencido(conta.vencimento, conta.situacao);
     const sit = situacaoLabel(vencido && conta.situacao === 'em_aberto' ? 'vencido' : conta.situacao);
     const vencDate = conta.vencimento.split('-').reverse().join('/');
-    const canBaixar = conta.situacao === 'em_aberto' || conta.situacao === 'parcial';
-    const canCancelar = conta.situacao === 'em_aberto';
+    // Mostrar todos os botões independente da situacao (valores variam no Bling)
+    const isPaid = String(conta.situacao).toLowerCase().includes('pag') || conta.situacao === '2';
+    const isCancelled = String(conta.situacao).toLowerCase().includes('cancel') || conta.situacao === '4';
+    const canBaixar = !isPaid && !isCancelled;
+    const canCancelar = !isPaid && !isCancelled;
+
 
     return (
         <tr className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${vencido ? 'bg-red-50/40' : ''}`}>
