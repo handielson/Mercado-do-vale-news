@@ -29,10 +29,12 @@ async function blingFetch(url: string, options: RequestInit = {}): Promise<any> 
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-        const msg = json?.error?.fields?.map((f: any) => f.msg).join(', ') || json?.message || `Erro ${res.status}`;
-        throw new Error(msg);
+        const hint = json?.hint ? ` — ${json.hint}` : '';
+        const detail = json?.detail || json?.error?.fields?.map((f: any) => f.msg).join(', ') || json?.message || `Erro ${res.status}`;
+        throw new Error(`${detail}${hint}`);
     }
     return json;
+
 }
 
 // ─── Contas a Pagar ──────────────────────────────────────────

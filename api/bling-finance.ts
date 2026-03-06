@@ -32,9 +32,24 @@ export default async function handler(req: any, res: any) {
             if (situacao) url += `&situacao=${situacao}`;
 
             const r = await fetch(url, { headers });
-            if (!r.ok) return res.status(r.status).json({ error: `Bling error: ${r.status}`, detail: await r.text() });
-            return res.status(200).json(await r.json());
+            const body = await r.text();
+            if (!r.ok) {
+                let parsed: any = {};
+                try { parsed = JSON.parse(body); } catch { }
+                const blingMsg = parsed?.error?.description || parsed?.mensagem || parsed?.message || body;
+                return res.status(r.status).json({
+                    error: `Bling ${r.status}`,
+                    detail: blingMsg,
+                    hint: r.status === 404
+                        ? 'Verifique se o escopo "Contas a Pagar/Receber" está habilitado no app Bling.'
+                        : r.status === 401
+                            ? 'Token expirado. Reconecte o Bling em Configurações > Integração Bling.'
+                            : undefined,
+                });
+            }
+            return res.status(200).json(JSON.parse(body));
         }
+
 
         if (action === 'get' && req.method === 'GET' && id) {
             const r = await fetch(`${BASE}/${endpoint}/${id}`, { headers });
