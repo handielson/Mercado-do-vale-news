@@ -21,7 +21,9 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'resource must be "pagar" or "receber"' });
     }
 
-    const endpoint = resource === 'pagar' ? 'contas-pagar' : 'contas-receber';
+    // ✅ Endpoint correto confirmado: /contas/pagar e /contas/receber (barra, não hífen)
+    const endpoint = resource === 'pagar' ? 'contas/pagar' : 'contas/receber';
+
 
     try {
         if (action === 'list' && req.method === 'GET') {
