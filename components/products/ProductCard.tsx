@@ -183,8 +183,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 product.specs?.color,
                                 product.specs?.storage,
                                 product.specs?.ram ? `${product.specs.ram} RAM` : undefined,
-                            ].filter(Boolean).join(' · ') || product.sku || ''}
+                            ].filter(Boolean).join(' · ')}
                         </p>
+                        {/* SKU sempre visível */}
+                        {product.sku && (
+                            <p className="font-mono text-[10px] text-slate-400 mt-0.5">SKU: {product.sku}</p>
+                        )}
+                        {/* Badge Pai / Variação */}
+                        {product.parent_id ? (
+                            <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                                ↳ Variação
+                            </span>
+                        ) : null}
                     </div>
                     <div className="flex items-center gap-1">
                         <button

@@ -82,7 +82,7 @@ export function ProductCard({
                     <div className="relative w-32 h-32 flex-shrink-0">
                         <img
                             src={imageUrl}
-                            alt={product.name}
+                            alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
                             onError={() => setImageError(true)}
                             className="w-full h-full object-cover rounded-lg"
                         />
@@ -165,7 +165,7 @@ export function ProductCard({
             <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
                 <img
                     src={imageUrl}
-                    alt={product.name}
+                    alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
                     onError={() => setImageError(true)}
                     className={`w-full h-full object-cover transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
                         }`}

@@ -31,6 +31,7 @@ import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
+import { BlingLinkSection } from './sections/BlingLinkSection';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -43,6 +44,8 @@ interface ProductFormProps {
 export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, isLoading }: ProductFormProps) {
     const [imagePreviews, setImagePreviews] = useState<string[]>(initialData?.images || []);
     const [isCompressing, setIsCompressing] = useState(false);
+    const [blingId, setBlingId] = useState<number | undefined>(initialData?.bling_id);
+    const [blingParentId, setBlingParentId] = useState<number | undefined>(initialData?.bling_parent_id);
 
     // Estado para armazenar as regras da categoria (Traffic Light)
     const [categoryConfig, setCategoryConfig] = useState<CategoryConfig | null>(null);
@@ -512,6 +515,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 console.log('✅ Cleared stock_quantity (inventory tracking disabled)');
             }
 
+            // Inject bling link
+            mergedData.bling_id = blingId;
+            mergedData.bling_parent_id = blingParentId;
+
             // 1. Salvar produto(s)
             console.log('📤 [ProductForm] Sending to onSubmit:', mergedData);
 
@@ -776,6 +783,20 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 useCustomImages={useCustomImages}
                 onToggleCustomImages={setUseCustomImages}
                 hasDefaultImages={!!selectedModel?.id && !!selectedColor}
+            />
+
+            {/* VÍNCULO COM BLING */}
+            <BlingLinkSection
+                blingId={blingId}
+                blingParentId={blingParentId}
+                onLink={(id, parentId) => {
+                    setBlingId(id);
+                    setBlingParentId(parentId);
+                }}
+                onUnlink={() => {
+                    setBlingId(undefined);
+                    setBlingParentId(undefined);
+                }}
             />
 
             {/* 5. CONTROLE DE ESTOQUE */}

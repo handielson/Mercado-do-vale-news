@@ -269,7 +269,11 @@ export function ModernProductCard({
                 <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
                     <img
                         src={currentImage}
-                        alt={product.name}
+                        alt={[
+                            currentProduct.name || product.name,
+                            variants?.colors[currentColorIndex]?.name || currentProduct.specs?.color,
+                            currentProduct.brand,
+                        ].filter(Boolean).join(' ')}
                         onError={() => setImageError(true)}
                         className={`w-full h-full object-contain transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
                             }`}

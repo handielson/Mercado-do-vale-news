@@ -5,11 +5,13 @@ import { Model } from '../../../types/model';
 import { EANInput } from '../../ui/EANInput';
 import { ModelSelect } from '../selectors/ModelSelect';
 import { CategorySelect } from '../CategorySelect';
-import { Package } from 'lucide-react';
+import { Package, GitBranch } from 'lucide-react';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
 import { versionService } from '../../../services/versions-supabase';
 import { FIELD_DICTIONARY } from '../../../config/field-dictionary';
+import { productService } from '../../../services/products';
+import { Product } from '../../../types/product';
 
 // Tradução de chaves técnicas do template_values para labels em português
 const TEMPLATE_LABELS: Record<string, string> = {
@@ -70,6 +72,23 @@ export function ProductBasicInfo({
     const [isLoadingModel, setIsLoadingModel] = useState(false);
     const [brandName, setBrandName] = useState<string>('');
     const [resolvedTemplateValues, setResolvedTemplateValues] = useState<Record<string, string>>({});
+    const [allProducts, setAllProducts] = useState<Product[]>([]);
+    const [parentSearch, setParentSearch] = useState('');
+    const [selectedParent, setSelectedParent] = useState<Product | null>(null);
+
+    // Carrega lista de produtos para busca de pai
+    useEffect(() => {
+        productService.list().then(setAllProducts).catch(() => { });
+    }, []);
+
+    // Preenche selectedParent ao editar um produto que já tem parent_id
+    useEffect(() => {
+        const pid = watch('parent_id');
+        if (pid && allProducts.length > 0) {
+            const parent = allProducts.find(p => p.id === pid);
+            setSelectedParent(parent || null);
+        }
+    }, [watch('parent_id'), allProducts]);
 
     const selectedModelName = watch('model');
 
@@ -261,50 +280,126 @@ export function ProductBasicInfo({
                             placeholder="Será gerado automaticamente se deixado vazio"
                         />
                     </div>
-                </div>
-            </div>
 
-            {/* Template Data Preview (read-only) — shown when a model is selected */}
-            {selectedModel?.template_values && Object.keys(selectedModel.template_values).length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                    <h4 className="font-medium text-blue-900 mb-3 flex items-center gap-2 text-sm">
-                        📋 Dados do Modelo (somente leitura)
-                        <span className="ml-1 text-xs text-slate-400 font-mono font-normal">models.template_values</span>
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                        <div>
-                            <span className="text-blue-700 font-medium">Modelo:</span>
-                            <span className="ml-2 text-blue-900">{selectedModel.name}</span>
-                        </div>
-                        {brandName && (
-                            <div>
-                                <span className="text-blue-700 font-medium">Marca:</span>
-                                <span className="ml-2 text-blue-900">{brandName}</span>
+                    {/* Produto Pai (Variação) */}
+                    <div className="space-y-1 md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1.5">
+                            <GitBranch size={14} className="text-slate-400" />
+                            Produto Pai
+                            <span className="ml-1 text-xs text-slate-400 font-mono">products.parent_id</span>
+                            <span className="ml-2 text-xs text-slate-400">(opcional — vincule se este é uma variação de cor/versão)</span>
+                        </label>
+
+                        {selectedParent ? (
+                            <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md">
+                                <GitBranch size={14} className="text-amber-600 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <span className="text-sm font-medium text-amber-900">{selectedParent.name}</span>
+                                    <span className="ml-2 font-mono text-xs text-amber-600">SKU: {selectedParent.sku}</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedParent(null);
+                                        setParentSearch('');
+                                        setValue('parent_id', undefined);
+                                    }}
+                                    className="text-amber-400 hover:text-red-500 transition-colors text-xs px-2 py-1 rounded hover:bg-red-50"
+                                >
+                                    Remover
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    value={parentSearch}
+                                    onChange={(e) => setParentSearch(e.target.value)}
+                                    className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    placeholder="Buscar por SKU ou nome do produto pai..."
+                                />
+                                {parentSearch.length >= 2 && (() => {
+                                    const filtered = allProducts.filter(p =>
+                                        !p.parent_id && // só pais
+                                        p.id !== initialData?.id && // não ele mesmo
+                                        (p.sku?.toLowerCase().includes(parentSearch.toLowerCase()) ||
+                                            p.name.toLowerCase().includes(parentSearch.toLowerCase()))
+                                    ).slice(0, 6);
+                                    if (filtered.length === 0) return null;
+                                    return (
+                                        <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-auto">
+                                            {filtered.map(p => (
+                                                <li
+                                                    key={p.id}
+                                                    className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-blue-50 text-sm"
+                                                    onClick={() => {
+                                                        setSelectedParent(p);
+                                                        setParentSearch('');
+                                                        setValue('parent_id', p.id);
+                                                        // Sugere SKU filho se o campo estiver vazio
+                                                        const currentSku = watch('sku');
+                                                        if (!currentSku?.trim() && p.sku) {
+                                                            const colorPart = watch('specs.color')
+                                                                ? `-${watch('specs.color').substring(0, 3).toUpperCase()}`
+                                                                : '-VAR';
+                                                            setValue('sku', `${p.sku}${colorPart}`);
+                                                        }
+                                                    }}
+                                                >
+                                                    <span className="font-mono text-xs text-slate-400 w-32 shrink-0 truncate">{p.sku || '—'}</span>
+                                                    <span className="text-slate-800 truncate">{p.name}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    );
+                                })()}
                             </div>
                         )}
-                        {(() => {
-                            // Deduplica por label — quando dois campos têm o mesmo label, mostra o primeiro
-                            const seenLabels = new Set<string>();
-                            return Object.entries(resolvedTemplateValues)
-                                .filter(([key]) => {
-                                    const label = getTemplateLabel(key);
-                                    if (seenLabels.has(label)) return false;
-                                    seenLabels.add(label);
-                                    return true;
-                                })
-                                .map(([key, value]) => (
-                                    <div key={key}>
-                                        <span className="text-blue-700 font-medium">{getTemplateLabel(key)}:</span>
-                                        <span className="ml-2 text-blue-900">{value}</span>
-                                    </div>
-                                ));
-                        })()}
                     </div>
-                    <p className="text-xs text-blue-600 mt-3">
-                        💡 Estes valores serão aplicados automaticamente ao produto
-                    </p>
                 </div>
-            )}
+
+                {/* Template Data Preview (read-only) — shown when a model is selected */}
+                {selectedModel?.template_values && Object.keys(selectedModel.template_values).length > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <h4 className="font-medium text-blue-900 mb-3 flex items-center gap-2 text-sm">
+                            📋 Dados do Modelo (somente leitura)
+                            <span className="ml-1 text-xs text-slate-400 font-mono font-normal">models.template_values</span>
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div>
+                                <span className="text-blue-700 font-medium">Modelo:</span>
+                                <span className="ml-2 text-blue-900">{selectedModel.name}</span>
+                            </div>
+                            {brandName && (
+                                <div>
+                                    <span className="text-blue-700 font-medium">Marca:</span>
+                                    <span className="ml-2 text-blue-900">{brandName}</span>
+                                </div>
+                            )}
+                            {(() => {
+                                // Deduplica por label — quando dois campos têm o mesmo label, mostra o primeiro
+                                const seenLabels = new Set<string>();
+                                return Object.entries(resolvedTemplateValues)
+                                    .filter(([key]) => {
+                                        const label = getTemplateLabel(key);
+                                        if (seenLabels.has(label)) return false;
+                                        seenLabels.add(label);
+                                        return true;
+                                    })
+                                    .map(([key, value]) => (
+                                        <div key={key}>
+                                            <span className="text-blue-700 font-medium">{getTemplateLabel(key)}:</span>
+                                            <span className="ml-2 text-blue-900">{value}</span>
+                                        </div>
+                                    ));
+                            })()}
+                        </div>
+                        <p className="text-xs text-blue-600 mt-3">
+                            💡 Estes valores serão aplicados automaticamente ao produto
+                        </p>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

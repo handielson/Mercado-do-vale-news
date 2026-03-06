@@ -70,6 +70,7 @@ import { FeedbackListPage } from '../pages/admin/feedbacks/FeedbackListPage';
 import { PromotionsPage as AdminPromotionsPage } from '../pages/admin/promotions/PromotionsPage';
 import BlingPage from '../pages/admin/settings/BlingPage';
 import BlingCallbackPage from '../pages/admin/settings/BlingCallbackPage';
+import { ProductImageBankPage } from '../pages/admin/products/ProductImageBankPage';
 
 
 import { feedbackService } from '../services/feedbackService';
@@ -345,6 +346,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><BulkRegistrationPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/products/image-bank",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ProductImageBankPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

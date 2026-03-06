@@ -109,6 +109,9 @@ export interface Product {
     promo_start?: string;          // Início da promoção (ISO 8601)
     promo_end?: string;            // Fim da promoção (ISO 8601)
 
+    // Variações Pai-Filho (sistema nativo)
+    parent_id?: string;        // UUID do produto pai (null = produto pai ou independente)
+
     // Bling ERP Integration
     bling_id?: number;         // ID do produto no Bling
     bling_parent_id?: number;  // ID do produto pai no Bling (para variações)
@@ -127,6 +130,7 @@ export interface ProductInput {
     model?: string;            // Optional: model name for display
     category_id?: string;      // Optional: override from model
     brand?: string;            // Optional: override from model
+    parent_id?: string;        // Optional: UUID do produto pai
     name: string;
     sku: string;
     price_cost: number;
@@ -162,4 +166,7 @@ export interface ProductInput {
     price_promo?: number;
     promo_start?: string;
     promo_end?: string;
+    // Bling ERP Integration
+    bling_id?: number;
+    bling_parent_id?: number;
 }

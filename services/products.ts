@@ -99,6 +99,19 @@ async function create(input: ProductInput): Promise<Product> {
         throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
     }
 
+    // Validate SKU uniqueness
+    if (input.sku) {
+        const { data: existing } = await supabase
+            .from('products')
+            .select('id, name')
+            .eq('company_id', companyId)
+            .eq('sku', input.sku)
+            .maybeSingle();
+        if (existing) {
+            throw new Error(`SKU "${input.sku}" já está em uso pelo produto "${existing.name}". Cada produto deve ter um SKU único.`);
+        }
+    }
+
     // Fetch model data to populate brand, category, dimensions
     const { data: modelData, error: modelError } = await supabase
         .from('models')
@@ -126,6 +139,7 @@ async function create(input: ProductInput): Promise<Product> {
         .insert({
             company_id: companyId,
             model_id: input.model_id,
+            parent_id: input.parent_id || null,
             brand,
             category_id,
             name: input.name,
@@ -153,6 +167,8 @@ async function create(input: ProductInput): Promise<Product> {
             price_promo: input.price_promo || null,
             promo_start: input.promo_start || null,
             promo_end: input.promo_end || null,
+            bling_id: input.bling_id || null,
+            bling_parent_id: input.bling_parent_id || null,
         })
         .select('*')
         .single();
@@ -171,6 +187,20 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     // Validate model_id is provided
     if (!input.model_id || input.model_id.trim() === '') {
         throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
+    }
+
+    // Validate SKU uniqueness (excluding self)
+    if (input.sku) {
+        const { data: existing } = await supabase
+            .from('products')
+            .select('id, name')
+            .eq('company_id', companyId)
+            .eq('sku', input.sku)
+            .neq('id', id)
+            .maybeSingle();
+        if (existing) {
+            throw new Error(`SKU "${input.sku}" já está em uso pelo produto "${existing.name}". Cada produto deve ter um SKU único.`);
+        }
     }
 
     // Fetch model data to populate brand, category, dimensions
@@ -199,6 +229,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         .from('products')
         .update({
             model_id: input.model_id,
+            parent_id: input.parent_id ?? null,
             brand,
             category_id,
             name: input.name,
@@ -226,6 +257,8 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             price_promo: input.price_promo || null,
             promo_start: input.promo_start || null,
             promo_end: input.promo_end || null,
+            bling_id: input.bling_id || null,
+            bling_parent_id: input.bling_parent_id || null,
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -313,6 +346,23 @@ async function searchByEAN(ean: string): Promise<Product[]> {
 }
 
 /**
+ * List children (variations) of a parent product
+ */
+async function listChildren(parentId: string): Promise<Product[]> {
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('parent_id', parentId)
+        .order('name');
+
+    if (error) throw new Error(`Failed to fetch product children: ${error.message}`);
+    return (data || []).map(transformFromDB);
+}
+
+/**
  * Transform database row to Product type
  */
 function transformFromDB(row: any): Product {
@@ -343,6 +393,9 @@ function transformFromDB(row: any): Product {
         is_gift: row.is_gift || false,
         warranty_type: row.warranty_type || 'brand',
         warranty_template_id: row.warranty_template_id || null,
+        parent_id: row.parent_id || undefined,
+        bling_id: row.bling_id || undefined,
+        bling_parent_id: row.bling_parent_id || undefined,
         price_promo: row.price_promo || undefined,
         promo_start: row.promo_start || undefined,
         promo_end: row.promo_end || undefined,
@@ -359,5 +412,6 @@ export const productService = {
     update,
     delete: deleteProduct,
     search,
-    searchByEAN
+    searchByEAN,
+    listChildren
 };
