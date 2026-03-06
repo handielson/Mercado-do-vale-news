@@ -54,8 +54,15 @@ export const blingFinanceService = {
             return (json?.data || []) as ContaPagar[];
         };
 
-        const [p1, p2, p3] = await Promise.all([fetchPage(1), fetchPage(2), fetchPage(3)]);
-        return [...p1, ...p2, ...p3].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+        const allContas: ContaPagar[] = [];
+        for (let page = 1; page <= 3; page++) {
+            if (page > 1) await new Promise(r => setTimeout(r, 400)); // Delay p/ evitar Rate Limit (400ms)
+            const pageData = await fetchPage(page);
+            allContas.push(...pageData);
+            if (pageData.length < 100) break; // Se não encheu a página, não tem próxima
+        }
+
+        return allContas.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     },
 
     async listContasReceber(filters?: {
@@ -72,8 +79,15 @@ export const blingFinanceService = {
             return (json?.data || []) as ContaReceber[];
         };
 
-        const [p1, p2, p3] = await Promise.all([fetchPage(1), fetchPage(2), fetchPage(3)]);
-        return [...p1, ...p2, ...p3].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+        const allContas: ContaReceber[] = [];
+        for (let page = 1; page <= 3; page++) {
+            if (page > 1) await new Promise(r => setTimeout(r, 400)); // Delay p/ evitar Rate Limit (400ms)
+            const pageData = await fetchPage(page);
+            allContas.push(...pageData);
+            if (pageData.length < 100) break; // Se não encheu a página, não tem próxima
+        }
+
+        return allContas.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     },
 
     async createConta(input: CreateContaInput): Promise<void> {
