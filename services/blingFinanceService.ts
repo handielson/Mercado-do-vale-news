@@ -94,4 +94,16 @@ export const blingFinanceService = {
         const params = new URLSearchParams({ resource: tipo, action: 'cancelar', id: String(id) });
         await blingFetch(`${BASE}?${params}`, { method: 'DELETE' });
     },
+
+    async updateConta(tipo: 'pagar' | 'receber', id: number, data: {
+        historico?: string;
+        vencimento?: string;
+        valor?: number;
+        competencia?: string;
+        contato?: { id?: number; nome?: string };
+    }): Promise<void> {
+        const params = new URLSearchParams({ resource: tipo, action: 'update', id: String(id) });
+        await blingFetch(`${BASE}?${params}`, { method: 'PUT', body: JSON.stringify(data) });
+    },
 };
+

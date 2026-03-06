@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     DollarSign, TrendingDown, TrendingUp, RefreshCw, Plus, Check,
-    X, AlertCircle, Loader2, ChevronDown, ChevronUp, Calendar, Filter
+    X, AlertCircle, Loader2, Calendar, Filter, Pencil
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { blingFinanceService } from '../../../services/blingFinanceService';
@@ -234,6 +234,81 @@ function LancarModal({ tipo, onConfirm, onClose }: LancarModalProps) {
     );
 }
 
+// ─── Modal: Editar Conta ───────────────────────────────────────────────────
+
+interface EditModalProps {
+    conta: ContaPagar | ContaReceber;
+    tipo: 'pagar' | 'receber';
+    onConfirm: (data: { historico: string; vencimento: string; valor: number; contatoNome: string }) => Promise<void>;
+    onClose: () => void;
+}
+
+function EditModal({ conta, onConfirm, onClose }: EditModalProps) {
+    const [historico, setHistorico] = useState(conta.historico || '');
+    const [vencimento, setVencimento] = useState(conta.vencimento);
+    const [valor, setValor] = useState(String(conta.valor.toFixed(2)));
+    const [contatoNome, setContatoNome] = useState(conta.contato?.nome || '');
+    const [saving, setSaving] = useState(false);
+
+    async function handleSave() {
+        if (!valor || parseFloat(valor) <= 0) { toast.error('Informe um valor válido.'); return; }
+        setSaving(true);
+        try {
+            await onConfirm({ historico, vencimento, valor: parseFloat(valor), contatoNome });
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                    <h3 className="text-base font-bold text-slate-800">✏️ Editar Conta</h3>
+                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+                        <X size={16} />
+                    </button>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Descrição / Histórico</label>
+                        <input type="text" value={historico} onChange={e => setHistorico(e.target.value)}
+                            placeholder="Ex: Aluguel março"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">Vencimento *</label>
+                            <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">Valor (R$) *</label>
+                            <input type="number" step="0.01" min="0.01" value={valor} onChange={e => setValor(e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Contato / Beneficiário</label>
+                        <input type="text" value={contatoNome} onChange={e => setContatoNome(e.target.value)}
+                            placeholder="Nome do contato"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+                    </div>
+                </div>
+                <div className="flex justify-end gap-2 px-5 pb-5">
+                    <button onClick={onClose}
+                        className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Cancelar</button>
+                    <button onClick={handleSave} disabled={saving}
+                        className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
+                        {saving ? <Loader2 size={15} className="animate-spin" /> : <Pencil size={15} />}
+                        Salvar no Bling
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── Summary Cards ──────────────────────────────────────────────────────────
 
 function SummaryCard({ label, value, icon, colorCls }: { label: string; value: number; icon: React.ReactNode; colorCls: string }) {
@@ -255,9 +330,10 @@ interface RowProps {
     tipo: 'pagar' | 'receber';
     onBaixar: (c: ContaPagar | ContaReceber) => void;
     onCancelar: (c: ContaPagar | ContaReceber) => void;
+    onEditar: (c: ContaPagar | ContaReceber) => void;
 }
 
-function ContaRow({ conta, tipo, onBaixar, onCancelar }: RowProps) {
+function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar }: RowProps) {
     const vencido = isVencido(conta.vencimento, conta.situacao);
     const sit = situacaoLabel(vencido && conta.situacao === 'em_aberto' ? 'vencido' : conta.situacao);
     const vencDate = conta.vencimento.split('-').reverse().join('/');
@@ -295,6 +371,13 @@ function ContaRow({ conta, tipo, onBaixar, onCancelar }: RowProps) {
                             {tipo === 'pagar' ? 'Pagar' : 'Receber'}
                         </button>
                     )}
+                    {(canBaixar || canCancelar) && (
+                        <button onClick={() => onEditar(conta)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
+                            <Pencil size={12} />
+                            Editar
+                        </button>
+                    )}
                     {canCancelar && (
                         <button onClick={() => onCancelar(conta)}
                             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 transition-colors">
@@ -329,6 +412,7 @@ export default function FinancialPage() {
 
     const [baixaTarget, setBaixaTarget] = useState<(ContaPagar | ContaReceber) | null>(null);
     const [lancarTipo, setLancarTipo] = useState<Tab | null>(null);
+    const [editTarget, setEditTarget] = useState<(ContaPagar | ContaReceber) | null>(null);
 
     const contas = tab === 'pagar' ? contasPagar : contasReceber;
     const summary = calcSummary(contas);
@@ -386,6 +470,23 @@ export default function FinancialPage() {
             await load();
         } catch (err: any) {
             toast.error('Erro ao lançar: ' + err.message);
+        }
+    }
+
+    async function handleEditar(data: { historico: string; vencimento: string; valor: number; contatoNome: string }) {
+        if (!editTarget) return;
+        try {
+            await blingFinanceService.updateConta(tab, (editTarget as any).id, {
+                historico: data.historico || undefined,
+                vencimento: data.vencimento,
+                valor: data.valor,
+                contato: data.contatoNome ? { nome: data.contatoNome } : undefined,
+            });
+            toast.success('Conta atualizada no Bling!');
+            setEditTarget(null);
+            await load();
+        } catch (err: any) {
+            toast.error('Erro ao editar: ' + err.message);
         }
     }
 
@@ -527,6 +628,7 @@ export default function FinancialPage() {
                                         tipo={tab}
                                         onBaixar={setBaixaTarget}
                                         onCancelar={handleCancelar}
+                                        onEditar={setEditTarget}
                                     />
                                 ))}
                             </tbody>
@@ -549,6 +651,14 @@ export default function FinancialPage() {
                     tipo={lancarTipo}
                     onConfirm={handleLancar}
                     onClose={() => setLancarTipo(null)}
+                />
+            )}
+            {editTarget && (
+                <EditModal
+                    conta={editTarget}
+                    tipo={tab}
+                    onConfirm={handleEditar}
+                    onClose={() => setEditTarget(null)}
                 />
             )}
         </div>
