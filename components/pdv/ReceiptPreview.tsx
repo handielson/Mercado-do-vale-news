@@ -178,40 +178,27 @@ export default function ReceiptPreview({
         <div className="bg-white rounded-xl border-2 border-slate-200 shadow-lg sticky top-6">
             {/* Header - Padronizado com Termo de Garantia */}
             <div className="bg-white p-6 rounded-t-xl border-b-2 border-slate-300">
-                <div className="flex items-start gap-4">
-                    {/* Logo */}
-                    {companySettings?.receipt_logo_url && (
-                        <div className="flex-shrink-0">
-                            <img
-                                src={companySettings.receipt_logo_url}
-                                alt="Logo"
-                                className="max-w-[150px] max-h-[80px] object-contain"
-                                onError={(e) => {
-                                    // Hide image if fails to load
-                                    e.currentTarget.style.display = 'none';
-                                }}
-                            />
-                        </div>
-                    )}
-
-                    {/* Company Info */}
-                    <div className="flex-1 text-right">
-                        <h2 className="text-lg font-bold text-slate-800 uppercase mb-1">
-                            Comprovante de Venda
-                        </h2>
-                        <p className="font-bold text-slate-700">
-                            {companySettings?.company_name || 'MERCADO DO VALE'}
-                        </p>
-                        {companySettings?.show_company_info && (
-                            <div className="text-xs text-slate-600 mt-1 space-y-0.5">
-                                {companySettings?.cnpj && <p>CNPJ: {companySettings.cnpj}</p>}
-                                {companySettings?.address && <p>{companySettings.address}</p>}
-                                {companySettings?.phone && <p>Tel: {companySettings.phone}</p>}
-                                {companySettings?.email && <p>{companySettings.email}</p>}
-                            </div>
-                        )}
+                {companySettings ? (
+                    <div dangerouslySetInnerHTML={{
+                        __html: (companySettings.default_thermal_header || companySettingsService.getDefaults().default_thermal_header || '')
+                            .replace(/{{logo}}/g, companySettings.receipt_logo_url || (companySettings as any).logo
+                                ? `<img src="${companySettings.receipt_logo_url || (companySettings as any).logo}" alt="Logo Empresa" style="max-height:80px; object-fit:contain; margin:0 auto;" />`
+                                : `<div style="width:120px; height:60px; background:#e2e8f0; margin:0 auto; display:flex; align-items:center; justify-content:center; color:#64748b; font-size:12px;">Logo</div>`
+                            )
+                            .replace(/{{nome_loja}}/g, companySettings.company_name || 'Mercado do Vale')
+                            .replace(/{{cnpj}}/g, companySettings.cnpj || '')
+                            .replace(/{{endereco}}/g, companySettings.address || '')
+                            .replace(/{{telefone}}/g, companySettings.phone || '')
+                            .replace(/{{email}}/g, companySettings.email || '')
+                            .replace(/{{nome_documento}}/g, 'COMPROVANTE DE VENDA')
+                    }} />
+                ) : (
+                    <div className="animate-pulse flex flex-col items-center justify-center gap-2 w-full">
+                        <div className="h-16 w-32 bg-slate-200 rounded"></div>
+                        <div className="h-4 w-48 bg-slate-200 rounded mt-2"></div>
+                        <div className="h-3 w-32 bg-slate-200 rounded"></div>
                     </div>
-                </div>
+                )}
 
                 {/* Custom Header Text */}
                 {companySettings?.header_text && (
