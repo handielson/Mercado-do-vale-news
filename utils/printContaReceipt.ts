@@ -1,15 +1,17 @@
 import { ContaPagar, ContaReceber } from '../types/finance';
+import { CompanySettings } from '../types/companySettings';
 
 const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',')}`;
 
 export function printContaReceipt(
     conta: ContaPagar | ContaReceber,
-    companyName: string,
+    settings: CompanySettings,
     tipo: 'pagar' | 'receber'
 ) {
     const isPagar = tipo === 'pagar';
     const title = isPagar ? 'Comprovante de Conta a Pagar' : 'Comprovante de Conta a Receber';
     const mainColor = isPagar ? '#dc2626' : '#16a34a'; // Red for Pagar, Green for Receber
+    const companyName = settings.company_name || 'Mercado do Vale';
 
     // Format dates
     const formatBlingDate = (d: string) => {
@@ -54,9 +56,7 @@ export function printContaReceipt(
         border-radius: 8px;
         box-shadow: 0 4px 24px rgba(0,0,0,0.10);
     }
-    .header { text-align: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px dashed #e5e7eb; }
-    .company { font-size: 16px; font-weight: 800; color: #111827; margin-bottom: 4px; }
-    .doc-type { font-size: 12px; font-weight: 700; text-transform: uppercase; color: ${mainColor}; letter-spacing: 1px; }
+    .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb; }
     
     .section { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #e5e7eb; }
     .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
@@ -78,7 +78,7 @@ export function printContaReceipt(
         white-space: pre-wrap;
     }
     
-    .footer { text-align: center; margin-top: 16px; font-size: 10px; color: #9ca3af; }
+    .footer { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #d1d5db; text-align: center; font-size: 10px; color: #9ca3af; }
     
     @media print {
         @page { size: 80mm auto; margin: 0; }
@@ -90,9 +90,17 @@ export function printContaReceipt(
 <body>
 <div class="receipt">
     <div class="header">
-        <p class="company">${companyName}</p>
-        <p class="doc-type">${title}</p>
-        <p style="font-size:11px;color:#6b7280;margin-top:4px;">Ref. API Bling: #${conta.id}</p>
+        <div>
+            ${(settings as any).logo || settings.receipt_logo_url
+            ? `<img src="${(settings as any).logo || settings.receipt_logo_url}" alt="Logo" style="max-height:60px;max-width:140px;object-fit:contain;" />`
+            : `<p style="font-size:16px;font-weight:800;color:#111827;">${companyName}</p>`}
+        </div>
+        <div style="text-align:right;">
+            <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:${mainColor};letter-spacing:1px;">${title}</p>
+            ${settings.cnpj ? `<p style="font-size:11px;color:#6b7280;">CNPJ: ${settings.cnpj}</p>` : ''}
+            ${settings.phone ? `<p style="font-size:11px;color:#6b7280;">Tel: ${settings.phone}</p>` : ''}
+            <p style="font-size:10px;color:#9ca3af;margin-top:4px;">Ref. API: #${conta.id}</p>
+        </div>
     </div>
 
     <div class="section">

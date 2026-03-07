@@ -502,11 +502,11 @@ export default function FinancialPage() {
         try {
             const detalhe = await blingFinanceService.getConta(tab, (conta as any).id);
             toast.dismiss(tId);
-            printContaReceipt(detalhe || conta, settings.company_name || 'Mercado do Vale', tab);
+            printContaReceipt(detalhe || conta, settings, tab);
         } catch (err: any) {
             toast.dismiss(tId);
             toast.error('Erro ao trazer detalhes (imprimindo resumo): ' + err.message);
-            printContaReceipt(conta, settings.company_name || 'Mercado do Vale', tab);
+            printContaReceipt(conta, settings, tab);
         }
     }
 
