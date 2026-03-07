@@ -116,7 +116,7 @@ export const companySettingsService = {
             {{logo}}
         </div>
         <div style="text-align: right; flex: 1;">
-            <h1 style="margin: 0 0 8px 0; font-size: 20px; font-weight: normal; text-transform: uppercase;">RECIBO DE PAGAMENTO</h1>
+            <h1 style="margin: 0 0 8px 0; font-size: 20px; font-weight: normal; text-transform: uppercase;">RECIBO</h1>
             <p style="margin: 0; font-weight: bold; font-size: 14px;">{{nome_loja}}</p>
             <p style="margin: 0; font-size: 12px; color: #555;">{{cnpj}}</p>
             <p style="margin: 0; font-size: 12px; color: #555;">{{endereco}}</p>
@@ -127,7 +127,7 @@ export const companySettingsService = {
 
     <!-- CORPO -->
     <div style="border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px;">
-        <h2 style="margin: 0; font-size: 14px; font-weight: bold; color: #374151; display: inline-block; width: 50%;">DADOS DO CLIENTE / FORNECEDOR / HISTÓRICO</h2>
+        <h2 style="margin: 0; font-size: 14px; font-weight: bold; color: #374151; display: inline-block; width: 50%;">DADOS DA TRANSAÇÃO</h2>
         <h2 style="margin: 0; font-size: 14px; font-weight: bold; color: #374151; display: inline-block; width: 49%; text-align: right;">VALOR</h2>
     </div>
 
@@ -153,7 +153,7 @@ export const companySettingsService = {
     <div style="margin-top: 60px; text-align: center;">
         <div style="width: 300px; border-bottom: 1px solid #000; margin: 0 auto 8px auto;"></div>
         <p style="margin: 0; font-size: 13px; font-weight: bold;">{{nome_loja}}</p>
-        <p style="margin: 0; font-size: 12px; color: #666;">Assinatura do Recebedor / Pagador</p>
+        <p style="margin: 0; font-size: 12px; color: #666;">Assinatura do Recebedor / Lançador</p>
     </div>
 </div>`
         };

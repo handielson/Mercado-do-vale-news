@@ -70,7 +70,7 @@ function getDefaultRange(): { inicio: string; fim: string } {
 interface BaixaModalProps {
     conta: ContaPagar | ContaReceber;
     tipo: 'pagar' | 'receber';
-    onConfirm: (baixa: BaixaConta) => Promise<void>;
+    onConfirm: (baixa: BaixaConta, imprimirRecibo: boolean) => Promise<void>;
     onClose: () => void;
 }
 
@@ -82,6 +82,7 @@ function BaixaModal({ conta, tipo, onConfirm, onClose }: BaixaModalProps) {
     const [juros, setJuros] = useState('0');
     const [desconto, setDesconto] = useState('0');
     const [saving, setSaving] = useState(false);
+    const [imprimirRecibo, setImprimirRecibo] = useState(true);
 
     async function handleConfirm() {
         setSaving(true);
@@ -92,7 +93,7 @@ function BaixaModal({ conta, tipo, onConfirm, onClose }: BaixaModalProps) {
                 juros: parseFloat(juros) || 0,
                 desconto: parseFloat(desconto) || 0,
                 historico: historico || undefined,
-            });
+            }, imprimirRecibo);
         } finally {
             setSaving(false);
         }
@@ -146,6 +147,18 @@ function BaixaModal({ conta, tipo, onConfirm, onClose }: BaixaModalProps) {
                         <input type="text" value={historico} onChange={e => setHistorico(e.target.value)}
                             placeholder="Opcional"
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 bg-white" />
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                        <input
+                            type="checkbox"
+                            id="imprimirRecibo"
+                            checked={imprimirRecibo}
+                            onChange={(e) => setImprimirRecibo(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                        />
+                        <label htmlFor="imprimirRecibo" className="text-sm text-slate-700 cursor-pointer">
+                            Imprimir Recibo desta baixa?
+                        </label>
                     </div>
                 </div>
                 <div className="flex justify-end gap-2 px-5 pb-5">
@@ -505,11 +518,23 @@ export default function FinancialPage() {
         }
     }, [dataInicio, dataFim, filtroSituacao]);
 
-    async function handleBaixar(baixa: BaixaConta) {
+    async function handleBaixar(baixa: BaixaConta, imprimirRecibo: boolean) {
         if (!baixaTarget) return;
         try {
             await blingFinanceService.baixarConta(tab, (baixaTarget as any).id, baixa);
             toast.success('Baixa registrada com sucesso!');
+
+            if (imprimirRecibo) {
+                // Cria uma conta "mockada" apenas com o valor da baixa e o historico
+                const contaMock: ContaPagar | ContaReceber = {
+                    ...baixaTarget,
+                    valor: baixa.valor + (baixa.juros || 0) + (baixa.acrescimo || 0) - (baixa.desconto || 0),
+                    saldo: undefined, // undefined -> printPaymentReceipt vai imprimir conta.valor direto
+                    historico: `Abatimento / Pagamento Parcial. Ref: ${baixaTarget.historico || 'S/N'}`
+                };
+                printPaymentReceipt(contaMock, settings, tab);
+            }
+
             setBaixaTarget(null);
             await load(true);
         } catch (err: any) {
