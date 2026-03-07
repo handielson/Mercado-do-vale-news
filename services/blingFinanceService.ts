@@ -1,24 +1,14 @@
 import { supabase } from './supabase';
 import type { ContaPagar, ContaReceber, BaixaConta, CreateContaInput } from '../types/finance';
+import { getValidToken } from './blingService';
 
 const BASE = '/api/bling-finance';
 
-// ─── Token helper ───────────────────────────────────────────
-async function getBlingToken(): Promise<string> {
-    const { data, error } = await supabase
-        .from('company_settings')
-        .select('bling_access_token')
-        .limit(1)
-        .maybeSingle();
-
-    if (error) throw error;
-    if (!data?.bling_access_token) throw new Error('Bling não conectado. Configure o token em Integrações > Bling.');
-    return `Bearer ${data.bling_access_token}`;
-}
-
 // ─── Generic fetch wrapper ───────────────────────────────────
 async function blingFetch(url: string, options: RequestInit = {}): Promise<any> {
-    const token = await getBlingToken();
+    const rawToken = await getValidToken();
+    const token = rawToken.startsWith('Bearer') ? rawToken : `Bearer ${rawToken}`;
+
     const res = await fetch(url, {
         ...options,
         headers: {

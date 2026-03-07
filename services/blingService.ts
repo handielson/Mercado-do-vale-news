@@ -342,7 +342,7 @@ async function getCompanyId(): Promise<string> {
 
 // ------- Token management -------
 
-async function getValidToken(): Promise<string> {
+export async function getValidToken(): Promise<string> {
     const { data, error } = await supabase
         .from('company_settings')
         .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
