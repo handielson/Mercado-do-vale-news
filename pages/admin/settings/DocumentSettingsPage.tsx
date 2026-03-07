@@ -5,9 +5,10 @@ import QRCode from 'react-qr-code';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { CompanySettings, CompanySettingsInput } from '../../../types/companySettings';
 import { WarrantyTemplateEditor } from '../../../components/settings/WarrantyTemplateEditor';
+import { PaymentReceiptTemplateEditor } from '../../../components/settings/PaymentReceiptTemplateEditor';
 import { toast } from 'sonner';
 
-type TabType = 'receipt' | 'warranty' | 'extra_page' | 'extended_warranty';
+type TabType = 'receipt' | 'warranty' | 'extra_page' | 'extended_warranty' | 'payment_receipt';
 
 export default function DocumentSettingsPage() {
     const navigate = useNavigate();
@@ -34,6 +35,7 @@ export default function DocumentSettingsPage() {
         receipt_extra_page_text: '',
         receipt_extra_page_qr_url: '',
         receipt_show_extra_page: false,
+        payment_receipt_template: '',
         extended_warranty_options: [],
         extended_warranty_terms_text: ''
     });
@@ -69,6 +71,7 @@ export default function DocumentSettingsPage() {
                     receipt_extra_page_text: data.receipt_extra_page_text || '',
                     receipt_extra_page_qr_url: data.receipt_extra_page_qr_url || '',
                     receipt_show_extra_page: data.receipt_show_extra_page || false,
+                    payment_receipt_template: data.payment_receipt_template || '',
                     extended_warranty_options: data.extended_warranty_options || [],
                     extended_warranty_terms_text: data.extended_warranty_terms_text || ''
                 });
@@ -208,7 +211,17 @@ export default function DocumentSettingsPage() {
                                 }`}
                         >
                             <Receipt size={18} />
-                            Recibo
+                            Cupom Térmico
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('payment_receipt')}
+                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'payment_receipt'
+                                ? 'border-blue-600 text-blue-600 font-medium'
+                                : 'border-transparent text-slate-600 hover:text-slate-800'
+                                }`}
+                        >
+                            <FileText size={18} />
+                            Recibo A4
                         </button>
                         <button
                             onClick={() => setActiveTab('warranty')}
@@ -376,6 +389,14 @@ export default function DocumentSettingsPage() {
                             </div>
                         </div>
                     </div>
+                )}
+
+                {activeTab === 'payment_receipt' && (
+                    <PaymentReceiptTemplateEditor
+                        template={settings.payment_receipt_template || ''}
+                        onTemplateChange={(value) => handleChange('payment_receipt_template', value)}
+                        logoUrl={settings.receipt_logo_url || ''}
+                    />
                 )}
 
                 {activeTab === 'warranty' && (

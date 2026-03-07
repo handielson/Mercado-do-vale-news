@@ -54,6 +54,7 @@ export interface CompanySettings {
     warranty_show_phone: boolean;
     warranty_show_email: boolean;
     warranty_show_address: boolean;
+    payment_receipt_template?: string;
     receipt_extra_page_text?: string;
     receipt_extra_page_qr_url?: string;
     receipt_show_extra_page: boolean;
@@ -90,6 +91,7 @@ export interface CompanySettingsInput {
     warranty_show_phone?: boolean;
     warranty_show_email?: boolean;
     warranty_show_address?: boolean;
+    payment_receipt_template?: string;
     receipt_extra_page_text?: string;
     receipt_extra_page_qr_url?: string;
     receipt_show_extra_page?: boolean;
