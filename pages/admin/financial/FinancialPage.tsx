@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { blingFinanceService } from '../../../services/blingFinanceService';
 import type { ContaPagar, ContaReceber, BaixaConta, CreateContaInput, FinancialSummary } from '../../../types/finance';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { companySettingsService } from '../../../services/companySettingsService';
 import { printContaReceipt } from '../../../utils/printContaReceipt';
 import { printPaymentReceipt } from '../../../utils/printPaymentReceipt';
 
@@ -446,7 +447,15 @@ function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar, onPrint, onPrin
 type Tab = 'pagar' | 'receber';
 
 export default function FinancialPage() {
-    const { settings } = useTheme();
+    const { settings: themeSettings } = useTheme();
+    const [fullSettings, setFullSettings] = useState<any>({});
+
+    useEffect(() => {
+        companySettingsService.get().then(s => {
+            if (s) setFullSettings(s);
+        }).catch(console.error);
+    }, []);
+
     const range = getDefaultRange();
     const [tab, setTab] = useState<Tab>('pagar');
     const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
@@ -532,7 +541,7 @@ export default function FinancialPage() {
                     saldo: undefined, // undefined -> printPaymentReceipt vai imprimir conta.valor direto
                     historico: `Abatimento / Pagamento Parcial. Ref: ${baixaTarget.historico || 'S/N'}`
                 };
-                printPaymentReceipt(contaMock, settings, tab);
+                printPaymentReceipt(contaMock, fullSettings, tab);
             }
 
             setBaixaTarget(null);
@@ -558,11 +567,11 @@ export default function FinancialPage() {
         try {
             const detalhe = await blingFinanceService.getConta(tab, (conta as any).id);
             toast.dismiss(tId);
-            printContaReceipt(detalhe || conta, settings, tab);
+            printContaReceipt(detalhe || conta, fullSettings, tab);
         } catch (err: any) {
             toast.dismiss(tId);
             toast.error('Erro ao trazer detalhes (imprimindo resumo): ' + err.message);
-            printContaReceipt(conta, settings, tab);
+            printContaReceipt(conta, fullSettings, tab);
         }
     }
 
@@ -571,11 +580,11 @@ export default function FinancialPage() {
         try {
             const detalhe = await blingFinanceService.getConta(tab, (conta as any).id);
             toast.dismiss(tId);
-            printPaymentReceipt(detalhe || conta, settings, tab);
+            printPaymentReceipt(detalhe || conta, fullSettings, tab);
         } catch (err: any) {
             toast.dismiss(tId);
             toast.error('Erro ao trazer dados (imprimindo resumo): ' + err.message);
-            printPaymentReceipt(conta, settings, tab);
+            printPaymentReceipt(conta, fullSettings, tab);
         }
     }
 

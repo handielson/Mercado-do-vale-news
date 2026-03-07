@@ -109,51 +109,48 @@ export const companySettingsService = {
             show_seller_info: true,
             show_seller_info: true,
             receipt_show_extra_page: false,
-            payment_receipt_template: `<div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; color: #333; line-height: 1.5;">
+            payment_receipt_template: `<div style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #333; max-width: 800px; margin: 0 auto; border: 1px solid #ddd; padding: 20px;">
     <!-- CABEÇALHO -->
-    <div style="border: 2px solid #84cc16; padding: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <div style="width: 150px; text-align: center;">
+    <div style="display: flex; align-items: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px;">
+        <div style="flex: 1;">
             {{logo}}
         </div>
-        <div style="text-align: right; flex: 1;">
-            <h1 style="margin: 0 0 8px 0; font-size: 20px; font-weight: normal; text-transform: uppercase;">RECIBO</h1>
-            <p style="margin: 0; font-weight: bold; font-size: 14px;">{{nome_loja}}</p>
-            <p style="margin: 0; font-size: 12px; color: #555;">{{cnpj}}</p>
-            <p style="margin: 0; font-size: 12px; color: #555;">{{endereco}}</p>
-            <p style="margin: 0; font-size: 12px; color: #555;">{{telefone}} | {{email}}</p>
-            <p style="margin: 8px 0 0 0; font-weight: bold; font-size: 14px; color: #2563eb;">Nº: {{numero_recibo}}</p>
+        <div style="flex: 2; text-align: right;">
+            <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">RECIBO</h2>
+            <p style="margin: 5px 0 0; font-weight: bold;">{{nome_loja}}</p>
+            <p style="margin: 0; font-size: 11px;">{{cnpj}}</p>
+            <p style="margin: 0; font-size: 11px;">{{endereco}}</p>
+            <p style="margin: 0; font-size: 11px;">{{telefone}} | {{email}}</p>
+            <p style="margin: 10px 0 0; font-size: 14px; font-weight: bold; color: #007bff;">Nº Recibo: {{numero_recibo}}</p>
         </div>
     </div>
 
     <!-- CORPO -->
-    <div style="border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px;">
-        <h2 style="margin: 0; font-size: 14px; font-weight: bold; color: #374151; display: inline-block; width: 50%;">DADOS DA TRANSAÇÃO</h2>
-        <h2 style="margin: 0; font-size: 14px; font-weight: bold; color: #374151; display: inline-block; width: 49%; text-align: right;">VALOR</h2>
-    </div>
-
-    <div style="display: flex; justify-content: space-between; margin-bottom: 24px;">
-        <div>
-            <p style="margin: 0 0 4px 0; font-size: 13px;"><strong>Nome:</strong> {{nome_cliente}}</p>
-            <p style="margin: 0 0 4px 0; font-size: 13px;"><strong>Documento:</strong> {{cpf_cliente}}</p>
-            <p style="margin: 0 0 4px 0; font-size: 13px;"><strong>Data Emissão:</strong> {{data_emissao}}</p>
+    <div style="background-color: #f9f9f9; padding: 10px; border: 1px solid #eee; margin-bottom: 20px; display: flex; justify-content: space-between;">
+        <div style="width: 48%;">
+            <p style="margin: 0 0 5px; font-weight: bold; border-bottom: 1px solid #ddd;">DADOS DO CLIENTE / FORNECEDOR</p>
+            <p style="margin: 2px 0;"><strong>Nome:</strong> {{nome_cliente}}</p>
+            <p style="margin: 2px 0;"><strong>Documento:</strong> {{cpf_cliente}}</p>
+            <p style="margin: 2px 0;"><strong>Data:</strong> {{data_emissao}}</p>
         </div>
-        <div style="text-align: right;">
-            <p style="margin: 0; font-size: 24px; font-weight: bold; color: #16a34a;">{{valor}}</p>
+        <div style="width: 48%; text-align: right;">
+            <p style="margin: 0 0 5px; font-weight: bold; border-bottom: 1px solid #ddd;">VALOR DO RECIBO</p>
+            <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #16a34a;">{{valor}}</p>
         </div>
     </div>
 
     <!-- DECLARAÇÃO -->
-    <div style="background-color: #f8fafc; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 40px; text-align: center;">
-        <p style="margin: 0; font-size: 14px;">
+    <div style="background-color: #f0f8ff; border: 1px dashed #007bff; padding: 15px; margin-bottom: 40px; font-size: 13px; text-align: center;">
+        <p style="margin: 0;">
             {{texto_abertura}} a quantia de <strong>{{valor}}</strong> referente a <strong>{{historico}}</strong>.
         </p>
     </div>
 
     <!-- ASSINATURA -->
-    <div style="margin-top: 60px; text-align: center;">
-        <div style="width: 300px; border-bottom: 1px solid #000; margin: 0 auto 8px auto;"></div>
-        <p style="margin: 0; font-size: 13px; font-weight: bold;">{{nome_loja}}</p>
-        <p style="margin: 0; font-size: 12px; color: #666;">Assinatura do Recebedor / Lançador</p>
+    <div style="margin-top: 50px; text-align: center;">
+        <div style="border-bottom: 2px solid #000; width: 400px; margin: 0 auto 10px;"></div>
+        <strong>{{nome_loja}}</strong><br/>
+        <small>Assinatura do Recebedor / Lançador</small>
     </div>
 </div>`
         };
