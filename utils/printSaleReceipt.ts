@@ -162,7 +162,18 @@ export function printSaleReceipt(
 
         extraPageHtml = `
 <div class="extra-page">
-    ${logoHtml ? `<div style="text-align:center;margin-bottom:20px;">${logoHtml}</div>` : ''}
+    <div class="header" style="margin-bottom:16px;">
+        <div>
+            ${logoHtml || `<p style="font-size:16px;font-weight:800;color:#111827;">${companyName}</p>`}
+        </div>
+        <div style="text-align:right;">
+            <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;letter-spacing:1px;">Termo de Garantia</p>
+            <p style="font-size:16px;font-weight:800;color:#111827;">${companyName}</p>
+            ${settings.cnpj ? `<p style="font-size:11px;color:#6b7280;">CNPJ: ${settings.cnpj}</p>` : ''}
+            ${settings.phone ? `<p style="font-size:11px;color:#6b7280;">Tel: ${settings.phone}</p>` : ''}
+            <p style="font-size:10px;color:#9ca3af;margin-top:4px;">Ref. Pedido: #${sale.id.slice(0, 8).toUpperCase()}</p>
+        </div>
+    </div>
     <div style="font-size:13px;line-height:1.7;color:#374151;">${formattedText || ''}</div>
     ${qrHtml}
 </div>`;
