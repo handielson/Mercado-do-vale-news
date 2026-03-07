@@ -1,17 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Save, Loader2, Receipt, Shield, QrCode, Package, User } from 'lucide-react';
+import { ArrowLeft, FileText, Save, Loader2, Receipt, Shield, QrCode, Package, User, Tag, Copy } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { CompanySettings, CompanySettingsInput } from '../../../types/companySettings';
+import { WARRANTY_TAGS } from '../../../types/warrantyDocument';
 import { WarrantyTemplateEditor } from '../../../components/settings/WarrantyTemplateEditor';
 import { PaymentReceiptTemplateEditor } from '../../../components/settings/PaymentReceiptTemplateEditor';
+import { HeaderTemplateEditor } from '../../../components/settings/HeaderTemplateEditor';
+import { DebtClearanceTemplateEditor } from '../../../components/settings/DebtClearanceTemplateEditor';
 import { toast } from 'sonner';
+import { useTheme } from '../../../contexts/ThemeContext';
 
-type TabType = 'receipt' | 'warranty' | 'extra_page' | 'extended_warranty' | 'payment_receipt';
+type TabType = 'receipt' | 'warranty' | 'extra_page' | 'extended_warranty' | 'payment_receipt' | 'headers' | 'debt_clearance' | 'tags_dictionary';
+
+const GLOBAL_DOCUMENT_TAGS: Record<string, string> = {
+    ...WARRANTY_TAGS,
+
+    // Documentos Dinâmicos e Cabeçalhos
+    cabecalho_a4: 'Injeta as configurações da aba Cabeçalhos (A4)',
+    cabecalho_termico: 'Injeta as configurações da aba Cabeçalhos (Térmica)',
+    nome_documento: 'Nome dinâmico do documento (RECIBO, TERMO, CARTA, etc)',
+    texto_abertura: 'Frase "Recebemos de [nome]" ou "Pagamos a [nome]"',
+
+    // Financeiro / Recibos / Quitação
+    valor: 'Valor Pago/Recebido (ex: R$ 1.500,00)',
+    historico: 'Histórico principal da Conta',
+    data_emissao: 'Data atual de Emissão do Documento',
+    numero_recibo: 'Número de Controle do Recibo/Conta no sistema',
+    valor_quitado: 'Valor liquidado formatado em R$ (Ex: R$ 1.500,00)',
+    historico_conta: 'Histórico completo da Conta Baixada',
+
+    // Garantia Estendida
+    meses_garantia_estendida: 'Prazo extra concedido (Ex: 12 meses)',
+    valor_garantia_estendida: 'Valor cobrado na garantia (Ex: R$ 150,00)',
+    data_inicio_estendida: 'Data de Início da Cobertura Estendida',
+    data_fim_estendida: 'Data Final da Cobertura Estendida'
+};
 
 export default function DocumentSettingsPage() {
     const navigate = useNavigate();
+    const { settings: themeSettings } = useTheme();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>('receipt');
@@ -36,8 +65,12 @@ export default function DocumentSettingsPage() {
         receipt_extra_page_qr_url: '',
         receipt_show_extra_page: false,
         payment_receipt_template: '',
+        debt_clearance_template: '',
+        default_a4_header: '',
+        default_thermal_header: '',
         extended_warranty_options: [],
-        extended_warranty_terms_text: ''
+        extended_warranty_terms_text: '',
+        extended_warranty_template: ''
     });
 
     // Load settings on mount
@@ -49,6 +82,7 @@ export default function DocumentSettingsPage() {
         try {
             setLoading(true);
             const data = await companySettingsService.get();
+            const defaults = companySettingsService.getDefaults();
 
             if (data) {
                 setSettings({
@@ -56,6 +90,7 @@ export default function DocumentSettingsPage() {
                     header_text: data.header_text || '',
                     footer_text: data.footer_text || '',
                     warranty_terms: data.warranty_terms || '',
+                    receipt_logo_url: data.receipt_logo_url || '',
                     receipt_width: data.receipt_width,
                     show_company_info: data.show_company_info,
                     show_order_number: data.show_order_number,
@@ -72,12 +107,15 @@ export default function DocumentSettingsPage() {
                     receipt_extra_page_qr_url: data.receipt_extra_page_qr_url || '',
                     receipt_show_extra_page: data.receipt_show_extra_page || false,
                     payment_receipt_template: data.payment_receipt_template || '',
+                    debt_clearance_template: data.debt_clearance_template || defaults.debt_clearance_template || '',
+                    default_a4_header: data.default_a4_header || defaults.default_a4_header || '',
+                    default_thermal_header: data.default_thermal_header || defaults.default_thermal_header || '',
                     extended_warranty_options: data.extended_warranty_options || [],
-                    extended_warranty_terms_text: data.extended_warranty_terms_text || ''
+                    extended_warranty_terms_text: data.extended_warranty_terms_text || '',
+                    extended_warranty_template: data.extended_warranty_template || defaults.extended_warranty_template || ''
                 });
             } else {
                 // Use defaults
-                const defaults = companySettingsService.getDefaults();
                 setSettings(prev => ({ ...prev, ...defaults }));
             }
         } catch (error) {
@@ -224,6 +262,16 @@ export default function DocumentSettingsPage() {
                             Recibo A4
                         </button>
                         <button
+                            onClick={() => setActiveTab('debt_clearance')}
+                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'debt_clearance'
+                                ? 'border-blue-600 text-blue-600 font-medium'
+                                : 'border-transparent text-slate-600 hover:text-slate-800'
+                                }`}
+                        >
+                            <FileText size={18} />
+                            Quitação
+                        </button>
+                        <button
                             onClick={() => setActiveTab('warranty')}
                             className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'warranty'
                                 ? 'border-blue-600 text-blue-600 font-medium'
@@ -232,6 +280,16 @@ export default function DocumentSettingsPage() {
                         >
                             <Shield size={18} />
                             Garantia
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('headers')}
+                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'headers'
+                                ? 'border-blue-600 text-blue-600 font-medium'
+                                : 'border-transparent text-slate-600 hover:text-slate-800'
+                                }`}
+                        >
+                            <FileText size={18} />
+                            Cabeçalhos Padrão
                         </button>
                         <button
                             onClick={() => setActiveTab('extra_page')}
@@ -252,6 +310,16 @@ export default function DocumentSettingsPage() {
                         >
                             <Shield size={18} />
                             Garantia Estendida
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('tags_dictionary')}
+                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'tags_dictionary'
+                                ? 'border-blue-600 text-blue-600 font-medium'
+                                : 'border-transparent text-slate-600 hover:text-slate-800'
+                                }`}
+                        >
+                            <Tag size={18} />
+                            Dicionário de Tags
                         </button>
                     </div>
                 </div>
@@ -395,15 +463,91 @@ export default function DocumentSettingsPage() {
                     <PaymentReceiptTemplateEditor
                         template={settings.payment_receipt_template || ''}
                         onTemplateChange={(value) => handleChange('payment_receipt_template', value)}
-                        logoUrl={settings.receipt_logo_url || ''}
+                        logoUrl={themeSettings?.logo_main || (settings as any).logo || settings.receipt_logo_url || ''}
+                        getPreviewHTML={(template, logo) => {
+                            const svgPlaceholder = `data:image/svg+xml;base64,${btoa(`<svg width="150" height="80" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="80" fill="#e2e8f0"/><text x="50%" y="50%" font-family="Arial" font-size="14" fill="#64748b" text-anchor="middle" dominant-baseline="middle">Logo</text></svg>`)}`;
+                            const logoSrc = logo || svgPlaceholder;
+                            const logoHtml = `<img src="${logoSrc}" alt="Logo" style="max-height:80px; max-width:150px; object-fit:contain;" />`;
+
+                            const cabecalhoA4 = (settings.default_a4_header || '')
+                                .replace(/{{logo}}/g, logoHtml)
+                                .replace(/{{nome_loja}}/g, settings.company_name || 'Mercado do Vale')
+                                .replace(/{{cnpj}}/g, settings.cnpj || '12.345.678/0001-90')
+                                .replace(/{{endereco}}/g, settings.address || 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                .replace(/{{telefone}}/g, settings.phone || '(11) 98765-4321')
+                                .replace(/{{email}}/g, settings.email || 'contato@mercadodovale.com.br')
+                                .replace(/{{nome_documento}}/g, 'RECIBO DE PAGAMENTO');
+
+                            let processedTemplate = template.replace(/<img[^>]*src="\{\{logo\}\}"[^>]*>/g, logoHtml);
+
+                            return processedTemplate
+                                .replace(/{{cabecalho_a4}}/g, cabecalhoA4)
+                                .replace(/{{logo}}/g, logoSrc)
+                                .replace(/{{nome_loja}}/g, 'Mercado do Vale')
+                                .replace(/{{endereco}}/g, 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                .replace(/{{telefone}}/g, '(11) 98765-4321')
+                                .replace(/{{email}}/g, 'contato@mercadodovale.com.br')
+                                .replace(/{{cnpj}}/g, '12.345.678/0001-90')
+                                .replace(/{{nome_cliente}}/g, 'João da Silva')
+                                .replace(/{{cpf_cliente}}/g, '123.456.789-00')
+                                .replace(/{{telefone_cliente}}/g, '(11) 91234-5678')
+                                .replace(/{{email_cliente}}/g, 'joao@email.com')
+                                .replace(/{{numero_recibo}}/g, 'REC-999')
+                                .replace(/{{data_emissao}}/g, new Date().toLocaleDateString('pt-BR'))
+                                .replace(/{{valor}}/g, 'R$ 1.500,00')
+                                .replace(/{{historico}}/g, 'Compra do pedido #1234')
+                                .replace(/{{texto_abertura}}/g, 'Recebemos de <strong>João da Silva</strong>');
+                        }}
                     />
                 )}
 
-                {activeTab === 'warranty' && (
-                    <WarrantyTemplateEditor
-                        template={settings.warranty_template || ''}
-                        onTemplateChange={(value) => handleChange('warranty_template', value)}
-                        logoUrl={settings.receipt_logo_url || ''}
+                {activeTab === 'debt_clearance' && (
+                    <DebtClearanceTemplateEditor
+                        template={settings.debt_clearance_template || ''}
+                        onTemplateChange={(value) => handleChange('debt_clearance_template', value)}
+                        logoUrl={themeSettings?.logo_main || (settings as any).logo || settings.receipt_logo_url || ''}
+                        getPreviewHTML={(template, logo) => {
+                            const svgPlaceholder = `data:image/svg+xml;base64,${btoa(`<svg width="150" height="80" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="80" fill="#e2e8f0"/><text x="50%" y="50%" font-family="Arial" font-size="14" fill="#64748b" text-anchor="middle" dominant-baseline="middle">Logo</text></svg>`)}`;
+                            const logoSrc = logo || svgPlaceholder;
+                            const logoHtml = `<img src="${logoSrc}" alt="Logo" style="max-height:80px; max-width:150px; object-fit:contain;" />`;
+
+                            const cabecalhoA4 = (settings.default_a4_header || '')
+                                .replace(/{{logo}}/g, logoHtml)
+                                .replace(/{{nome_loja}}/g, settings.company_name || 'Mercado do Vale')
+                                .replace(/{{cnpj}}/g, settings.cnpj || '12.345.678/0001-90')
+                                .replace(/{{endereco}}/g, settings.address || 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                .replace(/{{telefone}}/g, settings.phone || '(11) 98765-4321')
+                                .replace(/{{email}}/g, settings.email || 'contato@mercadodovale.com.br')
+                                .replace(/{{nome_documento}}/g, 'CARTA DE QUITAÇÃO DE DÉBITOS');
+
+                            let processedTemplate = template.replace(/<img[^>]*src="\{\{logo\}\}"[^>]*>/g, logoHtml);
+
+                            return processedTemplate
+                                .replace(/{{cabecalho_a4}}/g, cabecalhoA4)
+                                .replace(/{{logo}}/g, logoSrc)
+                                .replace(/{{nome_loja}}/g, 'Mercado do Vale')
+                                .replace(/{{endereco}}/g, 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                .replace(/{{telefone}}/g, '(11) 98765-4321')
+                                .replace(/{{email}}/g, 'contato@mercadodovale.com.br')
+                                .replace(/{{cnpj}}/g, '12.345.678/0001-90')
+                                .replace(/{{nome_cliente}}/g, 'João da Silva')
+                                .replace(/{{cpf_cliente}}/g, '123.456.789-00')
+                                .replace(/{{telefone_cliente}}/g, '(11) 91234-5678')
+                                .replace(/{{numero_recibo}}/g, '14002')
+                                .replace(/{{data_emissao}}/g, new Date().toLocaleDateString('pt-BR'))
+                                .replace(/{{valor_quitado}}/g, 'R$ 1.500,00')
+                                .replace(/{{historico_conta}}/g, 'Referente ao conserto de tela do iPhone 13');
+                        }}
+                    />
+                )}
+
+                {activeTab === 'headers' && (
+                    <HeaderTemplateEditor
+                        templateA4={settings.default_a4_header || ''}
+                        templateThermal={settings.default_thermal_header || ''}
+                        onTemplateA4Change={(value) => handleChange('default_a4_header', value)}
+                        onTemplateThermalChange={(value) => handleChange('default_thermal_header', value)}
+                        logoUrl={themeSettings?.logo_main || (settings as any).logo || settings.receipt_logo_url || ''}
                         showLogo={settings.warranty_show_logo || false}
                         showCompanyName={settings.warranty_show_company_name || false}
                         showCnpj={settings.warranty_show_cnpj || false}
@@ -411,6 +555,59 @@ export default function DocumentSettingsPage() {
                         showEmail={settings.warranty_show_email || false}
                         showAddress={settings.warranty_show_address || false}
                         onToggle={handleChange}
+                    />
+                )}
+
+                {activeTab === 'warranty' && (
+                    <WarrantyTemplateEditor
+                        title="Template da Garantia de Loja"
+                        template={settings.warranty_template || ''}
+                        onTemplateChange={(value) => handleChange('warranty_template', value)}
+                        logoUrl={themeSettings?.logo_main || settings.receipt_logo_url || ''}
+                        tagsDict={WARRANTY_TAGS}
+                        getPreviewHTML={(template, logo) => {
+                            const svgPlaceholder = `data:image/svg+xml;base64,${btoa(`<svg width="150" height="80" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="80" fill="#e2e8f0"/><text x="50%" y="50%" font-family="Arial" font-size="14" fill="#64748b" text-anchor="middle" dominant-baseline="middle">Logo</text></svg>`)}`;
+                            const logoSrc = logo || svgPlaceholder;
+                            const logoHtml = `<img src="${logoSrc}" alt="Logo" style="max-height:80px; max-width:150px; object-fit:contain;" />`;
+
+                            const cabecalhoA4 = (settings.default_a4_header || '')
+                                .replace(/{{logo}}/g, logoHtml)
+                                .replace(/{{nome_loja}}/g, settings.company_name || 'Mercado do Vale')
+                                .replace(/{{cnpj}}/g, settings.cnpj || '12.345.678/0001-90')
+                                .replace(/{{endereco}}/g, settings.address || 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                .replace(/{{telefone}}/g, settings.phone || '(11) 98765-4321')
+                                .replace(/{{email}}/g, settings.email || 'contato@mercadodovale.com.br')
+                                .replace(/{{nome_documento}}/g, 'TERMO DE GARANTIA');
+
+                            // Para garantir compatibilidade com templates antigos que já tenham a tag img com {{logo}} no src
+                            let processedTemplate = template.replace(/<img[^>]*src="\{\{logo\}\}"[^>]*>/g, logoHtml);
+
+                            return processedTemplate
+                                .replace(/{{cabecalho_a4}}/g, cabecalhoA4)
+                                .replace(/{{logo}}/g, logoSrc) // Se sobrou algum solto, substitui só pelo link
+                                .replace(/{{nome_loja}}/g, 'Mercado do Vale')
+                                .replace(/{{endereco}}/g, 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                .replace(/{{telefone}}/g, '(11) 98765-4321')
+                                .replace(/{{email}}/g, 'contato@mercadodovale.com.br')
+                                .replace(/{{cnpj}}/g, '12.345.678/0001-90')
+                                .replace(/{{nome_cliente}}/g, 'João da Silva')
+                                .replace(/{{cpf_cliente}}/g, '123.456.789-00')
+                                .replace(/{{telefone_cliente}}/g, '(11) 91234-5678')
+                                .replace(/{{email_cliente}}/g, 'joao@email.com')
+                                .replace(/{{numero_venda}}/g, 'VD-12345')
+                                .replace(/{{data_compra}}/g, new Date().toLocaleDateString('pt-BR'))
+                                .replace(/{{produto}}/g, 'iPhone 13 128GB')
+                                .replace(/{{marca}}/g, 'Apple')
+                                .replace(/{{modelo}}/g, 'iPhone 13')
+                                .replace(/{{cor}}/g, 'Azul')
+                                .replace(/{{ram}}/g, '4GB')
+                                .replace(/{{memoria}}/g, '128GB')
+                                .replace(/{{imei1}}/g, '123456789012345')
+                                .replace(/{{imei2}}/g, '543210987654321')
+                                .replace(/{{dias_garantia}}/g, '90')
+                                .replace(/{{tipo_garantia}}/g, 'Garantia Legal')
+                                .replace(/{{declaracao_recebimento}}/g, 'Declaro que retirei a mercadoria na loja em perfeito estado e testei.');
+                        }}
                     />
                 )}
 
@@ -551,22 +748,19 @@ export default function DocumentSettingsPage() {
                                         {/* Mock da Página 1 - Recibo Normal */}
                                         <div className="bg-white transform scale-[0.85] origin-top border-2 border-slate-200 shadow-md rounded-xl p-6 w-full max-w-[450px] opacity-80 pointer-events-none">
                                             <div className="border-b-2 border-slate-300 pb-4 mb-4 text-center">
-                                                {settings.logo_url ? (
-                                                    <img
-                                                        src={settings.logo_url}
-                                                        alt="Logo Empresa"
-                                                        className="max-w-[120px] max-h-[60px] object-contain mb-4 mx-auto grayscale"
-                                                    />
-                                                ) : (
-                                                    <div className="w-[120px] h-[60px] bg-slate-200 rounded mx-auto mb-4"></div>
-                                                )}
-                                                <h4 className="font-bold text-slate-800 text-lg uppercase mb-1">COMPROVANTE DE VENDA</h4>
-                                                <p className="text-sm font-bold text-slate-700">{settings.company_name || 'MERCADO DO VALE'}</p>
-                                                <div className="text-xs text-slate-500 mt-2 space-y-0.5">
-                                                    <p>CNPJ: {settings.cnpj || '12.345.678/0001-90'}</p>
-                                                    <p>{settings.address || 'Rua Fictícia, 123'}</p>
-                                                    <p>Tel: {settings.phone || '(11) 98765-4321'}</p>
-                                                </div>
+                                                <div dangerouslySetInnerHTML={{
+                                                    __html: (settings.default_thermal_header || '')
+                                                        .replace(/{{logo}}/g, (themeSettings?.logo_main || (settings as any).logo || settings.receipt_logo_url)
+                                                            ? `<img src="${themeSettings?.logo_main || (settings as any).logo || settings.receipt_logo_url}" alt="Logo Empresa" style="max-height:60px; object-fit:contain; margin:0 auto;" />`
+                                                            : `<div style="width:120px; height:60px; background:#e2e8f0; margin:0 auto;"></div>`
+                                                        )
+                                                        .replace(/{{nome_loja}}/g, settings.company_name || 'Mercado do Vale')
+                                                        .replace(/{{cnpj}}/g, settings.cnpj || '12.345.678/0001-90')
+                                                        .replace(/{{endereco}}/g, settings.address || 'Rua Fictícia, 123')
+                                                        .replace(/{{telefone}}/g, settings.phone || '(11) 98765-4321')
+                                                        .replace(/{{email}}/g, settings.email || '')
+                                                        .replace(/{{nome_documento}}/g, 'COMPROVANTE DE VENDA')
+                                                }} />
                                             </div>
 
                                             <div className="space-y-4 mb-6">
@@ -628,9 +822,9 @@ export default function DocumentSettingsPage() {
 
                                         {/* Página 2 - Folha Extra */}
                                         <div className="bg-white transform scale-[0.85] origin-top border shadow-2xl rounded-sm p-4 sm:p-8 w-full max-w-[450px] flex flex-col items-center text-center">
-                                            {settings.logo_url && (
+                                            {(themeSettings?.logo_main || (settings as any).logo || settings.receipt_logo_url) && (
                                                 <img
-                                                    src={settings.logo_url}
+                                                    src={themeSettings?.logo_main || (settings as any).logo || settings.receipt_logo_url}
                                                     alt="Logo Empresa"
                                                     className="max-w-[150px] max-h-[80px] object-contain mb-8"
                                                 />
@@ -677,7 +871,7 @@ export default function DocumentSettingsPage() {
                 )}
 
                 {activeTab === 'extended_warranty' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 gap-6">
                         {/* Configuração de Prazos */}
                         <div className="space-y-6">
                             <div className="bg-white rounded-xl border border-slate-200 p-6">
@@ -753,21 +947,91 @@ export default function DocumentSettingsPage() {
                             </div>
                         </div>
 
-                        {/* Editor de Texto do Regulamento Público */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col h-full">
-                            <h2 className="text-lg font-semibold text-slate-800 mb-4">
-                                Regulamento da Garantia Estendida
-                            </h2>
-                            <p className="text-sm text-slate-600 mb-4">
-                                Este texto institucional sobre a cobertura da garantia será exibido publicamente na página /garantia-estendida para seus clientes lerem.
-                            </p>
-                            <textarea
-                                value={settings.extended_warranty_terms_text || ''}
-                                onChange={(e) => handleChange('extended_warranty_terms_text', e.target.value)}
-                                className="w-full flex-1 min-h-[300px] p-4 text-sm font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 custom-scrollbar"
-                                placeholder="<h3>Termos e Condições da Garantia Estendida</h3>&#10;<p>A garantia estendida protege seu aparelho 100% contra defeitos crônicos após o término da garantia padrão...</p>"
-                            />
-                            <p className="text-xs text-slate-500 mt-2">Dica: Você pode usar tags HTML básicas estritamente sem atributos (como &lt;b&gt;, &lt;p&gt;, &lt;ul&gt;, &lt;li&gt;, &lt;h2&gt;) para formatar as quebras de linha e títulos.</p>
+                        {/* Editor de Texto com Tags do Regulamento Público */}
+                        <div className="bg-white rounded-xl flex flex-col h-full border border-slate-200">
+                            <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                                <h2 className="text-lg font-semibold text-slate-800">
+                                    Template da Garantia Estendida
+                                </h2>
+                            </div>
+                            <div className="p-0">
+                                <WarrantyTemplateEditor
+                                    title="Template da Garantia Estendida"
+                                    template={settings.extended_warranty_template || ''}
+                                    onTemplateChange={(value) => handleChange('extended_warranty_template', value)}
+                                    logoUrl={themeSettings?.logo_main || settings.receipt_logo_url || ''}
+                                    tagsDict={GLOBAL_DOCUMENT_TAGS}
+                                    getPreviewHTML={(template, logo) => {
+                                        const svgPlaceholder = `<svg width="150" height="80" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="80" fill="#e2e8f0"/><text x="50%" y="50%" font-family="Arial" font-size="14" fill="#64748b" text-anchor="middle" dominant-baseline="middle">Logo</text></svg>`;
+                                        const logoHtml = logo
+                                            ? `<img src="${logo}" alt="Logo" style="max-height:80px; max-width:150px; object-fit:contain;" />`
+                                            : `<img src="data:image/svg+xml;base64,${btoa(svgPlaceholder)}" alt="Logo Placeholder" />`;
+
+                                        const cabecalhoA4 = (settings.default_a4_header || '')
+                                            .replace(/{{logo}}/g, logoHtml)
+                                            .replace(/{{nome_loja}}/g, settings.company_name || 'Mercado do Vale')
+                                            .replace(/{{cnpj}}/g, settings.cnpj || '12.345.678/0001-90')
+                                            .replace(/{{endereco}}/g, settings.address || 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                            .replace(/{{telefone}}/g, settings.phone || '(11) 98765-4321')
+                                            .replace(/{{email}}/g, settings.email || 'contato@mercadodovale.com.br')
+                                            .replace(/{{nome_documento}}/g, 'GARANTIA ESTENDIDA');
+
+                                        return template
+                                            .replace(/{{cabecalho_a4}}/g, cabecalhoA4)
+                                            .replace(/{{logo}}/g, logoHtml)
+                                            .replace(/{{nome_loja}}/g, settings.company_name || 'Mercado do Vale')
+                                            .replace(/{{nome_cliente}}/g, 'João da Silva')
+                                            .replace(/{{cpf_cliente}}/g, '123.456.789-00')
+                                            .replace(/{{telefone_cliente}}/g, '(11) 91234-5678')
+                                            .replace(/{{produto}}/g, 'iPhone 13 128GB')
+                                            .replace(/{{imei1}}/g, '123456789012345')
+                                            .replace(/{{imei2}}/g, '')
+                                            .replace(/{{meses_garantia_estendida}}/g, '12')
+                                            .replace(/{{valor_garantia_estendida}}/g, 'R$ 150,00')
+                                            .replace(/{{data_inicio_estendida}}/g, '15/03/2026')
+                                            .replace(/{{data_fim_estendida}}/g, '15/03/2027');
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'tags_dictionary' && (
+                    <div className="bg-white rounded-xl border border-slate-200 p-6">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-3 bg-blue-50 rounded-lg">
+                                <Tag className="text-blue-600" size={24} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-semibold text-slate-800">Dicionário Global de Tags</h2>
+                                <p className="text-sm text-slate-600 mt-1">
+                                    Utilize estas tags na edição de "Garantia", "Garantia Estendida", "Quitação" e "Folha Extra". Clique num bloco para copiar.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                            {Object.entries(GLOBAL_DOCUMENT_TAGS).map(([tag, description]) => (
+                                <button
+                                    key={tag}
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(`{{${tag}}}`);
+                                        toast.success(`Tag {{${tag}}} copiada!`);
+                                    }}
+                                    className="flex flex-col items-start p-3 bg-white hover:bg-blue-50 hover:border-blue-200 border border-slate-200 rounded-lg transition-all text-left group shadow-sm"
+                                >
+                                    <div className="flex items-center justify-between w-full mb-1">
+                                        <span className="font-mono text-sm font-bold text-blue-600 break-all pr-2">
+                                            {`{{${tag}}}`}
+                                        </span>
+                                        <Copy size={14} className="text-slate-400 group-hover:text-blue-500 flex-shrink-0" />
+                                    </div>
+                                    <div className="text-xs text-slate-500 line-clamp-2 mt-1 w-full" title={description}>
+                                        {description}
+                                    </div>
+                                </button>
+                            ))}
                         </div>
                     </div>
                 )}

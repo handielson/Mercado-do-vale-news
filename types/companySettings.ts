@@ -60,6 +60,12 @@ export interface CompanySettings {
     receipt_show_extra_page: boolean;
     extended_warranty_options?: WarrantyOption[];
     extended_warranty_terms_text?: string;
+
+    default_a4_header?: string;
+    default_thermal_header?: string;
+    debt_clearance_template?: string;
+    extended_warranty_template?: string;
+
     ai_prompts?: any;
     business_hours?: BusinessHours;
     holiday_overrides?: string[];
@@ -97,6 +103,12 @@ export interface CompanySettingsInput {
     receipt_show_extra_page?: boolean;
     extended_warranty_options?: WarrantyOption[];
     extended_warranty_terms_text?: string;
+
+    default_a4_header?: string;
+    default_thermal_header?: string;
+    debt_clearance_template?: string;
+    extended_warranty_template?: string;
+
     ai_prompts?: any;
     business_hours?: BusinessHours;
     holiday_overrides?: string[];

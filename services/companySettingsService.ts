@@ -44,6 +44,12 @@ export const companySettingsService = {
 
                     data.address = parts.filter(Boolean).join(' - ');
                 }
+
+                // Fallback for empty templates
+                const defaults = this.getDefaults();
+                data.payment_receipt_template = data.payment_receipt_template || defaults.payment_receipt_template;
+                data.debt_clearance_template = data.debt_clearance_template || defaults.debt_clearance_template;
+                data.extended_warranty_template = data.extended_warranty_template || defaults.extended_warranty_template;
             }
 
             return data;
@@ -109,21 +115,48 @@ export const companySettingsService = {
             show_seller_info: true,
             show_seller_info: true,
             receipt_show_extra_page: false,
-            payment_receipt_template: `<div style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #333; max-width: 800px; margin: 0 auto; border: 1px solid #ddd; padding: 20px;">
-    <!-- CABEÇALHO -->
-    <div style="display: flex; align-items: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px;">
-        <div style="flex: 1;">
-            {{logo}}
-        </div>
-        <div style="flex: 2; text-align: right;">
-            <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">RECIBO</h2>
-            <p style="margin: 5px 0 0; font-weight: bold;">{{nome_loja}}</p>
-            <p style="margin: 0; font-size: 11px;">{{cnpj}}</p>
-            <p style="margin: 0; font-size: 11px;">{{endereco}}</p>
-            <p style="margin: 0; font-size: 11px;">{{telefone}} | {{email}}</p>
-            <p style="margin: 10px 0 0; font-size: 14px; font-weight: bold; color: #007bff;">Nº Recibo: {{numero_recibo}}</p>
-        </div>
+            default_a4_header: `<div style="display: flex; align-items: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px;">
+    <div style="flex: 1;">
+        {{logo}}
     </div>
+    <div style="flex: 2; text-align: right;">
+        <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">{{nome_documento}}</h2>
+        <p style="margin: 5px 0 0; font-weight: bold;">{{nome_loja}}</p>
+        <p style="margin: 0; font-size: 11px;">CNPJ: {{cnpj}}</p>
+        <p style="margin: 0; font-size: 11px;">{{endereco}}</p>
+        <p style="margin: 0; font-size: 11px;">{{telefone}} | {{email}}</p>
+    </div>
+</div>`,
+            default_thermal_header: `<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb; text-align: center;">
+    <div>
+        {{logo}}
+    </div>
+    <div style="text-align: center;">
+        <p style="font-size:10px; color:#64748b; margin-bottom: 2px;">CNPJ: {{cnpj}}</p>
+        <p style="font-size:10px; color:#64748b; margin-bottom: 2px;">{{endereco}}</p>
+        <p style="font-size:10px; color:#64748b; margin-bottom: 6px;">Tel: {{telefone}}</p>
+        <p style="font-size:12px; font-weight:700; text-transform:uppercase; color:#475569; letter-spacing:0.5px; margin-bottom: 0px;">{{nome_documento}}</p>
+    </div>
+</div>`,
+            debt_clearance_template: `<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 40px;">
+    {{cabecalho_a4}}
+
+    <h1 style="text-align: center; margin: 40px 0; text-transform: uppercase;">CARTA DE QUITAÇÃO DE DÉBITOS</h1>
+
+        <p>Histórico / Referência do Pagamento:<br>
+        <em>{{historico_conta}}</em></p>
+    </div>
+
+    <div style="margin-top: 80px; text-align: center;">
+        <p>___________________________________________________</p>
+        <p><strong>{{nome_loja}}</strong><br>
+        CNPJ: {{cnpj}}</p>
+        <p style="margin-top: 20px;">Emitido em: {{data_emissao}}</p>
+    </div>
+</div>`,
+            payment_receipt_template: `<div style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #333; max-width: 800px; margin: 0 auto; border: 1px solid #ddd; padding: 20px;">
+    <!-- CABEÇALHO DEDICADO VIA TAG GLOBAL -->
+    {{cabecalho_a4}}
 
     <!-- CORPO -->
     <div style="background-color: #f9f9f9; padding: 10px; border: 1px solid #eee; margin-bottom: 20px; display: flex; justify-content: space-between;">
@@ -151,6 +184,87 @@ export const companySettingsService = {
         <div style="border-bottom: 2px solid #000; width: 400px; margin: 0 auto 10px;"></div>
         <strong>{{nome_loja}}</strong><br/>
         <small>Assinatura do Recebedor / Lançador</small>
+    </div>
+</div>`,
+            extended_warranty_template: `<div style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #333; max-width: 800px; margin: 0 auto; border: 1px solid #cbd5e1; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+    <!-- CABEÇALHO GLOBAL -->
+    {{cabecalho_a4}}
+
+    <div style="text-align: center; margin: 20px 0 30px 0; padding-bottom: 10px; border-bottom: 2px solid #2563eb;">
+        <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: 1px;">Certificado de Garantia Estendida</h1>
+        <p style="margin: 5px 0 0; color: #64748b; font-size: 13px;">Proteção Adicional e Segurança para o seu Aparelho</p>
+    </div>
+
+    <!-- CLIENTE E PRODUTO -->
+    <div style="display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px;">
+        <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+            <div style="background-color: #f8fafc; padding: 8px 12px; font-weight: bold; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0; text-transform: uppercase;">
+                Dados do Cliente
+            </div>
+            <div style="padding: 12px;">
+                <p style="margin: 0 0 4px;"><strong>Nome:</strong> {{nome_cliente}}</p>
+                <p style="margin: 0 0 4px;"><strong>CPF/CNPJ:</strong> {{cpf_cliente}}</p>
+                <p style="margin: 0;"><strong>Contato:</strong> {{telefone_cliente}}</p>
+            </div>
+        </div>
+        
+        <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
+            <div style="background-color: #f8fafc; padding: 8px 12px; font-weight: bold; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0; text-transform: uppercase;">
+                Identificação do Aparelho
+            </div>
+            <div style="padding: 12px;">
+                <p style="margin: 0 0 4px;"><strong>Modelo:</strong> {{produto}}</p>
+                <p style="margin: 0 0 4px;"><strong>IMEI 1:</strong> {{imei1}}</p>
+                <p style="margin: 0;"><strong>IMEI 2:</strong> {{imei2}}</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- COBERTURA ESTENDIDA -->
+    <div style="border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; margin-bottom: 30px;">
+        <div style="background-color: #eff6ff; padding: 10px 15px; font-weight: bold; font-size: 13px; color: #1e40af; border-bottom: 1px solid #bfdbfe; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;">
+            <span>Resumo da Cobertura Estendida</span>
+            <span style="background: #2563eb; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px;">Válido e Ativo</span>
+        </div>
+        <div style="padding: 15px; display: flex; justify-content: space-between; flex-wrap: wrap;">
+            <div style="width: 48%; margin-bottom: 10px;">
+                <p style="margin: 0; color: #64748b; font-size: 11px; text-transform: uppercase;">Prazo Adicional</p>
+                <p style="margin: 2px 0 0; font-weight: bold; font-size: 14px; color: #0f172a;">{{meses_garantia_estendida}} Meses</p>
+            </div>
+            <div style="width: 48%; margin-bottom: 10px;">
+                <p style="margin: 0; color: #64748b; font-size: 11px; text-transform: uppercase;">Valor Contratado</p>
+                <p style="margin: 2px 0 0; font-weight: bold; font-size: 14px; color: #16a34a;">{{valor_garantia_estendida}}</p>
+            </div>
+            <div style="width: 48%;">
+                <p style="margin: 0; color: #64748b; font-size: 11px; text-transform: uppercase;">Início da Cobertura</p>
+                <p style="margin: 2px 0 0; font-weight: bold; font-size: 14px; color: #0f172a;">{{data_inicio_estendida}}</p>
+            </div>
+            <div style="width: 48%;">
+                <p style="margin: 0; color: #64748b; font-size: 11px; text-transform: uppercase;">Fim da Cobertura (Vencimento)</p>
+                <p style="margin: 2px 0 0; font-weight: bold; font-size: 14px; color: #dc2626;">{{data_fim_estendida}}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TERMOS E CONDICOES -->
+    <div style="margin-bottom: 40px; font-size: 11px; color: #475569; text-align: justify; padding: 15px; background-color: #f8fafc; border-radius: 6px; border: 1px dashed #cbd5e1;">
+        <p style="margin: 0 0 8px;"><strong>1. DO OBJETO:</strong> O presente certificado garante o reparo gratuito ou substituição de peças do aparelho descrito acima que apresentem defeito de fabricação ou vício de qualidade durante o prazo estendido contratado.</p>
+        <p style="margin: 0 0 8px;"><strong>2. DA VIGÊNCIA:</strong> A cobertura estendida inicia-se imediatamente após o término da garantia legal/padrão da loja e vigora até a data de vencimento especificada neste certificado.</p>
+        <p style="margin: 0;"><strong>3. DAS EXCLUSÕES:</strong> Esta garantia <u>NÃO COBRE</u>: danos físicos (telas quebradas, carcaça amassada), danos por líquidos (oxidação), mau uso, desgaste natural (bateria), instalação de software não-oficial e intervenção técnica por terceiros não autorizados. O rompimento do selo de garantia implicará na perda imediata da cobertura.</p>
+    </div>
+
+    <!-- ASSINATURAS -->
+    <div style="display: flex; justify-content: space-between; margin-top: 50px; padding: 0 20px;">
+        <div style="width: 40%; text-align: center;">
+            <div style="border-bottom: 1px solid #000; margin-bottom: 8px;"></div>
+            <p style="margin: 0; font-weight: bold; font-size: 12px; color: #0f172a;">{{nome_loja}}</p>
+            <p style="margin: 2px 0 0; font-size: 10px; color: #64748b;">Representante / Vendedor</p>
+        </div>
+        <div style="width: 40%; text-align: center;">
+            <div style="border-bottom: 1px solid #000; margin-bottom: 8px;"></div>
+            <p style="margin: 0; font-weight: bold; font-size: 12px; color: #0f172a;">{{nome_cliente}}</p>
+            <p style="margin: 2px 0 0; font-size: 10px; color: #64748b;">Titular do Contrato / Cliente</p>
+        </div>
     </div>
 </div>`
         };

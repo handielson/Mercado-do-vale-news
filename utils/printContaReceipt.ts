@@ -1,7 +1,10 @@
 import { ContaPagar, ContaReceber } from '../types/finance';
 import { CompanySettings } from '../types/companySettings';
+import { companySettingsService } from '../services/companySettingsService';
 
 const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',')}`;
+
+import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
 
 export function printContaReceipt(
     conta: ContaPagar | ContaReceber,
@@ -36,10 +39,12 @@ export function printContaReceipt(
     };
     const situacaoFormatada = situacaoMap[String(conta.situacao).toLowerCase()] || String(conta.situacao);
 
-    // Formatar histórico preservando quebras de linha
     const historicoFormatado = (conta.historico || 'Sem histórico')
         .replace(/\n/g, '<br>')
         .replace(/\r/g, '');
+
+    const rawCabecalho = getHeaderTemplate('default_thermal_header', settings);
+    const cabecalhoTermicoHTML = buildGlobalHeader(rawCabecalho, settings, title);
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -89,19 +94,7 @@ export function printContaReceipt(
 </head>
 <body>
 <div class="receipt">
-    <div class="header">
-        <div>
-            ${(settings as any).logo || settings.receipt_logo_url
-            ? `<img src="${(settings as any).logo || settings.receipt_logo_url}" alt="Logo" style="max-height:60px;max-width:140px;object-fit:contain;" />`
-            : `<p style="font-size:16px;font-weight:800;color:#111827;">${companyName}</p>`}
-        </div>
-        <div style="text-align:right;">
-            <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:${mainColor};letter-spacing:1px;">${title}</p>
-            ${settings.cnpj ? `<p style="font-size:11px;color:#6b7280;">CNPJ: ${settings.cnpj}</p>` : ''}
-            ${settings.phone ? `<p style="font-size:11px;color:#6b7280;">Tel: ${settings.phone}</p>` : ''}
-            <p style="font-size:10px;color:#9ca3af;margin-top:4px;">Ref. API: #${conta.id}</p>
-        </div>
-    </div>
+    ${cabecalhoTermicoHTML}
 
     <div class="section">
         <p class="section-title">Contatos e Detalhes</p>

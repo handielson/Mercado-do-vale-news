@@ -1,7 +1,10 @@
 import { SaleWithItems } from '../types/sale';
 import { CompanySettings } from '../types/companySettings';
+import { companySettingsService } from '../services/companySettingsService';
 import { CoinBalance } from '../types/cashback';
 import { BenefitStatus } from './benefitService';
+
+import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
 
 const fmt = (v: number) => `R$ ${(v / 100).toFixed(2).replace('.', ',')}`;
 
@@ -145,7 +148,7 @@ export function printSaleReceipt(
     const extraPageQrUrl = (settings as any).receipt_extra_page_qr_url || '';
 
     let extraPageHtml = '';
-    if (showExtraPage) {
+    if (showExtraPage && extraPageText) {
         const resolvedText = resolveExtraPageTags(extraPageText, sale, settings, benefits);
         const formattedText = resolvedText.replace(/\n/g, '<br>');
 
@@ -160,20 +163,12 @@ export function printSaleReceipt(
                </div>`
             : '';
 
+        const rawCabecalhoExtra = getHeaderTemplate('default_thermal_header', settings);
+        let cabecalhoTermicoExtraHTML = buildGlobalHeader(rawCabecalhoExtra, settings, 'Termo de Garantia / Folha Extra');
+
         extraPageHtml = `
 <div class="extra-page">
-    <div class="header" style="margin-bottom:16px;">
-        <div>
-            ${logoHtml || `<p style="font-size:16px;font-weight:800;color:#111827;">${companyName}</p>`}
-        </div>
-        <div style="text-align:right;">
-            <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;letter-spacing:1px;">Termo de Garantia</p>
-            <p style="font-size:16px;font-weight:800;color:#111827;">${companyName}</p>
-            ${settings.cnpj ? `<p style="font-size:11px;color:#6b7280;">CNPJ: ${settings.cnpj}</p>` : ''}
-            ${settings.phone ? `<p style="font-size:11px;color:#6b7280;">Tel: ${settings.phone}</p>` : ''}
-            <p style="font-size:10px;color:#9ca3af;margin-top:4px;">Ref. Pedido: #${sale.id.slice(0, 8).toUpperCase()}</p>
-        </div>
-    </div>
+    ${cabecalhoTermicoExtraHTML}
     <div style="font-size:13px;line-height:1.7;color:#374151;">${formattedText || ''}</div>
     ${qrHtml}
 </div>`;
@@ -187,6 +182,9 @@ export function printSaleReceipt(
         return `${Math.round(n * 3.78)}px`;
     };
     const containerWidth = mmToPx(paperWidth);
+
+    const rawCabecalhoPrincipal = getHeaderTemplate('default_thermal_header', settings);
+    const cabecalhoTermicoPrincipalHTML = buildGlobalHeader(rawCabecalhoPrincipal, settings, 'Comprovante de Venda');
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -225,15 +223,7 @@ export function printSaleReceipt(
 </head>
 <body>
 <div class="receipt">
-    <div class="header">
-        <div>${logoHtml}</div>
-        <div style="text-align:right;">
-            <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;letter-spacing:1px;">Comprovante de Venda</p>
-            <p style="font-size:16px;font-weight:800;color:#111827;">${companyName}</p>
-            ${settings.cnpj ? `<p style="font-size:11px;color:#6b7280;">CNPJ: ${settings.cnpj}</p>` : ''}
-            ${settings.phone ? `<p style="font-size:11px;color:#6b7280;">Tel: ${settings.phone}</p>` : ''}
-        </div>
-    </div>
+    ${cabecalhoTermicoPrincipalHTML}
 
     <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px dashed #d1d5db;">
         <div style="display:flex;justify-content:space-between;align-items:center;">

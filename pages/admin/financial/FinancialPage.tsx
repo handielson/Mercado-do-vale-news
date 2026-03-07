@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     DollarSign, TrendingDown, TrendingUp, RefreshCw, Plus, Check,
-    X, AlertCircle, Loader2, Calendar, Filter, Pencil, Search, Printer, ReceiptText
+    X, AlertCircle, Loader2, Calendar, Filter, Pencil, Search, Printer, ReceiptText, FileCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { blingFinanceService } from '../../../services/blingFinanceService';
@@ -10,6 +10,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { printContaReceipt } from '../../../utils/printContaReceipt';
 import { printPaymentReceipt } from '../../../utils/printPaymentReceipt';
+import { printDebtClearance } from '../../../utils/printDebtClearance';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -363,9 +364,10 @@ interface RowProps {
     onEditar: (c: ContaPagar | ContaReceber) => void;
     onPrint: (c: ContaPagar | ContaReceber) => void;
     onPrintReceipt: (c: ContaPagar | ContaReceber) => void;
+    onPrintClearance: (c: ContaPagar | ContaReceber) => void;
 }
 
-function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar, onPrint, onPrintReceipt }: RowProps) {
+function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar, onPrint, onPrintReceipt, onPrintClearance }: RowProps) {
     const vencido = isVencido(conta.vencimento, conta.situacao);
     const sit = situacaoLabel(vencido && normalizeSituacao(conta.situacao) === 'em_aberto' ? 'vencido' : conta.situacao);
     const vencDate = conta.vencimento.split('-').reverse().join('/');
@@ -429,6 +431,13 @@ function ContaRow({ conta, tipo, onBaixar, onCancelar, onEditar, onPrint, onPrin
                             title="Emitir Recibo de Pagamento"
                             className="flex items-center justify-center w-7 h-7 rounded-lg text-blue-500 hover:bg-blue-100 transition-colors">
                             <ReceiptText size={14} />
+                        </button>
+                    )}
+                    {isPaid && (
+                        <button onClick={() => onPrintClearance(conta)}
+                            title="Imprimir Carta de Quitação"
+                            className="flex items-center justify-center w-7 h-7 rounded-lg text-green-500 hover:bg-green-100 transition-colors ml-1">
+                            <FileCheck size={14} />
                         </button>
                     )}
                     {isPaid && (
@@ -585,6 +594,19 @@ export default function FinancialPage() {
             toast.dismiss(tId);
             toast.error('Erro ao trazer dados (imprimindo resumo): ' + err.message);
             printPaymentReceipt(conta, fullSettings, tab);
+        }
+    }
+
+    async function handlePrintClearance(conta: ContaPagar | ContaReceber) {
+        const tId = toast.loading('Carregando dados para Carta de Quitação...');
+        try {
+            const detalhe = await blingFinanceService.getConta(tab, (conta as any).id);
+            toast.dismiss(tId);
+            printDebtClearance(detalhe || conta, fullSettings);
+        } catch (err: any) {
+            toast.dismiss(tId);
+            toast.error('Erro ao trazer dados (imprimindo resumo): ' + err.message);
+            printDebtClearance(conta, fullSettings);
         }
     }
 
@@ -775,6 +797,7 @@ export default function FinancialPage() {
                                         onEditar={setEditTarget}
                                         onPrint={handlePrint}
                                         onPrintReceipt={handlePrintReceipt}
+                                        onPrintClearance={handlePrintClearance}
                                     />
                                 ))}
                             </tbody>
