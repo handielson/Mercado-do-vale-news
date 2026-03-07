@@ -461,7 +461,7 @@ export default function FinancialPage() {
 
     const summary = calcSummary(contas);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (forceRefresh = false) => {
         setLoading(true);
         try {
             const filters = {
@@ -469,13 +469,35 @@ export default function FinancialPage() {
                 dataVencimentoFim: dataFim,
                 situacao: filtroSituacao || undefined,
             };
+
+            const cacheKey = `bling_finance_${dataInicio}_${dataFim}_${filtroSituacao || 'all'}`;
+
+            if (!forceRefresh) {
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                    try {
+                        const { pagar, receber } = JSON.parse(cached);
+                        setContasPagar(pagar);
+                        setContasReceber(receber);
+                        toast.success('Contas carregadas da memória local.');
+                        setLoading(false);
+                        return;
+                    } catch (e) {
+                        // ignore corrupt cache
+                    }
+                }
+            }
+
             const [pagar, receber] = await Promise.all([
                 blingFinanceService.listContasPagar(filters),
                 blingFinanceService.listContasReceber(filters),
             ]);
+
+            localStorage.setItem(cacheKey, JSON.stringify({ pagar, receber, timestamp: Date.now() }));
+
             setContasPagar(pagar);
             setContasReceber(receber);
-            toast.success(`${pagar.length + receber.length} contas carregadas do Bling.`);
+            toast.success(`${pagar.length + receber.length} contas atualizadas do Bling.`);
         } catch (err: any) {
             toast.error('Erro ao buscar contas: ' + err.message);
         } finally {
@@ -489,7 +511,7 @@ export default function FinancialPage() {
             await blingFinanceService.baixarConta(tab, (baixaTarget as any).id, baixa);
             toast.success('Baixa registrada com sucesso!');
             setBaixaTarget(null);
-            await load();
+            await load(true);
         } catch (err: any) {
             toast.error('Erro ao registrar baixa: ' + err.message);
         }
@@ -500,7 +522,7 @@ export default function FinancialPage() {
         try {
             await blingFinanceService.cancelarConta(tab, (conta as any).id);
             toast.success('Conta cancelada.');
-            await load();
+            await load(true);
         } catch (err: any) {
             toast.error('Erro ao cancelar: ' + err.message);
         }
@@ -537,7 +559,7 @@ export default function FinancialPage() {
             await blingFinanceService.createConta(input);
             toast.success('Conta lançada no Bling!');
             setLancarTipo(null);
-            await load();
+            await load(true);
         } catch (err: any) {
             toast.error('Erro ao lançar: ' + err.message);
         }
@@ -554,7 +576,7 @@ export default function FinancialPage() {
             });
             toast.success('Conta atualizada no Bling!');
             setEditTarget(null);
-            await load();
+            await load(true);
         } catch (err: any) {
             toast.error('Erro ao editar: ' + err.message);
         }
@@ -585,7 +607,7 @@ export default function FinancialPage() {
                         <TrendingUp size={15} /> Nova a Receber
                     </button>
                     <button
-                        onClick={load}
+                        onClick={() => load(true)}
                         disabled={loading}
                         className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-semibold hover:bg-slate-900 transition-colors disabled:opacity-50">
                         {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
