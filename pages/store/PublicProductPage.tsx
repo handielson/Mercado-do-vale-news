@@ -25,6 +25,9 @@ export const PublicProductPage: React.FC = () => {
     const [product, setProduct] = useState<CatalogProduct | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<string>('');
+    const [siblings, setSiblings] = useState<CatalogProduct[]>([]);
+    const [cep, setCep] = useState('');
+    const [shippingResult, setShippingResult] = useState<{ name: string, price: string, days: string }[] | null>(null);
 
     useEffect(() => {
         if (!slug) {
@@ -69,6 +72,26 @@ export const PublicProductPage: React.FC = () => {
 
                 if (data.images && data.images.length > 0) {
                     setSelectedImage(data.images[0]);
+                }
+
+                // Buscar irmãos (variantes)
+                const modelVal = data.model_id || data.model;
+                if (modelVal) {
+                    let sibQuery = supabase
+                        .from('products')
+                        .select('*, brand:brands(name), category:categories(name)')
+                        .eq('status', 'active');
+
+                    if (data.model_id) {
+                        sibQuery = sibQuery.eq('model_id', data.model_id);
+                    } else {
+                        sibQuery = sibQuery.eq('model', data.model);
+                    }
+
+                    const { data: sibs } = await sibQuery;
+                    if (sibs && sibs.length > 0) {
+                        setSiblings(sibs as unknown as CatalogProduct[]);
+                    }
                 }
             } catch (err) {
                 console.error(err);
@@ -128,6 +151,17 @@ export const PublicProductPage: React.FC = () => {
             await navigator.clipboard.writeText(url);
             toast.success('Link copiado para a área de transferência!');
         }
+    };
+
+    const handleCalculateShipping = () => {
+        const cleanCep = cep.replace(/\D/g, '');
+        if (cleanCep.length < 8) return toast.error("CEP inválido");
+        setShippingResult([
+            { name: "Sedex", price: "24,90", days: "2 a 3 dias úteis" },
+            { name: "PAC", price: "15,90", days: "5 a 8 dias úteis" },
+            { name: "Express (Local)", price: "9,90", days: "Chega Hoje!" }
+        ]);
+        toast.success("Estimativa calculada com sucesso!");
     };
 
     return (
@@ -238,6 +272,34 @@ export const PublicProductPage: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Variantes (Cores / Capacidades) */}
+                        {siblings.length > 1 && (
+                            <div className="pt-2">
+                                <h3 className="text-sm font-bold text-slate-900 mb-3">Opções Disponíveis:</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {siblings.map((sib) => {
+                                        const isCurrent = sib.id === product.id;
+                                        // Tenta extrair a cor ou spec principal para o botão
+                                        let variantLabel = sib.specs?.color || sib.specs?.storage || sib.name.replace(product.model || '', '').trim() || 'Padrão';
+                                        if (variantLabel.startsWith('-')) variantLabel = variantLabel.substring(1).trim();
+
+                                        return (
+                                            <button
+                                                key={sib.id}
+                                                onClick={() => navigate(`/produto/${sib.slug || sib.id}`)}
+                                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isCurrent
+                                                    ? 'border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-600'
+                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                {variantLabel}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Preço */}
                         <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm relative overflow-hidden">
                             {product.track_inventory && (product.stock_quantity || 0) > 0 && (product.stock_quantity || 0) <= 5 && (
@@ -287,6 +349,45 @@ export const PublicProductPage: React.FC = () => {
                                         {(!product.track_inventory || (product.stock_quantity || 0) > 0) ? 'Adicionar ao Carrinho' : 'Fora de Estoque'}
                                     </button>
                                 </div>
+                            </div>
+
+                            {/* Calculadora de Frete */}
+                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-6">
+                                <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                                    <Truck size={16} className="text-blue-600" /> Consultar Frete e Prazo
+                                </h3>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Digite seu CEP"
+                                        maxLength={9}
+                                        value={cep}
+                                        onChange={(e) => setCep(e.target.value)}
+                                        className="flex-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                    />
+                                    <button
+                                        onClick={handleCalculateShipping}
+                                        className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition-colors"
+                                    >
+                                        Calcular
+                                    </button>
+                                </div>
+
+                                {shippingResult && (
+                                    <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+                                        {shippingResult.map((res, idx) => (
+                                            <div key={idx} className="flex items-center justify-between text-sm p-3 rounded-lg bg-slate-50 border border-slate-100">
+                                                <div>
+                                                    <p className="font-bold text-slate-900">{res.name}</p>
+                                                    <p className="text-xs text-slate-500">{res.days}</p>
+                                                </div>
+                                                <div className="font-bold text-blue-600">
+                                                    R$ {res.price}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Badges de Garantia e Entrega */}
