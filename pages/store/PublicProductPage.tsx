@@ -304,7 +304,7 @@ export const PublicProductPage: React.FC = () => {
                         <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm relative overflow-hidden">
                             {product.track_inventory && (product.stock_quantity || 0) > 0 && (product.stock_quantity || 0) <= 5 && (
                                 <div className="absolute top-0 left-0 w-full bg-red-500 text-white text-xs font-bold text-center py-1 animate-pulse">
-                                    Últimas {product.stock_quantity} unidades em estoque!
+                                    Últimas unidades em estoque!
                                 </div>
                             )}
                             <div className={product.track_inventory && (product.stock_quantity || 0) > 0 && (product.stock_quantity || 0) <= 5 ? "mt-4" : ""}>
