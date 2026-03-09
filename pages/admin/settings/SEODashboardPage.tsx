@@ -343,7 +343,7 @@ export const SEODashboardPage: React.FC = () => {
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <Link
-                                                    to={`/admin/products/${p.id}/edit`}
+                                                    to={`/admin/products/${p.id}`}
                                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors border border-blue-200"
                                                 >
                                                     <Edit3 className="w-3 h-3" /> Editar
