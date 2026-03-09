@@ -11,6 +11,7 @@ export interface ShippingSettings {
     melhor_envio_token?: string;
     melhor_envio_sandbox: boolean;
     melhor_envio_enabled: boolean;
+    melhor_envio_allowed_services?: string;
     local_delivery_enabled: boolean;
     updated_at: string;
 }
@@ -20,6 +21,7 @@ export interface ShippingSettingsInput {
     melhor_envio_token?: string;
     melhor_envio_sandbox?: boolean;
     melhor_envio_enabled?: boolean;
+    melhor_envio_allowed_services?: string;
     local_delivery_enabled?: boolean;
 }
 
@@ -47,10 +49,10 @@ export interface ShippingZoneInput {
     enabled?: boolean;
     cities?: string[];
     cep_ranges?: string[];
-    max_km_free?: number;
-    price_per_km?: number;
-    fixed_price?: number;
-    min_order_free?: number;
+    max_km_free?: number | null;
+    price_per_km?: number | null;
+    fixed_price?: number | null;
+    min_order_free?: number | null;
     estimated_days_min?: number;
     estimated_days_max?: number;
     display_order?: number;

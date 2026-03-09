@@ -11,42 +11,29 @@ interface MelhorEnvioInput {
     weight: number;     // gramas
     height: number;     // cm
     width: number;      // cm
-    length: number;     // cm
+    length?: number;    // cm
     token: string;
     sandbox?: boolean;
+    allowed_services?: string;
 }
 
 export const melhorEnvioService = {
     async calculate(input: MelhorEnvioInput): Promise<ShippingOption[]> {
-        const baseUrl = input.sandbox
-            ? 'https://sandbox.melhorenvio.com.br'
-            : 'https://melhorenvio.com.br';
-
-        const body = {
-            from: { postal_code: input.from_cep.replace(/\D/g, '') },
-            to: { postal_code: input.to_cep.replace(/\D/g, '') },
-            package: {
-                height: input.height,
-                width: input.width,
-                length: input.length,
-                weight: input.weight / 1000, // API espera KG
-            },
-            options: {
-                insurance_value: 0,
-                receipt: false,
-                own_hand: false,
-            },
-        };
-
-        const res = await fetch(`${baseUrl}/api/v2/me/shipment/calculate`, {
+        const res = await fetch('/api/melhor-envio-calculate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${input.token}`,
-                'User-Agent': 'Mercado do Vale (contato@mercadodovale.com.br)',
             },
-            body: JSON.stringify(body),
+            body: JSON.stringify({
+                from_cep: input.from_cep,
+                to_cep: input.to_cep,
+                weight_g: input.weight,
+                height_cm: input.height,
+                width_cm: input.width,
+                length_cm: input.length ?? 20,
+                token: input.token,
+                sandbox: input.sandbox,
+            }),
         });
 
         if (!res.ok) {
@@ -56,7 +43,7 @@ export const melhorEnvioService = {
 
         const data: any[] = await res.json();
 
-        return data
+        const options = data
             .filter((item) => !item.error && item.price)
             .map((item) => ({
                 id: `me_${item.id}`,
@@ -69,5 +56,14 @@ export const melhorEnvioService = {
                 daysLabel: `${item.delivery_time ?? '?'} dias úteis`,
                 type: 'carrier' as const,
             }));
+
+        if (!input.allowed_services?.trim()) {
+            return options;
+        }
+
+        const allowed = input.allowed_services.toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+        return options.filter(opt =>
+            allowed.some(a => opt.name.toLowerCase().includes(a) || opt.carrier.toLowerCase().includes(a))
+        );
     },
 };

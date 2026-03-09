@@ -15,7 +15,8 @@ export async function getCashbackSettings(): Promise<CashbackSettings> {
     const { data, error } = await supabase
         .from('cashback_settings')
         .select('*')
-        .single();
+        .limit(1)
+        .maybeSingle();
 
     if (error) throw new Error(`Erro ao buscar configurações de cashback: ${error.message}`);
     return data as CashbackSettings;
@@ -24,10 +25,17 @@ export async function getCashbackSettings(): Promise<CashbackSettings> {
 export async function updateCashbackSettings(
     updates: Partial<CashbackSettings>
 ): Promise<CashbackSettings> {
+    // Buscar o ID atual primeiro para evitar o erro 403 (RLS pode falhar com neq em updates nulos)
+    const current = await getCashbackSettings();
+
+    if (!current?.id) {
+        throw new Error('Nenhuma configuração de cashback encontrada para atualizar');
+    }
+
     const { data, error } = await supabase
         .from('cashback_settings')
         .update({ ...updates, updated_at: new Date().toISOString() })
-        .neq('id', '00000000-0000-0000-0000-000000000000') // atualiza a única linha
+        .eq('id', current.id)
         .select()
         .single();
 
@@ -144,6 +152,48 @@ export async function earnCoinsForPurchase(
 
     if (error) throw new Error(`Erro ao creditar moedas: ${error.message}`);
     return coinsEarned;
+}
+
+// Emissão de moedas pendentes (para novas compras online aguardando pagamento/aprovação)
+export async function addPendingCoinsForPurchase(
+    customerId: string,
+    finalPaidBrl: number,
+    saleId: string
+): Promise<void> {
+    const settings = await getCashbackSettings();
+    if (!settings.active || finalPaidBrl < settings.min_purchase_for_coins) return;
+
+    const coinsToEarn = Math.floor(finalPaidBrl * settings.coins_per_real);
+    if (coinsToEarn <= 0) return;
+
+    const { error } = await supabase.rpc('add_pending_coins', {
+        p_customer_id: customerId,
+        p_amount: coinsToEarn,
+        p_type: 'earn_purchase',
+        p_description: `Moedas pendentes da compra #${saleId.slice(0, 8)}`,
+        p_reference_id: saleId,
+        p_reference_type: 'sale',
+    });
+
+    if (error) throw new Error(`Erro ao pré-adicionar moedas: ${error.message}`);
+}
+
+// Confirma moedas pendentes
+export async function confirmPendingCoins(saleId: string): Promise<void> {
+    const { error } = await supabase.rpc('confirm_pending_coins', {
+        p_reference_id: saleId
+    });
+
+    if (error) throw new Error(`Erro ao confirmar moedas: ${error.message}`);
+}
+
+// Cancela moedas pendentes
+export async function cancelPendingCoins(saleId: string): Promise<void> {
+    const { error } = await supabase.rpc('cancel_pending_coins', {
+        p_reference_id: saleId
+    });
+
+    if (error) throw new Error(`Erro ao cancelar moedas pendentes: ${error.message}`);
 }
 
 // ============================================================

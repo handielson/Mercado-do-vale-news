@@ -21,7 +21,7 @@ interface DeliveryOptionsProps {
 }
 
 export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOptionsProps) {
-    const [cep, setCep] = useState('');
+    const [cep, setCep] = useState(selected.address?.cep || '');
     const [isLoadingCEP, setIsLoadingCEP] = useState(false);
     const [cepError, setCepError] = useState('');
     const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
@@ -35,6 +35,15 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
                 setStoreAddress(settings.address);
             }
         }).catch(console.error);
+
+        // Carrega opções de frete se já houver CEP salvo
+        if (selected.address?.cep) {
+            setIsLoadingShipping(true);
+            shippingService.calculate({ to_cep: selected.address.cep })
+                .then(setShippingOptions)
+                .catch(() => { })
+                .finally(() => setIsLoadingShipping(false));
+        }
     }, []);
 
     const handleTypeChange = (type: 'pickup' | 'delivery') => {
@@ -43,6 +52,20 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
 
     const handleCEPLookup = async () => {
         if (!cep) return;
+
+        // Evita refazer a busca se o CEP for exatamente o mesmo que já está preenchido e já temos um endereço
+        if (selected.address?.cep && selected.address.cep === cep && !cepError) {
+            // Apenas recalcula o frete se por algum motivo as opções de frete estiverem vazias
+            if (shippingOptions.length === 0) {
+                setIsLoadingShipping(true);
+                shippingService.calculate({ to_cep: cep })
+                    .then(setShippingOptions)
+                    .catch(() => { })
+                    .finally(() => setIsLoadingShipping(false));
+            }
+            return;
+        }
+
         setIsLoadingCEP(true);
         setCepError('');
         setShippingOptions([]);

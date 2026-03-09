@@ -8,9 +8,10 @@ import type { CoinBalance } from '../../types/cashback';
 interface DailyCheckinWidgetProps {
     customerId: string;
     onCoinsEarned?: (amount: number) => void;
+    hideBalance?: boolean;
 }
 
-export default function DailyCheckinWidget({ customerId, onCoinsEarned }: DailyCheckinWidgetProps) {
+export default function DailyCheckinWidget({ customerId, onCoinsEarned, hideBalance = false }: DailyCheckinWidgetProps) {
     const [balance, setBalance] = useState<CoinBalance | null>(null);
     const [checkedInToday, setCheckedInToday] = useState(false);
     const [streak, setStreak] = useState(0);
@@ -64,24 +65,26 @@ export default function DailyCheckinWidget({ customerId, onCoinsEarned }: DailyC
     return (
         <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border border-yellow-200 rounded-2xl p-5 space-y-4">
             {/* Saldo */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <div className="p-2 bg-yellow-400 rounded-xl">
-                        <Coins className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-amber-700 font-medium uppercase tracking-wide">Moedas do Vale</p>
-                        <p className="text-2xl font-bold text-amber-900">
-                            {balance?.balance.toLocaleString('pt-BR') ?? '0'}
-                            <span className="text-sm font-normal text-amber-600 ml-1">moedas</span>
-                        </p>
-                        {balance && balance.balance > 0 && (
-                            <p className="text-xs text-amber-600">
-                                ≈ R$ {coinsToReais(balance.balance, rate).toFixed(2).replace('.', ',')} em descontos
+            <div className={`flex items-center ${hideBalance ? 'justify-center border-b border-yellow-200/50 pb-4 mb-2' : 'justify-between'}`}>
+                {!hideBalance && (
+                    <div className="flex items-center gap-2">
+                        <div className="p-2 bg-yellow-400 rounded-xl">
+                            <Coins className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <p className="text-xs text-amber-700 font-medium uppercase tracking-wide">Moedas do Vale</p>
+                            <p className="text-2xl font-bold text-amber-900">
+                                {balance?.balance.toLocaleString('pt-BR') ?? '0'}
+                                <span className="text-sm font-normal text-amber-600 ml-1">moedas</span>
                             </p>
-                        )}
+                            {balance && balance.balance > 0 && (
+                                <p className="text-xs text-amber-600">
+                                    ≈ R$ {coinsToReais(balance.balance, rate).toFixed(2).replace('.', ',')} em descontos
+                                </p>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
                 {/* Streak */}
                 <div className="text-center">
                     <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-bold ${streak > 0 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'

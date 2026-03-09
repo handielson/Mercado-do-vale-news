@@ -107,6 +107,10 @@ export interface Order {
     coupon_code?: string;
     coupon_discount?: number;         // em centavos
 
+    // Cashback
+    coins_spent?: number;             // quantidade de moedas
+    coins_discount?: number;          // em centavos
+
     notes?: string;
     created_at: string;
     updated_at: string;
@@ -131,6 +135,8 @@ export interface OrderInput {
 
     coupon_code?: string;
     coupon_discount?: number;         // em centavos
+    coins_spent?: number;
+    coins_discount?: number;
 
     notes?: string;
 }

@@ -22,6 +22,7 @@ import type { WarrantyOption } from '@/types/companySettings';
 import { categoryService } from '@/services/categories';
 import { paymentIntegrationService } from '@/services/paymentIntegrationService';
 import { createOrder } from '@/services/orderService';
+import toast from 'react-hot-toast';
 
 interface QuoteModalProps {
     product: CatalogProduct;
@@ -46,9 +47,10 @@ interface QuoteModalProps {
     externalWarrantyProductName?: string; // nome do item elegível para constar no pedido
     externalWarrantyProductId?: string;
     externalWarrantyImageUrl?: string;
+    onCoinDiscountChange?: (discountBrl: number, coinsToSpend: number) => void;
 }
 
-export function QuoteModal({ product, variants, isOpen, onClose, initialVariant, inline, totalOverride, selectedWarranty: externalWarranty, onWarrantyChange, selectedDelivery: externalDelivery, onDeliveryChange, externalCouponCode, externalCouponDiscount, externalReferralCode, externalReferralName, externalWarrantyPrice, externalWarrantyProductName, externalWarrantyProductId, externalWarrantyImageUrl }: QuoteModalProps) {
+export function QuoteModal({ product, variants, isOpen, onClose, initialVariant, inline, totalOverride, selectedWarranty: externalWarranty, onWarrantyChange, selectedDelivery: externalDelivery, onDeliveryChange, externalCouponCode, externalCouponDiscount, externalReferralCode, externalReferralName, externalWarrantyPrice, externalWarrantyProductName, externalWarrantyProductId, externalWarrantyImageUrl, onCoinDiscountChange }: QuoteModalProps) {
     const [selectedVariant, setSelectedVariant] = useState<VariantSpecs>(initialVariant || {});
     const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
     const [selectedPlan, setSelectedPlan] = useState<InstallmentPlan | null>(null);
@@ -73,6 +75,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
     const [useCoins, setUseCoins] = useState(false);
     const [coinDiscount, setCoinDiscount] = useState(0);
     const [coinsToSpend, setCoinsToSpend] = useState(0);
+    const [coinError, setCoinError] = useState('');
     const [cashbackSettings, setCashbackSettings] = useState<any>(null);
 
     // Indicação
@@ -160,9 +163,11 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                 payment_method: 'on_delivery',
                 delivery_type: delivery.type === 'delivery' ? 'delivery' : 'pickup',
                 shipping_address: shippingAddress,
-                shipping_cost: delivery.shippingOption?.price ?? 0,
+                shipping_cost: Math.round((delivery.shippingOption?.price ?? 0) * 100),
                 coupon_code: externalCouponCode || undefined,
                 coupon_discount: externalCouponDiscount || 0,
+                coins_spent: useCoins ? coinsToSpend : 0,
+                coins_discount: useCoins ? Math.round(coinDiscount * 100) : 0,
                 notes: JSON.stringify({
                     referral_code: externalReferralCode || undefined,
                     referral_name: externalReferralName || undefined,
@@ -171,9 +176,11 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                 }),
             } as any);
             clearCart();
-            navigate(`/pedido/${order.id}/confirmacao`);
-        } catch (e) {
+            // Redirect to customer history instead of confirmation page
+            navigate('/perfil', { state: { tab: 'history' } });
+        } catch (e: any) {
             console.error('Erro ao criar pedido:', e);
+            toast.error(e.message || 'Erro inesperado ao gerar pedido. Verifique os dados e tente novamente.');
         } finally {
             setIsSubmittingOrder(false);
         }
@@ -275,22 +282,36 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
     // Recalcular desconto de moedas quando ativado
     useEffect(() => {
         if (!useCoins || !customer || coinBalance <= 0) {
-            setCoinDiscount(0);
-            setCoinsToSpend(0);
+            setCoinError('');
+            if (coinDiscount !== 0) {
+                setCoinDiscount(0);
+                setCoinsToSpend(0);
+                onCoinDiscountChange?.(0, 0);
+            }
             return;
         }
         const baseReais = coupon.finalPrice > 0 ? coupon.finalPrice : effectivePriceReais - coupon.discount;
         validateCoinRedeem(customer.id, coinBalance, baseReais)
             .then(v => {
+                let discount = 0;
+                let coins = 0;
+
                 if (v.valid) {
-                    setCoinDiscount(v.discount_brl);
-                    setCoinsToSpend(v.coins_to_use);
+                    setCoinError('');
+                    discount = v.discount_brl;
+                    coins = v.coins_to_use;
                 } else {
-                    setCoinDiscount(0);
-                    setCoinsToSpend(0);
+                    setCoinError(v.error || 'Não é possível resgatar moedas');
+                }
+
+                if (discount !== coinDiscount) {
+                    setCoinDiscount(discount);
+                    setCoinsToSpend(coins);
+                    onCoinDiscountChange?.(discount, coins);
                 }
             })
             .catch(() => { });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [useCoins, coinBalance, coupon.finalPrice, effectivePriceReais, coupon.discount, customer]);
 
     // Update selected variant when initialVariant changes (when modal opens with pre-selected variant)
@@ -441,8 +462,8 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                 availableColors,
                 couponCode: coupon.appliedCoupon?.code,
                 couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
-                referrerName: customer?.name,
-                referralCode: customer?.referral_code,
+                referrerName: externalReferralName || referralName || undefined,
+                referralCode: externalReferralCode || (referralName ? referralInput : undefined),
                 storeAddress,
                 selectedWarranty: selectedWarranty ? {
                     months: selectedWarranty.months,
@@ -605,10 +626,43 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                     </div>
                 )}
 
+                {/* Moedas do Vale */}
+                {!isAdmin && customer && coinBalance > 0 && (
+                    <div className="space-y-2">
+                        <label className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 cursor-pointer hover:bg-amber-100 transition-colors">
+                            <div className="flex items-center gap-2">
+                                <Coins className="w-4 h-4 text-amber-600" />
+                                <span className="text-sm font-medium text-amber-800">
+                                    Usar Moedas do Vale
+                                </span>
+                                <span className="text-xs text-amber-600">
+                                    ({coinBalance} moedas ≈ R$ {coinsToReais(coinBalance, coinRate).toFixed(2).replace('.', ',')})
+                                </span>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={useCoins}
+                                onChange={e => setUseCoins(e.target.checked)}
+                                className="w-4 h-4 text-amber-500 rounded focus:ring-amber-500"
+                            />
+                        </label>
+                        {coinError && useCoins && (
+                            <p className="text-xs text-red-500 px-1 mt-1 font-medium">
+                                ❌ {coinError}
+                            </p>
+                        )}
+                        {useCoins && coinDiscount > 0 && (
+                            <p className="text-xs text-amber-700 px-1 mt-1">
+                                🪙 -{coinsToSpend} moedas = <strong>-R$ {coinDiscount.toFixed(2).replace('.', ',')}</strong> de desconto no total
+                            </p>
+                        )}
+                    </div>
+                )}
+
                 {/* Simulador de Pagamento Combinado (Pix + Cartão) */}
                 {installmentPlans.length > 0 && (
                     <MixedPaymentSimulator
-                        totalPrice={totalOverride ?? effectivePriceWithWarranty}
+                        totalPrice={totalOverride !== undefined ? totalOverride : (effectivePriceWithWarranty - Math.round(coinDiscount * 100) - Math.round(coupon.discount * 100))}
                         onChange={setMixedPaymentState}
                     />
                 )}
@@ -779,33 +833,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                     </div>
                 )}
 
-                {/* Moedas do Vale */}
-                {!isAdmin && customer && coinBalance > 0 && (
-                    <div className="space-y-2">
-                        <label className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 cursor-pointer hover:bg-amber-100 transition-colors">
-                            <div className="flex items-center gap-2">
-                                <Coins className="w-4 h-4 text-amber-600" />
-                                <span className="text-sm font-medium text-amber-800">
-                                    Usar Moedas do Vale
-                                </span>
-                                <span className="text-xs text-amber-600">
-                                    ({coinBalance} moedas ≈ R$ {coinsToReais(coinBalance, coinRate).toFixed(2).replace('.', ',')})
-                                </span>
-                            </div>
-                            <input
-                                type="checkbox"
-                                checked={useCoins}
-                                onChange={e => setUseCoins(e.target.checked)}
-                                className="w-4 h-4 text-amber-500 rounded"
-                            />
-                        </label>
-                        {useCoins && coinDiscount > 0 && (
-                            <p className="text-xs text-amber-700 px-1">
-                                🪙 -{coinsToSpend} moedas = <strong>-R$ {coinDiscount.toFixed(2).replace('.', ',')}</strong> de desconto
-                            </p>
-                        )}
-                    </div>
-                )}
+
 
                 {/* Resumo de descontos — oculto no inline (CartPage já exibe o total) */}
                 {!inline && (coupon.discount > 0 || coinDiscount > 0 || warrantyPrice > 0) && (

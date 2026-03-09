@@ -83,14 +83,23 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
         if (variant.ram && variant.storage) {
             message += `  📱 ${variant.ram}/${variant.storage}\n`;
         }
-        if (quote.mixedPaymentState && quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
-            const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
-            message += `  À Vista (Pix): ${cashFmt}\n`;
-
-            const opt = quote.mixedPaymentState.cardOption!;
-            const moFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.monthlyValue / 100);
-            const totFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.totalWithFee / 100);
-            message += `  💳 Cartão: ${opt.installments}x de ${moFmt} (Total cart.: ${totFmt})\n`;
+        if (quote.mixedPaymentState) {
+            if (quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
+                const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
+                message += `  À Vista (Pix): ${cashFmt}\n`;
+                const opt = quote.mixedPaymentState.cardOption!;
+                const moFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.monthlyValue / 100);
+                const totFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.totalWithFee / 100);
+                message += `  💳 Cartão: ${opt.installments}x de ${moFmt} (Total cart.: ${totFmt})\n`;
+            } else if (quote.mixedPaymentState.selectedInstallment) {
+                const opt = quote.mixedPaymentState.cardOption!;
+                const moFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.monthlyValue / 100);
+                const totFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.totalWithFee / 100);
+                message += `  💳 Cartão: ${opt.installments}x de ${moFmt} (Total: ${totFmt})\n`;
+            } else if (quote.mixedPaymentState.cashCents > 0) {
+                const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
+                message += `  🟢 À Vista (Pix): ${cashFmt}\n`;
+            }
         } else {
             if (paymentOptions?.showCash !== false) {
                 message += `  ${priceAtVista} a vista\n`;
@@ -139,15 +148,23 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
         message += `Total: ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cashTotal)}\n`;
 
         message += `\n*💳 PAGAMENTO*\n`;
-        if (quote.mixedPaymentState && quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
-            // Mixed payment
-            const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
-            message += `À Vista (Pix): ${cashFmt}\n`;
-
-            const opt = quote.mixedPaymentState.cardOption!;
-            const moFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.monthlyValue / 100);
-            const totFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.totalWithFee / 100);
-            message += `Cartão: ${opt.installments}x de ${moFmt} (Total cart.: ${totFmt})\n`;
+        if (quote.mixedPaymentState) {
+            if (quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
+                const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
+                message += `À Vista (Pix): ${cashFmt}\n`;
+                const opt = quote.mixedPaymentState.cardOption!;
+                const moFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.monthlyValue / 100);
+                const totFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.totalWithFee / 100);
+                message += `Cartão: ${opt.installments}x de ${moFmt} (Total cart.: ${totFmt})\n`;
+            } else if (quote.mixedPaymentState.selectedInstallment) {
+                const opt = quote.mixedPaymentState.cardOption!;
+                const moFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.monthlyValue / 100);
+                const totFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opt.totalWithFee / 100);
+                message += `Parcelado: ${opt.installments}x de ${moFmt} (Total: ${totFmt})\n`;
+            } else if (quote.mixedPaymentState.cashCents > 0) {
+                const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
+                message += `À vista (Pix/Dinheiro): ${cashFmt}\n`;
+            }
         } else {
             // Standard
             if (paymentOptions?.showCash !== false) {

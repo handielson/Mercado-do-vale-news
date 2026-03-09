@@ -18,6 +18,7 @@ import { paymentIntegrationService } from './paymentIntegrationService';
 import { mercadoPagoProvider } from './providers/mercadoPagoProvider';
 import { telegramBotService } from './telegramBot';
 import { formatCurrency } from '../utils/saleCalculations';
+import { addPendingCoinsForPurchase, confirmPendingCoins, cancelPendingCoins } from './cashbackService';
 
 const COMPANY_SLUG = 'mercado-do-vale';
 
@@ -82,8 +83,10 @@ export async function createOrder(input: OrderInput): Promise<Order> {
     const companyId = await getCompanyId();
 
     const subtotal = input.items.reduce((sum, item) => sum + item.subtotal, 0);
-    const discount = input.coupon_discount ?? 0;
-    const total = subtotal - discount + input.shipping_cost;
+    const couponDisc = input.coupon_discount ?? 0;
+    const coinsDisc = input.coins_discount ?? 0;
+    const totalDiscount = couponDisc + coinsDisc;
+    const total = subtotal - totalDiscount + input.shipping_cost;
 
     const orderData = {
         company_id: companyId,
@@ -99,10 +102,12 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         shipping_address: input.shipping_address ?? null,
         shipping_cost: input.shipping_cost,
         subtotal,
-        discount,
+        discount: totalDiscount,
         total,
         coupon_code: input.coupon_code ?? null,
-        coupon_discount: input.coupon_discount ?? 0,
+        coupon_discount: couponDisc,
+        coins_spent: input.coins_spent ?? 0,
+        coins_discount: coinsDisc,
         notes: input.notes ?? null,
     };
 
@@ -114,6 +119,12 @@ export async function createOrder(input: OrderInput): Promise<Order> {
 
     if (orderError) throw new Error(orderError.message);
     if (!order) throw new Error('Falha ao criar pedido.');
+
+    // Adiciona moedas pendentes (aguardando conf. de pagamento)
+    if (orderData.customer_id) {
+        const totalReais = orderData.total / 100;
+        addPendingCoinsForPurchase(orderData.customer_id, totalReais, order.id).catch(e => console.error("Erro ao emitir moedas pendentes:", e));
+    }
 
     // Insere os itens
     const items = input.items.map(item => ({
@@ -216,6 +227,10 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                 if (!updateErr) {
                     (order as any).gateway_payment_status = mpResponse.status;
                     (order as any).status = mpResponse.status === 'approved' ? 'paid' : 'awaiting_payment';
+
+                    if (mpResponse.status === 'approved') {
+                        confirmPendingCoins(order.id).catch(console.error);
+                    }
                 }
 
                 // Notifica Telegram se cartão aprovado imediatamente
@@ -365,6 +380,9 @@ export async function confirmPayment(
 
     if (updateError) throw new Error(updateError.message);
 
+    // Confirma moedas pendentes
+    confirmPendingCoins(order.id).catch(e => console.error("Erro confirmando moedas:", e));
+
     // Notifica Telegram: pagamento online confirmado (PIX/webhook)
     const items = (order as any).items || [];
     telegramBotService.notifyOnlineOrder(
@@ -403,6 +421,9 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
 
     if (updateError) throw new Error(updateError.message);
 
+    // Confirma moedas pendentes
+    confirmPendingCoins(id).catch(e => console.error("Erro confirmando moedas entregues:", e));
+
     // Deduz estoque
     const items = (order as any).items || [];
     for (const item of items) {
@@ -425,6 +446,9 @@ export async function cancelOrder(id: string): Promise<void> {
         .update({ status: 'cancelled' })
         .eq('id', id);
     if (error) throw new Error(error.message);
+
+    // Cancela moedas pendentes
+    cancelPendingCoins(id).catch(e => console.error("Erro cancelando moedas pendentes:", e));
 }
 
 // ─── Salvar resultado do gateway no pedido ────────────────────────────────────

@@ -104,7 +104,9 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                 couponCode: coupon.appliedCoupon?.code,
                 couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
                 storeAddress,
-                mixedPaymentState
+                mixedPaymentState,
+                referrerName: referralName || undefined,
+                referralCode: referralName ? referralInput : undefined
             }
         );
         window.location.href = whatsappLink;
@@ -158,7 +160,9 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                 couponCode: coupon.appliedCoupon?.code,
                 couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
                 storeAddress,
-                mixedPaymentState
+                mixedPaymentState,
+                referrerName: referralName || undefined,
+                referralCode: referralName ? referralInput : undefined
             }
         );
         window.open(whatsappLink, '_blank');
@@ -179,7 +183,9 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                     couponCode: coupon.appliedCoupon?.code,
                     couponDiscount: coupon.discount > 0 ? coupon.discount : undefined,
                     storeAddress,
-                    mixedPaymentState
+                    mixedPaymentState,
+                    referrerName: referralName || undefined,
+                    referralCode: referralName ? referralInput : undefined
                 }
             );
             await navigator.clipboard.writeText(message);

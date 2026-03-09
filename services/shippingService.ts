@@ -248,6 +248,19 @@ export const shippingService = {
                     daysLabel: daysLabel(zone.estimated_days_min, zone.estimated_days_max),
                     type: 'local_paid',
                 });
+            } else if (zone.type === 'national') {
+                if (zone.fixed_price != null) {
+                    options.push({
+                        id: zone.id,
+                        name: zone.name,
+                        price: zone.fixed_price,
+                        isFree: zone.fixed_price === 0,
+                        estimatedDaysMin: zone.estimated_days_min,
+                        estimatedDaysMax: zone.estimated_days_max,
+                        daysLabel: daysLabel(zone.estimated_days_min, zone.estimated_days_max),
+                        type: 'national',
+                    });
+                }
             }
         }
 
@@ -264,11 +277,46 @@ export const shippingService = {
                     length: input.length ?? 20,
                     sandbox: settings.melhor_envio_sandbox,
                     token: settings.melhor_envio_token ?? '',
+                    allowed_services: settings.melhor_envio_allowed_services,
                 });
-                options.push(...carriers);
-            } catch (e) {
+                if (carriers.length === 0) {
+                    options.push({
+                        id: 'dev_dbg_2',
+                        name: 'DEBUG: Melhor Envio recused / filtered all options - Allowed: ' + (settings.melhor_envio_allowed_services || 'none'),
+                        price: 0,
+                        isFree: true,
+                        estimatedDaysMin: 0,
+                        estimatedDaysMax: 0,
+                        daysLabel: 'Debug',
+                        type: 'carrier'
+                    });
+                } else {
+                    options.push(...carriers);
+                }
+            } catch (e: any) {
                 console.warn('[shippingService] Melhor Envio error:', e);
+                options.push({
+                    id: 'dev_dbg_1',
+                    name: 'DEBUG: Melhor Envio Error: ' + e.message,
+                    price: 0,
+                    isFree: true,
+                    estimatedDaysMin: 0,
+                    estimatedDaysMax: 0,
+                    daysLabel: 'Debug',
+                    type: 'carrier'
+                });
             }
+        } else if (!settings?.melhor_envio_enabled && options.length === 0) {
+            options.push({
+                id: 'dev_dbg_3',
+                name: 'DEBUG: Melhor Envio is DISABLED in settings',
+                price: 0,
+                isFree: true,
+                estimatedDaysMin: 0,
+                estimatedDaysMax: 0,
+                daysLabel: 'Debug',
+                type: 'carrier'
+            });
         }
 
         return options.sort((a, b) => {

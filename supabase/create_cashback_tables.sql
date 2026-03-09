@@ -29,8 +29,10 @@ INSERT INTO cashback_settings DEFAULT VALUES ON CONFLICT DO NOTHING;
 
 -- RLS: admin lê e escreve, anônimos leem
 ALTER TABLE cashback_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cashback_settings_admin" ON cashback_settings;
 CREATE POLICY "cashback_settings_admin" ON cashback_settings
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "cashback_settings_public_read" ON cashback_settings;
 CREATE POLICY "cashback_settings_public_read" ON cashback_settings
     FOR SELECT TO anon USING (true);
 
@@ -49,11 +51,13 @@ CREATE INDEX IF NOT EXISTS idx_coin_balances_customer ON coin_balances(customer_
 
 -- RLS: cada cliente vê só o próprio saldo; admin vê tudo
 ALTER TABLE coin_balances ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "coin_balances_self" ON coin_balances;
 CREATE POLICY "coin_balances_self" ON coin_balances
     FOR ALL TO authenticated
-    USING (customer_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM customers WHERE id = auth.uid() AND customer_type = 'ADMIN'
-    ));
+    USING (
+        customer_id IN (SELECT id FROM customers WHERE user_id = auth.uid()) 
+        OR EXISTS (SELECT 1 FROM customers WHERE user_id = auth.uid() AND customer_type = 'ADMIN')
+    );
 
 -- 3. HISTÓRICO DE TRANSAÇÕES
 -- ============================================================
@@ -71,21 +75,33 @@ CREATE TABLE IF NOT EXISTS coin_transactions (
                         'expire',          -- expirado
                         'admin_adjust'     -- ajuste admin (positivo ou negativo)
                     )),
+    status          TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'pending', 'cancelled')),
     description     TEXT,
     reference_id    UUID,               -- ID da venda, check-in, etc.
     reference_type  TEXT CHECK (reference_type IN ('sale','quote','checkin','admin')),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ADICIONA A COLUNA CASO A TABELA JÁ EXISTA SEM ELA
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coin_transactions' AND column_name = 'status') THEN
+        ALTER TABLE coin_transactions ADD COLUMN status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'pending', 'cancelled'));
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_coin_tx_customer ON coin_transactions(customer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_coin_tx_status ON coin_transactions(status);
 CREATE INDEX IF NOT EXISTS idx_coin_tx_reference ON coin_transactions(reference_id) WHERE reference_id IS NOT NULL;
 
 ALTER TABLE coin_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "coin_tx_self" ON coin_transactions;
 CREATE POLICY "coin_tx_self" ON coin_transactions
     FOR SELECT TO authenticated
-    USING (customer_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM customers WHERE id = auth.uid() AND customer_type = 'ADMIN'
-    ));
+    USING (
+        customer_id IN (SELECT id FROM customers WHERE user_id = auth.uid()) 
+        OR EXISTS (SELECT 1 FROM customers WHERE user_id = auth.uid() AND customer_type = 'ADMIN')
+    );
+DROP POLICY IF EXISTS "coin_tx_admin_write" ON coin_transactions;
 CREATE POLICY "coin_tx_admin_write" ON coin_transactions
     FOR INSERT TO authenticated WITH CHECK (true);
 
@@ -104,11 +120,13 @@ CREATE TABLE IF NOT EXISTS checkin_logs (
 CREATE INDEX IF NOT EXISTS idx_checkin_customer ON checkin_logs(customer_id, checkin_date DESC);
 
 ALTER TABLE checkin_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "checkin_self" ON checkin_logs;
 CREATE POLICY "checkin_self" ON checkin_logs
     FOR ALL TO authenticated
-    USING (customer_id = auth.uid() OR EXISTS (
-        SELECT 1 FROM customers WHERE id = auth.uid() AND customer_type = 'ADMIN'
-    ));
+    USING (
+        customer_id IN (SELECT id FROM customers WHERE user_id = auth.uid()) 
+        OR EXISTS (SELECT 1 FROM customers WHERE user_id = auth.uid() AND customer_type = 'ADMIN')
+    );
 
 -- ============================================================
 -- RPCs ATÔMICAS
@@ -133,8 +151,61 @@ BEGIN
             updated_at      = now();
 
     -- Registrar transação
-    INSERT INTO coin_transactions(customer_id, amount, type, description, reference_id, reference_type)
-    VALUES (p_customer_id, p_amount, p_type, p_description, p_reference_id, p_reference_type);
+    INSERT INTO coin_transactions(customer_id, amount, type, description, reference_id, reference_type, status)
+    VALUES (p_customer_id, p_amount, p_type, p_description, p_reference_id, p_reference_type, 'completed');
+END;
+$$;
+
+-- Adicionar moedas pendentes (earn pending)
+CREATE OR REPLACE FUNCTION add_pending_coins(
+    p_customer_id  UUID,
+    p_amount       INTEGER,
+    p_type         TEXT,
+    p_description  TEXT DEFAULT NULL,
+    p_reference_id UUID DEFAULT NULL,
+    p_reference_type TEXT DEFAULT NULL
+) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    -- Nós NÃO atualizamos o coin_balances ainda.
+    
+    -- Apenas registrar transação pendente
+    INSERT INTO coin_transactions(customer_id, amount, type, description, reference_id, reference_type, status)
+    VALUES (p_customer_id, p_amount, p_type, p_description, p_reference_id, p_reference_type, 'pending');
+END;
+$$;
+
+-- Confirmar moedas pendentes
+CREATE OR REPLACE FUNCTION confirm_pending_coins(
+    p_reference_id UUID
+) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    tx RECORD;
+BEGIN
+    -- Buscar todas as transações pendentes para esta referência
+    FOR tx IN SELECT * FROM coin_transactions WHERE reference_id = p_reference_id AND status = 'pending' LOOP
+        
+        -- Atualizar saldo
+        INSERT INTO coin_balances(customer_id, balance, lifetime_earned)
+        VALUES (tx.customer_id, tx.amount, tx.amount)
+        ON CONFLICT (customer_id) DO UPDATE
+            SET balance         = coin_balances.balance + tx.amount,
+                lifetime_earned = coin_balances.lifetime_earned + tx.amount,
+                updated_at      = now();
+                
+        -- Atualizar status da transação
+        UPDATE coin_transactions SET status = 'completed' WHERE id = tx.id;
+        
+    END LOOP;
+END;
+$$;
+
+-- Cancelar moedas pendentes
+CREATE OR REPLACE FUNCTION cancel_pending_coins(
+    p_reference_id UUID
+) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    UPDATE coin_transactions SET status = 'cancelled' 
+    WHERE reference_id = p_reference_id AND status = 'pending';
 END;
 $$;
 

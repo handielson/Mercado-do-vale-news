@@ -15,6 +15,15 @@ import { toast } from 'sonner';
 
 type Tab = 'config' | 'zones' | 'ranges' | 'carriers' | 'calculator';
 
+const COMMON_CARRIERS = [
+    { id: 'correios', label: 'Correios (PAC/SEDEX)' },
+    { id: 'jadlog', label: 'Jadlog' },
+    { id: 'loggi', label: 'Loggi' },
+    { id: 'azul', label: 'Azul Cargo' },
+    { id: 'latam', label: 'LATAM Cargo' },
+    { id: 'buslog', label: 'Buslog' }
+];
+
 const ZONE_TYPE_LABELS: Record<ShippingZoneType, string> = {
     local_free: '🎁 Frete Grátis',
     local_paid: '🛵 Entrega Local Paga',
@@ -40,10 +49,10 @@ function ZoneForm({ zone, onSave, onCancel }: {
         enabled: zone?.enabled ?? true,
         cities: zone?.cities ?? [],
         cep_ranges: zone?.cep_ranges ?? [],
-        max_km_free: zone?.max_km_free,
-        price_per_km: zone?.price_per_km,
-        fixed_price: zone?.fixed_price,
-        min_order_free: zone?.min_order_free,
+        max_km_free: zone?.max_km_free ?? null,
+        price_per_km: zone?.price_per_km ?? null,
+        fixed_price: zone?.fixed_price ?? null,
+        min_order_free: zone?.min_order_free ?? null,
         estimated_days_min: zone?.estimated_days_min ?? 0,
         estimated_days_max: zone?.estimated_days_max ?? 1,
         display_order: zone?.display_order ?? 0,
@@ -138,25 +147,27 @@ function ZoneForm({ zone, onSave, onCancel }: {
                 <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Raio Grátis (km)</label>
                     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        value={form.max_km_free ?? ''} onChange={e => set('max_km_free', e.target.value ? Number(e.target.value) : undefined)}
+                        value={form.max_km_free ?? ''} onChange={e => set('max_km_free', e.target.value ? Number(e.target.value) : null)}
                         placeholder="Ex: 15" />
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Pedido mínimo p/ grátis (R$)</label>
                     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        value={form.min_order_free ?? ''} onChange={e => set('min_order_free', e.target.value ? Number(e.target.value) : undefined)}
+                        value={form.min_order_free ?? ''} onChange={e => set('min_order_free', e.target.value ? Number(e.target.value) : null)}
                         placeholder="Ex: 100" />
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Preço Fixo (R$)</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        {form.type === 'national' ? 'Preço Fixo (Deixe em branco p/ calcular via Correios/Melhor Envio)' : 'Preço Fixo (R$)'}
+                    </label>
                     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        value={form.fixed_price ?? ''} onChange={e => set('fixed_price', e.target.value ? Number(e.target.value) : undefined)}
+                        value={form.fixed_price ?? ''} onChange={e => set('fixed_price', e.target.value ? Number(e.target.value) : null)}
                         placeholder="Ex: 15,00" />
                 </div>
                 <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Preço por KM (R$)</label>
                     <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                        value={form.price_per_km ?? ''} onChange={e => set('price_per_km', e.target.value ? Number(e.target.value) : undefined)}
+                        value={form.price_per_km ?? ''} onChange={e => set('price_per_km', e.target.value ? Number(e.target.value) : null)}
                         placeholder="Ex: 1,50" />
                 </div>
                 <div>
@@ -252,7 +263,15 @@ export default function ShippingPage() {
     const [editingZone, setEditingZone] = useState<ShippingZone | undefined>();
     const [showRangeForm, setShowRangeForm] = useState(false);
     const [editingRange, setEditingRange] = useState<ShippingPriceRange | undefined>();
-    const [settingsForm, setSettingsForm] = useState({ origin_cep: '', secondary_origin_cep: '', melhor_envio_token: '', melhor_envio_sandbox: true, melhor_envio_enabled: false, local_delivery_enabled: true });
+    const [settingsForm, setSettingsForm] = useState({
+        origin_cep: '',
+        secondary_origin_cep: '',
+        melhor_envio_token: '',
+        melhor_envio_sandbox: true,
+        melhor_envio_enabled: false,
+        melhor_envio_allowed_services: '',
+        local_delivery_enabled: true
+    });
 
     useEffect(() => { loadAll(); }, []);
     useEffect(() => {
@@ -272,6 +291,7 @@ export default function ShippingPage() {
                 melhor_envio_token: s.melhor_envio_token ?? '',
                 melhor_envio_sandbox: s.melhor_envio_sandbox,
                 melhor_envio_enabled: s.melhor_envio_enabled,
+                melhor_envio_allowed_services: s.melhor_envio_allowed_services ?? '',
                 local_delivery_enabled: s.local_delivery_enabled,
             });
         }
@@ -536,7 +556,11 @@ export default function ShippingPage() {
             {/* Tab: Transportadoras */}
             {activeTab === 'carriers' && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-                    <h2 className="text-base font-semibold text-slate-800">Melhor Envio</h2>
+                    <h2 className="text-base font-semibold text-slate-800">Correios e Transportadoras (Nacional)</h2>
+                    <p className="text-sm text-slate-500 mb-4">
+                        A integração oficial do sistema para cálculo de fretes nacionais (Correios PAC/SEDEX, Jadlog, etc) é via **Melhor Envio**.
+                        Ative-a abaixo para que clientes de fora das suas Zonas Locais recebam o cálculo em tempo real.
+                    </p>
 
                     <div className="flex items-center gap-3">
                         <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_enabled: !p.melhor_envio_enabled }))}>
@@ -545,8 +569,8 @@ export default function ShippingPage() {
                                 : <ToggleLeft className="w-8 h-8 text-slate-400" />}
                         </button>
                         <div>
-                            <p className="text-sm font-medium text-slate-800">Ativar Melhor Envio</p>
-                            <p className="text-xs text-slate-500">Calculadora de fretes nacionais via API</p>
+                            <p className="text-sm font-medium text-slate-800">Ativar Cálculo Correios/Melhor Envio</p>
+                            <p className="text-xs text-slate-500">Exibirá automaticamente PAC, SEDEX e Transportadoras para CEPs do Brasil inteiro.</p>
                         </div>
                     </div>
 
@@ -572,6 +596,54 @@ export default function ShippingPage() {
                         <p className="text-xs text-slate-400 mt-1">
                             Gere em <a href="https://sandbox.melhorenvio.com.br/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">sandbox.melhorenvio.com.br/tokens</a>
                         </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-800 mb-2">Transportadoras Permitidas</label>
+                        <p className="text-xs text-slate-500 mb-3">
+                            Selecione quais transportadoras calcular no checkout. Se deixar todas desmarcadas, o sistema aceitará todas as que você validou no painel do Melhor Envio.
+                        </p>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {COMMON_CARRIERS.map(carrier => {
+                                const allowed_services_array = settingsForm.melhor_envio_allowed_services
+                                    .split(',')
+                                    .map(s => s.trim().toLowerCase())
+                                    .filter(Boolean);
+
+                                const isChecked = allowed_services_array.includes(carrier.id.toLowerCase());
+
+                                return (
+                                    <label key={carrier.id} className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${isChecked ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                        <div className="flex items-center h-5">
+                                            <input
+                                                type="checkbox"
+                                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                                checked={isChecked}
+                                                onChange={(e) => {
+                                                    const checked = e.target.checked;
+                                                    let newList = [...allowed_services_array];
+
+                                                    if (checked && !newList.includes(carrier.id)) {
+                                                        newList.push(carrier.id);
+                                                    } else if (!checked) {
+                                                        newList = newList.filter(id => id !== carrier.id);
+                                                    }
+
+                                                    setSettingsForm(prev => ({
+                                                        ...prev,
+                                                        melhor_envio_allowed_services: newList.join(',')
+                                                    }));
+                                                }}
+                                            />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-medium text-slate-800">{carrier.label}</span>
+                                        </div>
+                                    </label>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     <button onClick={handleSaveSettings} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">

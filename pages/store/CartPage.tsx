@@ -3,10 +3,10 @@ import { QuoteCartProvider } from '@/contexts/QuoteCartContext';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     Trash2, Plus, Minus, ShoppingBag, ChevronDown, Tag, CreditCard,
-    MapPin, Shield, ArrowRight, X, Sparkles, ChevronUp
+    MapPin, Shield, ArrowRight, X, Sparkles, ChevronUp, ArrowLeft
 } from 'lucide-react';
 import { formatCurrency } from '@/utils/saleCalculations';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { extractVariants } from '@/services/productVariants';
 import { QuoteModal } from '@/components/catalog/QuoteModal';
 import { DeliveryOptions, type DeliveryOption } from '@/components/catalog/DeliveryOptions';
@@ -63,6 +63,13 @@ function CartPageContent() {
     const [eligibleProductId, setEligibleProductId] = useState<string>('');
     const [eligibleImageUrl, setEligibleImageUrl] = useState<string>('');
     const [eligibleBaseWarrantyDays, setEligibleBaseWarrantyDays] = useState<number>(90);
+
+    // Moedas do Vale (desconto aplicado)
+    const [cartCoinDiscount, setCartCoinDiscount] = useState(0);
+
+    const handleCoinDiscountChange = useCallback((discountBrl: number) => {
+        setCartCoinDiscount(Math.round(discountBrl * 100));
+    }, []);
 
     const applyReferral = async () => {
         if (!referralInput.trim()) return;
@@ -170,8 +177,8 @@ function CartPageContent() {
 
     const warrantyPrice = selectedWarranty ? Math.round(eligibleTotal * selectedWarranty.percentage / 100) : 0;
     const couponDiscount = Math.round(coupon.discount * 100);
-    const grandTotal = subtotal + warrantyPrice - couponDiscount;
-    const hasModifiers = warrantyPrice > 0 || couponDiscount > 0;
+    const grandTotal = subtotal + warrantyPrice - couponDiscount - cartCoinDiscount;
+    const hasModifiers = warrantyPrice > 0 || couponDiscount > 0 || cartCoinDiscount > 0;
 
     useEffect(() => {
         sessionStorage.setItem('mv_cart_paySheetOpen', String(paySheetOpen));
@@ -287,6 +294,16 @@ function CartPageContent() {
                 </div>
             ))}
         </div>
+    );
+
+    const continueShoppingBtn = (
+        <Link
+            to="/"
+            className="flex items-center justify-center gap-2 w-full py-3.5 mt-2 rounded-2xl border-2 border-dashed border-gray-200 text-gray-500 font-medium hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50/50 transition-all group"
+        >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            Continuar comprando
+        </Link>
     );
 
     // ─── Garantia + Cupom (compartilhado) ────────────────────────────────────
@@ -494,6 +511,12 @@ function CartPageContent() {
                                 <span className="text-green-300">- {formatCurrency(couponDiscount)}</span>
                             </div>
                         )}
+                        {cartCoinDiscount > 0 && (
+                            <div className="flex justify-between text-sm text-blue-100">
+                                <span>Moedas do Vale</span>
+                                <span className="text-amber-300">- {formatCurrency(cartCoinDiscount)}</span>
+                            </div>
+                        )}
                     </div>
                 )}
                 <div className="flex justify-between items-end">
@@ -548,6 +571,7 @@ function CartPageContent() {
                             externalWarrantyProductName={`${eligibleItemNames} (Ref: ${eligibleBaseWarrantyDays}d)`}
                             externalWarrantyProductId={eligibleProductId}
                             externalWarrantyImageUrl={eligibleImageUrl}
+                            onCoinDiscountChange={handleCoinDiscountChange}
                         />
                     </div>
                 )}
@@ -586,9 +610,6 @@ function CartPageContent() {
                     </p>
                 </div>
             </div>
-            <Link to="/" className="block text-center text-gray-400 text-sm py-3">
-                ← Continuar comprando
-            </Link>
         </div>
     );
 
@@ -636,6 +657,7 @@ function CartPageContent() {
                 <div className="px-4 pt-4 pb-44 space-y-3">
                     {statusBanner}
                     {itemsList}
+                    {continueShoppingBtn}
                     {optionsPanel}
                     {hasModifiers && (
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3 space-y-1.5">
@@ -646,7 +668,6 @@ function CartPageContent() {
                             {couponDiscount > 0 && <div className="flex justify-between text-sm text-green-600"><span>Cupom</span><span>- {formatCurrency(couponDiscount)}</span></div>}
                         </div>
                     )}
-                    <Link to="/" className="block text-center text-gray-400 text-sm py-3">← Continuar comprando</Link>
                 </div>
 
                 {/* Bottom Sheet de pagamento */}
@@ -698,6 +719,7 @@ function CartPageContent() {
                                                 externalWarrantyProductName={eligibleItemNames}
                                                 externalWarrantyProductId={eligibleProductId}
                                                 externalWarrantyImageUrl={eligibleImageUrl}
+                                                onCoinDiscountChange={handleCoinDiscountChange}
                                             />
                                         </div>
                                     )}
@@ -736,7 +758,7 @@ function CartPageContent() {
                 <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t shadow-2xl px-4 py-3">
                     {hasModifiers && (
                         <p className="text-xs text-gray-400 text-center mb-1.5">
-                            {formatCurrency(subtotal)}{warrantyPrice > 0 ? ` + garantia` : ''}{couponDiscount > 0 ? ` - cupom` : ''}
+                            {formatCurrency(subtotal)}{warrantyPrice > 0 ? ` + garantia` : ''}{couponDiscount > 0 ? ` - cupom` : ''}{cartCoinDiscount > 0 ? ` - moedas` : ''}
                         </p>
                     )}
                     <button
@@ -769,6 +791,7 @@ function CartPageContent() {
                 <div className="max-w-2xl mx-auto px-6 py-6 space-y-4">
                     {statusBanner}
                     {itemsList}
+                    {continueShoppingBtn}
                     {optionsPanel}
                     {summaryPanel}
                 </div>
@@ -790,6 +813,7 @@ function CartPageContent() {
                         {statusBanner}
                         <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest px-1">Seus itens</h2>
                         {itemsList}
+                        {continueShoppingBtn}
                         {optionsPanel}
                     </div>
 

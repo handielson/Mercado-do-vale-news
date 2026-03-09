@@ -338,7 +338,8 @@ export default function PDVPage() {
                     ? (totals.subtotal * ((appliedCoupon as any).discount_percent ?? 0)) / 100
                     : 0;
                 const finalPaid = Math.max(0, totals.subtotal - couponDiscount + deliveryCostCustomer);
-                const coinsEarned = await earnCoinsForPurchase(selectedCustomer.id, finalPaid, sale.id);
+                // finalPaid is in cents, earnCoinsForPurchase expects Reais
+                const coinsEarned = await earnCoinsForPurchase(selectedCustomer.id, finalPaid / 100, sale.id);
                 if (coinsEarned > 0) {
                     toast.success(`🪙 +${coinsEarned} Moedas do Vale!`, {
                         description: `${selectedCustomer.name} acumulou moedas nesta compra.`

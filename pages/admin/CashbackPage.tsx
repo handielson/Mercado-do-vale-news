@@ -480,7 +480,7 @@ function SettingsTab() {
                     min={0}
                     step="any"
                     value={settings?.[key] as number ?? 0}
-                    onChange={e => setSettings(s => s ? { ...s, [key]: parseFloat(e.target.value) || 0 } : s)}
+                    onChange={e => setSettings(s => s ? { ...s, [key]: e.target.value === '' ? 0 : parseFloat(e.target.value) } : s)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-sm"
                 />
             )}

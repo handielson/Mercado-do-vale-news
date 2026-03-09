@@ -4,7 +4,8 @@ import {
     BannerCarousel,
     ProductFilters,
     SearchBar,
-    CategoryNav
+    CategoryNav,
+    CheckinWidget
 } from '@/components/catalog';
 import { CatalogFilters } from '@/components/catalog/CatalogFilters';
 import { ProductGroupGrid } from '@/components/catalog/ProductGroupGrid';
@@ -196,6 +197,11 @@ function CatalogContent() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     <BannerCarousel customerType={customerType} />
                 </div>
+            </div>
+
+            {/* Check-in Widget (Flutuante/Minimalista) */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex justify-end relative z-10">
+                <CheckinWidget />
             </div>
 
             {/* Category Navigation - NOVO */}

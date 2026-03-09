@@ -16,6 +16,15 @@ import { useCart } from '@/contexts/CartContext';
 import { CashbackBadge } from './CashbackBadge';
 import { getActivePromoPrice } from '@/utils/promoPrice';
 
+// Utility to determine if a color is dark enough to need white text
+const isDarkColor = (colorHex: string) => {
+    const hex = colorHex.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return yiq < 128;
+};
 
 interface ModernProductCardProps {
     product: CatalogProduct;
@@ -42,12 +51,18 @@ export function ModernProductCard({
     const [showQuoteModal, setShowQuoteModal] = useState(false);
     const [installment10x, setInstallment10x] = useState<string>('');
     const [installment12x, setInstallment12x] = useState<string>('');
-    const [currentColorIndex, setCurrentColorIndex] = useState(0);
-
-    // NEW: Selected variant state (defaults to first variant)
+    // Selected variant state (defaults to first variant)
     const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
 
-    // NEW: Store installment values for each variant
+    // Initial color index is -1 to force user selection, or 0 if only 1 color is available
+    const [currentColorIndex, setCurrentColorIndex] = useState<number>(() => {
+        if (productGroup && productGroup.variants && productGroup.variants.length > 0) {
+            return productGroup.variants[0].colors.length === 1 ? 0 : -1;
+        }
+        return -1;
+    });
+
+    // Store installment values for each variant
     const [variantInstallments, setVariantInstallments] = useState<Map<number, string>>(new Map());
 
     // Extract variants from productGroup or related products (using useMemo to prevent infinite loop)
@@ -67,6 +82,13 @@ export function ModernProductCard({
             return extractVariants(allProducts);
         }
     }, [product, productGroup, relatedProducts, selectedVariantIndex]);
+
+    useEffect(() => {
+        // Automatically select the first color if there is only 1 color available in the computed variant
+        if (variants && variants.colors.length === 1 && currentColorIndex === -1) {
+            setCurrentColorIndex(0);
+        }
+    }, [variants, currentColorIndex]);
 
     // Get the currently selected variant
     const selectedVariant = productGroup?.variants?.[selectedVariantIndex];
@@ -96,6 +118,12 @@ export function ModernProductCard({
 
     const handleAddToCart = (e: React.MouseEvent) => {
         e.stopPropagation();
+        // Only block if we have a valid product variant group that requires color selection
+        if (currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)) {
+            alert('Por favor, selecione uma cor antes de adicionar ao carrinho.');
+            return;
+        }
+
         addToCartContext(currentProduct);
         setAddedToCart(true);
         setTimeout(() => setAddedToCart(false), 2000);
@@ -104,28 +132,34 @@ export function ModernProductCard({
 
     // Check if this product is in cart (by variant, not just product ID)
     const isInCart = useMemo(() => {
-        if (!isAdmin) return false;
+        if (!isAdmin || currentColorIndex === -1) return false;
 
         // Get current product's RAM and Storage
         const currentRam = currentProduct.specs?.ram;
         const currentStorage = currentProduct.specs?.storage;
+        const currentColor = currentProduct.specs?.color;
 
-        // Check if any cart item matches this product's variant
+        // Check if any cart item matches this product's variant AND color
         return items.some(item => {
             const ramMatch = item.variant.ram === currentRam;
             const storageMatch = item.variant.storage === currentStorage;
             const modelMatch = item.product.model === currentProduct.model ||
                 item.product.name === currentProduct.name;
+            const colorMatch = item.product.specs?.color === currentColor;
 
-            return ramMatch && storageMatch && modelMatch;
+            return ramMatch && storageMatch && modelMatch && colorMatch;
         });
-    }, [items, currentProduct, isAdmin]);
+    }, [items, currentProduct, isAdmin, currentColorIndex]);
 
     const effectiveCustomerType = useEffectiveCustomerType();
 
     // Calculate 10x installment based on current product and customer type
     useEffect(() => {
-        const effectivePrice = getEffectivePrice(currentProduct, customer);
+        const productForPrice = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
+            ? selectedVariant.products[0]
+            : currentProduct;
+
+        const effectivePrice = getEffectivePrice(productForPrice, customer);
         if (!effectivePrice) return;
 
         // Atacado só aceita PIX/Dinheiro à vista - sem parcelamento
@@ -143,7 +177,7 @@ export function ModernProductCard({
         };
 
         loadInstallment();
-    }, [currentProduct, customer]);
+    }, [currentProduct, customer, currentColorIndex, selectedVariant]);
 
     // Calculate installments for all variants
     useEffect(() => {
@@ -181,17 +215,21 @@ export function ModernProductCard({
 
     // Get primary image — uses currentProduct (selected variant/color) not the representative product
     const getImageUrl = () => {
+        const productToUse = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
+            ? selectedVariant.products[0]
+            : currentProduct;
+
         // Handle images as string array (from Product type)
-        if (Array.isArray(currentProduct.images) && currentProduct.images.length > 0) {
+        if (Array.isArray(productToUse.images) && productToUse.images.length > 0) {
             // Ensure it's actually a string, not an object
-            const firstImage = currentProduct.images[0];
+            const firstImage = productToUse.images[0];
             if (typeof firstImage === 'string' && firstImage.length > 0) {
                 return firstImage;
             }
         }
 
         // Fallback to placeholder with brand name
-        const brandName = currentProduct.brand || product.brand || 'Produto';
+        const brandName = productToUse.brand || product.brand || 'Produto';
         return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%233B82F6'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>${encodeURIComponent(brandName)}</text></svg>`;
     };
 
@@ -204,7 +242,12 @@ export function ModernProductCard({
         : null;
 
     // Handlers
-    const handleCardClick = () => {
+    const handleCardClick = (e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        if (currentColorIndex === -1) {
+            alert('Por favor, selecione uma cor antes de adicionar ao orçamento.');
+            return;
+        }
         setShowQuoteModal(true);
     };
 
@@ -252,11 +295,20 @@ export function ModernProductCard({
 
     const handlePrevImage = (e: React.MouseEvent) => {
         e.stopPropagation();
+        if (currentColorIndex === -1) {
+            // If no color selected, default to first or last
+            setCurrentColorIndex(colorImages.length - 1);
+            return;
+        }
         setCurrentColorIndex((prev) => (prev === 0 ? colorImages.length - 1 : prev - 1));
     };
 
     const handleNextImage = (e: React.MouseEvent) => {
         e.stopPropagation();
+        if (currentColorIndex === -1) {
+            setCurrentColorIndex(0);
+            return;
+        }
         setCurrentColorIndex((prev) => (prev === colorImages.length - 1 ? 0 : prev + 1));
     };
 
@@ -265,9 +317,16 @@ export function ModernProductCard({
         setCurrentColorIndex(index);
     };
 
-    const currentImage = colorImages[currentColorIndex] || imageUrl;
+    // Use default image if no color selected, otherwise use color's image
+    const currentImage = currentColorIndex === -1
+        ? imageUrl
+        : (colorImages[currentColorIndex] || imageUrl);
 
-    const effectivePriceReais = (getEffectivePrice(currentProduct, customer) || 0) / 100;
+    const productForDisplay = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
+        ? selectedVariant.products[0]
+        : currentProduct;
+
+    const effectivePriceReais = (getEffectivePrice(productForDisplay, customer) || 0) / 100;
 
     return (
         <>
@@ -278,13 +337,19 @@ export function ModernProductCard({
                 onClick={handleCardClick}
             >
                 {/* Image */}
-                <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
+                <div
+                    className="relative aspect-[4/3] overflow-hidden bg-slate-100"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDetailsModal(true);
+                    }}
+                >
                     <img
                         src={currentImage}
                         alt={[
-                            currentProduct.name || product.name,
-                            variants?.colors[currentColorIndex]?.name || currentProduct.specs?.color,
-                            currentProduct.brand,
+                            productForDisplay.name || product.name,
+                            currentColorIndex !== -1 ? variants?.colors[currentColorIndex]?.name : '',
+                            productForDisplay.brand,
                         ].filter(Boolean).join(' ')}
                         onError={() => setImageError(true)}
                         className={`w-full h-full object-contain transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
@@ -339,7 +404,7 @@ export function ModernProductCard({
                             </span>
                         )}
                         {/* Badge de Promoção Ativa */}
-                        {getActivePromoPrice(currentProduct) !== null && (
+                        {getActivePromoPrice(productForDisplay) !== null && (
                             <span className="text-xs bg-red-500 text-white px-3 py-1.5 rounded-full font-semibold shadow-md animate-pulse">
                                 🏷️ PROMO
                             </span>
@@ -403,8 +468,8 @@ export function ModernProductCard({
                                 ? productGroup.model
                                 : product.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim()}
                         </h3>
-                        {currentProduct.brand && (
-                            <p className="text-sm text-slate-600 mt-1">{currentProduct.brand}</p>
+                        {productForDisplay.brand && (
+                            <p className="text-sm text-slate-600 mt-1">{productForDisplay.brand}</p>
                         )}
                     </div>
 
@@ -420,31 +485,46 @@ export function ModernProductCard({
                                     const installment = variantInstallments.get(idx);
 
                                     // Check if THIS specific variant (exact RAM + Storage) is in cart
+                                    // AND the current color matches the cart item's color.
                                     const variantInCart = isAdmin && items.some(item => {
-                                        // Must match BOTH RAM and Storage exactly
                                         const ramMatch = item.variant.ram === variant.ram;
                                         const storageMatch = item.variant.storage === variant.storage;
-                                        const modelMatch = item.product.model === currentProduct.model ||
-                                            item.product.name === currentProduct.name;
+                                        const modelMatch = item.product.model === productForDisplay.model ||
+                                            item.product.name === productForDisplay.name;
+                                        // If no color selected yet, we can't be sure this exact item is in cart
+                                        if (currentColorIndex === -1 && selectedVariantIndex === idx) return false;
 
-                                        return ramMatch && storageMatch && modelMatch;
+                                        // Match color if variant is currently selected
+                                        const colorMatch = selectedVariantIndex === idx
+                                            ? item.product.specs?.color === variant.colors[currentColorIndex]?.name
+                                            : false;
+
+                                        return ramMatch && storageMatch && modelMatch && colorMatch;
                                     });
 
+                                    const isSelectedVariant = selectedVariantIndex === idx;
+
                                     return (
-                                        <button
+                                        <div
                                             key={idx}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setSelectedVariantIndex(idx);
-                                                setCurrentColorIndex(0); // Reset color selection
+                                                // DON'T reset color if clicking same variant!
+                                                if (selectedVariantIndex !== idx) {
+                                                    const newVariant = productGroup.variants[idx];
+                                                    // Auto-select if the new variant only has 1 color
+                                                    setCurrentColorIndex(newVariant && newVariant.colors.length === 1 ? 0 : -1);
+                                                }
                                             }}
-                                            className={`w-full p-2.5 rounded-lg border-2 transition-all text-left relative ${selectedVariantIndex === idx
-                                                ? variantInCart
-                                                    ? 'border-green-600 bg-green-50'
-                                                    : 'border-blue-600 bg-blue-50'
-                                                : variantInCart
-                                                    ? 'border-green-300 bg-green-50/50 hover:border-green-400'
-                                                    : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                                            className={`w-full p-2.5 rounded-lg border-2 transition-all text-left relative cursor-pointer
+                                                ${isSelectedVariant
+                                                    ? variantInCart
+                                                        ? 'border-green-600 bg-green-50 shadow-sm'
+                                                        : 'border-blue-600 bg-blue-50 shadow-sm ring-1 ring-blue-600 ring-offset-1'
+                                                    : variantInCart
+                                                        ? 'border-green-300 bg-green-50/50 hover:border-green-400'
+                                                        : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
                                                 }`}
                                         >
                                             {/* Cart indicator badge */}
@@ -455,14 +535,22 @@ export function ModernProductCard({
                                             )}
 
                                             <div className="flex justify-between items-start mb-1">
-                                                <span className={`font-semibold text-sm ${variantInCart ? 'text-green-700' : ''}`}>
-                                                    {variant.ram !== 'no-ram' || variant.storage !== 'no-storage'
-                                                        ? `${variant.ram}/${variant.storage}`
-                                                        : variant.colors.length > 1
-                                                            ? `${variant.colors.length} Cores`
-                                                            : variant.colors[0]?.name || 'Padrão'
-                                                    }
-                                                </span>
+                                                <div className="flex flex-col">
+                                                    <span className={`font-semibold text-sm ${variantInCart ? 'text-green-700' : 'text-slate-800'}`}>
+                                                        {variant.ram !== 'no-ram' || variant.storage !== 'no-storage'
+                                                            ? `${variant.ram}/${variant.storage}`
+                                                            : variant.colors.length > 1
+                                                                ? `${variant.colors.length} Cores`
+                                                                : variant.colors[0]?.name || 'Padrão'
+                                                        }
+                                                    </span>
+                                                    {/* Mostrar a cor selecionada em texto se for a variante ativa */}
+                                                    {isSelectedVariant && variant.colors.length > 0 && (
+                                                        <span className={`text-xs font-medium mt-0.5 ${currentColorIndex !== -1 ? 'text-blue-600' : 'text-orange-500 animate-pulse'}`}>
+                                                            {currentColorIndex !== -1 ? `Cor: ${variant.colors[currentColorIndex]?.name}` : '⚠️ Escolha uma cor abaixo'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-right">
                                                     {/* Preço riscado se houver promo ativa */}
                                                     {variant.products[0] && getActivePromoPrice(variant.products[0]) !== null && (
@@ -480,21 +568,36 @@ export function ModernProductCard({
                                                     )}
                                                 </div>
                                             </div>
-                                            {/* Mini color indicators */}
-                                            <div className="flex gap-1 mt-1.5">
-                                                {variant.colors.slice(0, 4).map((color) => (
-                                                    <div
-                                                        key={color.name}
-                                                        className="w-3 h-3 rounded-full border border-slate-300"
-                                                        style={{ backgroundColor: color.hex }}
-                                                        title={color.name}
-                                                    />
-                                                ))}
-                                                {variant.colors.length > 4 && (
-                                                    <span className="text-xs text-slate-500">+{variant.colors.length - 4}</span>
-                                                )}
+                                            {/* Color indicators & selectors */}
+                                            <div className={`flex flex-wrap gap-2 mt-2 pt-2 border-t transition-opacity duration-200 
+                                                ${isSelectedVariant ? 'border-blue-200 opacity-100' : 'border-slate-200 opacity-70'}
+                                            `}>
+                                                {variant.colors.map((color, colorIdx) => {
+                                                    const isSelectedColor = isSelectedVariant && currentColorIndex === colorIdx;
+                                                    return (
+                                                        <div
+                                                            key={color.name}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedVariantIndex(idx);
+                                                                setCurrentColorIndex(colorIdx);
+                                                            }}
+                                                            className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer flex items-center justify-center
+                                                                ${isSelectedColor
+                                                                    ? 'border-blue-600 scale-110 shadow-md ring-2 ring-blue-200 ring-offset-1 z-10'
+                                                                    : 'border-slate-300 hover:scale-110 hover:border-blue-400'}
+                                                            `}
+                                                            style={{ backgroundColor: color.hex }}
+                                                            title={color.name}
+                                                        >
+                                                            {isSelectedColor && (
+                                                                <Check className={`w-3 h-3 ${isDarkColor(color.hex) ? 'text-white' : 'text-slate-800'}`} />
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
-                                        </button>
+                                        </div>
                                     );
                                 })}
                             </div>
@@ -571,12 +674,18 @@ export function ModernProductCard({
                         {isAdmin ? (
                             <button
                                 onClick={handleCardClick}
-                                className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 ${isInCart
-                                        ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
-                                        : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+                                disabled={currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)}
+                                className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 
+                                    ${(currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1))
+                                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none border border-slate-300'
+                                        : isInCart
+                                            ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 hover:shadow-lg'
+                                            : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 hover:shadow-lg'
                                     }`}
                             >
-                                {isInCart ? (
+                                {currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1) ? (
+                                    <>Escolha uma cor para adicionar</>
+                                ) : isInCart ? (
                                     <><Check className="w-4 h-4" />Adicionado</>
                                 ) : (
                                     <><ShoppingCart className="w-4 h-4" />Adicionar ao Orçamento</>
@@ -585,12 +694,18 @@ export function ModernProductCard({
                         ) : (
                             <button
                                 onClick={handleAddToCart}
-                                className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2 ${addedToCart
-                                        ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
-                                        : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
+                                disabled={currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)}
+                                className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 
+                                    ${(currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1))
+                                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none border border-slate-300'
+                                        : addedToCart
+                                            ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                                            : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 hover:shadow-lg'
                                     }`}
                             >
-                                {addedToCart ? (
+                                {currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1) ? (
+                                    <>Escolha uma cor para comprar</>
+                                ) : addedToCart ? (
                                     <><Check className="w-4 h-4" />Adicionado!</>
                                 ) : (
                                     <><ShoppingBag className="w-4 h-4" />Comprar</>

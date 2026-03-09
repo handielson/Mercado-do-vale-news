@@ -54,6 +54,7 @@ export interface CoinTransaction {
     customer_id: string;
     amount: number;           // positivo = ganhou, negativo = gastou
     type: CoinTransactionType;
+    status: 'completed' | 'pending' | 'cancelled';
     description: string | null;
     reference_id: string | null;
     reference_type: CoinReferenceType | null;
