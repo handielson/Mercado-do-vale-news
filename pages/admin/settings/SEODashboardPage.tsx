@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/services/supabase';
-import { Search, AlertTriangle, CheckCircle, BarChart2, RefreshCw, Link as LinkIcon, Edit3 } from 'lucide-react';
+import { Search, AlertTriangle, CheckCircle, BarChart2, RefreshCw, Link as LinkIcon, Edit3, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { generateSlug } from '@/utils/urlHelpers';
+import { toast } from 'sonner';
 
 interface SEOStats {
     total: number;
@@ -14,6 +16,7 @@ interface SEOStats {
 export const SEODashboardPage: React.FC = () => {
     const [stats, setStats] = useState<SEOStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [products, setProducts] = useState<any[]>([]);
 
@@ -63,6 +66,62 @@ export const SEODashboardPage: React.FC = () => {
         fetchSEOData();
     }, []);
 
+    const handleGenerateMissingSlugs = async () => {
+        const missing = products.filter(p => !p.slug);
+        if (missing.length === 0) {
+            toast.info('Nenhum slug faltando no catálogo.');
+            return;
+        }
+
+        setIsGenerating(true);
+        let successCount = 0;
+        let failCount = 0;
+
+        toast.info(`Gerando ${missing.length} slugs. Por favor, aguarde...`);
+
+        try {
+            for (const p of missing) {
+                let defaultSlug = generateSlug(p.name);
+                let slugToUse = defaultSlug;
+                let counter = 1;
+                let isUnique = false;
+
+                // Evitar duplicações
+                while (!isUnique && counter < 10) {
+                    const { data: existing } = await supabase.from('products').select('id').eq('slug', slugToUse).maybeSingle();
+                    if (!existing || existing.id === p.id) {
+                        isUnique = true;
+                    } else {
+                        slugToUse = `${defaultSlug}-${counter}`;
+                        counter++;
+                    }
+                }
+
+                const { error } = await supabase.from('products').update({ slug: slugToUse }).eq('id', p.id);
+                if (!error) {
+                    successCount++;
+                } else {
+                    console.error('Erro ao gerar slug para', p.name, error);
+                    failCount++;
+                }
+            }
+
+            if (successCount > 0) {
+                toast.success(`${successCount} links gerados com sucesso!`);
+            }
+            if (failCount > 0) {
+                toast.error(`Falha ao gerar ${failCount} links.`);
+            }
+
+            fetchSEOData();
+        } catch (err) {
+            toast.error('Ocorreu um erro ao gerar os slugs.');
+            console.error(err);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     const filteredProducts = products.filter(p =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.slug && p.slug.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -79,13 +138,26 @@ export const SEODashboardPage: React.FC = () => {
                         Monitore a saúde orgânica do seu catálogo. Para o Google encontrar seu produto, ele precisa de tags bem preenchidas.
                     </p>
                 </div>
-                <button
-                    onClick={fetchSEOData}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium text-sm"
-                >
-                    <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-                    Atualizar Análise
-                </button>
+                <div className="flex gap-2">
+                    {stats && stats.missingSlug > 0 && (
+                        <button
+                            onClick={handleGenerateMissingSlugs}
+                            disabled={isGenerating || loading}
+                            className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-sm ${isGenerating ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        >
+                            <Settings size={16} className={isGenerating ? "animate-spin" : ""} />
+                            {isGenerating ? `Gerando Slugs...` : `Gerar Slugs Faltantes`}
+                        </button>
+                    )}
+                    <button
+                        onClick={fetchSEOData}
+                        disabled={isGenerating || loading}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium text-sm disabled:opacity-50"
+                    >
+                        <RefreshCw size={16} className={loading && !isGenerating ? "animate-spin" : ""} />
+                        Atualizar
+                    </button>
+                </div>
             </div>
 
             {loading && !stats ? (
