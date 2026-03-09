@@ -292,35 +292,65 @@ export const PublicProductPage: React.FC = () => {
                             <div className="pt-2">
                                 <h3 className="text-sm font-bold text-slate-900 mb-3">Opções Disponíveis:</h3>
                                 <div className="flex flex-wrap gap-2">
-                                    {siblings.map((sib) => {
-                                        const isCurrent = sib.id === product.id;
-                                        // Extrai specs essenciais para o botão (Cor, Storage, RAM)
-                                        const labelPieces = [];
-                                        if (sib.specs?.color) labelPieces.push(sib.specs.color);
-                                        if (sib.specs?.storage) labelPieces.push(sib.specs.storage);
-                                        if (sib.specs?.ram) labelPieces.push(`RAM ${sib.specs.ram}`);
+                                    {(() => {
+                                        // 1. Array temporário para deduplicação visual
+                                        const uniqueLabels = new Set<string>();
+                                        const uniqueSiblings: CatalogProduct[] = [];
 
-                                        let variantLabel = labelPieces.join(' - ');
+                                        // 2. Primeiro garantimos que o produto atual entre na lista
+                                        const currentLabelPieces = [];
+                                        if (product.specs?.color) currentLabelPieces.push(product.specs.color);
+                                        if (product.specs?.storage) currentLabelPieces.push(product.specs.storage);
+                                        if (product.specs?.ram) currentLabelPieces.push(`RAM ${product.specs.ram}`);
+                                        let currentLbl = currentLabelPieces.join(' - ');
+                                        if (!currentLbl) currentLbl = product.name.replace(product.model || '', '').trim() || 'Padrão';
+                                        if (currentLbl.startsWith('-')) currentLbl = currentLbl.substring(1).trim();
 
-                                        // Fallback se as specs não estiverem preenchidas
-                                        if (!variantLabel) {
-                                            variantLabel = sib.name.replace(product.model || '', '').trim() || 'Padrão';
-                                        }
-                                        if (variantLabel.startsWith('-')) variantLabel = variantLabel.substring(1).trim();
+                                        uniqueLabels.add(currentLbl);
+                                        uniqueSiblings.push(product as CatalogProduct);
 
-                                        return (
-                                            <button
-                                                key={sib.id}
-                                                onClick={() => handleVariantChange(sib)}
-                                                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isCurrent
-                                                    ? 'border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-600'
-                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                                                    }`}
-                                            >
-                                                {variantLabel}
-                                            </button>
-                                        );
-                                    })}
+                                        // 3. Adicionamos os irmãos apenas se a label for "virgem" (não vista ainda)
+                                        siblings.forEach(sib => {
+                                            if (sib.id === product.id) return; // já adicionado
+
+                                            const labelPieces = [];
+                                            if (sib.specs?.color) labelPieces.push(sib.specs.color);
+                                            if (sib.specs?.storage) labelPieces.push(sib.specs.storage);
+                                            if (sib.specs?.ram) labelPieces.push(`RAM ${sib.specs.ram}`);
+
+                                            let sibLbl = labelPieces.join(' - ');
+                                            if (!sibLbl) sibLbl = sib.name.replace(product.model || '', '').trim() || 'Padrão';
+                                            if (sibLbl.startsWith('-')) sibLbl = sibLbl.substring(1).trim();
+
+                                            if (!uniqueLabels.has(sibLbl)) {
+                                                uniqueLabels.add(sibLbl);
+                                                // Salva label calculada num field transiente pra reusar no render
+                                                (sib as any)._displayLabel = sibLbl;
+                                                uniqueSiblings.push(sib);
+                                            }
+                                        });
+
+                                        // Se depois de limpar as duplicatas sobrar só 1 (são todos clones pro Bling) não renderiza grupo
+                                        if (uniqueSiblings.length <= 1) return null;
+
+                                        return uniqueSiblings.map((sib) => {
+                                            const isCurrent = sib.id === product.id;
+                                            const variantLabel = (sib as any)._displayLabel || currentLbl;
+
+                                            return (
+                                                <button
+                                                    key={sib.id}
+                                                    onClick={() => handleVariantChange(sib)}
+                                                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isCurrent
+                                                        ? 'border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-600'
+                                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                                                        }`}
+                                                >
+                                                    {variantLabel}
+                                                </button>
+                                            );
+                                        })
+                                    })()}
                                 </div>
                             </div>
                         )}
