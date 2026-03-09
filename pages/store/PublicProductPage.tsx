@@ -436,6 +436,7 @@ export const PublicProductPage: React.FC = () => {
 
                         </div>
                     </div>
+                </div>
             </main>
 
             {/* Sticky Mobile CTA */}
