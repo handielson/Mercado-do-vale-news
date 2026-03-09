@@ -34,6 +34,21 @@ export const ProductFormPage: React.FC = () => {
         }
     }, [id, eanFromState]);
 
+    // Update document title
+    useEffect(() => {
+        if (product?.name) {
+            document.title = `${product.name} | Editar Produto`;
+        } else if (isEditMode) {
+            document.title = 'Editar Produto | Mercado do Vale';
+        } else {
+            document.title = 'Novo Produto | Mercado do Vale';
+        }
+
+        return () => {
+            document.title = 'Mercado do Vale - Produtos';
+        };
+    }, [product?.name, isEditMode]);
+
     const fetchProduct = async () => {
         if (!id) return;
 

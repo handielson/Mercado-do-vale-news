@@ -165,6 +165,41 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         }
     };
 
+    const [jsonInput, setJsonInput] = React.useState('');
+
+    const handleApplyJson = () => {
+        try {
+            if (!jsonInput.trim()) {
+                toast.error('Cole o JSON gerado pela IA primeiro.');
+                return;
+            }
+
+            // Remove marcações markdown ```json e ``` se existirem
+            let jsonText = jsonInput.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+
+            // Tenta encontrar o bloco de JSON caso a IA tenha dado explicações textuais
+            const start = jsonText.indexOf('{');
+            const end = jsonText.lastIndexOf('}') + 1;
+            if (start !== -1 && end !== 0) {
+                jsonText = jsonText.substring(start, end);
+            }
+
+            const data = JSON.parse(jsonText);
+
+            if (data.description) setValue('description', data.description);
+            if (data.slug) setValue('slug', data.slug);
+            if (data.meta_title) setValue('meta_title', data.meta_title);
+            if (data.meta_description) setValue('meta_description', data.meta_description);
+            if (data.keywords && Array.isArray(data.keywords)) setValue('keywords', data.keywords);
+
+            setJsonInput('');
+            toast.success('Campos SEO preenchidos com sucesso pela Inteligência Artificial!');
+        } catch (err) {
+            console.error('Erro no parser do JSON', err);
+            toast.error('O formato JSON é inválido. Tente novamente ou cole apenas o código da resposta.');
+        }
+    };
+
     // Auto-preencher campos SEO quando dados do produto mudarem
     useEffect(() => {
         // Auto-preencher apenas se campo estiver vazio
@@ -278,6 +313,31 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         <ExternalLink size={16} />
                         Abrir ChatGPT
                     </a>
+                </div>
+
+                {/* Campo de Cola do JSON */}
+                <div className="mt-4 pt-4 border-t border-blue-200">
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-semibold text-blue-900">
+                            Colar Resposta da IA (JSON)
+                        </label>
+                    </div>
+                    <div className="flex flex-col gap-2 relative">
+                        <textarea
+                            value={jsonInput}
+                            onChange={(e) => setJsonInput(e.target.value)}
+                            rows={4}
+                            className="w-full px-3 py-2 text-xs font-mono border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                            placeholder='Ex: { "description": "...", "slug": "...", "meta_title": "..." }'
+                        />
+                        <button
+                            type="button"
+                            onClick={handleApplyJson}
+                            className="self-end px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition-colors shadow-md"
+                        >
+                            Preencher Campos Automaticamente ✨
+                        </button>
+                    </div>
                 </div>
             </div>
 
