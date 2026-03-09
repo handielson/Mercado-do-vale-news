@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Info, Clock } from 'lucide-react';
+import { Info, Clock, ShieldAlert, KeyRound } from 'lucide-react';
 import { Company } from '../../types/company';
 
 interface CompanyAdditionalInfoSectionProps {
@@ -83,6 +83,75 @@ export const CompanyAdditionalInfoSection: React.FC<CompanyAdditionalInfoSection
                     placeholder="Ex: © 2026 Mercado do Vale. Todos os direitos reservados."
                     rows={2}
                 />
+            </div>
+
+            {/* SEÇÃO DE MANUTENÇÃO */}
+            <div className="mt-8 pt-6 border-t border-red-100 bg-red-50/50 -mx-6 px-6 pb-6 rounded-b-2xl">
+                <h2 className="flex items-center gap-2 font-bold text-red-700 text-lg mb-4">
+                    <ShieldAlert size={22} className="text-red-600" />
+                    Operação Segura (Modo Manutenção)
+                </h2>
+                <p className="text-sm text-red-600/80 mb-6 font-medium">
+                    Restrinja o acesso à Loja Pública (Catálogo) durante grandes atualizações ou integrações.
+                </p>
+
+                <div className="space-y-5">
+                    {/* Toggle Ligar/Desligar */}
+                    <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-red-100 shadow-sm">
+                        <div>
+                            <span className="block font-bold text-slate-800">Status da Loja Pública</span>
+                            <span className="text-sm text-slate-500">
+                                {form.maintenanceMode ? 'Loja invisível para clientes. Apenas acessível via link VIP.' : 'Loja operando normalmente. Visível para o mundo ativo.'}
+                            </span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={form.maintenanceMode || false}
+                                onChange={(e) => onChange({ maintenanceMode: e.target.checked })}
+                            />
+                            <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-500 shadow-inner"></div>
+                        </label>
+                    </div>
+
+                    {form.maintenanceMode && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                            {/* Mensagem Pública */}
+                            <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col">
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                    Mensagem para Clientes
+                                </label>
+                                <textarea
+                                    value={form.maintenanceMessage || ''}
+                                    onChange={(e) => onChange({ maintenanceMessage: e.target.value })}
+                                    className="w-full flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none resize-none"
+                                    placeholder="Ex: Voltamos logo! Estamos realizando melhorias no sistema."
+                                />
+                            </div>
+
+                            {/* Link de Bypass Secreto */}
+                            <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col">
+                                <label className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1">
+                                    <KeyRound size={16} className="text-amber-500" />
+                                    Chave Secreta (Acesso VIP)
+                                </label>
+                                <div className="flex flex-col gap-2">
+                                    <input
+                                        type="text"
+                                        value={form.maintenanceBypassKey || ''}
+                                        onChange={(e) => onChange({ maintenanceBypassKey: e.target.value })}
+                                        className="w-full font-mono text-amber-700 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-amber-50"
+                                        placeholder="Ex: liberapromocao"
+                                    />
+                                    <p className="text-[11px] text-slate-500 leading-tight">
+                                        Use a URL <strong className="text-slate-700 select-all">?admin={form.maintenanceBypassKey || 'liberapromocao'}</strong> no seu navegador para ver a loja na aba anônima e testar catalogos!
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

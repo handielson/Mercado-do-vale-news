@@ -49,6 +49,9 @@ interface CompanySettingsRow {
     internal_notes: string | null;
     google_analytics_id: string | null;
     catalog_footer_text: string | null;
+    maintenance_mode: boolean | null;
+    maintenance_message: string | null;
+    maintenance_bypass_key: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -100,6 +103,9 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     internalNotes: row.internal_notes || '',
     googleAnalyticsId: row.google_analytics_id || '',
     catalogFooterText: row.catalog_footer_text || '',
+    maintenanceMode: row.maintenance_mode ?? false,
+    maintenanceMessage: row.maintenance_message || '',
+    maintenanceBypassKey: row.maintenance_bypass_key || '',
 });
 
 /**
@@ -144,6 +150,9 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     internal_notes: company.internalNotes || null,
     google_analytics_id: company.googleAnalyticsId || null,
     catalog_footer_text: company.catalogFooterText || null,
+    maintenance_mode: company.maintenanceMode ?? false,
+    maintenance_message: company.maintenanceMessage || null,
+    maintenance_bypass_key: company.maintenanceBypassKey || null,
 });
 
 /**

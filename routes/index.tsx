@@ -83,6 +83,7 @@ import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
 import { feedbackService } from '../services/feedbackService';
+import { MaintenanceGuard } from '../components/MaintenanceGuard';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -780,28 +781,34 @@ export const router = createBrowserRouter([
   {
     path: "/",
     element: (
-      <CartProvider>
-        <CatalogPage />
-      </CartProvider>
+      <MaintenanceGuard>
+        <CartProvider>
+          <CatalogPage />
+        </CartProvider>
+      </MaintenanceGuard>
     )
   },
   {
     path: "/produto/:slug",
     element: (
-      <QuoteCartProvider>
-        <CartProvider>
-          <PublicProductPage />
-        </CartProvider>
-      </QuoteCartProvider>
+      <MaintenanceGuard>
+        <QuoteCartProvider>
+          <CartProvider>
+            <PublicProductPage />
+          </CartProvider>
+        </QuoteCartProvider>
+      </MaintenanceGuard>
     )
   },
   // ─── Loja / Checkout ───────────────────────────────────────────────────────
   {
     path: "/carrinho",
     element: (
-      <CartProvider>
-        <CartPage />
-      </CartProvider>
+      <MaintenanceGuard>
+        <CartProvider>
+          <CartPage />
+        </CartProvider>
+      </MaintenanceGuard>
     )
   },
   {

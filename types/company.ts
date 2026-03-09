@@ -62,6 +62,11 @@ export interface Company {
 
     // Integrations
     googleAnalyticsId?: string; // Google Analytics Measurement ID (ex: G-XXXXXXXXXX)
+
+    // Maintenance Mode
+    maintenanceMode?: boolean;
+    maintenanceMessage?: string;
+    maintenanceBypassKey?: string;
 }
 
 export const defaultCompany: Company = {
@@ -102,5 +107,8 @@ export const defaultCompany: Company = {
     businessHours: '',
     description: '',
     internalNotes: '',
-    catalogFooterText: '© 2026 Mercado do Vale. Todos os direitos reservados. As informações, preços e disponibilidade de produtos estão sujeitos a alterações sem aviso prévio.'
+    catalogFooterText: '© 2026 Mercado do Vale. Todos os direitos reservados. As informações, preços e disponibilidade de produtos estão sujeitos a alterações sem aviso prévio.',
+    maintenanceMode: false,
+    maintenanceMessage: 'Voltamos logo! Estamos realizando manutenções no servidor para melhorar sua experiência.',
+    maintenanceBypassKey: 'liberado'
 };
