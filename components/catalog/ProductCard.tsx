@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Heart, Share2, ShoppingCart } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
@@ -24,6 +25,7 @@ export function ProductCard({
 }: ProductCardProps) {
     const [imageError, setImageError] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+    const navigate = useNavigate();
 
     // Get customer context for pricing
     const { customer } = useSupabaseAuth();
@@ -68,6 +70,12 @@ export function ProductCard({
         onShare?.(product);
     };
 
+    const handleTitleClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigate(`/produto/${product.slug || product.id}`);
+    };
+
     const handleAddToCart = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -79,7 +87,10 @@ export function ProductCard({
             <div className="bg-white rounded-lg shadow-sm border border-slate-200 hover:shadow-md transition-shadow p-4">
                 <div className="flex gap-4">
                     {/* Imagem */}
-                    <div className="relative w-32 h-32 flex-shrink-0">
+                    <div
+                        className="relative w-32 h-32 flex-shrink-0 cursor-pointer"
+                        onClick={handleTitleClick}
+                    >
                         <img
                             src={imageUrl}
                             alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
@@ -104,7 +115,12 @@ export function ProductCard({
                     {/* Conteúdo */}
                     <div className="flex-1 flex flex-col justify-between">
                         <div>
-                            <h3 className="font-semibold text-lg text-slate-900 mb-1">{product.name}</h3>
+                            <h3
+                                onClick={handleTitleClick}
+                                className="font-semibold text-lg text-slate-900 mb-1 cursor-pointer hover:text-blue-600 hover:underline"
+                            >
+                                {product.name}
+                            </h3>
                             <p className="text-sm text-slate-600 mb-2">{product.brand}</p>
                         </div>
 
@@ -162,7 +178,10 @@ export function ProductCard({
             onMouseLeave={() => setIsHovered(false)}
         >
             {/* Imagem */}
-            <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
+            <div
+                className="relative aspect-[4/3] overflow-hidden bg-slate-100 cursor-pointer"
+                onClick={handleTitleClick}
+            >
                 <img
                     src={imageUrl}
                     alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
@@ -240,7 +259,10 @@ export function ProductCard({
             <div className="p-4">
                 {/* Título e Marca */}
                 <div className="mb-3">
-                    <h3 className="font-semibold text-slate-900 mb-1 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                    <h3
+                        onClick={handleTitleClick}
+                        className="font-semibold text-slate-900 mb-1 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
+                    >
                         {product.name}
                     </h3>
                     <p className="text-sm text-slate-600">{product.brand}</p>

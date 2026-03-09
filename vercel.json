@@ -11,6 +11,10 @@
             "destination": "/api/$1"
         },
         {
+            "source": "/produto/:slug",
+            "destination": "/api/seo-produto?slug=:slug"
+        },
+        {
             "source": "/((?!api/).*)",
             "destination": "/index.html"
         }

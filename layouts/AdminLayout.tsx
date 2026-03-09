@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search } from 'lucide-react';
 
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -57,6 +57,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
           {/* MARKETING & LOJA */}
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Marketing & Loja</div>
+          <NavItem to="/admin/settings/seo-analyzer" icon={<Search size={18} />} label="Análise de SEO" active={location.pathname.startsWith('/admin/settings/seo-analyzer')} />
           <NavItem to="/admin/promotions" icon={<Ticket size={18} />} label="Promoções" active={location.pathname.startsWith('/admin/promotions')} />
           <NavItem to="/admin/catalog-config" icon={<Settings size={18} />} label="Config. Catálogo" active={location.pathname.startsWith('/admin/catalog-config')} />
           <NavItem to="/admin/settings/banners" icon={<Image size={18} />} label="Banners" active={location.pathname.startsWith('/admin/settings/banners')} />

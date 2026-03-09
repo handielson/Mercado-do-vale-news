@@ -26,6 +26,7 @@ import { ProductPricing } from './sections/ProductPricing';
 import { ProductImages } from './sections/ProductImages';
 import { ProductBasicInfo } from './sections/ProductBasicInfo';
 import { ProductWarranty } from './sections/ProductWarranty';
+import { ProductSEO } from './sections/ProductSEO';
 import { Model } from '../../types/model';
 import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
@@ -798,6 +799,22 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     setBlingParentId(undefined);
                 }}
             />
+
+            {/* OTIMIZAÇÃO DE SEO */}
+            <div className="bg-white p-6 rounded-xl border border-purple-200 shadow-sm space-y-4">
+                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <FileText size={18} className="text-purple-600" />
+                    Otimização para Buscadores (SEO)
+                </h3>
+                <ProductSEO
+                    watch={watch}
+                    setValue={setValue}
+                    errors={errors}
+                />
+            </div>
+
+            {/* COMPOSIÇÃO DE PREÇOS (O FINAL) */}
+            {/* Aqui continuam os Preços e Botão Salvar (abaixo) */}
 
             {/* 5. CONTROLE DE ESTOQUE */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">

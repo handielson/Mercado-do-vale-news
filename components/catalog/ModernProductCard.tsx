@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check, GitCompare, ShoppingBag } from 'lucide-react';
 
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
@@ -51,6 +52,7 @@ export function ModernProductCard({
     const [showQuoteModal, setShowQuoteModal] = useState(false);
     const [installment10x, setInstallment10x] = useState<string>('');
     const [installment12x, setInstallment12x] = useState<string>('');
+    const navigate = useNavigate();
     // Selected variant state (defaults to first variant)
     const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
 
@@ -251,6 +253,12 @@ export function ModernProductCard({
         setShowQuoteModal(true);
     };
 
+    const handleTitleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        // Use slug if available, otherwise just use id
+        navigate(`/produto/${product.slug || product.id}`);
+    };
+
     const handleInfoClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         setShowDetailsModal(true);
@@ -338,11 +346,8 @@ export function ModernProductCard({
             >
                 {/* Image */}
                 <div
-                    className="relative aspect-[4/3] overflow-hidden bg-slate-100"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setShowDetailsModal(true);
-                    }}
+                    className="relative aspect-[4/3] overflow-hidden bg-slate-100 cursor-pointer"
+                    onClick={handleTitleClick}
                 >
                     <img
                         src={currentImage}
@@ -463,7 +468,10 @@ export function ModernProductCard({
                 <div className="p-4 space-y-3">
                     {/* Title & Brand */}
                     <div>
-                        <h3 className="font-semibold text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                        <h3
+                            onClick={handleTitleClick}
+                            className="font-semibold text-slate-900 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
+                        >
                             {productGroup
                                 ? productGroup.model
                                 : product.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim()}

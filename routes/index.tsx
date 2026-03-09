@@ -76,9 +76,11 @@ import CartPage from '../pages/store/CartPage';
 import CheckoutPage from '../pages/store/CheckoutPage';
 import OrderConfirmationPage from '../pages/store/OrderConfirmationPage';
 import OrderTrackingPage from '../pages/store/OrderTrackingPage';
+import { PublicProductPage } from '../pages/store/PublicProductPage';
 import OnlineOrdersPage from '../pages/admin/orders/OnlineOrdersPage';
 import FinancialPage from '../pages/admin/financial/FinancialPage';
 import { CartProvider } from '../contexts/CartContext';
+import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
 
 
 
@@ -690,6 +692,22 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/admin/settings/seo-analyzer",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SEODashboardPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/seo-analyzer",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SEODashboardPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
     path: "/admin/pdv",
     element: (
       <ProtectedRoute requireAdmin={true}>
@@ -768,6 +786,16 @@ export const router = createBrowserRouter([
       <CartProvider>
         <CatalogPage />
       </CartProvider>
+    )
+  },
+  {
+    path: "/produto/:slug",
+    element: (
+      <QuoteCartProvider>
+        <CartProvider>
+          <PublicProductPage />
+        </CartProvider>
+      </QuoteCartProvider>
     )
   },
   // ─── Loja / Checkout ───────────────────────────────────────────────────────

@@ -136,8 +136,8 @@ function CatalogContent() {
 
     const handleShare = async (product: CatalogProduct) => {
         const productName = product.name;
-        // Link com busca pré-preenchida para que o destinatário veja o produto direto
-        const shareUrl = `${window.location.origin}/?search=${encodeURIComponent(productName)}`;
+        // Link direto SEO
+        const shareUrl = `${window.location.origin}/produto/${product.slug || product.id}`;
 
         // Web Share API (funciona em mobile e browsers modernos)
         if (navigator.share) {

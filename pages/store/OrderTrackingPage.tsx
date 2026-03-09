@@ -228,19 +228,23 @@ export default function OrderTrackingPage() {
                         {order.items.map(item => (
                             <div key={item.id} className="flex gap-3 items-start">
                                 {/* Foto do produto */}
-                                {item.product_image_url ? (
-                                    <img
-                                        src={item.product_image_url}
-                                        alt={item.product_name}
-                                        className="w-14 h-14 rounded-xl object-cover border border-gray-100 flex-shrink-0"
-                                    />
-                                ) : (
-                                    <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                        <Package className="w-6 h-6 text-gray-400" />
-                                    </div>
-                                )}
+                                <Link to={`/produto/${item.product_id}`} className="flex-shrink-0 group">
+                                    {item.product_image_url ? (
+                                        <img
+                                            src={item.product_image_url}
+                                            alt={item.product_name}
+                                            className="w-14 h-14 rounded-xl object-cover border border-gray-100 group-hover:border-blue-500 transition-colors"
+                                        />
+                                    ) : (
+                                        <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center group-hover:bg-gray-200 transition-colors">
+                                            <Package className="w-6 h-6 text-gray-400 group-hover:text-gray-500" />
+                                        </div>
+                                    )}
+                                </Link>
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-sm text-gray-800 leading-tight">{item.product_name}</p>
+                                    <Link to={`/produto/${item.product_id}`} className="hover:underline hover:text-blue-600 transition-colors">
+                                        <p className="font-medium text-sm text-gray-800 leading-tight">{item.product_name}</p>
+                                    </Link>
                                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                                         {item.product_name?.startsWith('Garantia Estendida') ? (
                                             // Item de garantia: mostrar produto coberto (novo formato: "Garantia +12m — Produto")

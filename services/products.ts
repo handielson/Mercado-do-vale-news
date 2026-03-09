@@ -169,6 +169,10 @@ async function create(input: ProductInput): Promise<Product> {
             promo_end: input.promo_end || null,
             bling_id: input.bling_id || null,
             bling_parent_id: input.bling_parent_id || null,
+            // SEO Additions
+            slug: input.slug || null,
+            meta_title: input.meta_title || null,
+            meta_description: input.meta_description || null,
         })
         .select('*')
         .single();
@@ -259,6 +263,10 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             promo_end: input.promo_end || null,
             bling_id: input.bling_id || null,
             bling_parent_id: input.bling_parent_id || null,
+            // SEO Additions
+            slug: input.slug || null,
+            meta_title: input.meta_title || null,
+            meta_description: input.meta_description || null,
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -399,6 +407,9 @@ function transformFromDB(row: any): Product {
         price_promo: row.price_promo || undefined,
         promo_start: row.promo_start || undefined,
         promo_end: row.promo_end || undefined,
+        slug: row.slug || undefined,
+        meta_title: row.meta_title || undefined,
+        meta_description: row.meta_description || undefined,
         created: row.created_at,
         updated: row.updated_at
     };
