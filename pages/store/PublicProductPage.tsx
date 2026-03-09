@@ -294,8 +294,18 @@ export const PublicProductPage: React.FC = () => {
                                 <div className="flex flex-wrap gap-2">
                                     {siblings.map((sib) => {
                                         const isCurrent = sib.id === product.id;
-                                        // Tenta extrair a cor ou spec principal para o botão
-                                        let variantLabel = sib.specs?.color || sib.specs?.storage || sib.name.replace(product.model || '', '').trim() || 'Padrão';
+                                        // Extrai specs essenciais para o botão (Cor, Storage, RAM)
+                                        const labelPieces = [];
+                                        if (sib.specs?.color) labelPieces.push(sib.specs.color);
+                                        if (sib.specs?.storage) labelPieces.push(sib.specs.storage);
+                                        if (sib.specs?.ram) labelPieces.push(`RAM ${sib.specs.ram}`);
+
+                                        let variantLabel = labelPieces.join(' - ');
+
+                                        // Fallback se as specs não estiverem preenchidas
+                                        if (!variantLabel) {
+                                            variantLabel = sib.name.replace(product.model || '', '').trim() || 'Padrão';
+                                        }
                                         if (variantLabel.startsWith('-')) variantLabel = variantLabel.substring(1).trim();
 
                                         return (
