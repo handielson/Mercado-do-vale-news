@@ -26,6 +26,7 @@ export default async function handler(req: any, res: any) {
                 description, 
                 meta_title, 
                 meta_description, 
+                seo_keywords,
                 images,
                 price_retail,
                 stock_quantity
@@ -90,6 +91,7 @@ export default async function handler(req: any, res: any) {
     <!-- SEO Injetado via Vercel Edge -->
     <title>${title}</title>
     <meta name="description" content="${description}" />
+    ${product.seo_keywords && product.seo_keywords.length > 0 ? `<meta name="keywords" content="${product.seo_keywords.join(', ')}" />` : ''}
     
     <!-- Open Graph / Facebook / WhatsApp -->
     <meta property="og:type" content="product" />

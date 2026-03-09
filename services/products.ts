@@ -173,6 +173,7 @@ async function create(input: ProductInput): Promise<Product> {
             slug: input.slug || null,
             meta_title: input.meta_title || null,
             meta_description: input.meta_description || null,
+            seo_keywords: input.seo_keywords || [],
         })
         .select('*')
         .single();
@@ -267,6 +268,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             slug: input.slug || null,
             meta_title: input.meta_title || null,
             meta_description: input.meta_description || null,
+            seo_keywords: input.seo_keywords || [],
         })
         .eq('id', id)
         .eq('company_id', companyId)
