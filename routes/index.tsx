@@ -80,11 +80,8 @@ import { PublicProductPage } from '../pages/store/PublicProductPage';
 import OnlineOrdersPage from '../pages/admin/orders/OnlineOrdersPage';
 import FinancialPage from '../pages/admin/financial/FinancialPage';
 import { CartProvider } from '../contexts/CartContext';
+import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
-
-
-
-
 import { feedbackService } from '../services/feedbackService';
 
 // Temporary components (will be moved to separate files in next phase)
