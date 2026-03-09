@@ -25,7 +25,7 @@ export const SEODashboardPage: React.FC = () => {
         try {
             const { data, error } = await supabase
                 .from('products')
-                .select('id, name, slug, meta_title, meta_description, status')
+                .select('id, name, slug, meta_title, meta_description, status, description')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -122,6 +122,55 @@ export const SEODashboardPage: React.FC = () => {
         }
     };
 
+    const handleGenerateMissingMetaTags = async () => {
+        const missing = products.filter(p => !p.meta_title || !p.meta_description);
+        if (missing.length === 0) {
+            toast.info('Nenhuma Meta Tag faltando no catálogo.');
+            return;
+        }
+
+        setIsGenerating(true);
+        let successCount = 0;
+        let failCount = 0;
+
+        toast.info(`Gerando tags para ${missing.length} produtos. Aguarde...`);
+
+        try {
+            for (const p of missing) {
+                const title = p.meta_title || `${p.name} | Mercado do Vale`;
+                // Pega a descrição limpa, ou usa um genérico
+                const desc = p.meta_description ||
+                    (p.description ? p.description.substring(0, 150).replace(/\n/g, ' ') + '...' : `Compre ${p.name} com os melhores preços e garantia no Mercado do Vale.`);
+
+                const { error } = await supabase.from('products').update({
+                    meta_title: title,
+                    meta_description: desc
+                }).eq('id', p.id);
+
+                if (!error) {
+                    successCount++;
+                } else {
+                    console.error('Erro ao gerar meta tags para', p.name, error);
+                    failCount++;
+                }
+            }
+
+            if (successCount > 0) {
+                toast.success(`${successCount} produtos atualizados com sucesso!`);
+            }
+            if (failCount > 0) {
+                toast.error(`Falha ao atualizar ${failCount} produtos.`);
+            }
+
+            fetchSEOData();
+        } catch (err) {
+            toast.error('Ocorreu um erro ao gerar as tags.');
+            console.error(err);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     const filteredProducts = products.filter(p =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.slug && p.slug.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -138,7 +187,7 @@ export const SEODashboardPage: React.FC = () => {
                         Monitore a saúde orgânica do seu catálogo. Para o Google encontrar seu produto, ele precisa de tags bem preenchidas.
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     {stats && stats.missingSlug > 0 && (
                         <button
                             onClick={handleGenerateMissingSlugs}
@@ -146,7 +195,17 @@ export const SEODashboardPage: React.FC = () => {
                             className={`flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-sm ${isGenerating ? 'opacity-70 cursor-not-allowed' : ''}`}
                         >
                             <Settings size={16} className={isGenerating ? "animate-spin" : ""} />
-                            {isGenerating ? `Gerando Slugs...` : `Gerar Slugs Faltantes`}
+                            {isGenerating ? `Gerando Slugs...` : `Slugs Faltantes`}
+                        </button>
+                    )}
+                    {stats && (stats.missingTitle > 0 || stats.missingDesc > 0) && (
+                        <button
+                            onClick={handleGenerateMissingMetaTags}
+                            disabled={isGenerating || loading}
+                            className={`flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors font-medium text-sm ${isGenerating ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        >
+                            <Settings size={16} className={isGenerating ? "animate-spin" : ""} />
+                            {isGenerating ? `Gerando Tags...` : `Gerar Meta Tags`}
                         </button>
                     )}
                     <button
