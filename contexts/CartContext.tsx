@@ -24,6 +24,7 @@ interface CartContextType {
     clear: () => void;
     totalItems: number;
     subtotal: number;            // em centavos
+    isHydrated: boolean;         // true após carregar do localStorage
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -121,6 +122,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             clear,
             totalItems,
             subtotal,
+            isHydrated,
         }}>
             {children}
         </CartContext.Provider>

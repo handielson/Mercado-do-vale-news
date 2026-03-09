@@ -87,6 +87,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <NavItem to="/admin/settings/bling" icon={<Link2 size={18} />} label="Bling" active={location.pathname.startsWith('/admin/settings/bling')} />
           <NavItem to="/admin/settings/shipping" icon={<Truck size={18} />} label="Frete" active={location.pathname.startsWith('/admin/settings/shipping')} />
           <NavItem to="/admin/settings/payment-fees" icon={<CreditCard size={18} />} label="Taxas" active={location.pathname.startsWith('/admin/settings/payment-fees')} />
+          <NavItem to="/admin/settings/integrations" icon={<Link2 size={18} />} label="Gateways Pagamento" active={location.pathname.startsWith('/admin/settings/integrations')} />
           <NavItem to="/admin/settings/documents" icon={<FileText size={18} />} label="Documentos" active={location.pathname.startsWith('/admin/settings/documents')} />
           <NavItem to="/admin/settings/warranty-templates" icon={<Shield size={18} />} label="Garantias" active={location.pathname.startsWith('/admin/settings/warranty-templates')} />
           {customer?.customer_type === 'ADMIN' && (

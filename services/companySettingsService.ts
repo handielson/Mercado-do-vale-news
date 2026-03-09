@@ -154,11 +154,70 @@ export const companySettingsService = {
         <p style="margin-top: 20px;">Emitido em: {{data_emissao}}</p>
     </div>
 </div>`,
-            payment_receipt_template: `<div style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #333; max-width: 800px; margin: 0 auto; border: 1px solid #ddd; padding: 20px;">
-    <!-- CABEÇALHO DEDICADO VIA TAG GLOBAL -->
+            delivery_receipt_template: `<div style="font-family: Arial, sans-serif; font-size: 13px; line-height: 1.6; color: #222; max-width: 800px; margin: 0 auto; padding: 32px;">
     {{cabecalho_a4}}
 
-    <!-- CORPO -->
+    <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+        <div>
+            <p style="margin:0;font-size:11px;color:#888;">Pedido</p>
+            <p style="margin:0;font-size:14px;font-weight:700;font-family:monospace;">#{{numero_pedido}}</p>
+        </div>
+        <div style="text-align:right;">
+            <p style="margin:0;font-size:11px;color:#888;">Emitido em</p>
+            <p style="margin:0;">{{data_emissao}}</p>
+        </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+        <tr style="background:#f5f5f5;">
+            <td colspan="2" style="padding:8px 10px;font-weight:700;font-size:12px;text-transform:uppercase;">Dados do Cliente</td>
+        </tr>
+        <tr>
+            <td style="padding:6px 10px;width:50%;"><strong>Nome:</strong> {{nome_cliente}}</td>
+            <td style="padding:6px 10px;"><strong>Telefone:</strong> {{telefone_cliente}}</td>
+        </tr>
+        <tr>
+            <td colspan="2" style="padding:6px 10px;"><strong>Endereço de Entrega:</strong> {{endereco_entrega}}</td>
+        </tr>
+    </table>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+        <thead>
+            <tr style="background:#f5f5f5;">
+                <th style="padding:8px;text-align:left;">Produto</th>
+                <th style="padding:8px;text-align:right;">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{itens_pedido}}
+        </tbody>
+        <tfoot>
+            <tr style="border-top:2px solid #333;">
+                <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:14px;">TOTAL</td>
+                <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:14px;">{{total_pedido}}</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div style="margin-top:40px;border:1px dashed #999;border-radius:8px;padding:20px;">
+        <p style="margin:0 0 4px;font-weight:700;font-size:12px;text-transform:uppercase;">Confirmação de Recebimento</p>
+        <p style="margin:0 0 30px;font-size:12px;color:#555;">Declaro ter recebido os produtos acima em perfeitas condições.</p>
+        <div style="display:flex;gap:40px;">
+            <div style="flex:1;">
+                <div style="border-bottom:1px solid #333;margin-bottom:6px;height:40px;"></div>
+                <p style="margin:0;font-size:11px;color:#666;">Assinatura do cliente</p>
+            </div>
+            <div style="flex:1;">
+                <div style="border-bottom:1px solid #333;margin-bottom:6px;height:40px;"></div>
+                <p style="margin:0;font-size:11px;color:#666;">Data e hora</p>
+            </div>
+        </div>
+    </div>
+
+    <p style="margin-top:16px;font-size:10px;color:#aaa;text-align:center;">{{nome_loja}} · Emitido em {{data_emissao}}</p>
+</div>`,
+            payment_receipt_template: `<div style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #333; max-width: 800px; margin: 0 auto; border: 1px solid #ddd; padding: 20px;">
+    {{cabecalho_a4}}
     <div style="background-color: #f9f9f9; padding: 10px; border: 1px solid #eee; margin-bottom: 20px; display: flex; justify-content: space-between;">
         <div style="width: 48%;">
             <p style="margin: 0 0 5px; font-weight: bold; border-bottom: 1px solid #ddd;">DADOS DO CLIENTE / FORNECEDOR</p>
@@ -171,47 +230,32 @@ export const companySettingsService = {
             <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #16a34a;">{{valor}}</p>
         </div>
     </div>
-
-    <!-- DECLARAÇÃO -->
     <div style="background-color: #f0f8ff; border: 1px dashed #007bff; padding: 15px; margin-bottom: 40px; font-size: 13px; text-align: center;">
-        <p style="margin: 0;">
-            {{texto_abertura}} a quantia de <strong>{{valor}}</strong> referente a <strong>{{historico}}</strong>.
-        </p>
+        <p style="margin: 0;">{{texto_abertura}} a quantia de <strong>{{valor}}</strong> referente a <strong>{{historico}}</strong>.</p>
     </div>
-
-    <!-- ASSINATURA -->
     <div style="margin-top: 50px; text-align: center;">
         <div style="border-bottom: 2px solid #000; width: 400px; margin: 0 auto 10px;"></div>
         <strong>{{nome_loja}}</strong><br/>
         <small>Assinatura do Recebedor / Lançador</small>
     </div>
 </div>`,
-            extended_warranty_template: `<div style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #333; max-width: 800px; margin: 0 auto; border: 1px solid #cbd5e1; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
-    <!-- CABEÇALHO GLOBAL -->
+            extended_warranty_template: `<div style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.5; color: #333; max-width: 800px; margin: 0 auto; border: 1px solid #cbd5e1; padding: 30px; border-radius: 8px;">
     {{cabecalho_a4}}
-
     <div style="text-align: center; margin: 20px 0 30px 0; padding-bottom: 10px; border-bottom: 2px solid #2563eb;">
         <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: 1px;">Certificado de Garantia Estendida</h1>
         <p style="margin: 5px 0 0; color: #64748b; font-size: 13px;">Proteção Adicional e Segurança para o seu Aparelho</p>
     </div>
-
-    <!-- CLIENTE E PRODUTO -->
     <div style="display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px;">
         <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
-            <div style="background-color: #f8fafc; padding: 8px 12px; font-weight: bold; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0; text-transform: uppercase;">
-                Dados do Cliente
-            </div>
+            <div style="background-color: #f8fafc; padding: 8px 12px; font-weight: bold; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0; text-transform: uppercase;">Dados do Cliente</div>
             <div style="padding: 12px;">
                 <p style="margin: 0 0 4px;"><strong>Nome:</strong> {{nome_cliente}}</p>
                 <p style="margin: 0 0 4px;"><strong>CPF/CNPJ:</strong> {{cpf_cliente}}</p>
                 <p style="margin: 0;"><strong>Contato:</strong> {{telefone_cliente}}</p>
             </div>
         </div>
-        
         <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;">
-            <div style="background-color: #f8fafc; padding: 8px 12px; font-weight: bold; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0; text-transform: uppercase;">
-                Identificação do Aparelho
-            </div>
+            <div style="background-color: #f8fafc; padding: 8px 12px; font-weight: bold; font-size: 11px; color: #475569; border-bottom: 1px solid #e2e8f0; text-transform: uppercase;">Identificação do Aparelho</div>
             <div style="padding: 12px;">
                 <p style="margin: 0 0 4px;"><strong>Modelo:</strong> {{produto}}</p>
                 <p style="margin: 0 0 4px;"><strong>IMEI 1:</strong> {{imei1}}</p>
@@ -219,8 +263,6 @@ export const companySettingsService = {
             </div>
         </div>
     </div>
-    
-    <!-- COBERTURA ESTENDIDA -->
     <div style="border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; margin-bottom: 30px;">
         <div style="background-color: #eff6ff; padding: 10px 15px; font-weight: bold; font-size: 13px; color: #1e40af; border-bottom: 1px solid #bfdbfe; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;">
             <span>Resumo da Cobertura Estendida</span>
@@ -245,15 +287,11 @@ export const companySettingsService = {
             </div>
         </div>
     </div>
-
-    <!-- TERMOS E CONDICOES -->
     <div style="margin-bottom: 40px; font-size: 11px; color: #475569; text-align: justify; padding: 15px; background-color: #f8fafc; border-radius: 6px; border: 1px dashed #cbd5e1;">
         <p style="margin: 0 0 8px;"><strong>1. DO OBJETO:</strong> O presente certificado garante o reparo gratuito ou substituição de peças do aparelho descrito acima que apresentem defeito de fabricação ou vício de qualidade durante o prazo estendido contratado.</p>
         <p style="margin: 0 0 8px;"><strong>2. DA VIGÊNCIA:</strong> A cobertura estendida inicia-se imediatamente após o término da garantia legal/padrão da loja e vigora até a data de vencimento especificada neste certificado.</p>
-        <p style="margin: 0;"><strong>3. DAS EXCLUSÕES:</strong> Esta garantia <u>NÃO COBRE</u>: danos físicos (telas quebradas, carcaça amassada), danos por líquidos (oxidação), mau uso, desgaste natural (bateria), instalação de software não-oficial e intervenção técnica por terceiros não autorizados. O rompimento do selo de garantia implicará na perda imediata da cobertura.</p>
+        <p style="margin: 0;"><strong>3. DAS EXCLUSÕES:</strong> Esta garantia <u>NÃO COBRE</u>: danos físicos, danos por líquidos, mau uso, desgaste natural (bateria), instalação de software não-oficial e intervenção técnica por terceiros não autorizados.</p>
     </div>
-
-    <!-- ASSINATURAS -->
     <div style="display: flex; justify-content: space-between; margin-top: 50px; padding: 0 20px;">
         <div style="width: 40%; text-align: center;">
             <div style="border-bottom: 1px solid #000; margin-bottom: 8px;"></div>
@@ -266,7 +304,7 @@ export const companySettingsService = {
             <p style="margin: 2px 0 0; font-size: 10px; color: #64748b;">Titular do Contrato / Cliente</p>
         </div>
     </div>
-</div>`
+</div>`,
         };
     }
 };

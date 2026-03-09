@@ -46,6 +46,7 @@ async function list(): Promise<Category[]> {
         slug: row.slug,
         config: row.config,
         warranty_days: row.warranty_days || 90,
+        extended_warranty_enabled: row.extended_warranty_enabled ?? false,
         created: row.created_at,
         updated: row.updated_at
     }));
@@ -71,7 +72,8 @@ async function create(input: CategoryInput): Promise<Category> {
             name: input.name,
             slug,
             config: input.config,
-            warranty_days: input.warranty_days || 90
+            warranty_days: input.warranty_days || 90,
+            extended_warranty_enabled: input.extended_warranty_enabled ?? false
         })
         .select()
         .single();
@@ -84,6 +86,7 @@ async function create(input: CategoryInput): Promise<Category> {
         slug: data.slug,
         config: data.config,
         warranty_days: data.warranty_days || 90,
+        extended_warranty_enabled: data.extended_warranty_enabled ?? false,
         created: data.created_at,
         updated: data.updated_at
     };
@@ -113,6 +116,7 @@ async function getById(id: string): Promise<Category | null> {
         slug: data.slug,
         config: data.config,
         warranty_days: data.warranty_days || 90,
+        extended_warranty_enabled: data.extended_warranty_enabled ?? false,
         created: data.created_at,
         updated: data.updated_at
     };
@@ -138,7 +142,8 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
             name: input.name,
             slug,
             config: input.config,
-            warranty_days: input.warranty_days || 90
+            warranty_days: input.warranty_days || 90,
+            extended_warranty_enabled: input.extended_warranty_enabled ?? false
         })
         .eq('id', id)
         .eq('company_id', companyId);

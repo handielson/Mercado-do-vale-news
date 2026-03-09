@@ -135,8 +135,9 @@ export interface Category {
     id: string;
     name: string;
     slug: string;
-    config: CategoryConfig;  // Field requirements configuration
-    warranty_days: number;   // Default warranty period in days
+    config: CategoryConfig;
+    warranty_days: number;
+    extended_warranty_enabled: boolean; // Se true, exibe opção de garantia estendida no carrinho
     created: string;
     updated: string;
 }
@@ -150,4 +151,5 @@ export interface CategoryInput {
     slug?: string;
     config: CategoryConfig;
     warranty_days?: number;
+    extended_warranty_enabled?: boolean;
 }

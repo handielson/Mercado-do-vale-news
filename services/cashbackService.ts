@@ -44,9 +44,9 @@ export async function getCoinBalance(customerId: string): Promise<CoinBalance | 
         .from('coin_balances')
         .select('*')
         .eq('customer_id', customerId)
-        .single();
+        .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
+    if (error) throw error;
     return data as CoinBalance | null;
 }
 

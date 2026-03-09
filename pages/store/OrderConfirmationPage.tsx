@@ -1,33 +1,135 @@
 /**
  * OrderConfirmationPage — Exibida após criação do pedido com sucesso
  */
-import { useParams, Link } from 'react-router-dom';
-import { CheckCircle, Package, MapPin, MessageCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useParams, Link, useLocation } from 'react-router-dom';
+import { CheckCircle, Package, MapPin, MessageCircle, Copy, Clock, AlertCircle, CreditCard } from 'lucide-react';
+import { getOrderById } from '@/services/orderService';
+import type { OrderWithItems } from '@/types/order';
 
 export default function OrderConfirmationPage() {
     const { id } = useParams<{ id: string }>();
+    const location = useLocation();
+    const [order, setOrder] = useState<OrderWithItems | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [copied, setCopied] = useState(false);
+
+    // pix_data passado em memória via navigate state (evita race condition com o banco)
+    const pixDataFromState = (location.state as any)?.pix_data;
+
+    useEffect(() => {
+        if (id) {
+            getOrderById(id)
+                .then(fetchedOrder => {
+                    if (fetchedOrder && pixDataFromState && !fetchedOrder.gateway_pix_data) {
+                        // Banco ainda não atualizou — usa o dado em memória
+                        setOrder({ ...fetchedOrder, gateway_pix_data: pixDataFromState } as any);
+                    } else {
+                        setOrder(fetchedOrder);
+                    }
+                })
+                .finally(() => setLoading(false));
+        }
+    }, [id, pixDataFromState]);
+
+    // Sem redirecionamento automático — o usuário clica no botão manualmente
+
+    const handleCopyPix = () => {
+        if (order?.gateway_pix_data?.qr_code) {
+            navigator.clipboard.writeText(order.gateway_pix_data.qr_code);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
 
     const whatsappLink = `https://wa.me/55?text=${encodeURIComponent(
-        `Olá! Acabei de fazer meu pedido #${id} pelo site. 😊`
+        `Olá! Acabei de fazer meu pedido #${id?.split('-')[0]} pelo site. 😊`
     )}`;
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            </div>
+        );
+    }
+
+    const hasPix = order?.gateway_pix_data?.qr_code_base64;
+    const hasProCheckoutUrl = order?.gateway_payment_url && order.status === 'awaiting_payment';
+    const isPendingPayment = hasPix || hasProCheckoutUrl;
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex flex-col items-center justify-center px-4 py-12">
             <div className="max-w-md w-full text-center">
-                {/* Ícone de sucesso */}
+                {/* Ícone de sucesso (Muda se for Pagamento Pendente) */}
                 <div className="flex justify-center mb-6">
-                    <div className="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center">
-                        <CheckCircle className="w-14 h-14 text-green-500" />
+                    <div className={`w-24 h-24 rounded-full flex items-center justify-center ${isPendingPayment ? 'bg-yellow-100' : 'bg-green-100'}`}>
+                        {isPendingPayment ? (
+                            <Clock className="w-14 h-14 text-yellow-500" />
+                        ) : (
+                            <CheckCircle className="w-14 h-14 text-green-500" />
+                        )}
                     </div>
                 </div>
 
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">Pedido realizado!</h1>
-                <p className="text-gray-500 mb-2">Seu pedido foi recebido com sucesso.</p>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                    {isPendingPayment ? 'Falta pouco!' : 'Pedido finalizado!'}
+                </h1>
+                <p className="text-gray-500 mb-8">
+                    {isPendingPayment
+                        ? 'Confirme e realize o seu pagamento abaixo.'
+                        : 'Seu pedido foi recebido com sucesso.'
+                    }
+                </p>
 
-                {/* Número do pedido */}
+                {/* Bloco PIX (Gerado) */}
+                {hasPix && order.gateway_pix_data && (
+                    <div className="bg-white border-2 border-yellow-200 rounded-2xl p-6 mb-6 shadow-sm flex flex-col items-center">
+                        <img
+                            src={`data:image/jpeg;base64,${order.gateway_pix_data.qr_code_base64}`}
+                            alt="QR Code PIX"
+                            className="w-48 h-48 mb-4 border rounded-xl"
+                        />
+                        <button
+                            onClick={handleCopyPix}
+                            className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold py-3 px-4 rounded-xl transition"
+                        >
+                            <Copy className="w-5 h-5" />
+                            {copied ? 'Código PIX Copiado!' : 'Copiar código PIX'}
+                        </button>
+                        <div className="mt-4 flex items-center gap-2 text-sm text-gray-500 bg-gray-50 p-3 rounded-lg w-full text-left">
+                            <AlertCircle className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                            <p>Abra o app do seu banco e escolha <b>"Pix Copia e Cola"</b> para colar este código.</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Bloco PRO Checkout (Cartões) */}
+                {hasProCheckoutUrl && (
+                    <div className="bg-white border-2 border-yellow-200 rounded-2xl p-6 mb-6 shadow-sm flex flex-col items-center">
+                        <div className="bg-blue-50 p-4 rounded-full mb-4 animate-pulse">
+                            <CreditCard className="w-10 h-10 text-blue-600" />
+                        </div>
+                        <h3 className="font-bold text-gray-800 text-lg mb-2">Redirecionando...</h3>
+                        <p className="text-gray-500 text-sm mb-6 text-center">
+                            Aguarde. Você está sendo levado para o Checkout Seguro do Mercado Pago.
+                        </p>
+                        <a
+                            href={order.gateway_payment_url}
+                            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition shadow-lg"
+                        >
+                            Ir Agora Manualmente
+                        </a>
+                    </div>
+                )}
+
+                {/* Informações do Cliente e Número do pedido */}
                 <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-6 shadow-sm">
+                    <p className="text-sm text-gray-500 mb-1 text-center">Cliente</p>
+                    <h2 className="text-base font-bold text-gray-800 text-center mb-4 pb-4 border-b border-gray-100">{order?.customer_name || '...'}</h2>
+
                     <p className="text-sm text-gray-500 mb-1">Número do pedido</p>
-                    <p className="font-mono font-bold text-gray-800 break-all text-sm">#{id}</p>
+                    <p className="font-mono font-bold text-gray-800 break-all text-sm">#{id?.split('-')[0]}</p>
                 </div>
 
                 {/* Próximos passos */}

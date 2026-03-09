@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { PaymentFee, PaymentFeeInput } from '../types/payment-fees';
+import { PaymentFee, PaymentFeeInput, PaymentChannel } from '../types/payment-fees';
 
 // TEMPORARY: Hardcoded company_id until we implement auth
 const TEMP_COMPANY_ID = 'mercado-do-vale';
@@ -24,7 +24,8 @@ export const paymentFeesService = {
             .from('payment_fees')
             .select('*')
             .order('payment_method', { ascending: true })
-            .order('installments', { ascending: true });
+            .order('installments', { ascending: true })
+            .order('channel', { ascending: true });
 
         if (error) throw error;
         return data || [];
@@ -54,17 +55,23 @@ export const paymentFeesService = {
 
         const companyId = await getCompanyId();
 
-        // Default fees based on the provided image
-        const defaults: Omit<PaymentFee, 'id' | 'created_at' | 'updated_at'>[] = [
-            { company_id: companyId, payment_method: 'debit', installments: 1, operator_fee: 1, applied_fee: 1 },
-            { company_id: companyId, payment_method: 'pix', installments: 1, operator_fee: 0, applied_fee: 0 },
-            ...Array.from({ length: 18 }, (_, i) => ({
+        // Default fees — presencial (up to 18x) and online (up to 12x)
+        const makeRows = (channel: PaymentChannel, maxCredit: number) => [
+            { company_id: companyId, payment_method: 'debit' as const, installments: 1, channel, operator_fee: 1, applied_fee: 1 },
+            { company_id: companyId, payment_method: 'pix' as const, installments: 1, channel, operator_fee: 0, applied_fee: 0 },
+            ...Array.from({ length: maxCredit }, (_, i) => ({
                 company_id: companyId,
                 payment_method: 'credit' as const,
                 installments: i + 1,
+                channel,
                 operator_fee: getDefaultOperatorFee(i + 1),
                 applied_fee: getDefaultAppliedFee(i + 1)
             }))
+        ];
+        const defaults = [
+            ...makeRows('presencial', 18),
+            ...makeRows('online_mp', 12),
+            ...makeRows('online_ps', 12),
         ];
 
         const { error } = await supabase.from('payment_fees').insert(defaults);

@@ -64,6 +64,7 @@ export interface CompanySettings {
     default_a4_header?: string;
     default_thermal_header?: string;
     debt_clearance_template?: string;
+    delivery_receipt_template?: string;
     extended_warranty_template?: string;
 
     ai_prompts?: any;
@@ -107,6 +108,7 @@ export interface CompanySettingsInput {
     default_a4_header?: string;
     default_thermal_header?: string;
     debt_clearance_template?: string;
+    delivery_receipt_template?: string;
     extended_warranty_template?: string;
 
     ai_prompts?: any;

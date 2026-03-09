@@ -5,7 +5,7 @@ export interface TelegramTemplate {
     name: string; // Ex: 'Venda Padrão (PDV)'
     content: string; // O corpo da mensagem
     type: 'action' | 'scheduled';
-    action_type?: 'sale' | 'new_customer' | null;
+    action_type?: 'sale' | 'new_customer' | 'online_order' | null;
     schedule_time?: string | null; // HH:MM format like '19:00'
 }
 
@@ -32,6 +32,13 @@ const DEFAULT_TEMPLATES: TelegramTemplate[] = [
         type: 'action',
         action_type: 'new_customer',
         content: '🎉 *Novo Cliente Registrado!*\n\n👤 *Nome:* {nome_cliente}\n📞 *Telefone:* {telefone_cliente}\n🏷️ *Tipo:* {tipo_cliente}'
+    },
+    {
+        id: 'online_order_template',
+        name: 'Pedido Online',
+        type: 'action',
+        action_type: 'online_order',
+        content: '🛒 *Novo Pedido Online!* (#\{id_pedido\})\n\n👤 *Cliente:* {cliente}\n📞 *Telefone:* {telefone}\n\n📦 *Itens:*\n{itens}\n💰 *Total:* {valor}\n💳 *Pagamento:* {pagamento}\n🚚 *Entrega:* {entrega}\n📍 *Endereço:* {endereco}'
     },
     {
         id: 'daily_report_template',
@@ -75,12 +82,19 @@ export const telegramSettingsService = {
             if (!t.type) {
                 return {
                     ...t,
-                    type: t.id === 'sale_template' ? 'action' : 'action', // Default to 'action' for old templates
+                    type: t.id === 'sale_template' ? 'action' : 'action',
                     action_type: t.id === 'sale_template' ? 'sale' : null
                 };
             }
             return t;
         });
+
+        // Injeta templates novos que ainda não existem na base (merge não-destrutivo)
+        const existingIds = new Set(data.templates.map((t: TelegramTemplate) => t.id));
+        const missingDefaults = DEFAULT_TEMPLATES.filter(t => !existingIds.has(t.id));
+        if (missingDefaults.length > 0) {
+            data.templates = [...data.templates, ...missingDefaults];
+        }
 
         return data;
     },

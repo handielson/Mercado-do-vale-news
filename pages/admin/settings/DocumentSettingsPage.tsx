@@ -12,7 +12,7 @@ import { DebtClearanceTemplateEditor } from '../../../components/settings/DebtCl
 import { toast } from 'sonner';
 import { useTheme } from '../../../contexts/ThemeContext';
 
-type TabType = 'receipt' | 'warranty' | 'extra_page' | 'extended_warranty' | 'payment_receipt' | 'headers' | 'debt_clearance' | 'tags_dictionary';
+type TabType = 'receipt' | 'warranty' | 'extra_page' | 'extended_warranty' | 'payment_receipt' | 'headers' | 'debt_clearance' | 'delivery_receipt' | 'tags_dictionary';
 
 const GLOBAL_DOCUMENT_TAGS: Record<string, string> = {
     ...WARRANTY_TAGS,
@@ -70,7 +70,8 @@ export default function DocumentSettingsPage() {
         default_thermal_header: '',
         extended_warranty_options: [],
         extended_warranty_terms_text: '',
-        extended_warranty_template: ''
+        extended_warranty_template: '',
+        delivery_receipt_template: ''
     });
 
     // Load settings on mount
@@ -112,7 +113,8 @@ export default function DocumentSettingsPage() {
                     default_thermal_header: data.default_thermal_header || defaults.default_thermal_header || '',
                     extended_warranty_options: data.extended_warranty_options || [],
                     extended_warranty_terms_text: data.extended_warranty_terms_text || '',
-                    extended_warranty_template: data.extended_warranty_template || defaults.extended_warranty_template || ''
+                    extended_warranty_template: data.extended_warranty_template || defaults.extended_warranty_template || '',
+                    delivery_receipt_template: data.delivery_receipt_template || defaults.delivery_receipt_template || ''
                 });
             } else {
                 // Use defaults
@@ -239,88 +241,33 @@ export default function DocumentSettingsPage() {
                         </button>
                     </div>
 
-                    {/* Tabs */}
-                    <div className="flex gap-2 mt-4 border-b border-slate-200">
-                        <button
-                            onClick={() => setActiveTab('receipt')}
-                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'receipt'
-                                ? 'border-blue-600 text-blue-600 font-medium'
-                                : 'border-transparent text-slate-600 hover:text-slate-800'
-                                }`}
-                        >
-                            <Receipt size={18} />
-                            Cupom Térmico
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('payment_receipt')}
-                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'payment_receipt'
-                                ? 'border-blue-600 text-blue-600 font-medium'
-                                : 'border-transparent text-slate-600 hover:text-slate-800'
-                                }`}
-                        >
-                            <FileText size={18} />
-                            Recibo A4
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('debt_clearance')}
-                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'debt_clearance'
-                                ? 'border-blue-600 text-blue-600 font-medium'
-                                : 'border-transparent text-slate-600 hover:text-slate-800'
-                                }`}
-                        >
-                            <FileText size={18} />
-                            Quitação
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('warranty')}
-                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'warranty'
-                                ? 'border-blue-600 text-blue-600 font-medium'
-                                : 'border-transparent text-slate-600 hover:text-slate-800'
-                                }`}
-                        >
-                            <Shield size={18} />
-                            Garantia
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('headers')}
-                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'headers'
-                                ? 'border-blue-600 text-blue-600 font-medium'
-                                : 'border-transparent text-slate-600 hover:text-slate-800'
-                                }`}
-                        >
-                            <FileText size={18} />
-                            Cabeçalhos Padrão
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('extra_page')}
-                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'extra_page'
-                                ? 'border-blue-600 text-blue-600 font-medium'
-                                : 'border-transparent text-slate-600 hover:text-slate-800'
-                                }`}
-                        >
-                            <QrCode size={18} />
-                            Folha Extra
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('extended_warranty')}
-                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'extended_warranty'
-                                ? 'border-blue-600 text-blue-600 font-medium'
-                                : 'border-transparent text-slate-600 hover:text-slate-800'
-                                }`}
-                        >
-                            <Shield size={18} />
-                            Garantia Estendida
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('tags_dictionary')}
-                            className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors ${activeTab === 'tags_dictionary'
-                                ? 'border-blue-600 text-blue-600 font-medium'
-                                : 'border-transparent text-slate-600 hover:text-slate-800'
-                                }`}
-                        >
-                            <Tag size={18} />
-                            Dicionário de Tags
-                        </button>
+                    {/* Tabs — Segmented Control */}
+                    <div className="mt-4 overflow-x-auto">
+                        <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-max min-w-full">
+                            {([
+                                { id: 'receipt', label: 'Cupom Térmico', icon: <Receipt size={14} /> },
+                                { id: 'payment_receipt', label: 'Recibo A4', icon: <FileText size={14} /> },
+                                { id: 'debt_clearance', label: 'Quitação', icon: <FileText size={14} /> },
+                                { id: 'delivery_receipt', label: 'Comprovante', icon: <Package size={14} /> },
+                                { id: 'warranty', label: 'Garantia', icon: <Shield size={14} /> },
+                                { id: 'extended_warranty', label: 'G. Estendida', icon: <Shield size={14} /> },
+                                { id: 'headers', label: 'Cabeçalhos', icon: <FileText size={14} /> },
+                                { id: 'extra_page', label: 'Folha Extra', icon: <QrCode size={14} /> },
+                                { id: 'tags_dictionary', label: 'Dicionário de Tags', icon: <Tag size={14} /> },
+                            ] as { id: TabType; label: string; icon: React.ReactNode }[]).map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${activeTab === tab.id
+                                            ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200'
+                                            : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                                        }`}
+                                >
+                                    {tab.icon}
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -537,6 +484,46 @@ export default function DocumentSettingsPage() {
                                 .replace(/{{data_emissao}}/g, new Date().toLocaleDateString('pt-BR'))
                                 .replace(/{{valor_quitado}}/g, 'R$ 1.500,00')
                                 .replace(/{{historico_conta}}/g, 'Referente ao conserto de tela do iPhone 13');
+                        }}
+                    />
+                )}
+
+                {activeTab === 'delivery_receipt' && (
+                    <DebtClearanceTemplateEditor
+                        template={settings.delivery_receipt_template || ''}
+                        onTemplateChange={(value) => handleChange('delivery_receipt_template', value)}
+                        logoUrl={themeSettings?.logo_main || (settings as any).logo || settings.receipt_logo_url || ''}
+                        getPreviewHTML={(template, logo) => {
+                            const svgPlaceholder = `data:image/svg+xml;base64,${btoa(`<svg width="150" height="80" xmlns="http://www.w3.org/2000/svg"><rect width="150" height="80" fill="#e2e8f0"/><text x="50%" y="50%" font-family="Arial" font-size="14" fill="#64748b" text-anchor="middle" dominant-baseline="middle">Logo</text></svg>`)}`;
+                            const logoSrc = logo || svgPlaceholder;
+                            const logoHtml = `<img src="${logoSrc}" alt="Logo" style="max-height:80px; max-width:150px; object-fit:contain;" />`;
+
+                            const cabecalhoA4 = (settings.default_a4_header || '')
+                                .replace(/{{logo}}/g, logoHtml)
+                                .replace(/{{nome_loja}}/g, settings.company_name || 'Mercado do Vale')
+                                .replace(/{{cnpj}}/g, settings.cnpj || '12.345.678/0001-90')
+                                .replace(/{{endereco}}/g, settings.address || 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                .replace(/{{telefone}}/g, settings.phone || '(11) 98765-4321')
+                                .replace(/{{email}}/g, settings.email || 'contato@mercadodovale.com.br')
+                                .replace(/{{nome_documento}}/g, 'COMPROVANTE DE ENTREGA');
+
+                            let processedTemplate = template.replace(/<img[^>]*src="\{\{logo\}\}"[^>]*>/g, logoHtml);
+
+                            return processedTemplate
+                                .replace(/{{cabecalho_a4}}/g, cabecalhoA4)
+                                .replace(/{{logo}}/g, logoSrc)
+                                .replace(/{{nome_loja}}/g, 'Mercado do Vale')
+                                .replace(/{{endereco}}/g, 'Rua Exemplo, 123 - Centro - Cidade/UF')
+                                .replace(/{{telefone}}/g, '(11) 98765-4321')
+                                .replace(/{{email}}/g, 'contato@mercadodovale.com.br')
+                                .replace(/{{cnpj}}/g, '12.345.678/0001-90')
+                                .replace(/{{numero_pedido}}/g, 'PED-001234')
+                                .replace(/{{nome_cliente}}/g, 'João da Silva')
+                                .replace(/{{telefone_cliente}}/g, '(11) 91234-5678')
+                                .replace(/{{data_emissao}}/g, new Date().toLocaleDateString('pt-BR'))
+                                .replace(/{{itens_pedido}}/g, '<p>1x Capa de Silicone - Preto - SKU: CAPA-001 .... R$ 14,90</p>')
+                                .replace(/{{total_pedido}}/g, 'R$ 14,90')
+                                .replace(/{{endereco_entrega}}/g, 'Rua Exemplo, 123 - Centro - Cidade/UF');
                         }}
                     />
                 )}

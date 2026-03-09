@@ -719,22 +719,27 @@ export default function FinancialPage() {
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-slate-200">
-                {(['pagar', 'receber'] as Tab[]).map(t => (
-                    <button key={t} onClick={() => setTab(t)}
-                        className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${tab === t
-                            ? t === 'pagar' ? 'border-red-500 text-red-600' : 'border-green-500 text-green-700'
-                            : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-                        {t === 'pagar' ? <TrendingDown size={16} /> : <TrendingUp size={16} />}
-                        Contas a {t === 'pagar' ? 'Pagar' : 'Receber'}
-                        {(t === 'pagar' ? contasPagar : contasReceber).length > 0 && (
-                            <span className={`ml-1 text-xs font-bold px-2 py-0.5 rounded-full ${t === 'pagar' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                                {(t === 'pagar' ? contasPagar : contasReceber).length}
-                            </span>
-                        )}
-                    </button>
-                ))}
+            {/* Tabs — Segmented Control */}
+            <div className="overflow-x-auto">
+                <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-max min-w-full">
+                    {(['pagar', 'receber'] as Tab[]).map(t => (
+                        <button key={t} onClick={() => setTab(t)}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${tab === t
+                                    ? t === 'pagar'
+                                        ? 'bg-white text-red-600 shadow-sm ring-1 ring-slate-200'
+                                        : 'bg-white text-green-700 shadow-sm ring-1 ring-slate-200'
+                                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                                }`}>
+                            {t === 'pagar' ? <TrendingDown size={15} /> : <TrendingUp size={15} />}
+                            Contas a {t === 'pagar' ? 'Pagar' : 'Receber'}
+                            {(t === 'pagar' ? contasPagar : contasReceber).length > 0 && (
+                                <span className={`ml-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${t === 'pagar' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                    {(t === 'pagar' ? contasPagar : contasReceber).length}
+                                </span>
+                            )}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Summary cards */}

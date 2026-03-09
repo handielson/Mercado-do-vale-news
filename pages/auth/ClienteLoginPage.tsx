@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
@@ -12,6 +12,8 @@ export const ClienteLoginPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const nextPath = searchParams.get('next') || '/';
     const { signInWithEmail, signInWithGoogle } = useAuth();
 
     const handleEmailLogin = async (e: React.FormEvent) => {
@@ -26,9 +28,7 @@ export const ClienteLoginPage: React.FC = () => {
         try {
             await signInWithEmail(email, password);
             toast.success('Login realizado com sucesso!');
-
-            // Always redirect to catalog - admins can access admin panel via header link
-            navigate('/');
+            navigate(nextPath);
         } catch (error: any) {
             toast.error(error.message || 'Erro ao fazer login');
         } finally {
@@ -39,6 +39,10 @@ export const ClienteLoginPage: React.FC = () => {
     const handleGoogleLogin = async () => {
         setGoogleLoading(true);
         try {
+            // Salva destino para o AuthCallbackPage usar após o OAuth
+            if (nextPath !== '/') {
+                sessionStorage.setItem('auth_next', nextPath);
+            }
             await signInWithGoogle();
             // Redirecionamento será feito pelo callback
         } catch (error: any) {
@@ -139,7 +143,7 @@ export const ClienteLoginPage: React.FC = () => {
                     <p className="text-sm text-slate-600">
                         Não tem uma conta?{' '}
                         <Link
-                            to="/cliente/cadastro"
+                            to={`/cliente/cadastro${nextPath !== '/' ? `?next=${nextPath}` : ''}`}
                             className="text-blue-600 hover:text-blue-700 font-semibold"
                         >
                             Criar conta

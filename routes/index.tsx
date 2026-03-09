@@ -58,6 +58,7 @@ import SystemTagsPage from '../pages/admin/settings/SystemTagsPage';
 import MarketingPage from '../pages/admin/settings/MarketingPage';
 import SalesPage from '../pages/admin/sales/SalesPage';
 import WhatsAppPage from '../pages/admin/settings/WhatsAppPage';
+import PaymentIntegrationsPage from '../pages/admin/settings/PaymentIntegrationsPage';
 import { TabsTestPage } from '../pages/test/TabsTestPage';
 import CatalogPage from '../pages/catalog/index';
 import CoinsInfoPage from '../pages/catalog/CoinsInfoPage';
@@ -532,6 +533,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><WarrantyTemplatesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/integrations",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><PaymentIntegrationsPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

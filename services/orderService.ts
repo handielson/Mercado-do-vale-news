@@ -14,7 +14,57 @@ import type {
     GatewayPaymentResult,
 } from '../types/order';
 
+import { paymentIntegrationService } from './paymentIntegrationService';
+import { mercadoPagoProvider } from './providers/mercadoPagoProvider';
+import { telegramBotService } from './telegramBot';
+import { formatCurrency } from '../utils/saleCalculations';
+
 const COMPANY_SLUG = 'mercado-do-vale';
+
+// ─── Helper: monta dados para notificação Telegram ────────────────────────────
+function buildOrderNotificationData(
+    order: any,
+    items: any[],
+    extra?: { installments?: number; cardBrand?: string }
+) {
+    const total = order.total ?? 0;
+    const installments = extra?.installments ?? 1;
+    const installmentValue = installments > 1 ? Math.round(total / installments) : total;
+
+    let pagamento: string;
+    if (order.payment_method === 'pix') {
+        pagamento = `🟢 PIX — *${formatCurrency(total)} à vista*`;
+    } else if (order.payment_method === 'credit_card') {
+        const brand = extra?.cardBrand ? ` (${extra.cardBrand})` : '';
+        if (installments > 1) {
+            pagamento = `💳 Cartão${brand} — *${installments}x de ${formatCurrency(installmentValue)}*\n   Total: ${formatCurrency(total)}`;
+        } else {
+            pagamento = `💳 Cartão${brand} — *${formatCurrency(total)} à vista*`;
+        }
+    } else {
+        const quando = order.delivery_type === 'pickup' ? 'na retirada' : 'na entrega';
+        pagamento = `💵 Pagar ${quando} — *${formatCurrency(total)}*`;
+    }
+
+    const itens = items
+        .map(i => `• ${i.product_name} x${i.quantity} — ${formatCurrency(i.subtotal)}`)
+        .join('\n');
+    const entrega = order.delivery_type === 'pickup' ? 'Retirada na loja' : 'Entrega em casa';
+    const addr = order.shipping_address;
+    const endereco = addr
+        ? `${addr.street}${addr.number ? ', ' + addr.number : ''}${addr.complement ? ' — ' + addr.complement : ''} — ${addr.neighborhood}, ${addr.city}/${addr.state}`
+        : 'Retirada presencial';
+    return {
+        id_pedido: order.id?.slice(0, 8) ?? '?',
+        cliente: order.customer_name ?? '-',
+        telefone: order.customer_phone ?? '-',
+        itens,
+        valor: formatCurrency(total),
+        pagamento,
+        entrega,
+        endereco,
+    };
+}
 
 async function getCompanyId(): Promise<string> {
     const { data, error } = await supabase
@@ -71,6 +121,8 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         product_id: item.product_id,
         product_name: item.product_name,
         product_sku: item.product_sku ?? null,
+        product_image_url: item.product_image_url ?? null,
+        product_color: item.product_color ?? null,
         quantity: item.quantity,
         unit_price: item.unit_price,
         subtotal: item.subtotal,
@@ -85,6 +137,141 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         await supabase.from('orders').delete().eq('id', order.id);
         throw new Error(itemsError.message);
     }
+
+    // Notifica Telegram imediatamente para pedidos on_delivery
+    if (orderData.payment_method === 'on_delivery') {
+        telegramBotService.notifyOnlineOrder(
+            buildOrderNotificationData({ ...orderData, id: order.id }, input.items)
+        );
+    }
+
+    // ─── GATEWAY INTEGRATION BLOCK ──────────────────────────────────────────
+    if (orderData.payment_gateway === 'mercado_pago' && orderData.payment_method === 'pix') {
+        try {
+            // 1. Busca Token de Produção/Sandbox do Banco
+            const credentials = await paymentIntegrationService.getIntegrationByGateway('mercado_pago');
+            if (!credentials || !credentials.is_active || !credentials.access_token) {
+                throw new Error("Credenciais do Mercado Pago não configuradas no painel.");
+            }
+
+            // 2. Dispara requisição para a API REST do Mercado Pago local
+            const mpResponse = await mercadoPagoProvider.createPixPayment(input, credentials.access_token);
+
+            // 3. Verifica dados PIX gerados
+            const qrCode = mpResponse.point_of_interaction?.transaction_data?.qr_code;
+            const qrCode64 = mpResponse.point_of_interaction?.transaction_data?.qr_code_base64;
+            const ticketUrl = mpResponse.point_of_interaction?.transaction_data?.ticket_url;
+
+            if (qrCode && qrCode64) {
+                // Montar JSONB para a coluna `gateway_pix_data` e colocar o ID dele `gateway_payment_id`
+                const pixData = {
+                    qr_code: qrCode,
+                    qr_code_base64: qrCode64,
+                    ticket_url: ticketUrl
+                };
+
+                const { error: updateOrderError } = await supabase
+                    .from('orders')
+                    .update({
+                        gateway_payment_id: String(mpResponse.id),
+                        gateway_pix_data: pixData,
+                        status: 'awaiting_payment'
+                    })
+                    .eq('id', order.id);
+
+                if (!updateOrderError) {
+                    // Modifica objeto em menória para retorno rápido pro front
+                    (order as any).gateway_pix_data = pixData;
+                    (order as any).status = 'awaiting_payment';
+                }
+            }
+        } catch (mpError: any) {
+            console.error("Falha ao gerar Pix MP:", mpError);
+            // Cancela o pedido e mostra o erro ao usuário
+            await supabase.from('orders').delete().eq('id', order.id);
+            throw new Error(mpError.message || "Erro ao gerar cobrança PIX. Tente novamente.");
+        }
+    } else if (orderData.payment_gateway === 'mercado_pago' && orderData.payment_method === 'credit_card') {
+        try {
+            const credentials = await paymentIntegrationService.getIntegrationByGateway('mercado_pago');
+            if (!credentials || !credentials.is_active || !credentials.access_token) {
+                throw new Error("Credenciais do Mercado Pago não configuradas no painel.");
+            }
+
+            // Verifica se veio um token do Brick (checkout transparente)
+            const cardFormData = (input as any).card_form_data;
+
+            if (cardFormData?.token) {
+                // ── Checkout Transparente (Brick) ──
+                const mpResponse = await mercadoPagoProvider.createCardPayment(input, cardFormData, credentials.access_token);
+
+                const { error: updateErr } = await supabase
+                    .from('orders')
+                    .update({
+                        gateway_payment_id: String(mpResponse.id),
+                        status: mpResponse.status === 'approved' ? 'paid' : 'awaiting_payment',
+                    })
+                    .eq('id', order.id);
+
+                if (!updateErr) {
+                    (order as any).gateway_payment_status = mpResponse.status;
+                    (order as any).status = mpResponse.status === 'approved' ? 'paid' : 'awaiting_payment';
+                }
+
+                // Notifica Telegram se cartão aprovado imediatamente
+                if (mpResponse.status === 'approved') {
+                    telegramBotService.notifyOnlineOrder(
+                        buildOrderNotificationData({ ...orderData, id: order.id }, input.items, {
+                            installments: cardFormData.installments ?? 1,
+                            cardBrand: cardFormData.payment_method_id,
+                        })
+                    );
+                }
+
+                if (mpResponse.status === 'rejected') {
+                    await supabase.from('orders').delete().eq('id', order.id);
+                    const MP_REJECTION_MESSAGES: Record<string, string> = {
+                        cc_rejected_insufficient_amount: 'Saldo insuficiente no cartão. Tente outro cartão.',
+                        cc_rejected_bad_filled_security_code: 'CVV incorreto. Verifique o código de segurança.',
+                        cc_rejected_bad_filled_date: 'Data de validade incorreta. Verifique e tente novamente.',
+                        cc_rejected_bad_filled_other: 'Dados do cartão incorretos. Verifique e tente novamente.',
+                        cc_rejected_max_attempts: 'Muitas tentativas recusadas. Tente novamente mais tarde ou use outro cartão.',
+                        cc_rejected_call_for_authorize: 'Pagamento não autorizado. Entre em contato com seu banco para liberar a compra.',
+                        cc_rejected_duplicated_payment: 'Este pagamento já foi processado anteriormente.',
+                        cc_rejected_invalid_installments: 'Número de parcelas não aceito para este cartão.',
+                        cc_rejected_high_risk: 'Pagamento recusado por segurança. Tente outro cartão ou forma de pagamento.',
+                        cc_rejected_card_disabled: 'Cartão bloqueado ou inativo. Entre em contato com seu banco.',
+                        cc_rejected_other_reason: 'Pagamento recusado pelo banco. Tente outro cartão ou entre em contato com seu banco.',
+                        pending_contingency: 'Pagamento em análise. Aguarde a confirmação.',
+                        pending_review_manual: 'Pagamento em revisão manual. Entraremos em contato em breve.',
+                    };
+                    const friendlyMessage = MP_REJECTION_MESSAGES[mpResponse.status_detail]
+                        ?? `Pagamento recusado. Motivo: ${mpResponse.status_detail}`;
+                    throw new Error(friendlyMessage);
+                }
+            } else {
+                // ── Fallback: Checkout PRO (redirect) ──
+                const mpResponse = await mercadoPagoProvider.createPreference(input, credentials.access_token, order.id);
+                const initPoint = credentials.environment === 'production'
+                    ? mpResponse.init_point
+                    : mpResponse.sandbox_init_point;
+
+                if (initPoint) {
+                    await supabase
+                        .from('orders')
+                        .update({ gateway_payment_id: String(mpResponse.id), gateway_payment_url: initPoint, status: 'awaiting_payment' })
+                        .eq('id', order.id);
+                    (order as any).gateway_payment_url = initPoint;
+                    (order as any).status = 'awaiting_payment';
+                }
+            }
+        } catch (mpError: any) {
+            console.error("Falha no pagamento MP:", mpError);
+            await supabase.from('orders').delete().eq('id', order.id);
+            throw new Error(mpError.message || "Erro de integração com o Mercado Pago.");
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     return order as Order;
 }
@@ -178,8 +365,13 @@ export async function confirmPayment(
 
     if (updateError) throw new Error(updateError.message);
 
-    // Deduz estoque dos itens
+    // Notifica Telegram: pagamento online confirmado (PIX/webhook)
     const items = (order as any).items || [];
+    telegramBotService.notifyOnlineOrder(
+        buildOrderNotificationData({ ...order, status: 'paid' }, items)
+    );
+
+    // Deduz estoque dos itens
     for (const item of items) {
         if (!item.product_id) continue;
         const { error: stockError } = await supabase.rpc('decrement_stock', {

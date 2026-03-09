@@ -378,48 +378,50 @@ export default function BlingPage() {
                 )}
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-slate-200">
-                <button
-                    onClick={() => setActiveTab('config')}
-                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'config'
-                        ? 'border-green-600 text-green-700'
-                        : 'border-transparent text-slate-500 hover:text-slate-700'
-                        }`}
-                >
-                    <Settings className="w-4 h-4" />
-                    Configuração
-                </button>
-                <button
-                    onClick={() => setActiveTab('products')}
-                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'products'
-                        ? 'border-green-600 text-green-700'
-                        : 'border-transparent text-slate-500 hover:text-slate-700'
-                        }`}
-                >
-                    <Package className="w-4 h-4" />
-                    Produtos
-                    {blingProducts.length > 0 && (
-                        <span className="ml-1 bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                            {blingProducts.length}
-                        </span>
-                    )}
-                </button>
-                <button
-                    onClick={() => setActiveTab('mappings')}
-                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'mappings'
-                        ? 'border-green-600 text-green-700'
-                        : 'border-transparent text-slate-500 hover:text-slate-700'
-                        }`}
-                >
-                    <ArrowRight className="w-4 h-4" />
-                    Mapeamentos
-                    {categoryMappings.length > 0 && (
-                        <span className="ml-1 bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                            {categoryMappings.length}
-                        </span>
-                    )}
-                </button>
+            {/* Tabs — Segmented Control */}
+            <div className="overflow-x-auto">
+                <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-max min-w-full">
+                    <button
+                        onClick={() => setActiveTab('config')}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'config'
+                                ? 'bg-white text-green-700 shadow-sm ring-1 ring-slate-200'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                            }`}
+                    >
+                        <Settings className="w-4 h-4" />
+                        Configuração
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('products')}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'products'
+                                ? 'bg-white text-green-700 shadow-sm ring-1 ring-slate-200'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                            }`}
+                    >
+                        <Package className="w-4 h-4" />
+                        Produtos
+                        {blingProducts.length > 0 && (
+                            <span className="ml-0.5 bg-green-100 text-green-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                                {blingProducts.length}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('mappings')}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'mappings'
+                                ? 'bg-white text-green-700 shadow-sm ring-1 ring-slate-200'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                            }`}
+                    >
+                        <ArrowRight className="w-4 h-4" />
+                        Mapeamentos
+                        {categoryMappings.length > 0 && (
+                            <span className="ml-0.5 bg-blue-100 text-blue-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                                {categoryMappings.length}
+                            </span>
+                        )}
+                    </button>
+                </div>
             </div>
 
             {/* ══════════════════════════════════════ */}

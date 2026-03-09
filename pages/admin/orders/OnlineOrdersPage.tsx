@@ -4,16 +4,26 @@
  */
 import { useState, useEffect } from 'react';
 import { getOrders, updateOrderStatus, completeOnDeliveryOrder, cancelOrder } from '@/services/orderService';
+import { supabase } from '@/services/supabase';
+import { companySettingsService } from '@/services/companySettingsService';
+import type { CompanySettings } from '@/types/companySettings';
+import { printDeliveryReceipt } from '@/utils/printDeliveryReceipt';
 import type { OrderWithItems, OrderStatus } from '@/types/order';
 import { formatCurrency } from '@/utils/saleCalculations';
+import { WarrantyTermModal } from '@/components/warranty/WarrantyTermModal';
+import { warrantyDocumentService } from '@/services/warrantyDocumentService';
+import { renderWarrantyBothCopies } from '@/utils/warrantyTagReplacement';
+import { buildGlobalHeader, getHeaderTemplate } from '@/utils/headerBuilder';
+import { customerService } from '@/services/customers';
 import {
     Package, Truck, CheckCircle, XCircle, Clock,
-    RefreshCw, AlertCircle, Loader2, Search
+    RefreshCw, AlertCircle, Loader2, Search, Printer, Shield
 } from 'lucide-react';
 
 const STATUS_LABELS: Record<string, string> = {
     pending: 'Aguardando',
     awaiting_payment: 'Ag. Pagamento',
+    payment_failed: 'Pgto. Não Concluído',
     paid: 'Pago',
     preparing: 'Em Preparo',
     shipped: 'Enviado',
@@ -25,6 +35,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-800',
     awaiting_payment: 'bg-orange-100 text-orange-800',
+    payment_failed: 'bg-red-100 text-red-700',
     paid: 'bg-green-100 text-green-800',
     preparing: 'bg-blue-100 text-blue-800',
     shipped: 'bg-purple-100 text-purple-800',
@@ -51,13 +62,44 @@ export default function OnlineOrdersPage() {
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('');
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+    const [warrantyModalOrder, setWarrantyModalOrder] = useState<OrderWithItems | null>(null);
+    const [warrantyCustomerCpf, setWarrantyCustomerCpf] = useState('');
+
+    useEffect(() => {
+        companySettingsService.get().then(setCompanySettings).catch(console.error);
+    }, []);
 
     const loadOrders = async () => {
         setLoading(true);
         try {
-            const data = await getOrders(
+            let data = await getOrders(
                 filterStatus ? { status: filterStatus as OrderStatus } : undefined
             );
+
+            // Fallback: busca imagem/cor para itens sem esses dados (pedidos antigos)
+            const allItems = data.flatMap(o => o.items);
+            const itemsMissing = allItems.filter(i => !i.product_image_url || !i.product_color);
+            if (itemsMissing.length > 0) {
+                const productIds = [...new Set(itemsMissing.map(i => i.product_id))];
+                const { data: products } = await supabase
+                    .from('products')
+                    .select('id, images, specs')
+                    .in('id', productIds);
+
+                if (products) {
+                    const map = Object.fromEntries(products.map(p => [p.id, p]));
+                    data = data.map(order => ({
+                        ...order,
+                        items: order.items.map(item => ({
+                            ...item,
+                            product_image_url: item.product_image_url || map[item.product_id]?.images?.[0] || undefined,
+                            product_color: item.product_color || map[item.product_id]?.specs?.color || map[item.product_id]?.specs?.Cor || undefined,
+                        }))
+                    }));
+                }
+            }
+
             setOrders(data);
         } catch (err) {
             console.error('[OnlineOrdersPage] Erro ao carregar pedidos:', err);
@@ -68,25 +110,139 @@ export default function OnlineOrdersPage() {
 
     useEffect(() => { loadOrders(); }, [filterStatus]);
 
-    const handleAction = async (
-        orderId: string,
-        action: 'paid' | 'preparing' | 'shipped' | 'complete' | 'cancel'
-    ) => {
-        setActionLoading(orderId + action);
+    const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+        setActionLoading(orderId + newStatus);
         try {
-            if (action === 'complete') {
+            if (newStatus === 'completed') {
                 await completeOnDeliveryOrder(orderId);
-            } else if (action === 'cancel') {
+            } else if (newStatus === 'cancelled') {
                 await cancelOrder(orderId);
             } else {
-                await updateOrderStatus(orderId, action as OrderStatus);
+                await updateOrderStatus(orderId, newStatus);
             }
-            await loadOrders();
+            // Otimista: atualiza localmente
+            setOrders(prev => prev.map(o =>
+                o.id === orderId ? { ...o, status: newStatus } : o
+            ));
         } catch (err: any) {
-            alert(`Erro: ${err.message}`);
+            alert(`Erro ao atualizar status: ${err.message}`);
         } finally {
             setActionLoading(null);
         }
+    };
+
+    const handlePrintReceipt = (order: OrderWithItems) => {
+        if (!companySettings) { alert('Aguarde carregar as configurações da empresa.'); return; }
+        printDeliveryReceipt(order, companySettings);
+    };
+
+    // Detecta item de garantia estendida no pedido
+    const getWarrantyItem = (order: OrderWithItems) =>
+        order.items.find(i => i.product_name?.startsWith('Garantia Estendida'));
+
+    const openWarrantyModal = async (order: OrderWithItems) => {
+        setWarrantyCustomerCpf('');
+        setWarrantyModalOrder(order);
+        // Busca CPF do cliente de forma assíncrona
+        if ((order as any).customer_id) {
+            try {
+                const customer = await customerService.getById((order as any).customer_id);
+                setWarrantyCustomerCpf(customer?.cpf_cnpj || '');
+            } catch { /* sem CPF disponivel */ }
+        }
+    };
+
+    // Monta warrantyTagData com chaves que batem exatamente com as {{tags}} do template
+    const buildWarrantyTagData = (order: OrderWithItems, cpf = warrantyCustomerCpf): Record<string, string> => {
+        const warrantyItem = getWarrantyItem(order);
+        if (!warrantyItem) return {};
+
+        // Extrai produto coberto e prazo do product_name: "Garantia Estendida +12m — Redmi Note"
+        const parts = warrantyItem.product_name.split(' \u2014 ');
+        const nonWarrantyItems = order.items.filter(i => !i.product_name?.startsWith('Garantia'));
+        const mainProduct = nonWarrantyItems.sort((a, b) => (b.subtotal ?? 0) - (a.subtotal ?? 0))[0];
+        const produto = parts[1] || mainProduct?.product_name || '';
+        const prazoMatch = warrantyItem.product_name.match(/(\d+)m/);
+        const meses = prazoMatch ? parseInt(prazoMatch[1]) : 0;
+
+        const dataCompra = new Date(order.created_at);
+
+        let diasGarantiaLoja = 90;
+        const refMatch = produto.match(/\(Ref:\s*(\d+)d\)/);
+        if (refMatch) {
+            diasGarantiaLoja = parseInt(refMatch[1], 10);
+            produto = produto.replace(refMatch[0], '').trim();
+        }
+
+        const dataFimLoja = new Date(dataCompra);
+        dataFimLoja.setDate(dataFimLoja.getDate() + diasGarantiaLoja);
+
+        const dataInicio = new Date(dataFimLoja);
+        dataInicio.setDate(dataInicio.getDate() + 1);
+
+        const dataFim = new Date(dataInicio);
+        dataFim.setMonth(dataFim.getMonth() + meses);
+
+        const fmtDate = (d: Date) => d.toLocaleDateString('pt-BR');
+
+        // Cabeçalho A4 ({{cabecalho_a4}})
+        let cabecalhoHtml = '';
+        if (companySettings) {
+            try {
+                const rawCabecalho = getHeaderTemplate('default_a4_header', companySettings);
+                cabecalhoHtml = buildGlobalHeader(rawCabecalho, companySettings, '');
+            } catch { /* sem template de cabeçalho */ }
+        }
+
+        return {
+            // Cabeçalho
+            cabecalho_a4: cabecalhoHtml,
+            // Empresa
+            nome_loja: companySettings?.company_name || '',
+            endereco: companySettings?.address || '',
+            telefone: companySettings?.phone || '',
+            email: companySettings?.email || '',
+            cnpj: companySettings?.cnpj || '',
+            logo: (companySettings as any)?.logo_url || '',
+            // Cliente
+            nome_cliente: order.customer_name || '',
+            cpf_cliente: cpf || '',
+            telefone_cliente: order.customer_phone || '',
+            email_cliente: '',
+            // Venda
+            numero_venda: `#${order.id.slice(0, 8).toUpperCase()}`,
+            data_compra: fmtDate(dataCompra),
+            // Produto coberto
+            produto,
+            modelo: produto,
+            marca: '',
+            cor: '',
+            ram: '',
+            memoria: '',
+            imei1: '',
+            imei2: '',
+            // Garantia (inclui tags padrão E tags custom do template)
+            dias_garantia: String(meses * 30),
+            meses_garantia_estendida: String(meses),
+            tipo_garantia: 'Garantia Estendida',
+            dias_garantia_loja: `${diasGarantiaLoja} dias`,   // Nova tag disponibilizada
+            valor_garantia_estendida: formatCurrency(warrantyItem.subtotal),
+            data_inicio_estendida: fmtDate(dataInicio),
+            data_fim_estendida: fmtDate(dataFim),
+            // Declaração
+            declaracao_recebimento: 'Declaro ter recebido este certificado de garantia estendida.',
+        };
+    };
+
+    const handleSaveWarrantyDoc = async (orderId: string) => {
+        const order = orders.find(o => o.id === orderId);
+        if (!order || !companySettings?.extended_warranty_template) return;
+        const tagData = buildWarrantyTagData(order);
+        const { copy1 } = renderWarrantyBothCopies(companySettings.extended_warranty_template, tagData);
+        await warrantyDocumentService.create({
+            order_id: orderId,
+            warranty_content: copy1,
+        });
     };
 
     const filtered = orders.filter(o => {
@@ -182,7 +338,7 @@ export default function OnlineOrdersPage() {
                                 {/* Total + itens */}
                                 <div className="text-right flex-shrink-0">
                                     <p className="font-bold text-blue-600 text-lg">
-                                        {formatCurrency(order.total / 100)}
+                                        {formatCurrency(order.total)}
                                     </p>
                                     <p className="text-xs text-gray-500">
                                         {order.items.length} {order.items.length === 1 ? 'item' : 'itens'}
@@ -190,71 +346,89 @@ export default function OnlineOrdersPage() {
                                 </div>
                             </div>
 
-                            {/* Itens resumidos */}
+                            {/* Itens com foto, cor e SKU */}
                             <div className="mt-3 pt-3 border-t border-gray-100">
-                                <p className="text-xs text-gray-500 mb-1">Produtos:</p>
-                                <div className="flex flex-wrap gap-1">
+                                <p className="text-xs text-gray-500 mb-2">Produtos:</p>
+                                <div className="space-y-2">
                                     {order.items.map(item => (
-                                        <span key={item.id} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-lg">
-                                            {item.quantity}× {item.product_name}
-                                        </span>
+                                        <div key={item.id} className="flex items-center gap-2">
+                                            {item.product_image_url ? (
+                                                <img
+                                                    src={item.product_image_url}
+                                                    alt={item.product_name}
+                                                    className="w-10 h-10 rounded-lg object-cover border border-gray-100 flex-shrink-0"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                                    <Package className="w-5 h-5 text-gray-400" />
+                                                </div>
+                                            )}
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-medium text-gray-800 truncate">
+                                                    {item.quantity}× {item.product_name}
+                                                </p>
+                                                <div className="flex gap-2 flex-wrap">
+                                                    {item.product_color && (
+                                                        <span className="text-xs text-gray-500">🎨 {item.product_color}</span>
+                                                    )}
+                                                    {item.product_sku && (
+                                                        <span className="text-xs text-gray-400 font-mono">{item.product_sku}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <span className="ml-auto text-xs font-semibold text-gray-700 flex-shrink-0">
+                                                {formatCurrency(item.subtotal)}
+                                            </span>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Ações por status */}
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                {order.status === 'pending' && (
-                                    <>
-                                        <ActionButton
-                                            label="Confirmar como pago"
-                                            icon={<CheckCircle className="w-4 h-4" />}
-                                            color="green"
-                                            loading={actionLoading === order.id + 'paid'}
-                                            onClick={() => handleAction(order.id, 'paid')}
-                                        />
-                                        <ActionButton
-                                            label="Cancelar"
-                                            icon={<XCircle className="w-4 h-4" />}
-                                            color="red"
-                                            loading={actionLoading === order.id + 'cancel'}
-                                            onClick={() => handleAction(order.id, 'cancel')}
-                                        />
-                                    </>
+                            {/* Status dinâmico + Comprovante */}
+                            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-gray-500 font-medium">Situação:</label>
+                                    <select
+                                        value={order.status}
+                                        disabled={actionLoading?.startsWith(order.id)}
+                                        onChange={e => handleStatusChange(order.id, e.target.value as OrderStatus)}
+                                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50"
+                                    >
+                                        <option value="pending">⏳ Aguardando</option>
+                                        <option value="awaiting_payment">💳 Ag. Pagamento</option>
+                                        <option value="payment_failed">🚫 Pgto. Não Concluído</option>
+                                        <option value="paid">✅ Aceito / Pago</option>
+                                        <option value="preparing">📦 Em Separação</option>
+                                        <option value="shipped">🚚 Enviado</option>
+                                        <option value="delivered">🏠 Entregue</option>
+                                        <option value="completed">🎉 Concluído</option>
+                                        <option value="cancelled">❌ Cancelado</option>
+                                    </select>
+                                    {actionLoading?.startsWith(order.id) && (
+                                        <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                                    )}
+                                </div>
+
+                                {/* Botão imprimir comprovante */}
+                                <button
+                                    onClick={() => handlePrintReceipt(order)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    <Printer className="w-3.5 h-3.5" />
+                                    Comprovante
+                                </button>
+
+                                {/* Botão garantia — só aparece quando pedido tem item de garantia */}
+                                {getWarrantyItem(order) && (
+                                    <button
+                                        onClick={() => openWarrantyModal(order)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                                    >
+                                        <Shield className="w-3.5 h-3.5" />
+                                        Garantia
+                                    </button>
                                 )}
-                                {order.status === 'paid' && (
-                                    <ActionButton
-                                        label="Iniciar preparo"
-                                        icon={<Package className="w-4 h-4" />}
-                                        color="blue"
-                                        loading={actionLoading === order.id + 'preparing'}
-                                        onClick={() => handleAction(order.id, 'preparing')}
-                                    />
-                                )}
-                                {order.status === 'preparing' && (
-                                    <ActionButton
-                                        label="Marcar como enviado"
-                                        icon={<Truck className="w-4 h-4" />}
-                                        color="purple"
-                                        loading={actionLoading === order.id + 'shipped'}
-                                        onClick={() => handleAction(order.id, 'shipped')}
-                                    />
-                                )}
-                                {(order.status === 'shipped' || order.status === 'delivered') && order.payment_method === 'on_delivery' && (
-                                    <ActionButton
-                                        label="Finalizar venda (pago na entrega)"
-                                        icon={<CheckCircle className="w-4 h-4" />}
-                                        color="green"
-                                        loading={actionLoading === order.id + 'complete'}
-                                        onClick={() => handleAction(order.id, 'complete')}
-                                    />
-                                )}
-                                {order.status === 'pending' && order.payment_method === 'on_delivery' && (
-                                    <span className="text-xs text-orange-600 flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        Aguardando entrega
-                                    </span>
-                                )}
+
                                 {/* Link de rastreamento */}
                                 <a
                                     href={`/pedido/${order.id}`}
@@ -269,6 +443,21 @@ export default function OnlineOrdersPage() {
                         </div>
                     ))}
                 </div>
+            )}
+
+            {/* WarrantyTermModal: abre ao clicar em 🛡️ Garantia */}
+            {warrantyModalOrder && companySettings?.extended_warranty_template && (
+                <WarrantyTermModal
+                    isOpen={!!warrantyModalOrder}
+                    onClose={() => setWarrantyModalOrder(null)}
+                    warrantyContent={renderWarrantyBothCopies(companySettings.extended_warranty_template!, buildWarrantyTagData(warrantyModalOrder)).copy1}
+                    warrantyTemplate={companySettings.extended_warranty_template}
+                    warrantyTagData={buildWarrantyTagData(warrantyModalOrder)}
+                    onGenerate={async () => {
+                        await handleSaveWarrantyDoc(warrantyModalOrder.id);
+                        setWarrantyModalOrder(null);
+                    }}
+                />
             )}
         </div>
     );

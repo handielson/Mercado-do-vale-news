@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Store, Loader2, Truck, Check, Map } from 'lucide-react';
+import { MapPin, Store, Loader2, Truck, Check, Map, ChevronDown } from 'lucide-react';
 import type { Address } from '@/services/addressLookup';
 import { lookupCEP, formatCEP } from '@/services/addressLookup';
 import { shippingService } from '@/services/shippingService';
@@ -27,6 +27,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
     const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
     const [isLoadingShipping, setIsLoadingShipping] = useState(false);
     const [storeAddress, setStoreAddress] = useState('');
+    const [addressOpen, setAddressOpen] = useState(false);
 
     useEffect(() => {
         companySettingsService.get().then(settings => {
@@ -311,23 +312,34 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
                 </div>
             )}
 
-            {/* Pickup Info */}
+            {/* Pickup Info — recolhível */}
             {selected.type === 'pickup' && storeAddress && (
-                <div className="mt-4 p-4 rounded-lg bg-blue-50 border border-blue-200 flex items-start gap-3">
-                    <Store className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <h4 className="text-sm font-semibold text-blue-900 mb-1">Nosso Endereço</h4>
-                        <p className="text-sm text-blue-800 mb-3 leading-relaxed">{storeAddress}</p>
-                        <a
-                            href={`https://maps.google.com/?q=${encodeURIComponent(storeAddress)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg transition-colors shadow-sm active:scale-95"
-                        >
-                            <Map className="w-4 h-4" />
-                            Abrir no Google Maps
-                        </a>
-                    </div>
+                <div className="mt-3 rounded-xl border border-slate-200 overflow-hidden">
+                    <button
+                        onClick={() => setAddressOpen(o => !o)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors"
+                    >
+                        <span className="flex items-center gap-2 text-sm font-medium text-blue-800">
+                            <Store className="w-4 h-4 text-blue-600" />
+                            Ver endereço da loja
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-blue-500 transition-transform duration-200 ${addressOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {addressOpen && (
+                        <div className="px-4 py-3 bg-white space-y-3">
+                            <p className="text-sm text-slate-700 leading-relaxed">{storeAddress}</p>
+                            <a
+                                href={`https://maps.google.com/?q=${encodeURIComponent(storeAddress)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg transition-colors shadow-sm"
+                            >
+                                <Map className="w-4 h-4" />
+                                Abrir no Google Maps
+                            </a>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

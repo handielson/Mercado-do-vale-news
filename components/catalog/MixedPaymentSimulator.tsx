@@ -59,8 +59,10 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
         if (cardCents <= 0) return [];
 
         const creditFees = paymentFees
-            .filter(f => f.payment_method === 'credit' && f.installments <= 12)
-            .sort((a, b) => a.installments - b.installments);
+            .filter(f => f.payment_method === 'credit' && f.installments <= 12 && f.channel === 'presencial')
+            .sort((a, b) => a.installments - b.installments)
+            // Dedup: keep only first entry per installment count
+            .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments));
 
         return creditFees.map(fee => {
             const feeAmount = Math.round(cardCents * (fee.applied_fee / 100));
@@ -100,12 +102,6 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
             <div className="flex items-center gap-2">
                 <span className="text-lg">💡</span>
                 <h4 className="font-semibold text-slate-800 text-sm">Simular Pagamento Combinado</h4>
-            </div>
-
-            {/* Total */}
-            <div className="flex justify-between items-center text-sm bg-white rounded-lg p-3 border border-slate-200">
-                <span className="text-slate-600">Total do pedido:</span>
-                <span className="font-bold text-slate-900">{formatCents(totalPrice)}</span>
             </div>
 
             {/* Botão Rápido: Pagar tudo no PIX */}

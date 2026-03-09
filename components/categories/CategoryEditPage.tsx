@@ -30,6 +30,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
     const [isSaving, setIsSaving] = useState(false);
     const [name, setName] = useState('');
     const [warrantyDays, setWarrantyDays] = useState(90);
+    const [extendedWarrantyEnabled, setExtendedWarrantyEnabled] = useState(false);
     const [config, setConfig] = useState<CategoryConfig>({
         imei1: 'optional',
         imei2: 'optional',
@@ -58,6 +59,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
             if (category) {
                 setName(category.name);
                 setWarrantyDays(category.warranty_days || 90);
+                setExtendedWarrantyEnabled(category.extended_warranty_enabled ?? false);
 
                 console.log('[CategoryEditPage] Loading category:', category.name);
                 console.log('[CategoryEditPage] Config:', category.config);
@@ -130,7 +132,8 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
             const categoryData: CategoryInput = {
                 name: name.trim(),
                 config,
-                warranty_days: warrantyDays
+                warranty_days: warrantyDays,
+                extended_warranty_enabled: extendedWarrantyEnabled
             };
 
             if (categoryId) {
@@ -196,6 +199,35 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                         onWarrantyDaysChange={setWarrantyDays}
                         isEditing={!!categoryId}
                     />
+
+                    {/* Toggle: Garantia Estendida */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                        <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                            🛡️ Garantia Estendida
+                        </h3>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <div className="relative">
+                                <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={extendedWarrantyEnabled}
+                                    onChange={e => setExtendedWarrantyEnabled(e.target.checked)}
+                                />
+                                <div className={`w-11 h-6 rounded-full transition-colors ${extendedWarrantyEnabled ? 'bg-blue-600' : 'bg-slate-200'
+                                    }`} />
+                                <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${extendedWarrantyEnabled ? 'translate-x-5' : 'translate-x-0'
+                                    }`} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-800">
+                                    Oferecer garantia estendida para produtos desta categoria
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                    Quando ativo, o cliente verá as opções de garantia estendida ao comprar
+                                </p>
+                            </div>
+                        </label>
+                    </div>
 
                     {/* Section 2: Unique Fields */}
                     <UniqueFieldsSection

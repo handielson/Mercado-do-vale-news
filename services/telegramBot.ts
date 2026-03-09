@@ -21,6 +21,17 @@ export interface CustomerNotificationData {
     tipo_cliente: string;
 }
 
+export interface OnlineOrderNotificationData {
+    id_pedido: string;    // primeiros 8 chars do UUID
+    cliente: string;
+    telefone: string;
+    itens: string;        // lista formatada de produtos
+    valor: string;        // total formatado em R$
+    pagamento: string;    // ex: 'Pagar na entrega'
+    entrega: string;      // ex: 'Retirada na loja' ou 'Entrega em casa'
+    endereco: string;     // endereço completo ou '-'
+}
+
 export const telegramBotService = {
 
     // Função para processar o template e enviar a requisição de forma assíncrona ("fire and forget").
@@ -38,6 +49,14 @@ export const telegramBotService = {
         setTimeout(() => {
             this._processAndSend('new_customer_template', 'new_customer', data).catch(err => {
                 console.error('[Telegram Bot] Falha silenciosa no envio do alerta de novo cliente:', err);
+            });
+        }, 50);
+    },
+
+    notifyOnlineOrder(data: OnlineOrderNotificationData) {
+        setTimeout(() => {
+            this._processAndSend('online_order_template', 'online_order', data).catch(err => {
+                console.error('[Telegram Bot] Falha silenciosa no envio do alerta de pedido online:', err);
             });
         }, 50);
     },

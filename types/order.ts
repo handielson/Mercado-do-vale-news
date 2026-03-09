@@ -9,6 +9,7 @@
 export type OrderStatus =
     | 'pending'           // Aguardando pagamento/confirmação
     | 'awaiting_payment'  // Pagamento iniciado no gateway (PIX gerado, etc.)
+    | 'payment_failed'    // Pagamento não concluído / recusado
     | 'paid'              // Pagamento confirmado pelo gateway (webhook)
     | 'preparing'         // Em preparação / separação
     | 'shipped'           // Enviado / saiu para entrega
@@ -24,7 +25,7 @@ export type OrderDeliveryType = 'pickup' | 'delivery';
 
 // ─── Gateway ─────────────────────────────────────────────────────────────────
 
-export type PaymentGateway = 'mercado_pago' | 'pagseguro' | 'stripe' | 'pagleve';
+export type PaymentGateway = 'mercado_pago' | 'pagseguro' | 'stripe' | 'pagaleve';
 
 // ─── Endereço de Entrega ─────────────────────────────────────────────────────
 
@@ -46,6 +47,8 @@ export interface OrderItem {
     product_id: string;
     product_name: string;
     product_sku?: string;
+    product_image_url?: string;  // URL da primeira imagem do produto
+    product_color?: string;      // Cor/variante do produto
     quantity: number;
     unit_price: number;  // em centavos
     subtotal: number;    // em centavos
@@ -56,6 +59,8 @@ export interface OrderItemInput {
     product_id: string;
     product_name: string;
     product_sku?: string;
+    product_image_url?: string;  // URL da primeira imagem
+    product_color?: string;      // Cor/variante
     quantity: number;
     unit_price: number;  // em centavos
     subtotal: number;    // em centavos
@@ -82,6 +87,11 @@ export interface Order {
     payment_gateway?: PaymentGateway;
     gateway_payment_id?: string;      // ID da transação no gateway
     gateway_payment_url?: string;     // URL de pagamento (Mercado Pago, etc.)
+    gateway_pix_data?: {              // Dados para rendenizar o PIX
+        qr_code: string;
+        qr_code_base64: string;
+        ticket_url?: string;
+    };
 
     // Entrega
     delivery_type: OrderDeliveryType;

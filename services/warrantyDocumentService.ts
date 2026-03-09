@@ -35,9 +35,10 @@ export const warrantyDocumentService = {
             .from('warranty_documents')
             .insert({
                 company_id: companyId,
-                sale_id: input.sale_id,
-                customer_id: input.customer_id,
-                delivery_type: input.delivery_type,
+                sale_id: input.sale_id ?? null,
+                order_id: input.order_id ?? null,
+                customer_id: input.customer_id ?? null,
+                delivery_type: input.delivery_type ?? null,
                 customer_signature: input.customer_signature,
                 warranty_content: input.warranty_content
             })
@@ -50,6 +51,27 @@ export const warrantyDocumentService = {
         }
 
         return data as WarrantyDocument;
+    },
+
+    /**
+     * Get warranty document by order ID (pedidos online)
+     */
+    async getByOrderId(orderId: string): Promise<WarrantyDocument | null> {
+        const companyId = await getCompanyId();
+
+        const { data, error } = await supabase
+            .from('warranty_documents')
+            .select('*')
+            .eq('company_id', companyId)
+            .eq('order_id', orderId)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching warranty document by order_id:', error);
+            throw new Error('Erro ao buscar documento de garantia');
+        }
+
+        return data as WarrantyDocument | null;
     },
 
     /**
@@ -163,3 +185,6 @@ export const warrantyDocumentService = {
         }
     }
 };
+
+// Re-export getByOrderId for convenience
+export const { getByOrderId: getWarrantyByOrderId } = warrantyDocumentService;

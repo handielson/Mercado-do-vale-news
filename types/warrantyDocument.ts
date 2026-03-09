@@ -11,11 +11,12 @@ export type DeliveryTypeWarranty = 'store_pickup' | 'delivery';
 export interface WarrantyDocument {
     id: string;
     company_id: string;
-    sale_id: string;
-    customer_id: string;
-    delivery_type: DeliveryTypeWarranty;
-    customer_signature?: string; // Base64 encoded image
-    warranty_content: string; // Generated content with tags replaced
+    sale_id?: string;          // PDV sale (optional for online orders)
+    order_id?: string;         // Online order (optional for PDV sales)
+    customer_id?: string;
+    delivery_type?: DeliveryTypeWarranty;
+    customer_signature?: string;
+    warranty_content: string;
     created_at: string;
     updated_at: string;
 }
@@ -24,9 +25,10 @@ export interface WarrantyDocument {
  * Input for creating warranty document
  */
 export interface WarrantyDocumentInput {
-    sale_id: string;
-    customer_id: string;
-    delivery_type: DeliveryTypeWarranty;
+    sale_id?: string;          // PDV: sale ID
+    order_id?: string;         // Online: order ID
+    customer_id?: string;
+    delivery_type?: DeliveryTypeWarranty;
     customer_signature?: string;
     warranty_content: string;
 }

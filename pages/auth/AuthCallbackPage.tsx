@@ -51,7 +51,9 @@ export const AuthCallbackPage: React.FC = () => {
             } else {
                 console.log('[AuthCallback] Customer complete, redirecting to catalog');
                 setStatus('Login realizado! Redirecionando...');
-                setTimeout(() => navigate('/'), 1000);
+                const nextPath = sessionStorage.getItem('auth_next') || '/';
+                sessionStorage.removeItem('auth_next');
+                setTimeout(() => navigate(nextPath), 1000);
             }
         };
 

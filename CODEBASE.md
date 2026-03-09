@@ -318,9 +318,11 @@ O sistema permite configurar prazos (ex: 3, 6, 12 meses) com acréscimo percentu
 
 **Componentes Principais:**
 1. **`QuoteModal` (Catálogo):** O cliente seleciona a garantia; o price-tag do botão Checkout e as parcelas são recalculadas on the fly.
-2. **`multiProductQuoteGenerator` (WhatsApp API):** Se `item.warranty` existir, uma linha é desenhada explicitando o acréscimo "Garantia Estendida" daquele item na mensagem de orçamento.
-3. **`CartItemsSection` (PDV):** Renderiza o carrinho atual com a possibilidade de trocar/remover garantias item a item.
-4. **`ReceiptPreview` (PDV Recibo):** Extrato consolidado que exibe claramente a escolha de garantia do cliente alinhada com o parcelamento de crédito escolhido pelo Vendedor.
+2. **`CartPage` e Carrinho:** Intercepta a finalização do produto mais caro aplicável e vai ao banco de dados checar a garantia nativa correta daquele produto (via Modelo, Categoria ou Customizada). Embutir a tag `(Ref: XXd)` na compra para as datas baterem universalmente.
+3. **`multiProductQuoteGenerator` (WhatsApp API):** Se `item.warranty` existir, uma linha é desenhada explicitando o acréscimo "Garantia Estendida" daquele item na mensagem de orçamento.
+4. **`CartItemsSection` (PDV):** Renderiza o carrinho atual com a possibilidade de trocar/remover garantias item a item.
+5. **`ReceiptPreview` (PDV Recibo):** Extrato consolidado que exibe claramente a escolha de garantia do cliente alinhada com o parcelamento de crédito escolhido pelo Vendedor.
+6. **`OrderTrackingPage` e `OnlineOrdersPage`:** Lê a tag oculta gerada no fechamento do carrinho e renderiza os dias exatos de Garantia Padrão (Legal) que o lojista ofereceu. Em seguida, a Garantia Estendida só se inicia exatamente no formato `D+1` da data final da garantia padrão, somando a extensão corretamente para não superpor direitos.
 
 ---
 

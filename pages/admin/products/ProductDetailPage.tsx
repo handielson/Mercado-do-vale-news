@@ -175,28 +175,33 @@ export const ProductDetailPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="border-b border-slate-200">
-                <nav className="flex gap-4">
+            {/* Tabs — Segmented Control */}
+            <div className="overflow-x-auto">
+                <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-max">
                     <button
                         onClick={() => setActiveTab('product')}
-                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'product'
-                                ? 'border-blue-600 text-blue-600'
-                                : 'border-transparent text-slate-600 hover:text-slate-900'
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'product'
+                                ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
                             }`}
                     >
                         Editar Produto
                     </button>
                     <button
                         onClick={() => setActiveTab('inventory')}
-                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'inventory'
-                                ? 'border-blue-600 text-blue-600'
-                                : 'border-transparent text-slate-600 hover:text-slate-900'
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'inventory'
+                                ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200'
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
                             }`}
                     >
-                        Gerenciar Estoque ({stats.total})
+                        Gerenciar Estoque
+                        {stats.total > 0 && (
+                            <span className="ml-0.5 bg-blue-100 text-blue-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                                {stats.total}
+                            </span>
+                        )}
                     </button>
-                </nav>
+                </div>
             </div>
 
             {/* Tab Content */}
