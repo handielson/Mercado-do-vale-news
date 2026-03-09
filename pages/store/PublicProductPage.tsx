@@ -153,6 +153,21 @@ export const PublicProductPage: React.FC = () => {
         }
     };
 
+    const handleVariantChange = (sib: CatalogProduct) => {
+        // Altera os dados instantaneamente sem reload de página
+        setProduct(sib);
+        if (sib.images && sib.images.length > 0) {
+            setSelectedImage(sib.images[0]);
+        }
+
+        // Atualiza a URL na barra do navegador (sem triggerar novo fetch)
+        const newUrl = `/produto/${sib.slug || sib.id}`;
+        window.history.pushState(null, '', newUrl);
+
+        // Scroll suave para o topo
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     const handleCalculateShipping = () => {
         const cleanCep = cep.replace(/\D/g, '');
         if (cleanCep.length < 8) return toast.error("CEP inválido");
@@ -286,7 +301,7 @@ export const PublicProductPage: React.FC = () => {
                                         return (
                                             <button
                                                 key={sib.id}
-                                                onClick={() => navigate(`/produto/${sib.slug || sib.id}`)}
+                                                onClick={() => handleVariantChange(sib)}
                                                 className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isCurrent
                                                     ? 'border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-600'
                                                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
