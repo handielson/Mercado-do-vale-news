@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
+import { toast } from 'sonner';
 import { ProductInput } from '../../../types/product';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 
