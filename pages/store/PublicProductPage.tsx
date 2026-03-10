@@ -134,6 +134,7 @@ export const PublicProductPage: React.FC = () => {
             icon: '🛒',
             duration: 3000
         });
+        navigate('/carrinho');
     };
 
     const handleShare = async () => {
