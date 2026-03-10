@@ -141,9 +141,9 @@ export const ProductDetailPage: React.FC = () => {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="p-6 max-w-7xl mx-auto">
             {/* Header */}
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 mb-8">
                 <button
                     onClick={handleCancel}
                     className="p-2 hover:bg-slate-100 rounded-lg transition-colors mt-1"
@@ -151,23 +151,26 @@ export const ProductDetailPage: React.FC = () => {
                     <ArrowLeft className="w-5 h-5 text-slate-600" />
                 </button>
                 <div className="flex-1">
-                    <h1 className="text-3xl font-bold text-slate-900">{product.name}</h1>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{product.name}</h1>
                     <p className="text-sm text-slate-500 mt-1">SKU: {product.sku}</p>
 
                     {/* Stats */}
-                    <div className="flex items-center gap-4 mt-4">
+                    <div className="flex flex-wrap items-center gap-4 mt-4 bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm w-max">
                         <div className="flex items-center gap-2">
                             <Package className="w-4 h-4 text-slate-400" />
                             <span className="text-sm text-slate-600">
                                 Total: <span className="font-semibold text-slate-900">{stats.total}</span>
                             </span>
                         </div>
+                        <div className="w-px h-4 bg-slate-200 hidden sm:block"></div>
                         <div className="text-sm text-slate-600">
                             Disponível: <span className="font-semibold text-green-600">{stats.available}</span>
                         </div>
+                        <div className="w-px h-4 bg-slate-200 hidden sm:block"></div>
                         <div className="text-sm text-slate-600">
                             Reservado: <span className="font-semibold text-yellow-600">{stats.reserved}</span>
                         </div>
+                        <div className="w-px h-4 bg-slate-200 hidden sm:block"></div>
                         <div className="text-sm text-slate-600">
                             Vendido: <span className="font-semibold text-blue-600">{stats.sold}</span>
                         </div>
@@ -175,78 +178,91 @@ export const ProductDetailPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Tabs — Segmented Control */}
-            <div className="overflow-x-auto">
-                <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-max">
-                    <button
-                        onClick={() => setActiveTab('product')}
-                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'product'
-                                ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200'
-                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
-                            }`}
-                    >
-                        Editar Produto
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('inventory')}
-                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'inventory'
-                                ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200'
-                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
-                            }`}
-                    >
-                        Gerenciar Estoque
-                        {stats.total > 0 && (
-                            <span className="ml-0.5 bg-blue-100 text-blue-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
-                                {stats.total}
-                            </span>
-                        )}
-                    </button>
+            <div className="flex flex-col md:flex-row gap-8 items-start">
+                {/* Menu Lateral */}
+                <div className="w-full md:w-64 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm sticky top-24">
+                    <nav className="flex flex-col gap-1.5">
+                        <button
+                            onClick={() => setActiveTab('product')}
+                            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'product'
+                                ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                                }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <Package className={`w-5 h-5 ${activeTab === 'product' ? 'text-blue-600' : 'text-slate-400'}`} />
+                                Editar Produto
+                            </div>
+                            {activeTab === 'product' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                        </button>
+
+                        <button
+                            onClick={() => setActiveTab('inventory')}
+                            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'inventory'
+                                ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                                }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <Package className={`w-5 h-5 ${activeTab === 'inventory' ? 'text-blue-600' : 'text-slate-400'}`} />
+                                Gerenciar Estoque
+                                {stats.total > 0 && (
+                                    <span className="ml-1.5 bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                                        {stats.total}
+                                    </span>
+                                )}
+                            </div>
+                            {activeTab === 'inventory' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                        </button>
+                    </nav>
                 </div>
-            </div>
 
-            {/* Tab Content */}
-            {activeTab === 'product' && (
-                <ProductForm
-                    initialData={product}
-                    onSubmit={handleProductSubmit}
-                    onCancel={handleCancel}
-                    isLoading={isSaving}
-                />
-            )}
-
-            {activeTab === 'inventory' && (
-                <div className="space-y-4">
-                    {/* Add Unit Button */}
-                    {!showUnitForm && (
-                        <div className="flex justify-end">
-                            <button
-                                onClick={() => setShowUnitForm(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Adicionar Unidade
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Unit Form */}
-                    {showUnitForm && (
-                        <UnitForm
-                            productId={product.id}
-                            onSubmit={handleUnitSubmit}
-                            onCancel={() => setShowUnitForm(false)}
+                {/* Tab Content */}
+                <div className="flex-1 min-w-0 space-y-6">
+                    {activeTab === 'product' && (
+                        <ProductForm
+                            initialData={product}
+                            onSubmit={handleProductSubmit}
+                            onCancel={handleCancel}
                             isLoading={isSaving}
                         />
                     )}
 
-                    {/* Units List */}
-                    <UnitList
-                        units={units}
-                        isLoading={isLoadingUnits}
-                        onDelete={handleDeleteUnit}
-                    />
+                    {activeTab === 'inventory' && (
+                        <div className="space-y-4">
+                            {/* Add Unit Button */}
+                            {!showUnitForm && (
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={() => setShowUnitForm(true)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Adicionar Unidade
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Unit Form */}
+                            {showUnitForm && (
+                                <UnitForm
+                                    productId={product.id}
+                                    onSubmit={handleUnitSubmit}
+                                    onCancel={() => setShowUnitForm(false)}
+                                    isLoading={isSaving}
+                                />
+                            )}
+
+                            {/* Units List */}
+                            <UnitList
+                                units={units}
+                                isLoading={isLoadingUnits}
+                                onDelete={handleDeleteUnit}
+                            />
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
         </div>
     );
 };

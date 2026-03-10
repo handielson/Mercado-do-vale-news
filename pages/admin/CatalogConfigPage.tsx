@@ -74,9 +74,9 @@ export default function CatalogConfigPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 pb-12">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div className="bg-white border-b border-gray-200 sticky top-0 z-10 mb-8 shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         <div className="flex items-center gap-4">
@@ -118,113 +118,121 @@ export default function CatalogConfigPage() {
                             )}
                         </button>
                     </div>
+                </div>
+            </div>
 
-                    {/* Tabs — Segmented Control */}
-                    <div className="mt-3 overflow-x-auto">
-                        <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-max min-w-full">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex flex-col md:flex-row gap-8 items-start">
+                    {/* Menu Lateral */}
+                    <div className="w-full md:w-64 flex-shrink-0 bg-white border border-gray-200 rounded-2xl p-3 shadow-sm sticky top-24">
+                        <nav className="flex flex-col gap-1.5">
                             {tabs.map(tab => {
                                 const Icon = tab.icon;
+                                const isActive = activeTab === tab.id;
                                 return (
                                     <button
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id)}
-                                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${activeTab === tab.id
-                                                ? 'bg-white text-blue-700 shadow-sm ring-1 ring-slate-200'
-                                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                                        className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
+                                                ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
+                                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                                             }`}
                                     >
-                                        <Icon className="w-4 h-4" />
-                                        {tab.label}
+                                        <div className="flex items-center gap-3">
+                                            <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                                            {tab.label}
+                                        </div>
+                                        {isActive && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                                     </button>
                                 );
                             })}
-                        </div>
+                        </nav>
                     </div>
-                </div>
-            </div>
 
-            {/* Content */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-                {/* 🎯 ATALHO: Configuração de Badges */}
-                <div className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-2 border-purple-300 rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="p-2 bg-purple-600 rounded-lg">
-                                    <Settings className="w-6 h-6 text-white" />
+                    {/* Conteúdo Principal */}
+                    <div className="flex-1 min-w-0 space-y-6">
+                        {/* 🎯 ATALHO: Configuração de Badges */}
+                        <div className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-2 border-purple-300 rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="p-2 bg-purple-600 rounded-lg">
+                                            <Settings className="w-6 h-6 text-white" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-bold text-purple-900">Configuração de Badges</h3>
+                                            <p className="text-sm text-purple-600">Personalize os badges que aparecem nos produtos</p>
+                                        </div>
+                                    </div>
+                                    <p className="text-purple-700 mb-4 leading-relaxed">
+                                        Configure quais badges (📡 NFC, 📶 5G, 📱 Dual SIM, etc.) aparecem nos cards de produtos para cada categoria.
+                                        Adicione, remova ou personalize cores e ícones facilmente.
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                            📡 NFC
+                                        </span>
+                                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                            📶 5G
+                                        </span>
+                                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                            📱 Dual SIM
+                                        </span>
+                                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                            ⚡ Carregamento Sem Fio
+                                        </span>
+                                        <span className="text-purple-500">+ mais...</span>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-purple-900">Configuração de Badges</h3>
-                                    <p className="text-sm text-purple-600">Personalize os badges que aparecem nos produtos</p>
+                                <div className="flex flex-col gap-2">
+                                    <button
+                                        onClick={() => {
+                                            const filePath = 'config/category-badges.ts';
+                                            const absolutePath = 'c:\\Users\\Nitro\\SynologyDrive\\SynologyDrive\\Programas\\Mercado do Vale New\\mercado-do-vale\\config\\category-badges.ts';
+
+                                            // Tentar abrir no VS Code
+                                            window.open(`vscode://file/${absolutePath}`, '_blank');
+
+                                            // Também copiar para clipboard como fallback
+                                            navigator.clipboard.writeText(filePath).then(() => {
+                                                alert('✅ Arquivo aberto no VS Code!\n\n📋 Caminho também copiado:\n' + filePath);
+                                            }).catch(() => {
+                                                alert('📂 Abra o arquivo:\n' + filePath);
+                                            });
+                                        }}
+                                        className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all font-semibold shadow-md hover:shadow-lg flex items-center gap-2 whitespace-nowrap"
+                                    >
+                                        <Settings className="w-5 h-5" />
+                                        Editar Badges
+                                    </button>
+                                    <p className="text-xs text-purple-600 text-center">
+                                        config/category-badges.ts
+                                    </p>
                                 </div>
                             </div>
-                            <p className="text-purple-700 mb-4 leading-relaxed">
-                                Configure quais badges (📡 NFC, 📶 5G, 📱 Dual SIM, etc.) aparecem nos cards de produtos para cada categoria.
-                                Adicione, remova ou personalize cores e ícones facilmente.
-                            </p>
-                            <div className="flex flex-wrap items-center gap-2 text-sm">
-                                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
-                                    📡 NFC
-                                </span>
-                                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
-                                    📶 5G
-                                </span>
-                                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
-                                    📱 Dual SIM
-                                </span>
-                                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
-                                    ⚡ Carregamento Sem Fio
-                                </span>
-                                <span className="text-purple-500">+ mais...</span>
-                            </div>
                         </div>
-                        <div className="flex flex-col gap-2">
-                            <button
-                                onClick={() => {
-                                    const filePath = 'config/category-badges.ts';
-                                    const absolutePath = 'c:\\Users\\Nitro\\SynologyDrive\\SynologyDrive\\Programas\\Mercado do Vale New\\mercado-do-vale\\config\\category-badges.ts';
 
-                                    // Tentar abrir no VS Code
-                                    window.open(`vscode://file/${absolutePath}`, '_blank');
-
-                                    // Também copiar para clipboard como fallback
-                                    navigator.clipboard.writeText(filePath).then(() => {
-                                        alert('✅ Arquivo aberto no VS Code!\n\n📋 Caminho também copiado:\n' + filePath);
-                                    }).catch(() => {
-                                        alert('📂 Abra o arquivo:\n' + filePath);
-                                    });
-                                }}
-                                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all font-semibold shadow-md hover:shadow-lg flex items-center gap-2 whitespace-nowrap"
-                            >
-                                <Settings className="w-5 h-5" />
-                                Editar Badges
-                            </button>
-                            <p className="text-xs text-purple-600 text-center">
-                                config/category-badges.ts
-                            </p>
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+                            {activeTab === 'display' && (
+                                <DisplayRulesTab settings={settings} updateSetting={updateSetting} />
+                            )}
+                            {activeTab === 'categories' && (
+                                <CategoriesTab settings={settings} updateSetting={updateSetting} />
+                            )}
+                            {activeTab === 'sections' && (
+                                <SectionsTab />
+                            )}
+                            {activeTab === 'appearance' && (
+                                <AppearanceTab settings={settings} updateSetting={updateSetting} />
+                            )}
+                            {activeTab === 'seo' && (
+                                <SEOTab settings={settings} updateSetting={updateSetting} />
+                            )}
+                            {activeTab === 'sharing' && (
+                                <SharingTab settings={settings} updateSetting={updateSetting} />
+                            )}
                         </div>
                     </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    {activeTab === 'display' && (
-                        <DisplayRulesTab settings={settings} updateSetting={updateSetting} />
-                    )}
-                    {activeTab === 'categories' && (
-                        <CategoriesTab settings={settings} updateSetting={updateSetting} />
-                    )}
-                    {activeTab === 'sections' && (
-                        <SectionsTab />
-                    )}
-                    {activeTab === 'appearance' && (
-                        <AppearanceTab settings={settings} updateSetting={updateSetting} />
-                    )}
-                    {activeTab === 'seo' && (
-                        <SEOTab settings={settings} updateSetting={updateSetting} />
-                    )}
-                    {activeTab === 'sharing' && (
-                        <SharingTab settings={settings} updateSetting={updateSetting} />
-                    )}
                 </div>
             </div>
         </div>

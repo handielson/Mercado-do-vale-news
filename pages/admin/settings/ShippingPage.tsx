@@ -362,332 +362,350 @@ export default function ShippingPage() {
     );
 
     return (
-        <div className="max-w-5xl mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-50 rounded-xl">
-                    <Truck className="w-7 h-7 text-blue-600" />
+        <div className="p-6 max-w-7xl mx-auto">
+            {/* Cabeçalho */}
+            <div className="flex items-center gap-3 mb-8">
+                <div className="p-3 bg-blue-50 rounded-xl">
+                    <Truck className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Configuração de Frete</h1>
+                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Configuração de Frete</h1>
                     <p className="text-sm text-slate-500">Gerencie zonas de entrega, preços e transportadoras</p>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-                {tabs.map(t => (
-                    <button key={t.id}
-                        onClick={() => setActiveTab(t.id)}
-                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === t.id ? 'bg-white shadow text-blue-700' : 'text-slate-600 hover:text-slate-900'}`}>
-                        <span>{t.icon}</span>
-                        <span className="hidden sm:inline">{t.label}</span>
-                    </button>
-                ))}
-            </div>
-
-            {/* Tab: Configurações */}
-            {activeTab === 'config' && (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-                    <h2 className="text-base font-semibold text-slate-800">Configurações Gerais</h2>
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">CEP de Origem (loja)</label>
-                        <input className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                            value={settingsForm.origin_cep}
-                            onChange={e => setSettingsForm(p => ({ ...p, origin_cep: e.target.value }))}
-                            placeholder="56000-000" maxLength={9} />
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">CEP Alternativo (ex: depósito)</label>
-                        <input className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                            value={settingsForm.secondary_origin_cep}
-                            onChange={e => setSettingsForm(p => ({ ...p, secondary_origin_cep: e.target.value }))}
-                            placeholder="56000-000" maxLength={9} />
-                        <p className="text-xs text-slate-400 mt-1">Usado como segunda opção na calculadora de frete avulso.</p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setSettingsForm(p => ({ ...p, local_delivery_enabled: !p.local_delivery_enabled }))}>
-                            {settingsForm.local_delivery_enabled
-                                ? <ToggleRight className="w-8 h-8 text-green-600" />
-                                : <ToggleLeft className="w-8 h-8 text-slate-400" />}
-                        </button>
-                        <div>
-                            <p className="text-sm font-medium text-slate-800">Entrega Local Ativa</p>
-                            <p className="text-xs text-slate-500">Usar as zonas configuradas para calcular frete local</p>
-                        </div>
-                    </div>
-
-                    <button onClick={handleSaveSettings} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
-                        <Check size={16} /> Salvar Configurações
-                    </button>
-                </div>
-            )}
-
-            {/* Tab: Zonas */}
-            {activeTab === 'zones' && (
-                <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <p className="text-sm text-slate-500">{zones.length} zona(s) configurada(s)</p>
-                        <button onClick={() => { setShowZoneForm(true); setEditingZone(undefined); }}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-                            <Plus size={16} /> Nova Zona
-                        </button>
-                    </div>
-
-                    {showZoneForm && (
-                        <ZoneForm zone={editingZone} onSave={handleSaveZone} onCancel={() => { setShowZoneForm(false); setEditingZone(undefined); }} />
-                    )}
-
-                    {zones.length === 0 && !showZoneForm && (
-                        <div className="text-center py-12 text-slate-400">
-                            <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                            <p>Nenhuma zona configurada ainda.</p>
-                            <p className="text-sm mt-1">Clique em "Nova Zona" para começar.</p>
-                        </div>
-                    )}
-
-                    {zones.map(zone => (
-                        <div key={zone.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                            <div className="flex items-center gap-3 p-4">
-                                <button onClick={() => handleToggleZone(zone)} className="flex-shrink-0">
-                                    {zone.enabled
-                                        ? <ToggleRight className="w-7 h-7 text-green-600" />
-                                        : <ToggleLeft className="w-7 h-7 text-slate-300" />}
+            <div className="flex flex-col md:flex-row gap-8 items-start">
+                {/* Menu Lateral */}
+                <div className="w-full md:w-64 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm sticky top-24">
+                    <nav className="flex flex-col gap-1.5">
+                        {tabs.map(t => {
+                            const isActive = activeTab === t.id;
+                            return (
+                                <button
+                                    key={t.id}
+                                    onClick={() => setActiveTab(t.id)}
+                                    className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
+                                            ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
+                                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className={`text-xl ${isActive ? 'opacity-100' : 'opacity-60'}`}>{t.icon}</span>
+                                        {t.label}
+                                    </div>
+                                    {isActive && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                                 </button>
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-semibold text-slate-900">{zone.name}</span>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${ZONE_TYPE_COLORS[zone.type]}`}>
-                                            {ZONE_TYPE_LABELS[zone.type]}
-                                        </span>
-                                        {!zone.enabled && <span className="text-xs text-slate-400">Inativa</span>}
-                                    </div>
-                                    <div className="text-xs text-slate-500 mt-1.5 flex flex-wrap gap-2">
-                                        {zone.cities && zone.cities.length > 0 && (
-                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                                                Cidades: {zone.cities.join(', ')}
-                                            </span>
-                                        )}
-                                        {zone.cep_ranges && zone.cep_ranges.length > 0 && (
-                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                                                CEPs: {zone.cep_ranges.length} faixa(s)
-                                            </span>
-                                        )}
-                                        {zone.max_km_free != null && (
-                                            <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded border border-green-100 font-medium">
-                                                Grátis até {zone.max_km_free}km
-                                            </span>
-                                        )}
-                                        {zone.min_order_free != null && (
-                                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-medium">
-                                                Mín. p/ Grátis: R$ {zone.min_order_free.toFixed(2).replace('.', ',')}
-                                            </span>
-                                        )}
-                                        {zone.fixed_price != null && (
-                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                                                Fixo: R$ {zone.fixed_price.toFixed(2).replace('.', ',')}
-                                            </span>
-                                        )}
-                                        {zone.price_per_km != null && (
-                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                                                R$ {zone.price_per_km.toFixed(2).replace('.', ',')}/km
-                                            </span>
-                                        )}
-                                        <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
-                                            Prazo: {zone.estimated_days_min} a {zone.estimated_days_max} dias
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => { setEditingZone(zone); setShowZoneForm(true); }}
-                                        className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600">
-                                        <Edit2 size={16} />
-                                    </button>
-                                    <button onClick={() => handleDeleteZone(zone.id)}
-                                        className="p-1.5 hover:bg-red-50 rounded-lg text-red-500">
-                                        <Trash2 size={16} />
-                                    </button>
+                            );
+                        })}
+                    </nav>
+                </div>
+
+                {/* Conteúdo Principal */}
+                <div className="flex-1 min-w-0 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    {/* Tab: Configurações */}
+                    {activeTab === 'config' && (
+                        <div className="space-y-5">
+                            <h2 className="text-base font-semibold text-slate-800">Configurações Gerais</h2>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CEP de Origem (loja)</label>
+                                <input className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={settingsForm.origin_cep}
+                                    onChange={e => setSettingsForm(p => ({ ...p, origin_cep: e.target.value }))}
+                                    placeholder="56000-000" maxLength={9} />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">CEP Alternativo (ex: depósito)</label>
+                                <input className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={settingsForm.secondary_origin_cep}
+                                    onChange={e => setSettingsForm(p => ({ ...p, secondary_origin_cep: e.target.value }))}
+                                    placeholder="56000-000" maxLength={9} />
+                                <p className="text-xs text-slate-400 mt-1">Usado como segunda opção na calculadora de frete avulso.</p>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setSettingsForm(p => ({ ...p, local_delivery_enabled: !p.local_delivery_enabled }))}>
+                                    {settingsForm.local_delivery_enabled
+                                        ? <ToggleRight className="w-8 h-8 text-green-600" />
+                                        : <ToggleLeft className="w-8 h-8 text-slate-400" />}
+                                </button>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-800">Entrega Local Ativa</p>
+                                    <p className="text-xs text-slate-500">Usar as zonas configuradas para calcular frete local</p>
                                 </div>
                             </div>
+
+                            <button onClick={handleSaveSettings} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
+                                <Check size={16} /> Salvar Configurações
+                            </button>
                         </div>
-                    ))}
-                </div>
-            )}
+                    )}
 
-            {/* Tab: Faixas de Preço */}
-            {activeTab === 'ranges' && (
-                <div className="space-y-4">
-                    {/* Zone selector */}
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Selecione a Zona</label>
-                        <select className="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                            value={selectedZoneId ?? ''} onChange={e => setSelectedZoneId(e.target.value || null)}>
-                            <option value="">-- Selecione uma zona --</option>
-                            {zones.map(z => (
-                                <option key={z.id} value={z.id}>{z.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {selectedZoneId && (
-                        <>
+                    {/* Tab: Zonas */}
+                    {activeTab === 'zones' && (
+                        <div className="space-y-4">
                             <div className="flex justify-between items-center">
-                                <p className="text-sm text-slate-500">{priceRanges.length} faixa(s) configurada(s)</p>
-                                <button onClick={() => { setShowRangeForm(true); setEditingRange(undefined); }}
+                                <p className="text-sm text-slate-500">{zones.length} zona(s) configurada(s)</p>
+                                <button onClick={() => { setShowZoneForm(true); setEditingZone(undefined); }}
                                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-                                    <Plus size={16} /> Adicionar Faixa
+                                    <Plus size={16} /> Nova Zona
                                 </button>
                             </div>
 
-                            {showRangeForm && (
-                                <PriceRangeForm zoneId={selectedZoneId} range={editingRange}
-                                    onSave={handleSaveRange}
-                                    onCancel={() => { setShowRangeForm(false); setEditingRange(undefined); }} />
+                            {showZoneForm && (
+                                <ZoneForm zone={editingZone} onSave={handleSaveZone} onCancel={() => { setShowZoneForm(false); setEditingZone(undefined); }} />
                             )}
 
-                            {priceRanges.length === 0 && !showRangeForm && (
-                                <div className="text-center py-10 text-slate-400">
-                                    <p>Nenhuma faixa cadastrada para esta zona.</p>
+                            {zones.length === 0 && !showZoneForm && (
+                                <div className="text-center py-12 text-slate-400">
+                                    <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                                    <p>Nenhuma zona configurada ainda.</p>
+                                    <p className="text-sm mt-1">Clique em "Nova Zona" para começar.</p>
                                 </div>
                             )}
 
-                            <div className="space-y-2">
-                                {priceRanges.map(range => (
-                                    <div key={range.id} className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3">
+                            {zones.map(zone => (
+                                <div key={zone.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                                    <div className="flex items-center gap-3 p-4">
+                                        <button onClick={() => handleToggleZone(zone)} className="flex-shrink-0">
+                                            {zone.enabled
+                                                ? <ToggleRight className="w-7 h-7 text-green-600" />
+                                                : <ToggleLeft className="w-7 h-7 text-slate-300" />}
+                                        </button>
                                         <div className="flex-1">
-                                            <span className="font-medium text-slate-800 text-sm">{range.label}</span>
-                                            <span className="text-xs text-slate-400 ml-2">({range.min_km}km → {range.max_km ?? '∞'}km)</span>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-semibold text-slate-900">{zone.name}</span>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${ZONE_TYPE_COLORS[zone.type]}`}>
+                                                    {ZONE_TYPE_LABELS[zone.type]}
+                                                </span>
+                                                {!zone.enabled && <span className="text-xs text-slate-400">Inativa</span>}
+                                            </div>
+                                            <div className="text-xs text-slate-500 mt-1.5 flex flex-wrap gap-2">
+                                                {zone.cities && zone.cities.length > 0 && (
+                                                    <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                        Cidades: {zone.cities.join(', ')}
+                                                    </span>
+                                                )}
+                                                {zone.cep_ranges && zone.cep_ranges.length > 0 && (
+                                                    <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                        CEPs: {zone.cep_ranges.length} faixa(s)
+                                                    </span>
+                                                )}
+                                                {zone.max_km_free != null && (
+                                                    <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded border border-green-100 font-medium">
+                                                        Grátis até {zone.max_km_free}km
+                                                    </span>
+                                                )}
+                                                {zone.min_order_free != null && (
+                                                    <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-medium">
+                                                        Mín. p/ Grátis: R$ {zone.min_order_free.toFixed(2).replace('.', ',')}
+                                                    </span>
+                                                )}
+                                                {zone.fixed_price != null && (
+                                                    <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                        Fixo: R$ {zone.fixed_price.toFixed(2).replace('.', ',')}
+                                                    </span>
+                                                )}
+                                                {zone.price_per_km != null && (
+                                                    <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                        R$ {zone.price_per_km.toFixed(2).replace('.', ',')}/km
+                                                    </span>
+                                                )}
+                                                <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                    Prazo: {zone.estimated_days_min} a {zone.estimated_days_max} dias
+                                                </span>
+                                            </div>
                                         </div>
-                                        <span className={`text-sm font-semibold ${range.price === 0 ? 'text-green-600' : 'text-slate-800'}`}>
-                                            {range.price === 0 ? 'Grátis' : `R$ ${range.price.toFixed(2)}`}
-                                        </span>
-                                        <span className="text-xs text-slate-400">{range.estimated_days_max}d</span>
-                                        <div className="flex gap-1">
-                                            <button onClick={() => { setEditingRange(range); setShowRangeForm(true); }}
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setEditingZone(zone); setShowZoneForm(true); }}
                                                 className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600">
-                                                <Edit2 size={15} />
+                                                <Edit2 size={16} />
                                             </button>
-                                            <button onClick={() => handleDeleteRange(range.id)}
+                                            <button onClick={() => handleDeleteZone(zone.id)}
                                                 className="p-1.5 hover:bg-red-50 rounded-lg text-red-500">
-                                                <Trash2 size={15} />
+                                                <Trash2 size={16} />
                                             </button>
                                         </div>
                                     </div>
-                                ))}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Tab: Faixas de Preço */}
+                    {activeTab === 'ranges' && (
+                        <div className="space-y-4">
+                            {/* Zone selector */}
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Selecione a Zona</label>
+                                <select className="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={selectedZoneId ?? ''} onChange={e => setSelectedZoneId(e.target.value || null)}>
+                                    <option value="">-- Selecione uma zona --</option>
+                                    {zones.map(z => (
+                                        <option key={z.id} value={z.id}>{z.name}</option>
+                                    ))}
+                                </select>
                             </div>
-                        </>
+
+                            {selectedZoneId && (
+                                <>
+                                    <div className="flex justify-between items-center">
+                                        <p className="text-sm text-slate-500">{priceRanges.length} faixa(s) configurada(s)</p>
+                                        <button onClick={() => { setShowRangeForm(true); setEditingRange(undefined); }}
+                                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                                            <Plus size={16} /> Adicionar Faixa
+                                        </button>
+                                    </div>
+
+                                    {showRangeForm && (
+                                        <PriceRangeForm zoneId={selectedZoneId} range={editingRange}
+                                            onSave={handleSaveRange}
+                                            onCancel={() => { setShowRangeForm(false); setEditingRange(undefined); }} />
+                                    )}
+
+                                    {priceRanges.length === 0 && !showRangeForm && (
+                                        <div className="text-center py-10 text-slate-400">
+                                            <p>Nenhuma faixa cadastrada para esta zona.</p>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                        {priceRanges.map(range => (
+                                            <div key={range.id} className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3">
+                                                <div className="flex-1">
+                                                    <span className="font-medium text-slate-800 text-sm">{range.label}</span>
+                                                    <span className="text-xs text-slate-400 ml-2">({range.min_km}km → {range.max_km ?? '∞'}km)</span>
+                                                </div>
+                                                <span className={`text-sm font-semibold ${range.price === 0 ? 'text-green-600' : 'text-slate-800'}`}>
+                                                    {range.price === 0 ? 'Grátis' : `R$ ${range.price.toFixed(2)}`}
+                                                </span>
+                                                <span className="text-xs text-slate-400">{range.estimated_days_max}d</span>
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => { setEditingRange(range); setShowRangeForm(true); }}
+                                                        className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600">
+                                                        <Edit2 size={15} />
+                                                    </button>
+                                                    <button onClick={() => handleDeleteRange(range.id)}
+                                                        className="p-1.5 hover:bg-red-50 rounded-lg text-red-500">
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Tab: Transportadoras */}
+                    {activeTab === 'carriers' && (
+                        <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
+                            <h2 className="text-base font-semibold text-slate-800">Correios e Transportadoras (Nacional)</h2>
+                            <p className="text-sm text-slate-500 mb-4">
+                                A integração oficial do sistema para cálculo de fretes nacionais (Correios PAC/SEDEX, Jadlog, etc) é via **Melhor Envio**.
+                                Ative-a abaixo para que clientes de fora das suas Zonas Locais recebam o cálculo em tempo real.
+                            </p>
+
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_enabled: !p.melhor_envio_enabled }))}>
+                                    {settingsForm.melhor_envio_enabled
+                                        ? <ToggleRight className="w-8 h-8 text-green-600" />
+                                        : <ToggleLeft className="w-8 h-8 text-slate-400" />}
+                                </button>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-800">Ativar Cálculo Correios/Melhor Envio</p>
+                                    <p className="text-xs text-slate-500">Exibirá automaticamente PAC, SEDEX e Transportadoras para CEPs do Brasil inteiro.</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_sandbox: !p.melhor_envio_sandbox }))}>
+                                    {settingsForm.melhor_envio_sandbox
+                                        ? <ToggleRight className="w-8 h-8 text-amber-500" />
+                                        : <ToggleLeft className="w-8 h-8 text-slate-400" />}
+                                </button>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-800">Modo Sandbox (testes)</p>
+                                    <p className="text-xs text-slate-500">Desative após validar para ir a produção</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Token de API</label>
+                                <input type="password"
+                                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={settingsForm.melhor_envio_token}
+                                    onChange={e => setSettingsForm(p => ({ ...p, melhor_envio_token: e.target.value }))}
+                                    placeholder="eyJ0eXAiOiJKV1..." />
+                                <p className="text-xs text-slate-400 mt-1">
+                                    Gere em <a href="https://sandbox.melhorenvio.com.br/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">sandbox.melhorenvio.com.br/tokens</a>
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-800 mb-2">Transportadoras Permitidas</label>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Selecione quais transportadoras calcular no checkout. Se deixar todas desmarcadas, o sistema aceitará todas as que você validou no painel do Melhor Envio.
+                                </p>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {COMMON_CARRIERS.map(carrier => {
+                                        const allowed_services_array = settingsForm.melhor_envio_allowed_services
+                                            .split(',')
+                                            .map(s => s.trim().toLowerCase())
+                                            .filter(Boolean);
+
+                                        const isChecked = allowed_services_array.includes(carrier.id.toLowerCase());
+
+                                        return (
+                                            <label key={carrier.id} className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${isChecked ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                                <div className="flex items-center h-5">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                                        checked={isChecked}
+                                                        onChange={(e) => {
+                                                            const checked = e.target.checked;
+                                                            let newList = [...allowed_services_array];
+
+                                                            if (checked && !newList.includes(carrier.id)) {
+                                                                newList.push(carrier.id);
+                                                            } else if (!checked) {
+                                                                newList = newList.filter(id => id !== carrier.id);
+                                                            }
+
+                                                            setSettingsForm(prev => ({
+                                                                ...prev,
+                                                                melhor_envio_allowed_services: newList.join(',')
+                                                            }));
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-medium text-slate-800">{carrier.label}</span>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <button onClick={handleSaveSettings} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
+                                <Check size={16} /> Salvar
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Tab: Calcular Frete */}
+                    {activeTab === 'calculator' && (
+                        <FreightCalculator
+                            originCep={settingsForm.origin_cep}
+                            secondaryCep={settingsForm.secondary_origin_cep || undefined}
+                        />
                     )}
                 </div>
-            )}
-
-            {/* Tab: Transportadoras */}
-            {activeTab === 'carriers' && (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-                    <h2 className="text-base font-semibold text-slate-800">Correios e Transportadoras (Nacional)</h2>
-                    <p className="text-sm text-slate-500 mb-4">
-                        A integração oficial do sistema para cálculo de fretes nacionais (Correios PAC/SEDEX, Jadlog, etc) é via **Melhor Envio**.
-                        Ative-a abaixo para que clientes de fora das suas Zonas Locais recebam o cálculo em tempo real.
-                    </p>
-
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_enabled: !p.melhor_envio_enabled }))}>
-                            {settingsForm.melhor_envio_enabled
-                                ? <ToggleRight className="w-8 h-8 text-green-600" />
-                                : <ToggleLeft className="w-8 h-8 text-slate-400" />}
-                        </button>
-                        <div>
-                            <p className="text-sm font-medium text-slate-800">Ativar Cálculo Correios/Melhor Envio</p>
-                            <p className="text-xs text-slate-500">Exibirá automaticamente PAC, SEDEX e Transportadoras para CEPs do Brasil inteiro.</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_sandbox: !p.melhor_envio_sandbox }))}>
-                            {settingsForm.melhor_envio_sandbox
-                                ? <ToggleRight className="w-8 h-8 text-amber-500" />
-                                : <ToggleLeft className="w-8 h-8 text-slate-400" />}
-                        </button>
-                        <div>
-                            <p className="text-sm font-medium text-slate-800">Modo Sandbox (testes)</p>
-                            <p className="text-xs text-slate-500">Desative após validar para ir a produção</p>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Token de API</label>
-                        <input type="password"
-                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                            value={settingsForm.melhor_envio_token}
-                            onChange={e => setSettingsForm(p => ({ ...p, melhor_envio_token: e.target.value }))}
-                            placeholder="eyJ0eXAiOiJKV1..." />
-                        <p className="text-xs text-slate-400 mt-1">
-                            Gere em <a href="https://sandbox.melhorenvio.com.br/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">sandbox.melhorenvio.com.br/tokens</a>
-                        </p>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-800 mb-2">Transportadoras Permitidas</label>
-                        <p className="text-xs text-slate-500 mb-3">
-                            Selecione quais transportadoras calcular no checkout. Se deixar todas desmarcadas, o sistema aceitará todas as que você validou no painel do Melhor Envio.
-                        </p>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {COMMON_CARRIERS.map(carrier => {
-                                const allowed_services_array = settingsForm.melhor_envio_allowed_services
-                                    .split(',')
-                                    .map(s => s.trim().toLowerCase())
-                                    .filter(Boolean);
-
-                                const isChecked = allowed_services_array.includes(carrier.id.toLowerCase());
-
-                                return (
-                                    <label key={carrier.id} className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${isChecked ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                                        <div className="flex items-center h-5">
-                                            <input
-                                                type="checkbox"
-                                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                                                checked={isChecked}
-                                                onChange={(e) => {
-                                                    const checked = e.target.checked;
-                                                    let newList = [...allowed_services_array];
-
-                                                    if (checked && !newList.includes(carrier.id)) {
-                                                        newList.push(carrier.id);
-                                                    } else if (!checked) {
-                                                        newList = newList.filter(id => id !== carrier.id);
-                                                    }
-
-                                                    setSettingsForm(prev => ({
-                                                        ...prev,
-                                                        melhor_envio_allowed_services: newList.join(',')
-                                                    }));
-                                                }}
-                                            />
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-medium text-slate-800">{carrier.label}</span>
-                                        </div>
-                                    </label>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    <button onClick={handleSaveSettings} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
-                        <Check size={16} /> Salvar
-                    </button>
-                </div>
-            )}
-
-            {/* Tab: Calcular Frete */}
-            {activeTab === 'calculator' && (
-                <FreightCalculator
-                    originCep={settingsForm.origin_cep}
-                    secondaryCep={settingsForm.secondary_origin_cep || undefined}
-                />
-            )}
+            </div>
         </div>
     );
 }

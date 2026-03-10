@@ -810,40 +810,54 @@ export default function CashbackPage() {
     const [activeTab, setActiveTab] = useState<TabId>('dashboard');
 
     return (
-        <div className="p-6 max-w-5xl mx-auto space-y-6">
-            <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-xl">
+        <div className="p-6 max-w-7xl mx-auto">
+            {/* Cabeçalho */}
+            <div className="flex items-center gap-3 mb-8">
+                <div className="p-3 bg-yellow-100 rounded-xl">
                     <Coins className="w-6 h-6 text-yellow-600" />
                 </div>
                 <div>
-                    <h1 className="text-xl font-bold text-slate-800">Moedas do Vale</h1>
-                    <p className="text-sm text-slate-500">Gerencie o sistema de fidelidade por moedas</p>
+                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Moedas do Vale</h1>
+                    <p className="text-sm text-slate-500">Gerencie o programa de recompensas e fidelidade</p>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit overflow-x-auto">
-                {TABS.map(({ id, label, Icon }) => (
-                    <button
-                        key={id}
-                        onClick={() => setActiveTab(id)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === id
-                            ? 'bg-white text-slate-800 shadow-sm'
-                            : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                    >
-                        <Icon className="w-4 h-4" />
-                        {label}
-                    </button>
-                ))}
-            </div>
+            <div className="flex flex-col md:flex-row gap-8 items-start">
+                {/* Menu Lateral */}
+                <div className="w-full md:w-64 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm sticky top-24">
+                    <nav className="flex flex-col gap-1.5">
+                        {TABS.map(({ id, label, Icon }) => {
+                            const isActive = activeTab === id;
+                            return (
+                                <button
+                                    key={id}
+                                    onClick={() => setActiveTab(id)}
+                                    className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
+                                            ? 'bg-yellow-50 text-yellow-800 shadow-sm border border-yellow-200/60'
+                                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <Icon className={`w-5 h-5 ${isActive ? 'text-yellow-600' : 'text-slate-400'}`} />
+                                        {label}
+                                    </div>
+                                    {isActive && <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />}
+                                </button>
+                            );
+                        })}
+                    </nav>
+                </div>
 
-            {/* Conteúdo */}
-            {activeTab === 'dashboard' && <DashboardTab />}
-            {activeTab === 'promotions' && <PromotionsTab />}
-            {activeTab === 'settings' && <SettingsTab />}
-            {activeTab === 'transactions' && <TransactionsTab />}
-            {activeTab === 'adjust' && <ManualAdjustTab />}
+                {/* Conteúdo Principal */}
+                <div className="flex-1 min-w-0 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    {activeTab === 'dashboard' && <DashboardTab />}
+                    {activeTab === 'promotions' && <PromotionsTab />}
+                    {activeTab === 'settings' && <SettingsTab />}
+                    {activeTab === 'transactions' && <TransactionsTab />}
+                    {activeTab === 'adjust' && <ManualAdjustTab />}
+                </div>
+            </div>
         </div>
     );
 }
+

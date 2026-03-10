@@ -111,67 +111,79 @@ export function BulkRegistrationPage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 p-6">
-            <div className="max-w-5xl mx-auto">
-                {/* Header */}
-                <div className="mb-6">
-                    <button
-                        onClick={() => navigate('/admin/products')}
-                        className="flex items-center gap-2 text-slate-600 hover:text-slate-800 mb-4"
-                    >
-                        <ArrowLeft size={20} />
-                        Voltar para Produtos
-                    </button>
-                    <h1 className="text-3xl font-bold text-slate-800">📦 Cadastro em Massa de Produtos</h1>
-                    <p className="text-slate-600 mt-2">
-                        Cadastre múltiplos produtos rapidamente usando scanner de código de barras ou upload de planilha
-                    </p>
+        <div className="p-6 max-w-7xl mx-auto">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-8">
+                <button
+                    onClick={() => navigate('/admin/products')}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors -ml-2"
+                >
+                    <ArrowLeft className="w-5 h-5 text-slate-600" />
+                </button>
+                <div className="p-3 bg-blue-50 rounded-xl">
+                    <Upload className="w-6 h-6 text-blue-600" />
                 </div>
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Cadastro em Massa</h1>
+                    <p className="text-sm text-slate-500">Cadastre múltiplos produtos rapidamente via scanner ou Excel</p>
+                </div>
+            </div>
 
-                {/* Tabs */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-6">
-                    <div className="flex border-b border-slate-200">
+            <div className="flex flex-col md:flex-row gap-8 items-start">
+                {/* Menu Lateral */}
+                <div className="w-full md:w-64 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm sticky top-24">
+                    <nav className="flex flex-col gap-1.5">
                         <button
                             onClick={() => setActiveTab('quick')}
-                            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-center gap-2 ${activeTab === 'quick'
-                                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'quick'
+                                    ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
+                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                                 }`}
                         >
-                            <Zap size={20} />
-                            Cadastro Rápido (Scanner)
+                            <div className="flex items-center gap-3">
+                                <Zap className={`w-5 h-5 ${activeTab === 'quick' ? 'text-blue-600' : 'text-slate-400'}`} />
+                                Scanner
+                            </div>
+                            {activeTab === 'quick' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                         </button>
+
                         <button
                             onClick={() => setActiveTab('upload')}
-                            className={`flex-1 px-6 py-4 font-medium transition-colors flex items-center justify-center gap-2 ${activeTab === 'upload'
-                                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'upload'
+                                    ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
+                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                                 }`}
                         >
-                            <Upload size={20} />
-                            Upload Excel
+                            <div className="flex items-center gap-3">
+                                <Upload className={`w-5 h-5 ${activeTab === 'upload' ? 'text-blue-600' : 'text-slate-400'}`} />
+                                Excel
+                            </div>
+                            {activeTab === 'upload' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                         </button>
-                    </div>
+                    </nav>
                 </div>
 
-                {/* Tab Content */}
-                {activeTab === 'quick' && <QuickRegisterForm />}
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                    {activeTab === 'quick' && <QuickRegisterForm />}
 
-                {activeTab === 'upload' && (
-                    <>
-                        {uploadStep === 'upload' && (
-                            <BulkUploadForm onUploadComplete={handleFileProcessed} />
-                        )}
+                    {activeTab === 'upload' && (
+                        <>
+                            {uploadStep === 'upload' && (
+                                <BulkUploadForm onUploadComplete={handleFileProcessed} />
+                            )}
 
-                        {uploadStep === 'preview' && (
-                            <BulkPreviewTable
-                                previews={previews}
-                                onConfirm={handleConfirmImport}
-                                onCancel={handleCancelPreview}
-                            />
-                        )}
-                    </>
-                )}
+                            {uploadStep === 'preview' && (
+                                <BulkPreviewTable
+                                    previews={previews}
+                                    onConfirm={handleConfirmImport}
+                                    onCancel={handleCancelPreview}
+                                />
+                            )}
+                        </>
+                    )}
+
+                </div>
 
                 {/* Progress Modal */}
                 <BulkProgressModal
