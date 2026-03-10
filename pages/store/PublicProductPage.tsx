@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck } from 'lucide-react';
+import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
@@ -20,7 +21,7 @@ export const PublicProductPage: React.FC = () => {
     const { slug } = useParams<{ slug: string }>();
     const navigate = useNavigate();
     const { customer } = useSupabaseAuth();
-    const { dispatch } = useQuoteCart();
+    const { addItem } = useCart();
 
     const [product, setProduct] = useState<CatalogProduct | null>(null);
     const [loading, setLoading] = useState(true);
@@ -128,7 +129,7 @@ export const PublicProductPage: React.FC = () => {
     const description = product.meta_description || product.description || `Compre ${product.name} no Mercado do Vale.`;
 
     const handleAddToCart = () => {
-        dispatch({ type: 'ADD_ITEM', payload: product });
+        addItem(product);
         toast.success('Produto adicionado ao carrinho!', {
             icon: '🛒',
             duration: 3000
