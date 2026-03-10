@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import type { ContaPagar, ContaReceber, BaixaConta, CreateContaInput } from '../types/finance';
 import { getValidToken } from './blingService';
 
-const BASE = '/api/bling-finance';
+const BASE = '/api/bling?resource=finance';
 
 // ─── Generic fetch wrapper ───────────────────────────────────
 async function blingFetch(url: string, options: RequestInit = {}): Promise<any> {
@@ -36,7 +36,7 @@ export const blingFinanceService = {
         situacao?: string;
     }): Promise<ContaPagar[]> {
         const fetchPage = async (page: number) => {
-            const params = new URLSearchParams({ resource: 'pagar', action: 'list', limite: '100', pagina: String(page) });
+            const params = new URLSearchParams({ resourceType: 'pagar', action: 'list', limite: '100', pagina: String(page) });
             if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
             if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
             if (filters?.situacao) params.set('situacao', filters.situacao);
@@ -61,7 +61,7 @@ export const blingFinanceService = {
         situacao?: string;
     }): Promise<ContaReceber[]> {
         const fetchPage = async (page: number) => {
-            const params = new URLSearchParams({ resource: 'receber', action: 'list', limite: '100', pagina: String(page) });
+            const params = new URLSearchParams({ resourceType: 'receber', action: 'list', limite: '100', pagina: String(page) });
             if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
             if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
             if (filters?.situacao) params.set('situacao', filters.situacao);
@@ -81,13 +81,13 @@ export const blingFinanceService = {
     },
 
     async getConta(tipo: 'pagar' | 'receber', id: number): Promise<ContaPagar | ContaReceber> {
-        const params = new URLSearchParams({ resource: tipo, action: 'get', id: String(id) });
+        const params = new URLSearchParams({ resourceType: tipo, action: 'get', id: String(id) });
         const json = await blingFetch(`${BASE}?${params}`);
         return json?.data;
     },
 
     async createConta(input: CreateContaInput): Promise<void> {
-        const params = new URLSearchParams({ resource: input.tipo, action: 'create' });
+        const params = new URLSearchParams({ resourceType: input.tipo, action: 'create' });
         const body: Record<string, any> = {
             vencimento: input.vencimento,
             valor: input.valor,
@@ -104,7 +104,7 @@ export const blingFinanceService = {
     },
 
     async baixarConta(tipo: 'pagar' | 'receber', id: number, baixa: BaixaConta): Promise<void> {
-        const params = new URLSearchParams({ resource: tipo, action: 'baixar', id: String(id) });
+        const params = new URLSearchParams({ resourceType: tipo, action: 'baixar', id: String(id) });
         // Bling API v3 exige o campo 'valorRecebido' para baixas de pagamentos e recebimentos
         const payload = { ...baixa, valorRecebido: baixa.valor };
         delete (payload as any).valor;
@@ -112,7 +112,7 @@ export const blingFinanceService = {
     },
 
     async cancelarConta(tipo: 'pagar' | 'receber', id: number): Promise<void> {
-        const params = new URLSearchParams({ resource: tipo, action: 'cancelar', id: String(id) });
+        const params = new URLSearchParams({ resourceType: tipo, action: 'cancelar', id: String(id) });
         await blingFetch(`${BASE}?${params}`, { method: 'DELETE' });
     },
 
@@ -123,7 +123,7 @@ export const blingFinanceService = {
         competencia?: string;
         contato?: { id?: number; nome?: string };
     }): Promise<void> {
-        const params = new URLSearchParams({ resource: tipo, action: 'update', id: String(id) });
+        const params = new URLSearchParams({ resourceType: tipo, action: 'update', id: String(id) });
         await blingFetch(`${BASE}?${params}`, { method: 'PUT', body: JSON.stringify(data) });
     },
 };

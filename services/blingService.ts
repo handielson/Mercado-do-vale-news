@@ -105,7 +105,7 @@ export interface BlingProductDetail extends BlingProduct {
 export async function fetchBlingProductDetail(productId: number): Promise<BlingProductDetail | null> {
     try {
         const accessToken = await getValidToken();
-        const res = await fetch(`/api/bling-product-detail?id=${productId}`, {
+        const res = await fetch(`/api/bling?resource=product-detail&id=${productId}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         if (!res.ok) return null;
@@ -115,7 +115,7 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         const parentId: number | undefined = data.variacao?.produtoPai?.id;
         let parentData: any = null;
         if (parentId) {
-            const parentRes = await fetch(`/api/bling-product-detail?id=${parentId}`, {
+            const parentRes = await fetch(`/api/bling?resource=product-detail&id=${parentId}`, {
                 headers: { 'Authorization': `Bearer ${accessToken}` },
             });
             if (parentRes.ok) parentData = await parentRes.json();
@@ -366,7 +366,7 @@ export async function getValidToken(): Promise<string> {
 }
 
 async function refreshToken(tokenData: BlingTokenData): Promise<string> {
-    const res = await fetch('/api/bling-exchange', {
+    const res = await fetch('/api/bling?resource=exchange', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -413,7 +413,7 @@ async function blingGet(path: string, accessToken: string): Promise<any> {
 
 async function fetchProductsPage(accessToken: string, page: number): Promise<{ items: any[]; total: number }> {
     // Usa proxy serverless para evitar CORS
-    const res = await fetch(`/api/bling-products?page=${page}`, {
+    const res = await fetch(`/api/bling?resource=products&page=${page}`, {
         headers: {
             'Authorization': `Bearer ${accessToken}`,
         },
@@ -436,7 +436,7 @@ export async function fetchBlingCategories(): Promise<BlingCategory[]> {
     let page = 1;
 
     do {
-        const res = await fetch(`/api/bling-categories?page=${page}`, {
+        const res = await fetch(`/api/bling?resource=categories&page=${page}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         if (!res.ok) break;
@@ -457,7 +457,7 @@ async function fetchStockMap(accessToken: string): Promise<Map<number, number>> 
     let page = 1;
 
     do {
-        const res = await fetch(`/api/bling-stock?page=${page}`, {
+        const res = await fetch(`/api/bling?resource=stock&page=${page}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         if (!res.ok) break;
@@ -626,7 +626,7 @@ export async function syncStockToBling(productId: string, quantity: number, note
         if (!blingId) return; // Produto não veio do Bling — ignora
 
         // Chama o proxy server-side (CORS-safe)
-        await fetch('/api/bling-stock-sync', {
+        await fetch('/api/bling?resource=stock-sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ blingId, quantity, notes }),
@@ -682,7 +682,7 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
     const accessToken = await getValidToken();
 
     const [res, stockMap] = await Promise.all([
-        fetch(`/api/bling-products?page=1&search=${encodeURIComponent(query)}`, {
+        fetch(`/api/bling?resource=products&page=1&search=${encodeURIComponent(query)}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         }),
         fetchStockMap(accessToken),
