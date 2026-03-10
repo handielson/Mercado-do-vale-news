@@ -62,11 +62,32 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
+                let modelData: Record<string, any> = {};
+                let modelRootDescription = '';
+                if (data.model_id) {
+                    const { data: mData } = await supabase
+                        .from('models')
+                        .select('description, template_values')
+                        .eq('id', data.model_id)
+                        .maybeSingle();
+
+                    if (mData) {
+                        modelRootDescription = mData.description || '';
+                        if (mData.template_values) {
+                            modelData = mData.template_values;
+                        }
+                    }
+                }
+
                 // Format it perfectly as CatalogProduct
                 const formattedProduct = {
                     ...data,
                     brand: data.brand?.name || data.brand,
                     category: data.category?.name || data.category_id,
+                    description: modelData.description || modelRootDescription || data.description,
+                    meta_title: modelData.meta_title || data.meta_title,
+                    meta_description: modelData.meta_description || data.meta_description,
+                    keywords: modelData.keywords || data.keywords,
                 };
 
                 setProduct(formattedProduct as unknown as CatalogProduct);
@@ -91,7 +112,42 @@ export const PublicProductPage: React.FC = () => {
 
                     const { data: sibs } = await sibQuery;
                     if (sibs && sibs.length > 0) {
-                        setSiblings(sibs as unknown as CatalogProduct[]);
+                        // Pre-fetch all models used by siblings to avoid N+1 queries
+                        const modelIds = Array.from(new Set(sibs.map(s => s.model_id).filter(Boolean)));
+                        let modelsMap: Record<string, any> = {};
+                        let modelsRootDescMap: Record<string, string> = {};
+
+                        if (modelIds.length > 0) {
+                            const { data: modelsData } = await supabase
+                                .from('models')
+                                .select('id, description, template_values')
+                                .in('id', modelIds);
+
+                            if (modelsData) {
+                                modelsMap = modelsData.reduce((acc, m) => {
+                                    acc[m.id] = m.template_values || {};
+                                    return acc;
+                                }, {} as Record<string, any>);
+
+                                modelsRootDescMap = modelsData.reduce((acc, m) => {
+                                    if (m.description) acc[m.id] = m.description;
+                                    return acc;
+                                }, {} as Record<string, string>);
+                            }
+                        }
+
+                        const formattedSibs = sibs.map(sib => {
+                            const sibModelData = sib.model_id ? modelsMap[sib.model_id] || {} : {};
+                            const sibModelRootDesc = sib.model_id ? modelsRootDescMap[sib.model_id] || '' : '';
+                            return {
+                                ...sib,
+                                description: sibModelData.description || sibModelRootDesc || sib.description,
+                                meta_title: sibModelData.meta_title || sib.meta_title,
+                                meta_description: sibModelData.meta_description || sib.meta_description,
+                                keywords: sibModelData.keywords || sib.keywords,
+                            };
+                        });
+                        setSiblings(formattedSibs as unknown as CatalogProduct[]);
                     }
                 }
             } catch (err) {
@@ -243,7 +299,7 @@ export const PublicProductPage: React.FC = () => {
                             {selectedImage ? (
                                 <img
                                     src={selectedImage}
-                                    alt={product.name}
+                                    alt={product.meta_title || product.name}
                                     className="w-full h-full object-contain"
                                 />
                             ) : (
@@ -258,7 +314,7 @@ export const PublicProductPage: React.FC = () => {
                                         onClick={() => setSelectedImage(img)}
                                         className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden ${selectedImage === img ? 'border-blue-600' : 'border-slate-200 hover:border-slate-300'}`}
                                     >
-                                        <img src={img} alt="" className="w-full h-full object-contain p-1" />
+                                        <img src={img} alt={`${product.meta_title || product.name} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
                                     </button>
                                 ))}
                             </div>

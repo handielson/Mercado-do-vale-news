@@ -91,9 +91,15 @@ export function useModelTemplate(
                         setValue(key, value);
                         console.log(`✅ Filled spec field: ${key} = ${value}`);
                     } else {
-                        // Assumir que é spec se não for preço ou logística
-                        setValue(`specs.${key}`, value);
-                        console.log(`✅ Filled spec field: specs.${key} = ${value}`);
+                        const seoFields = ['meta_title', 'meta_description', 'keywords', 'slug'];
+                        if (seoFields.includes(key)) {
+                            setValue(key, value);
+                            console.log(`✅ Filled SEO field: ${key} = ${value}`);
+                        } else {
+                            // Assumir que é spec se não for preço, logística ou SEO
+                            setValue(`specs.${key}`, value);
+                            console.log(`✅ Filled spec field: specs.${key} = ${value}`);
+                        }
                     }
 
                     fieldsFilledCount++;

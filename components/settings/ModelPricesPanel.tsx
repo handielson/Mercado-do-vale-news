@@ -3,6 +3,7 @@ import { X, TrendingDown, TrendingUp, Loader2, DollarSign, Clock, CheckCircle } 
 import { supabase } from '../../services/supabase';
 import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../services/priceHistoryService';
 import { toast } from 'sonner';
+import { CurrencyInput } from '../ui/CurrencyInput';
 
 interface Variation {
     ram: string;
@@ -190,20 +191,16 @@ export function ModelPricesPanel({ modelId, modelName, onClose }: ModelPricesPan
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             {PRICE_FIELDS.map(f => (
                                                 <div key={f.key}>
-                                                    <label className="block text-xs font-medium text-slate-500 mb-1">{f.label} (R$)</label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        min="0"
-                                                        value={(prices[f.key] / 100).toFixed(2)}
-                                                        onChange={e => {
-                                                            const cents = Math.round(parseFloat(e.target.value || '0') * 100);
+                                                    <label className="block text-xs font-medium text-slate-500 mb-1">{f.label}</label>
+                                                    <CurrencyInput
+                                                        value={prices[f.key]}
+                                                        onChange={cents => {
                                                             setPriceInputs(prev => ({
                                                                 ...prev,
                                                                 [key]: { ...prev[key], [f.key]: cents }
                                                             }));
                                                         }}
-                                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                                        className="w-full h-10 py-2 text-sm"
                                                     />
                                                 </div>
                                             ))}

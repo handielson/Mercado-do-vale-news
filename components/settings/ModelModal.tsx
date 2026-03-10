@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, FileText, Settings } from 'lucide-react';
+import { X, FileText, Settings, Search, ExternalLink } from 'lucide-react';
+import { toast } from 'sonner';
 import { Model, type ModelInput } from '../../types/model';
 import { type Brand } from '../../types/brand';
 import { type Category } from '../../types/category';
@@ -20,7 +21,7 @@ interface ModelModalProps {
     model?: Model | null;
 }
 
-type TabType = 'basic' | 'template' | 'photos';
+type TabType = 'basic' | 'template' | 'seo' | 'photos';
 
 /**
  * TemplateFieldInput Component
@@ -145,6 +146,84 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
     const eanInputRef = useRef<HTMLInputElement>(null);
+
+    // AI Generation State
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [promptCopied, setPromptCopied] = useState(false);
+    const [jsonInput, setJsonInput] = useState('');
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Update AI Prompt automatically when model data changes
+    useEffect(() => {
+        const brandObj = brands.find(b => b.id === brandId);
+        const categoryObj = categories.find(c => c.id === categoryId);
+
+        const defaultPrompt = `Gere conteúdo SEO otimizado para o seguinte produto:
+
+Nome: ${name || '[Nome do Modelo]'}
+Marca: ${brandObj?.name || '[Marca]'}
+Categoria: ${categoryObj?.name || '[Categoria]'}
+
+Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicações):
+{
+    "description": "descrição detalhada do modelo com mínimo 300 palavras, destacando benefícios, especificações técnicas e diferenciais",
+    "slug": "url-amigavel-sem-acentos-minusculas",
+    "meta_title": "título SEO com máximo 60 caracteres incluindo nome da loja",
+    "meta_description": "meta descrição persuasiva com máximo 160 caracteres destacando benefícios",
+    "keywords": ["palavra1", "palavra2", "palavra3", "palavra4", "palavra5"]
+}`;
+        setAiPrompt(defaultPrompt);
+    }, [name, brandId, categoryId, brands, categories]);
+
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        };
+    }, []);
+
+    const handleCopyPrompt = async () => {
+        try {
+            await navigator.clipboard.writeText(aiPrompt);
+            setPromptCopied(true);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+                setPromptCopied(false);
+                timeoutRef.current = null;
+            }, 2000);
+        } catch (err) {
+            console.error('Erro ao copiar prompt:', err);
+        }
+    };
+
+    const handleApplyJson = () => {
+        try {
+            if (!jsonInput.trim()) {
+                toast.error('Cole o JSON gerado pela IA primeiro.');
+                return;
+            }
+
+            let jsonText = jsonInput.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+            const start = jsonText.indexOf('{');
+            const end = jsonText.lastIndexOf('}') + 1;
+            if (start !== -1 && end !== 0) {
+                jsonText = jsonText.substring(start, end);
+            }
+
+            const data = JSON.parse(jsonText);
+
+            if (data.description) setDescription(data.description);
+            if (data.slug) handleTemplateValueChange('slug', data.slug);
+            if (data.meta_title) handleTemplateValueChange('meta_title', data.meta_title);
+            if (data.meta_description) handleTemplateValueChange('meta_description', data.meta_description);
+            if (data.keywords && Array.isArray(data.keywords)) handleTemplateValueChange('keywords', data.keywords);
+
+            setJsonInput('');
+            toast.success('Campos SEO preenchidos com sucesso pela Inteligência Artificial!');
+        } catch (err) {
+            console.error('Erro no parser do JSON', err);
+            toast.error('O formato JSON é inválido. Tente novamente ou cole apenas o código da resposta.');
+        }
+    };
 
     useEffect(() => {
         loadData();
@@ -318,6 +397,18 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                         <div className="flex items-center justify-center gap-2">
                             <FileText size={18} />
                             Template
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('seo')}
+                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'seo'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-slate-600 hover:text-slate-800'
+                            }`}
+                    >
+                        <div className="flex items-center justify-center gap-2">
+                            <Search size={18} />
+                            SEO
                         </div>
                     </button>
                     <button
@@ -643,6 +734,173 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
                                 </div>
                             </div>
                         </>
+                    )}
+
+                    {/* SEO Tab */}
+                    {activeTab === 'seo' && (
+                        <div className="space-y-4">
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                <p className="text-sm text-blue-900">
+                                    🔍 <strong>SEO (Otimização de Buscas)</strong>: Configure as tags padrão para todos os produtos deste modelo.
+                                </p>
+                            </div>
+
+                            {/* Seção de Ajuda com Links para IAs */}
+                            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
+                                <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                                    <ExternalLink size={18} />
+                                    💡 Gerar Conteúdo SEO com IA
+                                </h4>
+                                <p className="text-sm text-blue-700 mb-3">
+                                    Use uma das ferramentas abaixo para gerar conteúdo SEO otimizado. Copie o prompt e cole na IA escolhida.
+                                </p>
+
+                                {/* Campo de Prompt Editável */}
+                                <div className="mb-3">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="text-xs font-medium text-blue-900">
+                                            Prompt para IA (editável)
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyPrompt}
+                                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                                        >
+                                            {promptCopied ? '✓ Copiado!' : '📋 Copiar Prompt'}
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        value={aiPrompt}
+                                        onChange={(e) => setAiPrompt(e.target.value)}
+                                        rows={12}
+                                        className="w-full px-3 py-2 text-xs font-mono border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white"
+                                        placeholder="Edite o prompt conforme necessário..."
+                                    />
+                                    <p className="text-xs text-blue-600 mt-1">
+                                        💡 Dica: O prompt é atualizado automaticamente quando você preenche Nome, Marca e Categoria.
+                                    </p>
+                                </div>
+
+                                {/* Botões de Links para IAs */}
+                                <div className="flex flex-wrap gap-2">
+                                    <a
+                                        href="https://gemini.google.com/"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                                    >
+                                        <ExternalLink size={16} /> Abrir Gemini
+                                    </a>
+                                    <a
+                                        href="https://www.perplexity.ai/"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium text-sm"
+                                    >
+                                        <ExternalLink size={16} /> Abrir Perplexity
+                                    </a>
+                                    <a
+                                        href="https://x.com/i/grok"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium text-sm"
+                                    >
+                                        <ExternalLink size={16} /> Abrir Grok
+                                    </a>
+                                    <a
+                                        href="https://chat.openai.com/"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+                                    >
+                                        <ExternalLink size={16} /> Abrir ChatGPT
+                                    </a>
+                                </div>
+
+                                {/* Campo de Cola do JSON */}
+                                <div className="mt-4 pt-4 border-t border-blue-200">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-semibold text-blue-900">
+                                            Colar Resposta da IA (JSON)
+                                        </label>
+                                    </div>
+                                    <div className="flex flex-col gap-2 relative">
+                                        <textarea
+                                            value={jsonInput}
+                                            onChange={(e) => setJsonInput(e.target.value)}
+                                            rows={4}
+                                            className="w-full px-3 py-2 text-xs font-mono border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                            placeholder='Ex: { "description": "...", "slug": "...", "meta_title": "..." }'
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleApplyJson}
+                                            className="self-end px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition-colors shadow-md"
+                                        >
+                                            Preencher Campos Automaticamente ✨
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    URL Amigável Padrão (Slug)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={templateValues['slug'] || ''}
+                                    onChange={(e) => handleTemplateValueChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Ex: iphone-14-pro"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">Os produtos herdarão esse slug. Dica: deixe vazio para o Auto-Gerador criar único por variação.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Título SEO
+                                </label>
+                                <input
+                                    type="text"
+                                    value={templateValues['meta_title'] || ''}
+                                    onChange={(e) => handleTemplateValueChange('meta_title', e.target.value)}
+                                    maxLength={60}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Máx 60 caracteres"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Meta Descrição
+                                </label>
+                                <textarea
+                                    value={templateValues['meta_description'] || ''}
+                                    onChange={(e) => handleTemplateValueChange('meta_description', e.target.value)}
+                                    maxLength={160}
+                                    rows={3}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                    placeholder="Descrição curta (Máx 160 caracteres)"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Palavras-chave (Keywords)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={templateValues['keywords'] ? templateValues['keywords'].join(', ') : ''}
+                                    onChange={(e) => {
+                                        const values = e.target.value.split(',').map(k => k.trim()).filter(k => k);
+                                        handleTemplateValueChange('keywords', values);
+                                    }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="palavra1, palavra2, smartphone..."
+                                />
+                            </div>
+                        </div>
                     )}
 
                     {/* Photos Tab */}

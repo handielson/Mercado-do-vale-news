@@ -29,9 +29,15 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         DEV_MODE ? "md:top-10 md:h-[calc(100vh-2.5rem)]" : ""
       )}>
         <div className="px-2">
-          <h1 className="text-xl font-bold tracking-tighter text-blue-400">
-            {settings.company_name}
-          </h1>
+          <Link to="/" target="_blank" title="Ver Loja" className="block hover:opacity-80 transition-opacity">
+            {settings.logo_dark || settings.logo_main ? (
+              <img src={settings.logo_dark || settings.logo_main} alt={settings.company_name} className="h-10 object-contain" />
+            ) : (
+              <h1 className="text-xl font-bold tracking-tighter text-blue-400">
+                {settings.company_name}
+              </h1>
+            )}
+          </Link>
           <div className="flex items-center gap-1.5 mt-1">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
