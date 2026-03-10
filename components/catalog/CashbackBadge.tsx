@@ -37,7 +37,7 @@ export function CashbackBadge({ paidAmountBrl, className = '', variant = 'minima
                     max_redeem_percent: 0,
                     created_at: '',
                     updated_at: ''
-                } as CashbackSettings;
+                } as unknown as CashbackSettings;
             });
         }
 

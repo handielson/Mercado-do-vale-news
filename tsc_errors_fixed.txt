@@ -1,4 +1,4 @@
-﻿api/seo-produto.ts(119,25): error TS2339: Property 'sku' does not exist on type '{ name: any; description: any; meta_title: any; meta_description: any; seo_keywords: any; images: any; price_retail: any; stock_quantity: any; }'.
+api/seo-produto.ts(119,25): error TS2339: Property 'sku' does not exist on type '{ name: any; description: any; meta_title: any; meta_description: any; seo_keywords: any; images: any; price_retail: any; stock_quantity: any; }'.
 components/admin/BannerEditor.tsx(24,15): error TS2322: Type '{ id: string; image_url: string; title: string; is_active: true; link_type: "none"; display_order: number; clicks_count: number; views_count: number; created_at: Date; updated_at: Date; }[]' is not assignable to type 'Banner[]'.
   Property 'target_audience' is missing in type '{ id: string; image_url: string; title: string; is_active: true; link_type: "none"; display_order: number; clicks_count: number; views_count: number; created_at: Date; updated_at: Date; }' but required in type 'Banner'.
 components/admin/BannerEditor.tsx(162,72): error TS2339: Property 'link_value' does not exist on type 'Banner'.

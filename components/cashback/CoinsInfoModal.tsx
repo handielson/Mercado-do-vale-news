@@ -16,6 +16,18 @@ export function CoinsInfoModal({
     coinsPerReal = 1,
     coinsToReais = 100,
 }: CoinsInfoModalProps) {
+    const [expiryDays, setExpiryDays] = React.useState<number>(0);
+
+    // Fetch configurações adicionais se necessario
+    useEffect(() => {
+        import('../../services/cashbackService').then(m => {
+            m.getCashbackSettings().then(s => {
+                if (s?.coins_expire_after_days) {
+                    setExpiryDays(s.coins_expire_after_days);
+                }
+            }).catch(() => null);
+        });
+    }, []);
     // Fechar com Escape
     useEffect(() => {
         const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -171,7 +183,9 @@ export function CoinsInfoModal({
                                 'Faça check-in todo dia para não quebrar o streak',
                                 `No dia ${dailyValues.length} você ganha ${dailyValues[dailyValues.length - 1]} moedas — o maior bônus!`,
                                 'Compras maiores geram mais moedas',
-                                'Moedas não expiram enquanto você mantiver atividade',
+                                expiryDays > 0
+                                    ? `As moedas expiram em ${expiryDays} dias após serem ganhas`
+                                    : 'Moedas não expiram enquanto você mantiver atividade',
                             ].map((tip, i) => (
                                 <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
                                     <CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />

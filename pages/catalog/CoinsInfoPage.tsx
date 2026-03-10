@@ -21,7 +21,7 @@ export default function CoinsInfoPage() {
     const minRedeem = settings?.min_coins_to_redeem ?? 100;
     const maxRedeemPct = settings?.max_redeem_percent ?? 20;
     const expiryDays = settings?.coins_expire_after_days ?? 0;
-    const coinsPerReferral = settings?.coins_per_referral_purchase ?? 50;
+    const referralMultiplier = settings?.referral_coins_per_real ?? 0.50;
 
     const [userCode, setUserCode] = useState<string | null>(null);
 
@@ -146,8 +146,8 @@ export default function CoinsInfoPage() {
                             <div className="flex-1">
                                 <h3 className="font-semibold text-slate-800 mb-1">Indicação de Amigos (Compartilhamento)</h3>
                                 <p className="text-sm text-slate-600">
-                                    Compartilhe produtos conosco! Quando alguém fechar uma compra no WhatsApp usando sua indicação, você ganha{' '}
-                                    <strong className="text-purple-700">{coinsPerReferral} moedas</strong> automaticamente!
+                                    Compartilhe produtos conosco! Quando alguém fechar uma compra usando sua indicação, você ganha{' '}
+                                    <strong className="text-purple-700">{referralMultiplier * 100}% do subtotal da compra em moedas</strong> automaticamente! (Ex: R$ 100 da compra = {100 * referralMultiplier} moedas).
                                 </p>
                                 {userCode && (
                                     <div className="mt-2 text-sm bg-purple-50 p-2 rounded border border-purple-100">
@@ -296,8 +296,8 @@ export default function CoinsInfoPage() {
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                         {expiryDays > 0 ? (
                             <p className="text-sm text-slate-600">
-                                As moedas expiram após <strong>{expiryDays} dias</strong> sem atividade na conta.
-                                Para mantê-las, faça compras ou check-ins regularmente.
+                                As moedas expiram após <strong>{expiryDays} dias</strong> a partir da data em que foram ganhas.
+                                Utilize suas moedas dentro deste prazo para não perdê-las.
                             </p>
                         ) : (
                             <div className="flex items-center gap-2">

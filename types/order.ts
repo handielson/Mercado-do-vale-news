@@ -111,6 +111,10 @@ export interface Order {
     coins_spent?: number;             // quantidade de moedas
     coins_discount?: number;          // em centavos
 
+    // Referral
+    referral_code?: string;
+    referral_name?: string;
+
     notes?: string;
     created_at: string;
     updated_at: string;
@@ -137,6 +141,9 @@ export interface OrderInput {
     coupon_discount?: number;         // em centavos
     coins_spent?: number;
     coins_discount?: number;
+
+    referral_code?: string;
+    referral_name?: string;
 
     notes?: string;
 }

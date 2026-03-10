@@ -27,6 +27,7 @@ const TX_LABELS: Record<CoinTransactionType, { label: string; color: string }> =
     earn_checkin: { label: 'Check-in', color: 'bg-blue-100 text-blue-800' },
     earn_streak: { label: 'Streak Bônus', color: 'bg-purple-100 text-purple-800' },
     earn_manual: { label: 'Crédito Admin', color: 'bg-teal-100 text-teal-800' },
+    earn_referral: { label: 'Indicação', color: 'bg-indigo-100 text-indigo-800' },
     spend_discount: { label: 'Resgate', color: 'bg-orange-100 text-orange-800' },
     refund_cancel: { label: 'Estorno', color: 'bg-yellow-100 text-yellow-800' },
     expire: { label: 'Expirado', color: 'bg-red-100 text-red-800' },
@@ -538,7 +539,7 @@ function SettingsTab() {
 
                 <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
                     <h3 className="font-semibold text-slate-800">🤝 Indicações e Compartilhamento</h3>
-                    {field('Moedas por Venda Indicada', 'coins_per_referral_purchase', 'Qtd. de moedas que o cliente ganha quando alguém compra usando seu código')}
+                    {field('Multiplicador de Indicação', 'referral_coins_per_real', 'Ex: 0.5 = O indicador ganha 50% do valor da compra em moedas', 'number')}
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4 md:col-span-2">

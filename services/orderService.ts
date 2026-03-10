@@ -18,7 +18,7 @@ import { paymentIntegrationService } from './paymentIntegrationService';
 import { mercadoPagoProvider } from './providers/mercadoPagoProvider';
 import { telegramBotService } from './telegramBot';
 import { formatCurrency } from '../utils/saleCalculations';
-import { addPendingCoinsForPurchase, confirmPendingCoins, cancelPendingCoins } from './cashbackService';
+import { addPendingCoinsForPurchase, confirmPendingCoins, cancelPendingCoins, cancelReferralReward } from './cashbackService';
 
 const COMPANY_SLUG = 'mercado-do-vale';
 
@@ -108,6 +108,8 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         coupon_discount: couponDisc,
         coins_spent: input.coins_spent ?? 0,
         coins_discount: coinsDisc,
+        referral_code: input.referral_code ?? null,
+        referral_name: input.referral_name ?? null,
         notes: input.notes ?? null,
     };
 
@@ -122,8 +124,9 @@ export async function createOrder(input: OrderInput): Promise<Order> {
 
     // Adiciona moedas pendentes (aguardando conf. de pagamento)
     if (orderData.customer_id) {
-        const totalReais = orderData.total / 100;
-        addPendingCoinsForPurchase(orderData.customer_id, totalReais, order.id).catch(e => console.error("Erro ao emitir moedas pendentes:", e));
+        // Moedas calculadas apenas sobre o valor dos produtos (excluindo frete)
+        const productTotalReais = (orderData.subtotal - orderData.discount) / 100;
+        addPendingCoinsForPurchase(orderData.customer_id, productTotalReais, order.id).catch(e => console.error("Erro ao emitir moedas pendentes:", e));
     }
 
     // Insere os itens
@@ -366,7 +369,7 @@ export async function confirmPayment(
 ): Promise<void> {
     const { data: order, error: fetchError } = await supabase
         .from('orders')
-        .select('id, items:order_items(product_id, quantity)')
+        .select('id, subtotal, discount, referral_code, customer_id, customer_name, items:order_items(product_id, quantity)')
         .eq('gateway_payment_id', gatewayPaymentId)
         .single();
 
@@ -382,6 +385,22 @@ export async function confirmPayment(
 
     // Confirma moedas pendentes
     confirmPendingCoins(order.id).catch(e => console.error("Erro confirmando moedas:", e));
+
+    // Processa recompensa de indicação (se houver)
+    if (order.referral_code && order.customer_id) {
+        const productTotalReais = (order.subtotal - order.discount) / 100;
+        supabase.rpc('process_referral_reward', {
+            p_referral_code: order.referral_code,
+            p_buyer_id: order.customer_id,
+            p_purchase_value: productTotalReais,
+            p_reference_id: order.id,
+            p_reference_type: 'order',
+            p_buyer_name: order.customer_name
+        }).then(({ error, data }) => {
+            if (error) console.error("Erro na RPC de indicação:", error);
+            else console.log("Resultado da indicação:", data);
+        });
+    }
 
     // Notifica Telegram: pagamento online confirmado (PIX/webhook)
     const items = (order as any).items || [];
@@ -407,7 +426,7 @@ export async function confirmPayment(
 export async function completeOnDeliveryOrder(id: string): Promise<void> {
     const { data: order, error: fetchError } = await supabase
         .from('orders')
-        .select('id, items:order_items(product_id, quantity)')
+        .select('id, subtotal, discount, referral_code, customer_id, customer_name, items:order_items(product_id, quantity)')
         .eq('id', id)
         .single();
 
@@ -423,6 +442,22 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
 
     // Confirma moedas pendentes
     confirmPendingCoins(id).catch(e => console.error("Erro confirmando moedas entregues:", e));
+
+    // Processa recompensa de indicação (se houver)
+    if (order.referral_code && order.customer_id) {
+        const productTotalReais = (order.subtotal - order.discount) / 100;
+        supabase.rpc('process_referral_reward', {
+            p_referral_code: order.referral_code,
+            p_buyer_id: order.customer_id,
+            p_purchase_value: productTotalReais,
+            p_reference_id: order.id,
+            p_reference_type: 'order',
+            p_buyer_name: order.customer_name
+        }).then(({ error, data }) => {
+            if (error) console.error("Erro na RPC de indicação:", error);
+            else console.log("Resultado da indicação:", data);
+        });
+    }
 
     // Deduz estoque
     const items = (order as any).items || [];
@@ -449,6 +484,9 @@ export async function cancelOrder(id: string): Promise<void> {
 
     // Cancela moedas pendentes
     cancelPendingCoins(id).catch(e => console.error("Erro cancelando moedas pendentes:", e));
+
+    // Estorna moedas de indicação (se existirem e já tiverem sido pagas)
+    cancelReferralReward(id).catch(e => console.error("Erro cancelando moedas de indicação:", e));
 }
 
 // ─── Salvar resultado do gateway no pedido ────────────────────────────────────

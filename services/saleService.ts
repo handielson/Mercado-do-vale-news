@@ -16,6 +16,7 @@ import { calculateSaleTotals } from '../utils/saleCalculations';
 import { promotionService } from './promotionService';
 import { benefitService } from './benefitService';
 import { syncStockToBling } from './blingService';
+import { cancelReferralReward } from './cashbackService';
 
 /**
  * Create a new sale
@@ -162,9 +163,14 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
 
                 const buyerName = customer?.name || 'Cliente';
 
+                const productTotalReais = (totals.subtotal - totals.discount_total) / 100;
+
                 const { data: rpcResult, error: rpcError } = await supabase.rpc('process_referral_reward', {
                     p_referral_code: saleInput.referral_code,
-                    p_sale_id: sale.id,
+                    p_buyer_id: saleInput.customer_id,
+                    p_purchase_value: productTotalReais,
+                    p_reference_id: sale.id,
+                    p_reference_type: 'sale',
                     p_buyer_name: buyerName
                 });
 
@@ -319,6 +325,9 @@ export const cancelSale = async (id: string): Promise<void> => {
             .from('delivery_credits')
             .update({ status: 'cancelled' })
             .eq('sale_id', id);
+
+        // Estorna moedas de indicação (se existirem e já tiverem sido pagas)
+        cancelReferralReward(id).catch(e => console.error("Erro cancelando moedas de indicação:", e));
     } catch (error) {
         console.error('Error cancelling sale:', error);
         throw error;
@@ -358,6 +367,9 @@ export const refundSale = async (id: string): Promise<void> => {
             .from('delivery_credits')
             .update({ status: 'cancelled' })
             .eq('sale_id', id);
+
+        // Estorna moedas de indicação (se existirem e já tiverem sido pagas)
+        cancelReferralReward(id).catch(e => console.error("Erro cancelando moedas de indicação:", e));
     } catch (error) {
         console.error('Error refunding sale:', error);
         throw error;

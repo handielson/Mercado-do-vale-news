@@ -12,7 +12,8 @@ export interface CashbackSettings {
     max_redeem_percent: number;       // máx % do pedido pago com moedas (ex: 20)
     min_coins_to_redeem: number;      // saldo mínimo para resgatar
     // Indicação (Referral)
-    coins_per_referral_purchase: number; // moedas ganhas por venda indicada (ex: 50)
+    coins_per_referral_purchase?: number; // moedas ganhas por venda indicada (legado)
+    referral_coins_per_real: number;      // multiplicador. Ex: 0.50 = 50% do valor da compra
     // Check-in
     checkin_base_coins: number;
     checkin_streak_milestones: CheckinMilestone[];

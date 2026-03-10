@@ -259,6 +259,7 @@ export default function CheckoutPage() {
             }] : [];
 
             const order = await createOrder({
+                customer_id: customer?.id || undefined,
                 customer_name: form.customer_name,
                 customer_phone: form.customer_phone,
                 customer_email: form.customer_email || undefined,
@@ -268,21 +269,19 @@ export default function CheckoutPage() {
                 delivery_type: form.delivery_type,
                 shipping_address: shippingAddress,
                 shipping_cost: shippingCost,
-                notes: JSON.stringify({
-                    referral_code: state.referralCode || undefined,
-                    referral_name: state.referralName || undefined,
-                    delivery_notes: form.complement || undefined, // Campo complemento do Checkout muitas vezes tem a obs, ou adicionamos no QuoteModal
-                }),
+                referral_code: state.referralCode || undefined,
+                referral_name: state.referralName || undefined,
+                notes: form.complement || undefined,
                 // Token do Brick para checkout transparente (se cartão MP)
                 ...(cardFormData ? { card_form_data: cardFormData } : {}),
             } as any);
 
             // Se tem URL de checkout PRO (fallback redirect), redireciona
-            if (gatewayUrl) {
+            if (order.gateway_payment_url) {
                 isRedirectingToGateway.current = true;
                 clear();
                 sessionStorage.removeItem('mv_checkout_form');
-                window.location.href = gatewayUrl;
+                window.location.href = order.gateway_payment_url;
                 return;
             }
             clear();

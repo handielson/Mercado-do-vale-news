@@ -273,6 +273,18 @@ export async function refundCoinsOnCancel(
     if (error) throw new Error(`Erro ao estornar moedas: ${error.message}`);
 }
 
+export async function cancelReferralReward(referenceId: string): Promise<void> {
+    const { error, data } = await supabase.rpc('refund_referral_coins', {
+        p_reference_id: referenceId,
+    });
+
+    if (error) {
+        console.error(`Erro ao estornar moedas de indicacao para o pedido ${referenceId}:`, error);
+    } else {
+        console.log(`Estorno de moedas de indicação concluído:`, data);
+    }
+}
+
 // ============================================================
 // AJUSTE MANUAL (ADMIN)
 // ============================================================
