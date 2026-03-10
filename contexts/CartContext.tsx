@@ -5,6 +5,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { toast } from 'sonner';
 import type { CatalogProduct } from '@/types/catalog';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -63,15 +64,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     const addItem = (product: CatalogProduct, quantity = 1) => {
         setItems(prev => {
-            // Se já existe o mesmo produto, incrementa quantidade
             const existing = prev.find(i => i.product.id === product.id);
+            // Se já existe, validar o total
             if (existing) {
+                const totalWanted = existing.quantity + quantity;
+                if (product.track_inventory && product.stock_quantity !== undefined && totalWanted > product.stock_quantity) {
+                    toast.error(`Apenas ${product.stock_quantity} unidades disponíveis em estoque do produto ${product.name}.`);
+                    return prev;
+                }
                 return prev.map(i =>
                     i.product.id === product.id
-                        ? { ...i, quantity: i.quantity + quantity }
+                        ? { ...i, quantity: totalWanted }
                         : i
                 );
             }
+
+            // Validação de estoque para adição nova
+            if (product.track_inventory && product.stock_quantity !== undefined && quantity > product.stock_quantity) {
+                toast.error(`Apenas ${product.stock_quantity} unidades disponíveis em estoque.`);
+                return prev;
+            }
+
             // Determina o preço efetivo (considera promo ativa)
             const now = new Date();
             const isPromoActive =
@@ -105,7 +118,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
             removeItem(id);
             return;
         }
-        setItems(prev => prev.map(i => i.id === id ? { ...i, quantity } : i));
+        setItems(prev => {
+            const item = prev.find(i => i.id === id);
+            if (item && item.product.track_inventory && item.product.stock_quantity !== undefined) {
+                if (quantity > item.product.stock_quantity) {
+                    toast.error(`Estoque máximo atingido: ${item.product.stock_quantity} unidades.`);
+                    return prev;
+                }
+            }
+            return prev.map(i => i.id === id ? { ...i, quantity } : i);
+        });
     };
 
     const clear = () => setItems([]);
