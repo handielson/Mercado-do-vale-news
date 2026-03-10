@@ -83,7 +83,7 @@ import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
 import { feedbackService } from '../services/feedbackService';
-import { MaintenanceGuard } from '../components/MaintenanceGuard';
+import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
