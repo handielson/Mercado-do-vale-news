@@ -60,6 +60,7 @@ export interface CompanySettings {
     receipt_show_extra_page: boolean;
     extended_warranty_options?: WarrantyOption[];
     extended_warranty_terms_text?: string;
+    pix_discount_percentage?: number;
 
     default_a4_header?: string;
     default_thermal_header?: string;
@@ -104,6 +105,7 @@ export interface CompanySettingsInput {
     receipt_show_extra_page?: boolean;
     extended_warranty_options?: WarrantyOption[];
     extended_warranty_terms_text?: string;
+    pix_discount_percentage?: number;
 
     default_a4_header?: string;
     default_thermal_header?: string;

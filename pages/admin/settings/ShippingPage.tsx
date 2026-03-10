@@ -464,12 +464,41 @@ export default function ShippingPage() {
                                         </span>
                                         {!zone.enabled && <span className="text-xs text-slate-400">Inativa</span>}
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-0.5">
-                                        {zone.cities?.join(', ')}
-                                        {zone.max_km_free ? ` · Grátis até ${zone.max_km_free}km` : ''}
-                                        {zone.fixed_price ? ` · Preço: R$${zone.fixed_price}` : ''}
-                                        {zone.price_per_km ? ` · R$${zone.price_per_km}/km` : ''}
-                                    </p>
+                                    <div className="text-xs text-slate-500 mt-1.5 flex flex-wrap gap-2">
+                                        {zone.cities && zone.cities.length > 0 && (
+                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                Cidades: {zone.cities.join(', ')}
+                                            </span>
+                                        )}
+                                        {zone.cep_ranges && zone.cep_ranges.length > 0 && (
+                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                CEPs: {zone.cep_ranges.length} faixa(s)
+                                            </span>
+                                        )}
+                                        {zone.max_km_free != null && (
+                                            <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded border border-green-100 font-medium">
+                                                Grátis até {zone.max_km_free}km
+                                            </span>
+                                        )}
+                                        {zone.min_order_free != null && (
+                                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-medium">
+                                                Mín. p/ Grátis: R$ {zone.min_order_free.toFixed(2).replace('.', ',')}
+                                            </span>
+                                        )}
+                                        {zone.fixed_price != null && (
+                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                Fixo: R$ {zone.fixed_price.toFixed(2).replace('.', ',')}
+                                            </span>
+                                        )}
+                                        {zone.price_per_km != null && (
+                                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                                R$ {zone.price_per_km.toFixed(2).replace('.', ',')}/km
+                                            </span>
+                                        )}
+                                        <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                            Prazo: {zone.estimated_days_min} a {zone.estimated_days_max} dias
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="flex gap-2">
                                     <button onClick={() => { setEditingZone(zone); setShowZoneForm(true); }}

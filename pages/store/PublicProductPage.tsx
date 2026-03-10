@@ -12,6 +12,10 @@ import { QuoteCartSidebar } from '@/components/catalog/QuoteCartSidebar';
 import { FloatingCartButton } from '@/components/catalog/FloatingCartButton';
 import { CatalogProduct } from '@/types/catalog';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
+import { getCashbackSettings } from '@/services/cashbackService';
+import type { CashbackSettings } from '@/types/cashback';
+import { companySettingsService } from '@/services/companySettingsService';
+import type { CompanySettings } from '@/types/companySettings';
 
 /**
  * PublicProductPage
@@ -29,8 +33,12 @@ export const PublicProductPage: React.FC = () => {
     const [siblings, setSiblings] = useState<CatalogProduct[]>([]);
     const [cep, setCep] = useState('');
     const [shippingResult, setShippingResult] = useState<{ name: string, price: string, days: string }[] | null>(null);
+    const [cashbackSettings, setCashbackSettings] = useState<CashbackSettings | null>(null);
+    const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
 
     useEffect(() => {
+        getCashbackSettings().then(setCashbackSettings).catch(console.error);
+        companySettingsService.get().then(setCompanySettings).catch(console.error);
         if (!slug) {
             navigate('/');
             return;
@@ -180,6 +188,10 @@ export const PublicProductPage: React.FC = () => {
     const discountedPrice = product.discount_percentage
         ? originalPrice * (1 - product.discount_percentage / 100)
         : originalPrice;
+
+    const estimatedCoins = cashbackSettings?.active && discountedPrice >= (cashbackSettings.min_purchase_for_coins || 0)
+        ? Math.floor(discountedPrice * (cashbackSettings.coins_per_real || 0))
+        : 0;
 
     const title = product.meta_title || `${product.name} | Mercado do Vale`;
     const description = product.meta_description || product.description || `Compre ${product.name} no Mercado do Vale.`;
@@ -437,9 +449,17 @@ export const PublicProductPage: React.FC = () => {
                                         <p className="text-sm font-medium text-green-600 mt-1">
                                             ou em até <span className="font-bold">12x de R$ {(discountedPrice / 12).toFixed(2).replace('.', ',')}</span> sem juros
                                         </p>
-                                        <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-bold border border-green-100">
-                                            ✓ 5% desconto direto no PIX
-                                        </div>
+                                        {(companySettings?.pix_discount_percentage || 0) > 0 && (
+                                            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-bold border border-green-100">
+                                                ✓ {companySettings?.pix_discount_percentage}% desconto direto no PIX
+                                            </div>
+                                        )}
+                                        {estimatedCoins > 0 && (
+                                            <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-bold border border-amber-200">
+                                                <span className="text-base leading-none">🪙</span>
+                                                Ganhe {estimatedCoins} Moedas do Vale
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div>
@@ -449,6 +469,17 @@ export const PublicProductPage: React.FC = () => {
                                         <p className="text-sm font-medium text-green-600 mt-1">
                                             ou em até <span className="font-bold">12x de R$ {(discountedPrice / 12).toFixed(2).replace('.', ',')}</span> sem juros
                                         </p>
+                                        {(companySettings?.pix_discount_percentage || 0) > 0 && (
+                                            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-bold border border-green-100">
+                                                ✓ {companySettings?.pix_discount_percentage}% desconto direto no PIX
+                                            </div>
+                                        )}
+                                        {estimatedCoins > 0 && (
+                                            <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-bold border border-amber-200">
+                                                <span className="text-base leading-none">🪙</span>
+                                                Ganhe {estimatedCoins} Moedas do Vale
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 

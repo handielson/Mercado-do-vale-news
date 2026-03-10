@@ -41,6 +41,7 @@ interface CompanySettingsRow {
     pix_key: string | null;
     pix_key_type: string | null;
     pix_beneficiary_name: string | null;
+    pix_discount_percentage: number | null;
     bank_name: string | null;
     bank_agency: string | null;
     bank_account: string | null;
@@ -95,6 +96,7 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     pixKey: row.pix_key || '',
     pixKeyType: (row.pix_key_type as any) || undefined,
     pixBeneficiaryName: row.pix_beneficiary_name || '',
+    pixDiscountPercentage: Number(row.pix_discount_percentage) || 0,
     bankName: row.bank_name || '',
     bankAgency: row.bank_agency || '',
     bankAccount: row.bank_account || '',
@@ -142,6 +144,7 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     pix_key: company.pixKey || null,
     pix_key_type: company.pixKeyType || null,
     pix_beneficiary_name: company.pixBeneficiaryName || null,
+    pix_discount_percentage: company.pixDiscountPercentage || 0,
     bank_name: company.bankName || null,
     bank_agency: company.bankAgency || null,
     bank_account: company.bankAccount || null,

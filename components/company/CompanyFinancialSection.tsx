@@ -28,7 +28,7 @@ export const CompanyFinancialSection: React.FC<CompanyFinancialSectionProps> = (
                 Dados Financeiros
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">
                         Nome do Beneficiário PIX
@@ -71,6 +71,22 @@ export const CompanyFinancialSection: React.FC<CompanyFinancialSectionProps> = (
                         <option value="PHONE">Telefone</option>
                         <option value="RANDOM">Chave Aleatória</option>
                     </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        Desconto no PIX (%)
+                    </label>
+                    <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={form.pixDiscountPercentage || 0}
+                        onChange={(e) => onChange({ pixDiscountPercentage: parseFloat(e.target.value) || 0 })}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="Ex: 5"
+                    />
                 </div>
             </div>
 

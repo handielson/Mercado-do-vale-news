@@ -53,6 +53,7 @@ export interface Company {
     bankName?: string;
     bankAgency?: string;
     bankAccount?: string;
+    pixDiscountPercentage?: number;
 
     // Additional Info
     businessHours?: string;
@@ -104,6 +105,7 @@ export const defaultCompany: Company = {
     bankName: '',
     bankAgency: '',
     bankAccount: '',
+    pixDiscountPercentage: 0,
     businessHours: '',
     description: '',
     internalNotes: '',
