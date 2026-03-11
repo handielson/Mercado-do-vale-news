@@ -212,10 +212,10 @@ export default async function handler(req: any, res: any) {
             const payload = req.body;
             const supabase = createClient(supabaseUrl, supabaseKey);
 
-            // Salva log do payload para diagnóstico (silencioso se tabela não existir)
+            // Salva log do payload para diagnóstico
             supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }).catch(() => {});
 
-            // Formato Bling v3: { event: 'stock.updated', data: { produto: {id}, saldoFisico } }
+            // Formato Bling v3: { event: 'stock.updated', data: { produto: {id, codigo}, saldoFisico } }
             const eventV3 = payload?.event as string | undefined;
             const isStockEventV3 = typeof eventV3 === 'string' && (eventV3.startsWith('stock.') || eventV3.startsWith('virtual_stock.'));
 
@@ -228,25 +228,58 @@ export default async function handler(req: any, res: any) {
             }
 
             // Extrai ID e saldo (ambos os formatos v2 e v3)
-            const blingId = payload?.data?.produto?.id
+            const rawBlingId = payload?.data?.produto?.id
                 || payload?.dados?.produto?.id
                 || payload?.data?.id;
+            const rawSku = payload?.data?.produto?.codigo
+                || payload?.dados?.produto?.codigo;
             const saldo = payload?.data?.saldoFisico
                 ?? payload?.data?.saldoVirtual
                 ?? payload?.dados?.saldoFisico
                 ?? payload?.dados?.saldoVirtual;
 
-            if (!blingId || saldo === undefined) {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_fields', blingId, saldo });
+            if (rawBlingId === undefined && !rawSku) {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_fields', rawBlingId, saldo });
             }
 
-            const { error } = await supabase
-                .from('products')
-                .update({ stock_quantity: Math.max(0, saldo) })
-                .eq('bling_id', String(blingId));
+            if (saldo === undefined) {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_saldo', rawBlingId, rawSku });
+            }
 
-            if (error) return res.status(200).json({ ok: false, error: error.message });
-            return res.status(200).json({ ok: true, blingId, saldo });
+            const newQty = Math.max(0, Number(saldo));
+            let updated = false;
+
+            // Tentativa 1: match por bling_id como número
+            if (rawBlingId !== undefined) {
+                const { data: byIdNum, error: e1 } = await supabase
+                    .from('products')
+                    .update({ stock_quantity: newQty })
+                    .eq('bling_id', Number(rawBlingId))
+                    .select('id');
+                if (!e1 && byIdNum && byIdNum.length > 0) updated = true;
+            }
+
+            // Tentativa 2: match por bling_id como string (fallback de tipo)
+            if (!updated && rawBlingId !== undefined) {
+                const { data: byIdStr, error: e2 } = await supabase
+                    .from('products')
+                    .update({ stock_quantity: newQty })
+                    .eq('bling_id', String(rawBlingId))
+                    .select('id');
+                if (!e2 && byIdStr && byIdStr.length > 0) updated = true;
+            }
+
+            // Tentativa 3: fallback por SKU
+            if (!updated && rawSku) {
+                const { data: bySku, error: e3 } = await supabase
+                    .from('products')
+                    .update({ stock_quantity: newQty })
+                    .eq('sku', String(rawSku))
+                    .select('id');
+                if (!e3 && bySku && bySku.length > 0) updated = true;
+            }
+
+            return res.status(200).json({ ok: true, updated, blingId: rawBlingId, sku: rawSku, newQty });
         } catch (err: any) {
             return res.status(200).json({ ok: false, error: err.message });
         }

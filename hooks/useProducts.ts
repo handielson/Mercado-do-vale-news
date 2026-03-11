@@ -67,15 +67,16 @@ export const useProducts = () => {
     const [itemsPerPage, setItemsPerPage] = useState(24);
 
     /**
-     * Fetch products from Supabase. forceRefresh = true shows spinner on the button.
+     * Fetch products from Supabase.
+     * mode='spinner'    → mostra isLoading (sem cache, primeiro acesso)
+     * mode='background' → silencioso, dados já estão na tela via cache
+     * mode='refresh'    → mostra isRefreshing (botão de atualizar clicado)
      */
-    const fetchProducts = useCallback(async (forceRefresh = false) => {
+    const fetchProducts = useCallback(async (mode: 'spinner' | 'background' | 'refresh' = 'spinner') => {
         try {
-            if (forceRefresh) {
-                setIsRefreshing(true);
-            } else {
-                setIsLoading(true);
-            }
+            if (mode === 'spinner') setIsLoading(true);
+            if (mode === 'refresh') setIsRefreshing(true);
+            // background: nenhum indicador visual — dados do cache já estão na tela
             setError(null);
             const data = await productService.list();
             setProducts(data);
@@ -142,14 +143,14 @@ export const useProducts = () => {
      * Force-refresh data from Supabase (used by the refresh button in the UI)
      */
     const refresh = useCallback(() => {
-        fetchProducts(true);
+        fetchProducts('refresh');
     }, [fetchProducts]);
 
     /**
      * Refetch products (useful after create/update/delete)
      */
     const refetch = useCallback(() => {
-        fetchProducts(false);
+        fetchProducts('spinner');
     }, [fetchProducts]);
 
     /**
@@ -167,14 +168,10 @@ export const useProducts = () => {
         }
     }, [refetch]);
 
-    // Initial fetch: if we have cache, fetch in background silently; otherwise show spinner
+    // Initial fetch: se tem cache → background silencioso; senão → spinner
     useEffect(() => {
-        if (cached) {
-            // Já tem dados em tela – atualiza silenciosamente em background
-            fetchProducts(false);
-        } else {
-            fetchProducts(false);
-        }
+        const hasCachedData = loadFromCache() !== null;
+        fetchProducts(hasCachedData ? 'background' : 'spinner');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
