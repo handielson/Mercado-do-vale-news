@@ -246,11 +246,57 @@ export default async function handler(req: any, res: any) {
             try { await supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }); } catch (_) { }
 
 
-            // event = "stock.updated" ou "stock.created" (conforme documentação)
+            // Identifica o tipo de evento
             const event: string | undefined = payload?.event;
-            if (typeof event !== 'string' || !event.startsWith('stock.')) {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'not_stock_event', event });
+            if (typeof event !== 'string') {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_event' });
             }
+
+            // ── Evento de PRODUTO (price_retail) ────────────────────────────────
+            if (event.startsWith('product.')) {
+                const blingId: number | undefined = payload?.data?.id;
+                const preco: number | undefined = payload?.data?.preco;
+                const sku: string | undefined = payload?.data?.codigo;
+
+                if (!blingId || preco === undefined) {
+                    return res.status(200).json({ ok: true, ignored: true, reason: 'missing_product_fields', blingId, preco });
+                }
+
+                // Busca por bling_id (ou por SKU como fallback)
+                let found2 = (await supabase.from('products').select('id, sku').eq('bling_id', blingId)).data;
+                if (!found2?.length && sku) {
+                    found2 = (await supabase.from('products').select('id, sku').eq('sku', sku)).data;
+                }
+
+                const pId = found2?.[0]?.id;
+                if (!pId) {
+                    return res.status(200).json({ ok: true, updated: false, reason: 'product_not_found', blingId, sku });
+                }
+
+                const { data: upd, error: upErr } = await supabase
+                    .from('products')
+                    .update({ price_retail: preco })
+                    .eq('id', pId)
+                    .select('id, sku, price_retail');
+
+                if (upErr) return res.status(200).json({ ok: false, error: upErr.message });
+
+                return res.status(200).json({
+                    ok: true,
+                    updated: (upd?.length ?? 0) > 0,
+                    event,
+                    blingId,
+                    preco,
+                    rows: upd?.length ?? 0,
+                    jwtRole,
+                });
+            }
+
+            // ── Evento de ESTOQUE (stock_quantity) ──────────────────────────────
+            if (!event.startsWith('stock.')) {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'unhandled_event', event });
+            }
+
 
             // Identifica o produto pelo id (inteiro, conforme documentação)
             const blingProductId: number | undefined = payload?.data?.produto?.id;
