@@ -1,4 +1,4 @@
-
+﻿
 
 import React from 'react';
 import { createBrowserRouter, Navigate, useNavigate } from 'react-router-dom';
@@ -97,8 +97,8 @@ const DashboardPage = () => {
 
   return (
     <div className="animate-in fade-in duration-500">
-      <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
-      <p className="text-slate-500">Gestão operacional do ecossistema.</p>
+      <h2 className="text-3xl font-bold tracking-tight">VisÃ£o Geral</h2>
+      <p className="text-slate-500">GestÃ£o operacional do ecossistema.</p>
 
       {/* Alerta de Novas Mensagens */}
       {unreadFeedbacks > 0 && (
@@ -110,9 +110,9 @@ const DashboardPage = () => {
             <MessageSquareDashed size={20} />
           </div>
           <div>
-            <h3 className="text-amber-800 font-bold text-sm">Atenção: Novas Mensagens!</h3>
+            <h3 className="text-amber-800 font-bold text-sm">AtenÃ§Ã£o: Novas Mensagens!</h3>
             <p className="text-amber-700 text-sm mt-0.5">
-              Você tem <strong>{unreadFeedbacks}</strong> {unreadFeedbacks === 1 ? 'mensagem' : 'mensagens'} aguardando leitura na sua caixa de entrada. Clique aqui para ler.
+              VocÃª tem <strong>{unreadFeedbacks}</strong> {unreadFeedbacks === 1 ? 'mensagem' : 'mensagens'} aguardando leitura na sua caixa de entrada. Clique aqui para ler.
             </p>
           </div>
         </div>
@@ -121,18 +121,18 @@ const DashboardPage = () => {
       {/* Quick Access Cards */}
       <div className="mt-8 space-y-8">
 
-        {/* ── Grupo: Produtos & Catálogo ── */}
+        {/* â”€â”€ Grupo: Produtos & CatÃ¡logo â”€â”€ */}
         <div>
           <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <span>📦</span> Produtos & Catálogo
+            <span>ðŸ“¦</span> Produtos & CatÃ¡logo
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
 
             <button onClick={() => navigate('/admin/products')}
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer group text-left">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                  <span className="text-lg">📦</span>
+                  <span className="text-lg">ðŸ“¦</span>
                 </div>
                 <p className="font-semibold text-slate-800 text-sm">Produtos</p>
               </div>
@@ -143,7 +143,7 @@ const DashboardPage = () => {
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group text-left">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                  <span className="text-lg">📱</span>
+                  <span className="text-lg">ðŸ“±</span>
                 </div>
                 <p className="font-semibold text-slate-800 text-sm">Modelos</p>
               </div>
@@ -154,42 +154,53 @@ const DashboardPage = () => {
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-yellow-400 hover:shadow-md transition-all cursor-pointer group text-left">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-yellow-100 rounded-lg flex items-center justify-center group-hover:bg-yellow-200 transition-colors">
-                  <span className="text-lg">📊</span>
+                  <span className="text-lg">ðŸ“Š</span>
                 </div>
                 <p className="font-semibold text-slate-800 text-sm">Estoque</p>
               </div>
-              <p className="text-xs text-slate-500">Movimentações e saldos</p>
+              <p className="text-xs text-slate-500">MovimentaÃ§Ãµes e saldos</p>
             </button>
 
             <button onClick={() => navigate('/admin/settings/catalog')}
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group text-left">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
-                  <span className="text-lg">🛍️</span>
+                  <span className="text-lg">ðŸ›ï¸</span>
                 </div>
-                <p className="font-semibold text-slate-800 text-sm">Catálogo</p>
+                <p className="font-semibold text-slate-800 text-sm">CatÃ¡logo</p>
               </div>
-              <p className="text-xs text-slate-500">Configurar catálogo</p>
+              <p className="text-xs text-slate-500">Configurar catÃ¡logo</p>
             </button>
 
             <a href="/" target="_blank" rel="noopener noreferrer"
               className="bg-gradient-to-br from-indigo-600 to-blue-700 p-4 rounded-xl shadow-sm hover:shadow-md transition-all text-left text-white">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center">
-                  <span className="text-lg">🛒</span>
+                  <span className="text-lg">ðŸ›’</span>
                 </div>
-                <p className="font-semibold text-sm">Ver Loja ↗</p>
+                <p className="font-semibold text-sm">Ver Loja â†—</p>
               </div>
               <p className="text-xs text-blue-200">Abrir loja como cliente</p>
             </a>
 
+            <button onClick={() => navigate('/admin/settings/bling')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-orange-50 rounded-lg flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                  <span className="text-lg">ðŸ”—</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">Bling</p>
+              </div>
+              <p className="text-xs text-slate-500">Sync ERP / Webhook</p>
+            </button>
+
           </div>
         </div>
 
-        {/* ── Grupo: Operações Diárias ── */}
+        {/* â”€â”€ Grupo: OperaÃ§Ãµes DiÃ¡rias â”€â”€ */}
         <div>
           <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <span>⚡</span> Operações Diárias
+            <span>âš¡</span> OperaÃ§Ãµes DiÃ¡rias
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
 
@@ -197,7 +208,7 @@ const DashboardPage = () => {
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-purple-400 hover:shadow-md transition-all cursor-pointer group text-left">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                  <span className="text-lg">💰</span>
+                  <span className="text-lg">ðŸ’°</span>
                 </div>
                 <p className="font-semibold text-slate-800 text-sm">PDV</p>
               </div>
@@ -208,18 +219,18 @@ const DashboardPage = () => {
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-sky-400 hover:shadow-md transition-all cursor-pointer group text-left">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-sky-100 rounded-lg flex items-center justify-center group-hover:bg-sky-200 transition-colors">
-                  <span className="text-lg">📋</span>
+                  <span className="text-lg">ðŸ“‹</span>
                 </div>
                 <p className="font-semibold text-slate-800 text-sm">Vendas</p>
               </div>
-              <p className="text-xs text-slate-500">Histórico de vendas</p>
+              <p className="text-xs text-slate-500">HistÃ³rico de vendas</p>
             </button>
 
             <button onClick={() => navigate('/admin/orders')}
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer group text-left">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-teal-100 rounded-lg flex items-center justify-center group-hover:bg-teal-200 transition-colors">
-                  <span className="text-lg">🛒</span>
+                  <span className="text-lg">ðŸ›’</span>
                 </div>
                 <p className="font-semibold text-slate-800 text-sm">Pedidos</p>
               </div>
@@ -230,7 +241,7 @@ const DashboardPage = () => {
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer group text-left">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
-                  <span className="text-lg">💳</span>
+                  <span className="text-lg">ðŸ’³</span>
                 </div>
                 <p className="font-semibold text-slate-800 text-sm">Financeiro</p>
               </div>
@@ -241,11 +252,11 @@ const DashboardPage = () => {
               className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-xl shadow-sm hover:shadow-md transition-all text-left text-white">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center">
-                  <span className="text-lg">🚚</span>
+                  <span className="text-lg">ðŸšš</span>
                 </div>
                 <p className="font-semibold text-sm">Calcular Frete</p>
               </div>
-              <p className="text-xs text-blue-100">Cotação avulsa</p>
+              <p className="text-xs text-blue-100">CotaÃ§Ã£o avulsa</p>
             </button>
 
           </div>
@@ -256,11 +267,11 @@ const DashboardPage = () => {
       {/* Stats Cards */}
       <div className="mt-8">
         <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span>📊</span> Visão Geral
+          <span>ðŸ“Š</span> VisÃ£o Geral
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
-            <p className="text-xs font-semibold text-slate-500 uppercase">Total Operações</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase">Total OperaÃ§Ãµes</p>
             <p className="text-2xl font-bold mt-1">R$ 0,00</p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-red-500">
@@ -268,7 +279,7 @@ const DashboardPage = () => {
             <p className="text-2xl font-bold mt-1">0 itens</p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500">
-            <p className="text-xs font-semibold text-slate-500 uppercase">Requisições Atacado</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase">RequisiÃ§Ãµes Atacado</p>
             <p className="text-2xl font-bold mt-1">0</p>
           </div>
         </div>
@@ -280,7 +291,7 @@ const DashboardPage = () => {
 
 const StorePage = () => (
   <div className="p-8 animate-in slide-in-from-bottom-4 duration-500">
-    <h1 className="text-3xl font-bold">Catálogo de Produtos</h1>
+    <h1 className="text-3xl font-bold">CatÃ¡logo de Produtos</h1>
     <p className="text-slate-500 mt-2">Explore as melhores ofertas para o seu perfil.</p>
     <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
       <div className="aspect-square bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 italic">
@@ -341,12 +352,12 @@ export const router = createBrowserRouter([
     path: "/perfil",
     element: <CustomerProfilePage />
   },
-  // Regulamento Moedas do Vale (página pública)
+  // Regulamento Moedas do Vale (pÃ¡gina pÃºblica)
   {
     path: "/moedas-do-vale",
     element: <CoinsInfoPage />
   },
-  // Promoções e Vantagens (Central Pública)
+  // PromoÃ§Ãµes e Vantagens (Central PÃºblica)
   {
     path: "/promocoes",
     element: <CustomerPromotionsPage />
@@ -355,7 +366,7 @@ export const router = createBrowserRouter([
     path: "/promocoes/pelicula-gratis",
     element: <FreeScreenProtectorRulesPage />
   },
-  // Garantia Estendida (página pública)
+  // Garantia Estendida (pÃ¡gina pÃºblica)
   {
     path: "/garantia-estendida",
     element: <ExtendedWarrantyPage />
@@ -857,7 +868,7 @@ export const router = createBrowserRouter([
       </MaintenanceGuard>
     )
   },
-  // ─── Loja / Checkout ───────────────────────────────────────────────────────
+  // â”€â”€â”€ Loja / Checkout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     path: "/carrinho",
     element: (
@@ -884,7 +895,7 @@ export const router = createBrowserRouter([
     path: "/pedido/:id/confirmacao",
     element: <OrderConfirmationPage />
   },
-  // ─── Admin — Pedidos Online ────────────────────────────────────────────────
+  // â”€â”€â”€ Admin â€” Pedidos Online â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     path: "/admin/pedidos-online",
     element: (
@@ -895,7 +906,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "*",
-    element: <div className="p-20 text-center font-medium text-slate-500">404 - Página não encontrada</div>
+    element: <div className="p-20 text-center font-medium text-slate-500">404 - PÃ¡gina nÃ£o encontrada</div>
   }
 ]);
 
