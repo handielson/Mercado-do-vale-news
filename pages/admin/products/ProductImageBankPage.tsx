@@ -37,6 +37,31 @@ export function ProductImageBankPage() {
     const [previewFile, setPreviewFile] = useState<{ name: string; url: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Drag-to-reorder no banco de imagens (por SKU)
+    const [draggedBankImg, setDraggedBankImg] = useState<{ sku: string; fromIdx: number } | null>(null);
+
+    const handleBankDragStart = (sku: string, fromIdx: number) => {
+        setDraggedBankImg({ sku, fromIdx });
+    };
+
+    const handleBankDragOver = (e: React.DragEvent, sku: string, toIdx: number) => {
+        e.preventDefault();
+        if (!draggedBankImg || draggedBankImg.sku !== sku || draggedBankImg.fromIdx === toIdx) return;
+        setBankImages(prev => {
+            const skuImages = prev.filter(img => img.sku === sku);
+            const others = prev.filter(img => img.sku !== sku);
+            const moved = skuImages[draggedBankImg.fromIdx];
+            if (!moved) return prev;
+            const reordered = [...skuImages];
+            reordered.splice(draggedBankImg.fromIdx, 1);
+            reordered.splice(toIdx, 0, moved);
+            return [...others, ...reordered];
+        });
+        setDraggedBankImg({ sku, fromIdx: toIdx });
+    };
+
+    const handleBankDragEnd = () => setDraggedBankImg(null);
+
     // Dados do banco para o gerador
     const [dbSkus, setDbSkus] = useState<{ sku: string; name: string; color?: string }[]>([]);
     const [dbColors, setDbColors] = useState<string[]>([]);
@@ -804,14 +829,34 @@ export function ProductImageBankPage() {
                                     </span>
                                 </div>
                                 <div className="flex flex-wrap gap-3">
-                                    {grouped[sku]
-                                        .sort((a, b) => a.color.localeCompare(b.color) || a.order - b.order)
-                                        .map(img => (
+                                    {grouped[sku].map((img, imgIdx) => {
+                                        const isDraggingThis = draggedBankImg?.sku === sku && draggedBankImg?.fromIdx === imgIdx;
+                                        return (
                                             <div
                                                 key={img.path}
-                                                className="group relative w-24 h-24 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer"
+                                                draggable
+                                                onDragStart={() => handleBankDragStart(sku, imgIdx)}
+                                                onDragOver={(e) => handleBankDragOver(e, sku, imgIdx)}
+                                                onDragEnd={handleBankDragEnd}
+                                                className={`group relative w-24 h-24 rounded-lg overflow-hidden border-2 bg-slate-50 cursor-grab active:cursor-grabbing transition-all ${
+                                                    isDraggingThis
+                                                        ? 'border-blue-400 opacity-40 scale-95'
+                                                        : imgIdx === 0
+                                                            ? 'border-blue-400'
+                                                            : 'border-slate-200 hover:border-blue-300'
+                                                }`}
                                                 onClick={() => setPreviewFile({ name: img.filename, url: img.url })}
                                             >
+                                                {/* Grip icon */}
+                                                <div className="absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <GripVertical size={14} className="text-white drop-shadow" />
+                                                </div>
+                                                {/* Badge Principal */}
+                                                {imgIdx === 0 && (
+                                                    <div className="absolute top-1 right-1 z-10 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.5 rounded shadow">
+                                                        CAPA
+                                                    </div>
+                                                )}
                                                 <img
                                                     src={img.url}
                                                     alt={img.filename}
@@ -827,11 +872,12 @@ export function ProductImageBankPage() {
                                                 </div>
                                                 <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5">
                                                     <p className="text-[9px] text-white truncate text-center">
-                                                        {img.color} #{img.order}
+                                                        #{imgIdx + 1} {img.color && img.color !== '' ? img.color : ''}
                                                     </p>
                                                 </div>
                                             </div>
-                                        ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}
