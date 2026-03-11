@@ -230,13 +230,11 @@ export function ModernProductCard({
             }
         }
 
-        // Fallback to placeholder with brand name
-        const brandName = productToUse.brand || product.brand || 'Produto';
-        return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%233B82F6'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>${encodeURIComponent(brandName)}</text></svg>`;
+        // Fallback to professional placeholder
+        return '/product-placeholder.png';
     };
 
-    const imageUrl = !imageError ? getImageUrl() :
-        `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%23EF4444'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>Sem Imagem</text></svg>`;
+    const imageUrl = !imageError ? getImageUrl() : '/product-placeholder.png';
 
     // Build memory badge (RAM/Storage)
     const memoryBadge = variants && variants.rams.length > 0 && variants.storages.length > 0
