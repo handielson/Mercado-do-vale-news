@@ -275,9 +275,10 @@ export default async function handler(req: any, res: any) {
 
                 const { data: upd, error: upErr } = await supabase
                     .from('products')
-                    .update({ price_retail: preco })
+                    .update({ price_retail: Math.round(preco * 100) })
                     .eq('id', pId)
                     .select('id, sku, price_retail');
+
 
                 if (upErr) return res.status(200).json({ ok: false, error: upErr.message });
 
