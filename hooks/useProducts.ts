@@ -5,15 +5,57 @@ import { ProductStatus } from '../utils/field-standards';
 import { productService } from '../services/products';
 import { ProductFiltersState } from '../components/products/ProductFilters';
 
+const CACHE_KEY = 'admin_products_cache';
+const CACHE_TIMESTAMP_KEY = 'admin_products_cache_ts';
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+function loadFromCache(): Product[] | null {
+    try {
+        const ts = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+        if (!ts) return null;
+        const age = Date.now() - parseInt(ts, 10);
+        if (age > CACHE_TTL_MS) return null;
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw) as Product[];
+    } catch {
+        return null;
+    }
+}
+
+function saveToCache(products: Product[]) {
+    try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(products));
+        localStorage.setItem(CACHE_TIMESTAMP_KEY, String(Date.now()));
+    } catch { /* quota cheia, ignora */ }
+}
+
+function getCacheAge(): string | null {
+    try {
+        const ts = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+        if (!ts) return null;
+        const diffMs = Date.now() - parseInt(ts, 10);
+        const diffMin = Math.floor(diffMs / 60000);
+        if (diffMin < 1) return 'agora';
+        return `há ${diffMin} min`;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * useProducts Hook
- * Manages product list state, loading, and client-side filtering
+ * Manages product list state, loading, and client-side filtering.
+ * Loads instantly from localStorage cache, then refreshes in background.
  */
 export const useProducts = () => {
-    const [products, setProducts] = useState<Product[]>([]);
-    const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const cached = loadFromCache();
+    const [products, setProducts] = useState<Product[]>(cached || []);
+    const [filteredProducts, setFilteredProducts] = useState<Product[]>(cached || []);
+    const [isLoading, setIsLoading] = useState(!cached); // só mostra loading se não tem cache
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [cacheAge, setCacheAge] = useState<string | null>(getCacheAge);
     const [filters, setFilters] = useState<ProductFiltersState>({
         search: '',
         status: 'all',
@@ -25,20 +67,27 @@ export const useProducts = () => {
     const [itemsPerPage, setItemsPerPage] = useState(24);
 
     /**
-     * Fetch products from service
+     * Fetch products from Supabase. forceRefresh = true shows spinner on the button.
      */
-    const fetchProducts = useCallback(async () => {
+    const fetchProducts = useCallback(async (forceRefresh = false) => {
         try {
-            setIsLoading(true);
+            if (forceRefresh) {
+                setIsRefreshing(true);
+            } else {
+                setIsLoading(true);
+            }
             setError(null);
             const data = await productService.list();
             setProducts(data);
-            setFilteredProducts(data); // Initially show all
+            setFilteredProducts(data);
+            saveToCache(data);
+            setCacheAge('agora');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Erro ao carregar produtos');
             console.error('Error fetching products:', err);
         } finally {
             setIsLoading(false);
+            setIsRefreshing(false);
         }
     }, []);
 
@@ -90,10 +139,17 @@ export const useProducts = () => {
     }, []);
 
     /**
+     * Force-refresh data from Supabase (used by the refresh button in the UI)
+     */
+    const refresh = useCallback(() => {
+        fetchProducts(true);
+    }, [fetchProducts]);
+
+    /**
      * Refetch products (useful after create/update/delete)
      */
     const refetch = useCallback(() => {
-        fetchProducts();
+        fetchProducts(false);
     }, [fetchProducts]);
 
     /**
@@ -111,10 +167,16 @@ export const useProducts = () => {
         }
     }, [refetch]);
 
-    // Initial fetch on mount
+    // Initial fetch: if we have cache, fetch in background silently; otherwise show spinner
     useEffect(() => {
-        fetchProducts();
-    }, [fetchProducts]);
+        if (cached) {
+            // Já tem dados em tela – atualiza silenciosamente em background
+            fetchProducts(false);
+        } else {
+            fetchProducts(false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Apply filters whenever they change
     useEffect(() => {
@@ -133,11 +195,14 @@ export const useProducts = () => {
         allFilteredProducts: filteredProducts,
         allProducts: products,
         isLoading,
+        isRefreshing,
         error,
         filters,
         handleFilterChange,
         refetch,
+        refresh,
         deleteProduct,
+        cacheAge,
         // Pagination exports
         currentPage,
         setCurrentPage,

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
@@ -10,7 +10,9 @@ import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal
 
 /**
  * ProductListPage
- * Main page for product management - displays list with filters and actions
+ * Main page for product management - displays list with filters and actions.
+ * Products are loaded instantly from localStorage cache and silently refreshed
+ * in the background. A manual "Atualizar" button forces a fresh fetch.
  */
 export const ProductListPage: React.FC = () => {
     const navigate = useNavigate();
@@ -19,15 +21,18 @@ export const ProductListPage: React.FC = () => {
     const {
         products,
         isLoading,
+        isRefreshing,
         error,
         handleFilterChange,
         deleteProduct,
+        refresh,
         currentPage,
         setCurrentPage,
         itemsPerPage,
         setItemsPerPage,
         totalPages,
-        allFilteredProducts
+        allFilteredProducts,
+        cacheAge,
     } = useProducts();
 
     const handleNewProduct = () => {
@@ -49,7 +54,6 @@ export const ProductListPage: React.FC = () => {
 
         if (confirmed) {
             await deleteProduct(product.id);
-            // Note: refetch is automatic in the hook
         }
     };
 
@@ -64,6 +68,24 @@ export const ProductListPage: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-3">
+                    {/* Refresh button */}
+                    <button
+                        onClick={refresh}
+                        disabled={isRefreshing}
+                        title="Atualizar dados sem recarregar a página"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors shadow-sm disabled:opacity-60"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        <span className="font-medium">
+                            {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+                        </span>
+                        {cacheAge && !isRefreshing && (
+                            <span className="text-xs text-slate-400 font-normal">
+                                ({cacheAge})
+                            </span>
+                        )}
+                    </button>
+
                     <button
                         onClick={() => setIsExportModalOpen(true)}
                         className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
@@ -94,6 +116,14 @@ export const ProductListPage: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Refreshing banner (shows when refreshing in background while list is visible) */}
+            {isRefreshing && allFilteredProducts.length > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                    <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" />
+                    Atualizando lista de produtos em segundo plano...
+                </div>
+            )}
 
             {/* Error Message */}
             {error && (
