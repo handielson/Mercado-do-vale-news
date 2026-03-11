@@ -120,6 +120,9 @@ export default function BlingPage() {
     const [reimportingIds, setReimportingIds] = useState<Set<string>>(new Set());
     const [reimportResults, setReimportResults] = useState<Map<string, { ok: boolean; message: string }>>(new Map());
     const [reimportingAll, setReimportingAll] = useState(false);
+    const [webhookLogs, setWebhookLogs] = useState<{ id: string; payload: any; received_at: string }[] | null>(null);
+    const [loadingLogs, setLoadingLogs] = useState(false);
+    const [logsTableExists, setLogsTableExists] = useState<boolean | null>(null);
 
     // ─────────────────────────────────────────────────────
     // Load
@@ -1497,6 +1500,20 @@ export default function BlingPage() {
                             toast.success('Reimportação em massa concluída!');
                         }
 
+                        async function loadWebhookLogs() {
+                            setLoadingLogs(true);
+                            try {
+                                const res = await fetch('/api/bling?resource=webhook-logs');
+                                const json = await res.json();
+                                setLogsTableExists(json.tableExists ?? false);
+                                setWebhookLogs(json.logs || []);
+                            } catch (e: any) {
+                                toast.error('Erro ao carregar logs: ' + e.message);
+                            } finally {
+                                setLoadingLogs(false);
+                            }
+                        }
+
                         return (
                             <div className="space-y-4">
 
@@ -1659,16 +1676,96 @@ export default function BlingPage() {
 
                                 {/* Formato do payload */}
                                 <div className="bg-slate-800 rounded-xl p-5 space-y-2">
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Formato esperado do payload (Bling v3)</p>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Formato esperado do payload (Bling v3 - Versão 1)</p>
                                     <pre className="text-xs text-green-400 overflow-auto">{JSON.stringify({
                                         eventId: "abc-123",
                                         event: "stock.updated",
+                                        companyId: "...",
                                         data: {
                                             produto: { id: 12345678 },
-                                            saldoFisico: 10
+                                            deposito: { id: 12345678, saldoFisico: 1250.75, saldoVirtual: 1250.75 },
+                                            operacao: "E",
+                                            quantidade: 26,
+                                            saldoFisicoTotal: 1500.75,
+                                            saldoVirtualTotal: 1500.75,
                                         }
                                     }, null, 2)}</pre>
                                 </div>
+
+                                {/* Logs do webhook em tempo real */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                            <Activity className="w-5 h-5 text-blue-600" />
+                                            Logs do Webhook (últimos eventos recebidos)
+                                        </h2>
+                                        <button
+                                            onClick={loadWebhookLogs}
+                                            disabled={loadingLogs}
+                                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                                        >
+                                            {loadingLogs ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                            {loadingLogs ? 'Carregando...' : 'Carregar Logs'}
+                                        </button>
+                                    </div>
+                                    <p className="text-sm text-slate-500">
+                                        Se esta lista estiver vazia após uma movimentação de estoque no Bling, significa que o webhook <strong>não está configurado</strong> no painel do Bling.
+                                    </p>
+
+                                    {logsTableExists === false && (
+                                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
+                                            <p className="text-sm font-semibold text-red-700">⚠️ Tabela webhook_logs não existe no Supabase</p>
+                                            <p className="text-xs text-red-600">Execute o SQL abaixo no Supabase → SQL Editor:</p>
+                                            <pre className="text-xs bg-slate-900 text-green-400 rounded-lg p-3 overflow-auto">{`CREATE TABLE IF NOT EXISTS webhook_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  source TEXT,
+  payload JSONB,
+  received_at TIMESTAMPTZ DEFAULT now()
+);`}</pre>
+                                        </div>
+                                    )}
+
+                                    {webhookLogs !== null && logsTableExists && webhookLogs.length === 0 && (
+                                        <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                                            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                            Nenhum evento recebido ainda. Configure o webhook no painel do Bling e faça uma movimentação de estoque para testar.
+                                        </div>
+                                    )}
+
+                                    {webhookLogs !== null && webhookLogs.length > 0 && (
+                                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                            <div className="bg-green-50 border-b border-green-200 px-4 py-2 text-xs font-semibold text-green-800">
+                                                ✓ {webhookLogs.length} evento(s) recebido(s) — Bling está chamando o servidor
+                                            </div>
+                                            <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                                                {webhookLogs.map((log, i) => {
+                                                    const evt = log.payload?.event || log.payload?.evento || 'desconhecido';
+                                                    const blingId = log.payload?.data?.produto?.id;
+                                                    const saldo = log.payload?.data?.saldoFisicoTotal;
+                                                    const updated = log.payload?.updated;
+                                                    return (
+                                                        <div key={log.id || i} className="px-4 py-3 text-xs space-y-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="font-semibold text-slate-800">{evt}</span>
+                                                                <span className="text-slate-400">{new Date(log.received_at).toLocaleString('pt-BR')}</span>
+                                                            </div>
+                                                            <div className="flex gap-4 text-slate-500">
+                                                                {blingId && <span>produto.id: <strong className="text-slate-700">{blingId}</strong></span>}
+                                                                {saldo !== undefined && <span>saldoFisicoTotal: <strong className="text-slate-700">{saldo}</strong></span>}
+                                                                {updated !== undefined && (
+                                                                    <span className={updated ? 'text-green-600 font-semibold' : 'text-red-500 font-semibold'}>
+                                                                        {updated ? '✓ produto atualizado' : '✗ produto NÃO encontrado'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
 
                             </div>
                         );

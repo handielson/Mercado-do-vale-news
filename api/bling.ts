@@ -266,7 +266,25 @@ export default async function handler(req: any, res: any) {
     }
 
 
+    // ─── WEBHOOK-LOGS: leitura dos últimos logs para diagnóstico ────────────
+    if (resource === 'webhook-logs') {
+        if (req.method !== 'GET') return res.status(405).end();
+        try {
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const { data, error } = await supabase
+                .from('webhook_logs')
+                .select('id, source, payload, received_at')
+                .order('received_at', { ascending: false })
+                .limit(20);
+            if (error) return res.status(200).json({ ok: false, tableExists: false, error: error.message, logs: [] });
+            return res.status(200).json({ ok: true, tableExists: true, logs: data || [] });
+        } catch (err: any) {
+            return res.status(200).json({ ok: false, error: err.message, logs: [] });
+        }
+    }
+
     // ─── FINANCE: Contas a Pagar / Receber ──────────────────────────────────
+
     if (resource === 'finance') {
         const authHeader = req.headers['authorization'];
         if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
