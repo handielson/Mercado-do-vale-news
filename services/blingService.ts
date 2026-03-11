@@ -850,7 +850,9 @@ export async function importBlingProducts(
             if (existing) {
                 operation = 'atualização';
                 // Remove campos que não devem ser sobrescritos em updates
-                const { company_id, bling_id, specs, stock_quantity, track_inventory, is_gift, warranty_type, ...updateFields } = dbRow;
+                // NOTA: specs (cor, ram, storage) é INCLUÍDO para que mudanças de variação
+                // no Bling (ex: "vinho escuro" → "vinho") sejam refletidas ao reimportar.
+                const { company_id, bling_id, stock_quantity, track_inventory, is_gift, warranty_type, ...updateFields } = dbRow;
                 const { error } = await supabase
                     .from('products')
                     .update(updateFields)
