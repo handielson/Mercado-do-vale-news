@@ -25,7 +25,7 @@ const COMMON_CARRIERS = [
 ];
 
 const ZONE_TYPE_LABELS: Record<ShippingZoneType, string> = {
-    local_free: '🎁 Frete Grátis',
+    local_free: '🎁 Entrega Local Grátis',
     local_paid: '🛵 Entrega Local Paga',
     national: '📦 Nacional',
 };
@@ -328,8 +328,28 @@ export default function ShippingPage() {
     }
 
     async function handleToggleZone(zone: ShippingZone) {
-        await shippingService.saveZone({ ...zone, enabled: !zone.enabled }, zone.id);
-        loadAll();
+        try {
+            const input: ShippingZoneInput = {
+                name: zone.name,
+                type: zone.type,
+                enabled: !zone.enabled,
+                cities: zone.cities,
+                cep_ranges: zone.cep_ranges,
+                max_km_free: zone.max_km_free,
+                price_per_km: zone.price_per_km,
+                fixed_price: zone.fixed_price,
+                min_order_free: zone.min_order_free,
+                estimated_days_min: zone.estimated_days_min,
+                estimated_days_max: zone.estimated_days_max,
+                display_order: zone.display_order
+            };
+            await shippingService.saveZone(input, zone.id);
+            toast.success(input.enabled ? 'Zona ativada!' : 'Zona desativada!');
+            loadAll();
+        } catch (error) {
+            console.error('Erro ao alternar zona:', error);
+            toast.error('Erro ao alterar status da zona. Verifique o console.');
+        }
     }
 
     async function handleSaveRange(input: ShippingPriceRangeInput) {

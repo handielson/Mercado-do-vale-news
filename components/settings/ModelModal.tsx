@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, FileText, Settings, Search, ExternalLink } from 'lucide-react';
+import { X, FileText, Settings, Search, ExternalLink, Tags } from 'lucide-react';
 import { toast } from 'sonner';
 import { Model, type ModelInput } from '../../types/model';
 import { type Brand } from '../../types/brand';
@@ -8,6 +8,7 @@ import { modelService } from '../../services/models';
 import { brandService } from '../../services/brands';
 import { categoryService } from '../../services/categories';
 import { customFieldsService, type CustomField } from '../../services/custom-fields';
+import { crossSellTagsService, type CrossSellTag } from '../../services/cross-sell-tags';
 import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
 import { UNIQUE_FIELDS } from '../../config/product-fields';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -21,7 +22,7 @@ interface ModelModalProps {
     model?: Model | null;
 }
 
-type TabType = 'basic' | 'template' | 'seo' | 'photos';
+type TabType = 'basic' | 'template' | 'seo' | 'photos' | 'tags';
 
 /**
  * TemplateFieldInput Component
@@ -138,6 +139,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [brands, setBrands] = useState<Brand[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
+    const [officialTags, setOfficialTags] = useState<CrossSellTag[]>([]);
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
 
     // UI State
@@ -254,13 +256,15 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     const loadData = async () => {
         try {
             setLoading(true);
-            const [brandsData, categoriesData, fieldsData] = await Promise.all([
+            const [brandsData, categoriesData, fieldsData, tagsData] = await Promise.all([
                 brandService.listActive(),
                 categoryService.list(),
-                customFieldsService.list()
+                customFieldsService.list(),
+                crossSellTagsService.list()
             ]);
             setBrands(brandsData);
             setCategories(categoriesData);
+            setOfficialTags(tagsData);
             // Filter out unique fields
             setCustomFields(fieldsData.filter(f => !UNIQUE_FIELDS.includes(f.key)));
         } catch (error) {
@@ -358,8 +362,8 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl my-8 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 sm:p-6 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-full flex flex-col animate-in fade-in zoom-in-95 overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-slate-200">
                     <h2 className="text-xl font-bold text-slate-800">
@@ -424,10 +428,21 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             📸 Fotos por Cor
                         </div>
                     </button>
+                    <button
+                        onClick={() => setActiveTab('tags')}
+                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'tags'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-slate-600 hover:text-slate-800'
+                            }`}
+                    >
+                        <div className="flex items-center justify-center gap-2">
+                            🏷️ Cross-Sell
+                        </div>
+                    </button>
                 </div>
 
                 {/* Body */}
-                <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div className="p-6 space-y-4 flex-1 overflow-y-auto bg-slate-50/50">
                     {/* Basic Tab */}
                     {activeTab === 'basic' && (
                         <>
@@ -598,10 +613,19 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 </label>
                                 <textarea
                                     value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
+                                    onChange={(e) => {
+                                        setDescription(e.target.value);
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                    }}
+                                    onFocus={(e) => {
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                    }}
                                     placeholder="Ex: Smartphone Apple com tela de 6.1 polegadas..."
                                     rows={3}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    style={{ minHeight: '80px' }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden resize-none"
                                 />
                             </div>
 
@@ -928,6 +952,180 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
                     {activeTab === 'photos' && model && (
                         <ColorImageManager modelId={model.id} />
+                    )}
+
+                    {/* Tags Tab */}
+                    {activeTab === 'tags' && (
+                        <div className="space-y-4">
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                                <p className="text-sm text-blue-900">
+                                    🏷️ <strong>Tags de Venda Cruzada (Cross-Sell)</strong> <span className="text-slate-500 font-mono text-xs">(tags_venda)</span>.<br/>
+                                    Estas tags forçam o sistema a conectar produtos de categorias diferentes na vitrine "Aproveite e leve junto".
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Adicionar Novas Tags
+                                </label>
+                                <div className="space-y-2">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Ex: Gamer, Type-C, Viagem (pressione Enter)"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const input = e.currentTarget;
+                                                    const value = input.value.trim();
+                                                    if (value) {
+                                                        const currentTags = templateValues['tags_venda'] || [];
+                                                        if (!currentTags.includes(value)) {
+                                                            handleTemplateValueChange('tags_venda', [...currentTags, value]);
+                                                        }
+                                                        input.value = '';
+                                                    }
+                                                }
+                                            }}
+                                            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                    </div>
+                                    <p className="text-xs text-slate-500">
+                                        Digite uma tag e pressione Enter para adicionar.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="pt-2">
+                                <h4 className="text-sm font-medium text-slate-700 mb-2">Tags Ativas no Modelo:</h4>
+                                <div className="flex flex-wrap gap-2 min-h-[40px] p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                    {!(templateValues['tags_venda']?.length > 0) && (
+                                        <span className="text-sm text-slate-400 italic">Nenhuma tag cadastrada.</span>
+                                    )}
+                                    {templateValues['tags_venda']?.map((tag: string, index: number) => (
+                                        <span
+                                            key={index}
+                                            className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium"
+                                        >
+                                            {tag}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newTags = templateValues['tags_venda'].filter((_: any, i: number) => i !== index);
+                                                    handleTemplateValueChange('tags_venda', newTags);
+                                                }}
+                                                className="hover:text-blue-900 ml-1"
+                                            >
+                                                ×
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {officialTags?.length > 0 && (
+                                <div className="pt-4 border-t border-slate-200">
+                                    <h4 className="text-sm font-medium text-indigo-800 mb-2 mt-2 flex items-center gap-2">
+                                        <Tags size={16}/> Tags Oficiais Dicionário:
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {officialTags
+                                            .filter(tag => !(templateValues['tags_venda'] || []).includes(tag.name))
+                                            .map((tag) => (
+                                            <button
+                                                key={tag.id}
+                                                type="button"
+                                                className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium transition-colors border border-indigo-200"
+                                                onClick={() => {
+                                                    const currentTags = templateValues['tags_venda'] || [];
+                                                    handleTemplateValueChange('tags_venda', [...currentTags, tag.name]);
+                                                }}
+                                                title="Adicionar esta Tag Oficial de Cross-Sell"
+                                            >
+                                                + {tag.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="pt-4 border-t border-slate-200">
+                                <h4 className="text-sm font-medium text-slate-700 mb-2 mt-2">Sugestões Dinâmicas (Ficha Técnica):</h4>
+                                <div className="space-y-3">
+                                    {/* Sugestões do Sistema Fixo */}
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-xs text-slate-500 font-semibold uppercase">Dados Básicos</span>
+                                        <div className="flex flex-wrap gap-2">
+                                            {name && (
+                                                <>
+                                                    <button type="button" onClick={() => handleTemplateValueChange('tags_venda', [...(templateValues['tags_venda'] || []), name])} className={`px-2 py-1 text-xs font-medium rounded border ${ (templateValues['tags_venda'] || []).includes(name) ? 'bg-slate-200 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-500 hover:text-blue-600' }`} disabled={(templateValues['tags_venda'] || []).includes(name)}>+ {name}</button>
+                                                    <button type="button" onClick={() => handleTemplateValueChange('tags_venda', [...(templateValues['tags_venda'] || []), `Modelo: ${name}`])} className={`px-2 py-1 text-xs font-medium rounded border ${ (templateValues['tags_venda'] || []).includes(`Modelo: ${name}`) ? 'bg-slate-200 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-500 hover:text-blue-600' }`} disabled={(templateValues['tags_venda'] || []).includes(`Modelo: ${name}`)}>+ Modelo: {name}</button>
+                                                </>
+                                            )}
+                                            {brandId && brands.find(b => b.id === brandId) && (
+                                                <>
+                                                    <button type="button" onClick={() => handleTemplateValueChange('tags_venda', [...(templateValues['tags_venda'] || []), brands.find(b => b.id === brandId)!.name])} className={`px-2 py-1 text-xs font-medium rounded border ${ (templateValues['tags_venda'] || []).includes(brands.find(b => b.id === brandId)!.name) ? 'bg-slate-200 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-500 hover:text-blue-600' }`} disabled={(templateValues['tags_venda'] || []).includes(brands.find(b => b.id === brandId)!.name)}>+ {brands.find(b => b.id === brandId)!.name}</button>
+                                                    <button type="button" onClick={() => handleTemplateValueChange('tags_venda', [...(templateValues['tags_venda'] || []), `Marca: ${brands.find(b => b.id === brandId)!.name}`])} className={`px-2 py-1 text-xs font-medium rounded border ${ (templateValues['tags_venda'] || []).includes(`Marca: ${brands.find(b => b.id === brandId)!.name}`) ? 'bg-slate-200 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-500 hover:text-blue-600' }`} disabled={(templateValues['tags_venda'] || []).includes(`Marca: ${brands.find(b => b.id === brandId)!.name}`)}>+ Marca: {brands.find(b => b.id === brandId)!.name}</button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Sugestões de Campos Customizados */}
+                                    {customFields.map(field => {
+                                        const rawValue = templateValues[field.key];
+                                        if (rawValue === undefined || rawValue === null || rawValue === '') return null;
+                                        const values = Array.isArray(rawValue) ? rawValue : [String(rawValue)];
+
+                                        return (
+                                            <div key={field.key} className="flex flex-col gap-1">
+                                                <span className="text-xs text-slate-500 font-semibold uppercase">{field.label}</span>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {values.map(val => {
+                                                        const cleanVal = String(val).trim();
+                                                        if (cleanVal.length === 0) return null;
+                                                        const formattedVal = `${field.label}: ${cleanVal}`;
+                                                        const activeTags = templateValues['tags_venda'] || [];
+
+                                                        return (
+                                                            <React.Fragment key={cleanVal}>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={activeTags.includes(cleanVal)}
+                                                                    onClick={() => handleTemplateValueChange('tags_venda', [...activeTags, cleanVal])}
+                                                                    className={`px-2 py-1 text-xs font-medium rounded border ${
+                                                                        activeTags.includes(cleanVal)
+                                                                            ? 'bg-slate-200 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed'
+                                                                            : 'bg-white text-slate-600 border-slate-300 hover:border-blue-500 hover:text-blue-600'
+                                                                    }`}
+                                                                >
+                                                                    + {cleanVal}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={activeTags.includes(formattedVal)}
+                                                                    onClick={() => {
+                                                                        const latestTags = templateValues['tags_venda'] || [];
+                                                                        handleTemplateValueChange('tags_venda', [...latestTags, formattedVal]);
+                                                                    }}
+                                                                    className={`px-2 py-1 text-xs font-medium rounded border ${
+                                                                        activeTags.includes(formattedVal)
+                                                                            ? 'bg-slate-200 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed'
+                                                                            : 'bg-white text-slate-600 border-slate-300 hover:border-blue-500 hover:text-blue-600'
+                                                                    }`}
+                                                                >
+                                                                    + {formattedVal}
+                                                                </button>
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
                     )}
 
                     {/* Error Message */}

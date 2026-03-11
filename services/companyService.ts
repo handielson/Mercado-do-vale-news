@@ -53,6 +53,8 @@ interface CompanySettingsRow {
     maintenance_mode: boolean | null;
     maintenance_message: string | null;
     maintenance_bypass_key: string | null;
+    about_us_text: string | null;
+    about_us_image_url: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -108,6 +110,8 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     maintenanceMode: row.maintenance_mode ?? false,
     maintenanceMessage: row.maintenance_message || '',
     maintenanceBypassKey: row.maintenance_bypass_key || '',
+    aboutUsText: row.about_us_text || '',
+    aboutUsImageUrl: row.about_us_image_url || '',
 });
 
 /**
@@ -156,6 +160,8 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     maintenance_mode: company.maintenanceMode ?? false,
     maintenance_message: company.maintenanceMessage || null,
     maintenance_bypass_key: company.maintenanceBypassKey || null,
+    about_us_text: company.aboutUsText || null,
+    about_us_image_url: company.aboutUsImageUrl || null,
 });
 
 /**

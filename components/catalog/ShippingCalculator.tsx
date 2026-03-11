@@ -52,8 +52,8 @@ export function ShippingCalculator({ weight, height, width, length, orderValue, 
                 length,
                 order_value: orderValue,
             });
-            setOptions(results);
-            if (results.length === 0) setError('Não encontramos opções de frete para este CEP.');
+            setOptions(results.options);
+            if (results.options.length === 0) setError('Não encontramos opções de frete para este CEP.');
         } catch {
             setError('Erro ao calcular frete. Tente novamente.');
         } finally {

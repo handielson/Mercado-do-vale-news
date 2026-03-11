@@ -481,6 +481,7 @@ function CartPageContent() {
                             selected={delivery}
                             onSelect={setDelivery}
                             storeStatus={storeStatus}
+                            subtotal={subtotal / 100}
                         />
                     </div>
                 )}

@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
+import { useCompare } from '@/contexts/CompareContext';
 import { PublicHeader } from '@/components/PublicHeader';
 import { QuoteCartSidebar } from '@/components/catalog/QuoteCartSidebar';
 import { FloatingCartButton } from '@/components/catalog/FloatingCartButton';
 import { CatalogProduct } from '@/types/catalog';
-import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
+import { ModernProductCard } from '@/components/catalog/ModernProductCard';
+import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { getCashbackSettings } from '@/services/cashbackService';
 import type { CashbackSettings } from '@/types/cashback';
 import { companySettingsService } from '@/services/companySettingsService';
@@ -27,16 +29,25 @@ export const PublicProductPage: React.FC = () => {
     const { customer } = useSupabaseAuth();
     const { addItem } = useCart();
 
+    const customerType = useEffectiveCustomerType();
+
     const [product, setProduct] = useState<CatalogProduct | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<string>('');
     const [siblings, setSiblings] = useState<CatalogProduct[]>([]);
+    const [relatedProducts, setRelatedProducts] = useState<CatalogProduct[]>([]);
+    const [crossSellProducts, setCrossSellProducts] = useState<CatalogProduct[]>([]);
     const [cep, setCep] = useState('');
     const [shippingResult, setShippingResult] = useState<{ name: string, price: string, days: string }[] | null>(null);
     const [cashbackSettings, setCashbackSettings] = useState<CashbackSettings | null>(null);
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+    // Config da categoria: define quais campos existem no template
+    const [categoryConfig, setCategoryConfig] = useState<any>(null);
+    // Dicionário de chaves para nomes amigáveis baseados nos campos customizados do BD
+    const [customFieldNames, setCustomFieldNames] = useState<Record<string, string>>({});
 
     useEffect(() => {
+        window.scrollTo(0, 0);
         getCashbackSettings().then(setCashbackSettings).catch(console.error);
         companySettingsService.get().then(setCompanySettings).catch(console.error);
         if (!slug) {
@@ -47,11 +58,19 @@ export const PublicProductPage: React.FC = () => {
         const fetchProduct = async () => {
             setLoading(true);
             try {
+                // Fetch dictionary of custom fields to get readable labels
+                const { data: fieldsData } = await supabase.from('custom_fields').select('key, name');
+                if (fieldsData) {
+                    const dict: Record<string, string> = {};
+                    fieldsData.forEach(f => { if (f.key) dict[f.key] = f.name; });
+                    setCustomFieldNames(dict);
+                }
+
                 const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug);
 
                 let query = supabase
                     .from('products')
-                    .select('*, brand:brands(name), category:categories(name)')
+                    .select('*, brand:brands(name), category:categories(name, config)')
                     .eq('status', 'active');
 
                 if (isUuid) {
@@ -72,10 +91,14 @@ export const PublicProductPage: React.FC = () => {
 
                 let modelData: Record<string, any> = {};
                 let modelRootDescription = '';
+                let modelBrandName = '';
+                // Valores padrão de specs vindos do template do modelo
+                let modelSpecDefaults: Record<string, any> = {};
+
                 if (data.model_id) {
                     const { data: mData } = await supabase
                         .from('models')
-                        .select('description, template_values')
+                        .select('description, template_values, brand:brands(name)')
                         .eq('id', data.model_id)
                         .maybeSingle();
 
@@ -83,15 +106,40 @@ export const PublicProductPage: React.FC = () => {
                         modelRootDescription = mData.description || '';
                         if (mData.template_values) {
                             modelData = mData.template_values;
+                            // Salvar todos os campos do template como specs, exceto logísticos e SEO nativos
+                            const ignoredKeys = ['weight_kg', 'dimensions.width_cm', 'dimensions.height_cm', 'dimensions.depth_cm', 'slug', 'meta_title', 'meta_description', 'keywords'];
+                            Object.entries(mData.template_values).forEach(([k, v]) => {
+                                if (!ignoredKeys.includes(k)) {
+                                    const cleanKey = k.replace(/^specs\./, ''); // remove se existir prefixo antigo
+                                    modelSpecDefaults[cleanKey] = v;
+                                }
+                            });
                         }
+                        modelBrandName = (mData.brand as any)?.name || '';
                     }
                 }
 
                 // Format it perfectly as CatalogProduct
+                const categoryRaw = (data.category as any);
+                // Salvar config da categoria para render dinâmico das specs
+                if (categoryRaw?.config) setCategoryConfig(categoryRaw.config);
+
+                // Merge: template defaults + product specs + logistics fallbacks
+                const mergedSpecs = {
+                    ...(modelSpecDefaults),
+                    ...(data.specs || {}),
+                    // Logística: valor do produto se existir, senão do template do modelo
+                    weight_kg: data.weight_kg ?? modelData['weight_kg'],
+                    width_cm: data.width_cm ?? modelData['dimensions.width_cm'],
+                    height_cm: data.height_cm ?? modelData['dimensions.height_cm'],
+                    depth_cm: data.depth_cm ?? modelData['dimensions.depth_cm'],
+                };
+
                 const formattedProduct = {
                     ...data,
-                    brand: data.brand?.name || data.brand,
-                    category: data.category?.name || data.category_id,
+                    specs: mergedSpecs,
+                    brand: data.brand?.name || modelBrandName || data.brand || '',
+                    category: categoryRaw?.name || data.category_id,
                     description: modelData.description || modelRootDescription || data.description,
                     meta_title: modelData.meta_title || data.meta_title,
                     meta_description: modelData.meta_description || data.meta_description,
@@ -103,6 +151,50 @@ export const PublicProductPage: React.FC = () => {
                 if (data.images && data.images.length > 0) {
                     setSelectedImage(data.images[0]);
                 }
+
+                // Função auxiliar global para produtos
+                const enrichProductsWithModels = async (productList: any[]) => {
+                    try {
+                        if (!productList || productList.length === 0) return productList;
+                        
+                        const modelIds = Array.from(new Set(productList.map(p => p.model_id).filter(Boolean)));
+                        if (modelIds.length === 0) return productList;
+
+                        const { data: modelsData, error } = await supabase
+                            .from('models')
+                            .select('id, description, template_values, brand:brands(name)')
+                            .in('id', modelIds as string[]);
+
+                        if (error || !modelsData) return productList;
+
+                        const modelsMap = modelsData.reduce((acc, m) => {
+                            acc[m.id] = m;
+                            return acc;
+                        }, {} as Record<string, any>);
+
+                        return productList.map(p => {
+                            if (!p.model_id || !modelsMap[p.model_id]) return p;
+                            const mData = modelsMap[p.model_id];
+                            const mTemplate = mData.template_values || {};
+                            const mergedSpecs = { ...mTemplate, ...(p.specs || {}) };
+                            const mergedBrand = typeof p.brand === 'object' ? p.brand?.name : p.brand;
+                            const modelBrand = typeof mData.brand === 'object' ? mData.brand?.name : mData.brand;
+                            
+                            return {
+                                ...p,
+                                specs: mergedSpecs,
+                                description: mTemplate.description || mData.description || p.description,
+                                meta_title: mTemplate.meta_title || p.meta_title,
+                                meta_description: mTemplate.meta_description || p.meta_description,
+                                keywords: mTemplate.keywords || p.keywords,
+                                brand: mergedBrand || modelBrand || ''
+                            };
+                        });
+                    } catch (err) {
+                        console.error('Error enriching products with models:', err);
+                        return productList;
+                    }
+                };
 
                 // Buscar irmãos (variantes)
                 const modelVal = data.model_id || data.model;
@@ -119,45 +211,117 @@ export const PublicProductPage: React.FC = () => {
                     }
 
                     const { data: sibs } = await sibQuery;
+
                     if (sibs && sibs.length > 0) {
-                        // Pre-fetch all models used by siblings to avoid N+1 queries
-                        const modelIds = Array.from(new Set(sibs.map(s => s.model_id).filter(Boolean)));
-                        let modelsMap: Record<string, any> = {};
-                        let modelsRootDescMap: Record<string, string> = {};
-
-                        if (modelIds.length > 0) {
-                            const { data: modelsData } = await supabase
-                                .from('models')
-                                .select('id, description, template_values')
-                                .in('id', modelIds);
-
-                            if (modelsData) {
-                                modelsMap = modelsData.reduce((acc, m) => {
-                                    acc[m.id] = m.template_values || {};
-                                    return acc;
-                                }, {} as Record<string, any>);
-
-                                modelsRootDescMap = modelsData.reduce((acc, m) => {
-                                    if (m.description) acc[m.id] = m.description;
-                                    return acc;
-                                }, {} as Record<string, string>);
-                            }
-                        }
-
-                        const formattedSibs = sibs.map(sib => {
-                            const sibModelData = sib.model_id ? modelsMap[sib.model_id] || {} : {};
-                            const sibModelRootDesc = sib.model_id ? modelsRootDescMap[sib.model_id] || '' : '';
-                            return {
-                                ...sib,
-                                description: sibModelData.description || sibModelRootDesc || sib.description,
-                                meta_title: sibModelData.meta_title || sib.meta_title,
-                                meta_description: sibModelData.meta_description || sib.meta_description,
-                                keywords: sibModelData.keywords || sib.keywords,
-                            };
-                        });
-                        setSiblings(formattedSibs as unknown as CatalogProduct[]);
+                        const enrichedSibs = await enrichProductsWithModels(sibs);
+                        setSiblings(enrichedSibs as unknown as CatalogProduct[]);
                     }
                 }
+
+                // Buscar produtos relacionados (mesma categoria, max 4)
+                if (data.category_id) {
+                    const { data: related } = await supabase
+                        .from('products')
+                        .select('*, brand:brands(name), category:categories(name)')
+                        .eq('status', 'active')
+                        .eq('category_id', data.category_id)
+                        .neq('id', data.id)
+                        .limit(4);
+
+                    if (related) {
+                        const enrichedRelated = await enrichProductsWithModels(related);
+                        const formattedRelated = enrichedRelated.map(rel => ({
+                            ...rel,
+                            category: (rel.category as any)?.name || rel.category_id,
+                            brand: typeof rel.brand === 'object' ? (rel.brand as any)?.name : rel.brand
+                        }));
+                        setRelatedProducts(formattedRelated as unknown as CatalogProduct[]);
+                    }
+                }
+
+                // Buscar Cross-Sell (produtos de OUTRAS categorias que compartilhem alguma Spec/Tag do produto atual)
+                if (Object.keys(mergedSpecs).length > 0) {
+                    const orConditions: string[] = [];
+                    
+                    // Lista de características muito genéricas que não servem para cruzar vendas (ex: dois itens pretos não significam que conversem)
+                    const BLOCKED_CROSS_SELL_KEYS = new Set([
+                        'color', 'cor', 'storage', 'armazenamento', 'ram', 'memory', 'memoria',
+                        'weight_kg', 'peso_g', 'peso_kg', 'peso', 'width_cm', 'largura', 'height_cm', 'altura',
+                        'depth_cm', 'profundidade', 'tamanho', 'size', 'wifi', 'bluetooth', 'nfc',
+                        'versao', 'version', 'ano', 'year', 'garantia', 'warranty', 'voltagem', 'voltage',
+                        'condicao', 'condition', 'estado', 'status', 'tipo', 'type', 'modelo', 'model', 
+                        'marca', 'brand', 'bateria', 'battery_mah', 'battery_health', 'display', 'tela'
+                    ]);
+
+                    // Dá prioridade total se o lojista criou um campo customizado explícito para isso
+                    const explicitTags = mergedSpecs['tags_venda'] || mergedSpecs['cross_sell_tags'] || mergedSpecs['tags'];
+                    
+                    if (explicitTags) {
+                        // Usa apenas as tags explícitas
+                        const tagList = Array.isArray(explicitTags) ? explicitTags : [explicitTags];
+                        tagList.forEach(item => {
+                            if (typeof item === 'string' && item.trim().length > 2) {
+                                const cleanVal = item.trim().replace(/"/g, '');
+                                // O produto alvo pode ter a tag na mesma chave ou como valor genérico nas specs
+                                orConditions.push(`specs->>tags_venda.eq."${cleanVal}"`);
+                                orConditions.push(`specs->>cross_sell_tags.eq."${cleanVal}"`);
+                                orConditions.push(`specs->>tags.eq."${cleanVal}"`);
+                            }
+                        });
+                    } else {
+                        // Lógica automática: cruza todas as especificações técnicas, exceto as genéricas
+                        Object.entries(mergedSpecs).forEach(([k, v]) => {
+                            if (BLOCKED_CROSS_SELL_KEYS.has(k.toLowerCase())) return;
+
+                            // Função auxiliar para injetar condição
+                            const injectCondition = (val: any) => {
+                                if (typeof val === 'string' && val.trim().length > 2 && val.trim().toLowerCase() !== 'sim' && val.trim().toLowerCase() !== 'não') {
+                                    const cleanVal = val.trim().replace(/"/g, '');
+                                    orConditions.push(`specs->>${k}.ilike."%${cleanVal}%"`); 
+                                } else if (typeof val === 'number' && val > 0) {
+                                    orConditions.push(`specs->>${k}.eq.${val}`);
+                                }
+                            };
+
+                            if (Array.isArray(v)) {
+                                v.forEach(item => injectCondition(item));
+                            } else {
+                                injectCondition(v);
+                            }
+                        });
+                    }
+
+                    // Construção dinâmica de tags via OR match (specs->>campo.eq.Valor)
+                    if (orConditions.length > 0) {
+                        const orString = orConditions.join(',');
+                        
+                        let csQuery = supabase
+                            .from('products')
+                            .select('*, brand:brands(name), category:categories(name)')
+                            .eq('status', 'active')
+                            .neq('id', data.id)
+                            .or(orString)
+                            .limit(4);
+
+                        // Garante que o cross-sell é apenas de produtos de categorias *diferentes*
+                        if (data.category_id) {
+                            csQuery = csQuery.neq('category_id', data.category_id);
+                        }
+
+                        const { data: crossSellResult, error: csError } = await csQuery;
+                        
+                        if (!csError && crossSellResult && crossSellResult.length > 0) {
+                            const enrichedCrossSell = await enrichProductsWithModels(crossSellResult);
+                            const formattedCrossSell = enrichedCrossSell.map(rel => ({
+                                ...rel,
+                                category: (rel.category as any)?.name || rel.category_id,
+                                brand: typeof rel.brand === 'object' ? (rel.brand as any)?.name : rel.brand
+                            }));
+                            setCrossSellProducts(formattedCrossSell as unknown as CatalogProduct[]);
+                        }
+                    }
+                }
+
             } catch (err) {
                 console.error(err);
                 navigate('/');
@@ -203,6 +367,24 @@ export const PublicProductPage: React.FC = () => {
             duration: 3000
         });
         navigate('/carrinho');
+    };
+
+    const { add: addToCompare, remove: removeFromCompare, isSelected: isComparing } = useCompare();
+    const isInCompare = product ? isComparing(product.id) : false;
+
+    const handleCompare = () => {
+        if (!product) return;
+        if (isInCompare) {
+            removeFromCompare(product.id);
+            toast.success('Produto removido da comparação');
+        } else {
+            const error = addToCompare(product);
+            if (error) {
+                toast.error(error);
+            } else {
+                toast.success('Produto adicionado à comparação');
+            }
+        }
     };
 
     const handleShare = async () => {
@@ -336,23 +518,37 @@ export const PublicProductPage: React.FC = () => {
                     {/* Informações do Produto (Direita) */}
                     <div className="space-y-6">
                         <div>
-                            {product.brand && (
-                                <span className="text-sm font-bold text-blue-600 uppercase tracking-wider mb-2 block">
-                                    {typeof product.brand === 'string' ? product.brand : 'Marca'}
-                                </span>
-                            )}
                             <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight">
                                 {product.name}
                             </h1>
-                            <div className="flex items-center gap-4 mt-3">
-                                <span className="text-sm text-slate-500">
-                                    SKU: <span className="font-mono">{product.sku || 'N/A'}</span>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-slate-500">
+                                <span>
+                                    SKU: <span className="font-mono">{product.sku || '—'}</span>
                                 </span>
+                                <span className="text-slate-300">|</span>
+                                <span>
+                                    Marca:{' '}
+                                    <span className="font-semibold text-slate-800">
+                                        {typeof product.brand === 'string' && product.brand ? product.brand : '—'}
+                                    </span>
+                                </span>
+                                <span className="text-slate-300">|</span>
                                 <button
                                     onClick={handleShare}
-                                    className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-600 transition-colors"
+                                    className="flex items-center gap-1.5 text-slate-500 hover:text-blue-600 transition-colors"
                                 >
                                     <Share2 size={16} /> Compartilhar
+                                </button>
+                                <button
+                                    onClick={handleCompare}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-sm shadow-sm ${
+                                        isInCompare 
+                                            ? 'border-blue-600 bg-blue-100 text-blue-800 font-bold' 
+                                            : 'border-slate-300 bg-slate-100 text-slate-700 hover:border-slate-400 hover:bg-slate-200'
+                                    }`}
+                                >
+                                    <GitCompare size={16} className={isInCompare ? "text-blue-700" : "text-slate-600"} /> 
+                                    {isInCompare ? 'Comparando' : 'Comparar'}
                                 </button>
                             </div>
                         </div>
@@ -446,15 +642,17 @@ export const PublicProductPage: React.FC = () => {
                                         <div className="text-4xl font-extrabold text-slate-900">
                                             R$ {discountedPrice.toFixed(2).replace('.', ',')}
                                         </div>
-                                        <p className="text-sm font-medium text-green-600 mt-1">
-                                            ou em até <span className="font-bold">12x de R$ {(discountedPrice / 12).toFixed(2).replace('.', ',')}</span> sem juros
-                                        </p>
-                                        {(companySettings?.pix_discount_percentage || 0) > 0 && (
+                                        {customerType !== 'wholesale' && (
+                                            <p className="text-sm font-medium text-green-600 mt-1">
+                                                ou em até <span className="font-bold">12x de R$ {(discountedPrice / 12).toFixed(2).replace('.', ',')}</span> sem juros
+                                            </p>
+                                        )}
+                                        {customerType !== 'wholesale' && (companySettings?.pix_discount_percentage || 0) > 0 && (
                                             <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-bold border border-green-100">
                                                 ✓ {companySettings?.pix_discount_percentage}% desconto direto no PIX
                                             </div>
                                         )}
-                                        {estimatedCoins > 0 && (
+                                        {customerType !== 'wholesale' && estimatedCoins > 0 && (
                                             <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-bold border border-amber-200">
                                                 <span className="text-base leading-none">🪙</span>
                                                 Ganhe {estimatedCoins} Moedas do Vale
@@ -466,15 +664,17 @@ export const PublicProductPage: React.FC = () => {
                                         <div className="text-4xl font-extrabold text-slate-900">
                                             R$ {discountedPrice.toFixed(2).replace('.', ',')}
                                         </div>
-                                        <p className="text-sm font-medium text-green-600 mt-1">
-                                            ou em até <span className="font-bold">12x de R$ {(discountedPrice / 12).toFixed(2).replace('.', ',')}</span> sem juros
-                                        </p>
-                                        {(companySettings?.pix_discount_percentage || 0) > 0 && (
+                                        {customerType !== 'wholesale' && (
+                                            <p className="text-sm font-medium text-green-600 mt-1">
+                                                ou em até <span className="font-bold">12x de R$ {(discountedPrice / 12).toFixed(2).replace('.', ',')}</span> sem juros
+                                            </p>
+                                        )}
+                                        {customerType !== 'wholesale' && (companySettings?.pix_discount_percentage || 0) > 0 && (
                                             <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-bold border border-green-100">
                                                 ✓ {companySettings?.pix_discount_percentage}% desconto direto no PIX
                                             </div>
                                         )}
-                                        {estimatedCoins > 0 && (
+                                        {customerType !== 'wholesale' && estimatedCoins > 0 && (
                                             <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-bold border border-amber-200">
                                                 <span className="text-base leading-none">🪙</span>
                                                 Ganhe {estimatedCoins} Moedas do Vale
@@ -552,35 +752,237 @@ export const PublicProductPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Descrição Longa */}
-                            {product.description && (
-                                <div className="pt-6 border-t border-slate-200">
-                                    <h3 className="text-lg font-bold text-slate-900 mb-3">Descrição do Produto</h3>
-                                    <div className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: product.description }} />
-                                </div>
-                            )}
-
-                            {/* Especificações Técnicas */}
-                            {product.specs && Object.keys(product.specs).length > 0 && (
-                                <div className="pt-6 border-t border-slate-200">
-                                    <h3 className="text-lg font-bold text-slate-900 mb-3">Especificações</h3>
-                                    <div className="grid grid-cols-2 gap-y-2 gap-x-6 text-sm">
-                                        {Object.entries(product.specs).map(([key, value]) => {
-                                            if (typeof value !== 'string' && typeof value !== 'number') return null;
-                                            return (
-                                                <div key={key} className="flex flex-col border-b border-slate-100 pb-2">
-                                                    <span className="text-slate-500 capitalize">{key}</span>
-                                                    <span className="font-medium text-slate-900">{value}</span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
                         </div>
                     </div>
                 </div>
+
+                {/* ── Seção full-width: Descrição + Especificações ── */}
+                {(product.description || (product.specs && Object.keys(product.specs).length > 0)) && (
+                    <div className="mt-10 space-y-8">
+
+                        {/* Descrição Longa */}
+                        {product.description && (
+                            <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+                                <h3 className="text-xl font-bold text-slate-900 mb-5 pb-3 border-b border-slate-100">
+                                    Descrição do Produto
+                                </h3>
+                                <div
+                                    className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed"
+                                    dangerouslySetInnerHTML={{ __html: product.description }}
+                                />
+                            </div>
+                        )}
+
+                        {/* Especificações Técnicas */}
+                        {product.specs && Object.keys(product.specs).length > 0 && (
+                            <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+                                <h3 className="text-xl font-bold text-slate-900 mb-5 pb-3 border-b border-slate-100">
+                                    Especificações
+                                </h3>
+                                <div className="mt-4">
+                                    {(() => {
+                                        // Campos nunca exibidos publicamente (identificadores únicos de unidade e dados logísticos de cálculo)
+                                        const HIDDEN_KEYS = new Set([
+                                            'imei1', 'imei2', 'imei', 'serial', 'serial_number',
+                                            'weight_kg', 'width_cm', 'height_cm', 'depth_cm', 'peso_kg', 'largura_cm', 'altura_cm', 'profundidade_cm'
+                                        ]);
+
+                                        // UUID regex — oculta valores que são IDs internos
+                                        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+                                        // Labels de fallback para campos nativos (não custom)
+                                        const NATIVE_LABELS: Record<string, string> = {
+                                            color: 'Cor', storage: 'Armazenamento', ram: 'Memória RAM',
+                                            version: 'Versão', versao: 'Versão',
+                                            battery_health: 'Saúde da Bateria', battery_mah: 'Bateria (mAh)',
+                                            display: 'Display (pol)',
+                                            peso_g: 'Peso (g)',
+                                            // Fallbacks explícitos para campos comuns que podem falhar no fetch de custom_fields público por RLS
+                                            celular_slot_para_cartao: 'Slot para cartão',
+                                            celular_biometria: 'Biometria',
+                                            celular_tipo_de_protecao_de_tela: 'Proteção de tela',
+                                            celular_fps_display: 'Display FPS',
+                                            pontuacao_dxomak: 'Pontuação Dxomak',
+                                            cam_principal_mpx: 'Câm. Principal (Mpx)',
+                                            cam_selfie_mpx: 'Câm. Selfie (Mpx)',
+                                            rede_operadora: 'Rede Operadora',
+                                            tipo_de_tela: 'Formato de tela',
+                                            tipo_de_display: 'Display de',
+                                            entrada_fone_de_ouvido: 'Entrada de fone',
+                                            antutu: 'Antutu',
+                                            chipset: 'Chipset',
+                                            processador: 'Processador',
+                                            carregamento: 'Carregamento',
+                                            gpu: 'GPU',
+                                            nfc: 'NFC',
+                                            rede: 'Rede',
+                                            camera: 'Câmera',
+                                        };
+
+                                        // Configuração de Grupo de Especificações e Ícones
+                                        const SPEC_GROUPS = [
+                                            {
+                                                id: 'identificacao',
+                                                label: 'Principal',
+                                                icon: Smartphone,
+                                                keys: ['version', 'versao', 'color', 'storage', 'ram']
+                                            },
+                                            {
+                                                id: 'tela',
+                                                label: 'Tela',
+                                                icon: Monitor,
+                                                keys: ['display', 'tipo_de_display', 'tipo_de_tela', 'celular_fps_display', 'celular_tipo_de_protecao_de_tela']
+                                            },
+                                            {
+                                                id: 'camera',
+                                                label: 'Câmeras',
+                                                icon: Camera,
+                                                keys: ['cam_principal_mpx', 'cam_selfie_mpx', 'camera', 'pontuacao_dxomak']
+                                            },
+                                            {
+                                                id: 'desempenho',
+                                                label: 'Processamento',
+                                                icon: Cpu,
+                                                keys: ['chipset', 'processador', 'cpu', 'gpu', 'antutu']
+                                            },
+                                            {
+                                                id: 'bateria',
+                                                label: 'Bateria',
+                                                icon: Battery,
+                                                keys: ['battery_mah', 'battery_health', 'carregamento']
+                                            },
+                                            {
+                                                id: 'conexoes',
+                                                label: 'Conectividade',
+                                                icon: Wifi,
+                                                keys: ['rede_operadora', 'rede', 'network', 'network_type', 'nfc', 'bluetooth', 'wifi', 'usb', 'sim', 'celular_slot_para_cartao', 'entrada_fone_de_ouvido']
+                                            },
+                                            {
+                                                id: 'fisico',
+                                                label: 'Físico e Segurança',
+                                                icon: ShieldCheck,
+                                                keys: ['celular_biometria', 'resistencia', 'peso_g']
+                                            }
+                                        ];
+
+                                        const specs = product.specs as Record<string, unknown>;
+                                        const renderedKeys = new Set<string>();
+                                        const allItems: { key: string, label: string, strVal: string }[] = [];
+
+                                        // Auxiliar: processa o valor e adiciona na lista se for válido
+                                        const tryAddItem = (key: string, label: string, value: unknown) => {
+                                            if (HIDDEN_KEYS.has(key.toLowerCase())) return;
+                                            const strVal = String(value ?? '').trim();
+                                            if (!strVal || strVal === '0') return;
+                                            if (uuidRegex.test(strVal)) return;
+                                            if (renderedKeys.has(key.toLowerCase())) return;
+
+                                            allItems.push({ key: key.toLowerCase(), label, strVal });
+                                            renderedKeys.add(key.toLowerCase());
+                                        };
+
+                                        // ── 1. CAMPOS DO TEMPLATE DA CATEGORIA ──
+                                        if (categoryConfig?.custom_fields && Array.isArray(categoryConfig.custom_fields)) {
+                                            for (const field of categoryConfig.custom_fields) {
+                                                const key: string = field.key || field.name?.toLowerCase().replace(/\s+/g, '_') || '';
+                                                if (!key) continue;
+                                                if (field.requirement === 'off' || field.requirement === 'hidden') continue;
+                                                const label: string = customFieldNames[key] || field.label || field.name || key.replace(/_/g, ' ');
+                                                tryAddItem(key, label, specs[key]);
+                                            }
+                                        }
+
+                                        // ── 2. CAMPOS NATIVOS DA CATEGORIA ──
+                                        for (const [nk, nl] of Object.entries(NATIVE_LABELS)) {
+                                            tryAddItem(nk, nl, specs[nk]);
+                                        }
+
+                                        // ── 3. CAMPOS EXTRAS ──
+                                        for (const [key, value] of Object.entries(specs)) {
+                                            const label = customFieldNames[key] || key.replace(/_/g, ' ');
+                                            tryAddItem(key, label, value);
+                                        }
+
+                                        // Agrupar itens mapeados
+                                        const groupedItems: { group: typeof SPEC_GROUPS[0] | { id: string, label: string, icon: any, keys: string[] }, items: typeof allItems }[] = [];
+                                        
+                                        SPEC_GROUPS.forEach(group => {
+                                            const groupItems = allItems.filter(item => group.keys.includes(item.key));
+                                            if (groupItems.length > 0) {
+                                                // Ordenar os itens dentro do grupo para seguir a ordem de chaves configurada no array `keys`
+                                                groupItems.sort((a, b) => group.keys.indexOf(a.key) - group.keys.indexOf(b.key));
+                                                groupedItems.push({ group, items: groupItems });
+                                            }
+                                        });
+
+                                        // Coletar itens restantes que não caíram em nenhum grupo (Outros)
+                                        const mappedKeys = new Set(SPEC_GROUPS.flatMap(g => g.keys));
+                                        const othersItems = allItems.filter(item => !mappedKeys.has(item.key));
+                                        
+                                        if (othersItems.length > 0) {
+                                            groupedItems.push({
+                                                group: { id: 'outros', label: 'Outras Características', icon: Settings, keys: [] },
+                                                items: othersItems
+                                            });
+                                        }
+
+                                        return (
+                                            <div className="flex flex-col gap-6 w-full">
+                                                {groupedItems.map((g, index) => (
+                                                    <div key={g.group.id} className={index !== 0 ? "pt-6 border-t border-slate-100" : ""}>
+                                                        <div className="flex items-center gap-2 mb-4 text-slate-800">
+                                                            <g.group.icon className="w-5 h-5 text-blue-600" />
+                                                            <h4 className="font-bold text-base">{g.group.label}</h4>
+                                                        </div>
+                                                        <dl className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-6 gap-x-4 text-sm pl-7">
+                                                            {g.items.map(item => (
+                                                                <div key={item.key} className="flex flex-col max-w-full">
+                                                                    <dt className="text-slate-500 text-xs font-semibold uppercase tracking-wide truncate pr-2" title={item.label}>{item.label}</dt>
+                                                                    <dd className="font-medium text-slate-900 mt-0.5 break-words pr-2">{item.strVal}</dd>
+                                                                </div>
+                                                            ))}
+                                                        </dl>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+                )}
+
+                {/* Produtos Relacionados - Ocultado temporariamente a pedido do cliente */}
+                {false && relatedProducts.length > 0 && (
+                    <div className="mt-16 mb-8 pt-10 border-t border-slate-200">
+                        <h2 className="text-2xl font-bold text-slate-900 mb-8 flex items-center gap-2">
+                            <Smartphone size={24} className="text-blue-600" /> Quem comprou, curtiu também!
+                        </h2>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                            {relatedProducts.map(rel => (
+                                <ModernProductCard key={rel.id} product={rel} />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Cross-Sell Dinâmico via Tags - Ocultado temporariamente a pedido do cliente */}
+                {false && crossSellProducts.length > 0 && (
+                    <div className="mt-8 mb-8 pt-10 border-t border-slate-200 bg-blue-50/50 p-6 rounded-3xl">
+                        <h2 className="text-2xl font-bold text-blue-900 mb-2 flex items-center gap-2">
+                            <Box size={24} className="text-blue-600" /> Aproveite e leve junto!
+                        </h2>
+                        <p className="text-blue-700/80 mb-8 text-sm">Itens perfeitamente compatíveis com este produto.</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                            {crossSellProducts.map(rel => (
+                                <ModernProductCard key={rel.id} product={rel} />
+                            ))}
+                        </div>
+                    </div>
+                )}
+
             </main>
 
             {/* Sticky Mobile CTA */}

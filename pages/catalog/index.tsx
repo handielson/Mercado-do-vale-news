@@ -352,8 +352,16 @@ function CatalogContent() {
             {/* Rodapé do Catálogo */}
             {footerText && (
                 <footer className="border-t border-slate-200 bg-white mt-4">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 text-center">
-                        <p className="text-xs text-slate-400">{footerText}</p>
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                            <p className="text-xs text-slate-400 text-center md:text-left flex-1">{footerText}</p>
+                            
+                            <div className="flex gap-4">
+                                <a href="/quem-somos" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">
+                                    Quem Somos
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </footer>
             )}

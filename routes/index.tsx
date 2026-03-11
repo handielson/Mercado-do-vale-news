@@ -69,6 +69,7 @@ import { PromotionsPage as CustomerPromotionsPage } from '../pages/customer/Prom
 import { FreeScreenProtectorRulesPage } from '../pages/customer/FreeScreenProtectorRulesPage';
 import { FeedbackListPage } from '../pages/admin/feedbacks/FeedbackListPage';
 import { PromotionsPage as AdminPromotionsPage } from '../pages/admin/promotions/PromotionsPage';
+import { AboutUsPage } from '../pages/catalog/AboutUsPage';
 import BlingPage from '../pages/admin/settings/BlingPage';
 import BlingCallbackPage from '../pages/admin/settings/BlingCallbackPage';
 import { ProductImageBankPage } from '../pages/admin/products/ProductImageBankPage';
@@ -785,6 +786,14 @@ export const router = createBrowserRouter([
         <CartProvider>
           <CatalogPage />
         </CartProvider>
+      </MaintenanceGuard>
+    )
+  },
+  {
+    path: "/quem-somos",
+    element: (
+      <MaintenanceGuard>
+        <AboutUsPage />
       </MaintenanceGuard>
     )
   },

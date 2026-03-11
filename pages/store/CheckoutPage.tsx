@@ -146,11 +146,11 @@ export default function CheckoutPage() {
             }
 
             // Calcula opções de frete
-            const options = await shippingService.calculate({
+            const res = await shippingService.calculate({
                 to_cep: cep,
                 order_value: subtotal,
             });
-            setShippingOptions(options);
+            setShippingOptions(res.options);
         } catch {
             setError('Não foi possível calcular o frete. Tente novamente.');
         } finally {

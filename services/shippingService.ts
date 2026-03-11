@@ -11,6 +11,7 @@ import type {
     ShippingPriceRangeInput,
     ShippingOption,
     ShippingCalculationInput,
+    ShippingCalculationResult,
 } from '../types/shipping';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -155,8 +156,9 @@ export const shippingService = {
 
     // ── Calculation ───────────────────────────────────────────────────────────
 
-    async calculate(input: ShippingCalculationInput): Promise<ShippingOption[]> {
+    async calculate(input: ShippingCalculationInput): Promise<ShippingCalculationResult> {
         const options: ShippingOption[] = [];
+        let missingForFree: number | undefined = undefined;
 
         const [settings, zones] = await Promise.all([
             shippingService.getSettings(),
@@ -164,7 +166,7 @@ export const shippingService = {
         ]);
 
         const destInfo = await getCepInfo(input.to_cep);
-        if (!destInfo) return [];
+        if (!destInfo) return { options: [] };
 
         let originCoords: { lat: number; lng: number } | null = null;
         if (settings?.origin_cep) {
@@ -192,9 +194,21 @@ export const shippingService = {
             const matches = cityMatch || cepMatch;
             if (!matches && zone.type !== 'national') continue;
 
+            const isLocal = zone.type === 'local_free' || zone.type === 'local_paid';
+            const withinRadius = isLocal ? (!zone.max_km_free || distanceKm === null || distanceKm <= zone.max_km_free) : false;
+
+            // Extrair a lógica do "Falta X para o frete grátis" para qualquer zona local
+            // que tenha a regra do min_order_free definida
+            if (isLocal && withinRadius && zone.min_order_free && input.order_value !== undefined) {
+                if (input.order_value < zone.min_order_free) {
+                    const diff = zone.min_order_free - input.order_value;
+                    if (missingForFree === undefined || diff < missingForFree) {
+                        missingForFree = diff;
+                    }
+                }
+            }
+
             if (zone.type === 'local_free') {
-                const withinRadius =
-                    !zone.max_km_free || distanceKm === null || distanceKm <= zone.max_km_free;
                 const meetsMinOrder =
                     !zone.min_order_free || !input.order_value || input.order_value >= zone.min_order_free;
 
@@ -212,6 +226,23 @@ export const shippingService = {
                 }
 
             } else if (zone.type === 'local_paid') {
+                const meetsMinOrder = zone.min_order_free && input.order_value && input.order_value >= zone.min_order_free;
+                
+                // Se a zona paga bateu a meta do frete grátis (min_order), ela vira grátis
+                if (meetsMinOrder && withinRadius) {
+                     options.push({
+                        id: zone.id,
+                        name: zone.name,
+                        price: 0,
+                        isFree: true,
+                        estimatedDaysMin: zone.estimated_days_min,
+                        estimatedDaysMax: zone.estimated_days_max,
+                        daysLabel: daysLabel(zone.estimated_days_min, zone.estimated_days_max),
+                        type: 'local_paid', // O painel a enxergaria como local_paid, mas a entregamos com price 0
+                    });
+                    continue;
+                }
+
                 if (zone.price_ranges && zone.price_ranges.length > 0 && distanceKm !== null) {
                     const range = zone.price_ranges.find(
                         (r) => distanceKm! >= r.min_km && (r.max_km === null || distanceKm! <= r.max_km)
@@ -319,10 +350,13 @@ export const shippingService = {
             });
         }
 
-        return options.sort((a, b) => {
-            if (a.isFree && !b.isFree) return -1;
-            if (!a.isFree && b.isFree) return 1;
-            return a.price - b.price;
-        });
+        return {
+            options: options.sort((a, b) => {
+                if (a.isFree && !b.isFree) return -1;
+                if (!a.isFree && b.isFree) return 1;
+                return a.price - b.price;
+            }),
+            missingForFree
+        };
     },
 };

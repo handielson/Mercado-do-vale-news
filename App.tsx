@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { RouterProvider } from 'react-router-dom';
@@ -10,6 +9,8 @@ import { CompareBar } from './components/catalog/CompareBar';
 import { router } from './routes/index';
 import { useFavicon } from './hooks/useFavicon';
 import { useGoogleAnalytics } from './hooks/useGoogleAnalytics';
+
+
 
 /**
  * App Root

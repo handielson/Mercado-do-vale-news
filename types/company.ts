@@ -60,6 +60,8 @@ export interface Company {
     description?: string;
     internalNotes?: string;
     catalogFooterText?: string; // Texto do rodapé exibido no catálogo público
+    aboutUsText?: string; // Texto para a página Quem Somos
+    aboutUsImageUrl?: string; // Imagem para a página Quem Somos
 
     // Integrations
     googleAnalyticsId?: string; // Google Analytics Measurement ID (ex: G-XXXXXXXXXX)
@@ -110,6 +112,8 @@ export const defaultCompany: Company = {
     description: '',
     internalNotes: '',
     catalogFooterText: '© 2026 Mercado do Vale. Todos os direitos reservados. As informações, preços e disponibilidade de produtos estão sujeitos a alterações sem aviso prévio.',
+    aboutUsText: '',
+    aboutUsImageUrl: '',
     maintenanceMode: false,
     maintenanceMessage: 'Voltamos logo! Estamos realizando manutenções no servidor para melhorar sua experiência.',
     maintenanceBypassKey: 'liberado'

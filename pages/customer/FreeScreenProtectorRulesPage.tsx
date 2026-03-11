@@ -22,11 +22,11 @@ export const FreeScreenProtectorRulesPage: React.FC = () => {
                             <ShieldCheck className="w-6 h-6 text-indigo-200" />
                         </div>
                         <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
-                            Regulamento: 1 Ano de Película Grátis
+                            Regulamento: Clube da película do vale
                         </h1>
                     </div>
                     <p className="text-lg text-indigo-200/90 leading-relaxed font-medium">
-                        Entenda como funciona o seu benefício exclusivo e como realizar os resgates mensais nas nossas lojas.
+                        Entenda como funciona o seu benefício e como realizar os resgates mensais nas nossas lojas.
                     </p>
                 </div>
             </div>
@@ -40,9 +40,13 @@ export const FreeScreenProtectorRulesPage: React.FC = () => {
                             <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2">
                                 <Info className="text-indigo-600" /> O que é o benefício?
                             </h2>
-                            <p className="text-slate-600 leading-relaxed">
-                                A promoção "1 Ano de Película Grátis" é um benefício exclusivo concedido aos clientes que adquirem qualquer smartphone conosco. Durante o período de 12 meses após a compra, o cliente tem direito a receber e ter instalada gratuitamente 1 (uma) película de proteção para a tela do aparelho adquirido por mês.
+                            <p className="text-slate-600 leading-relaxed mb-4">
+                                O "Clube da película do vale" é uma <strong>promoção sazonal</strong> e exclusiva da Mercado do Vale. Fique alerta, pois este aviso significa que o benefício <strong>"entra e sai" do ar</strong>. Quando a campanha estiver ativa, os clientes que adquirem qualquer smartphone conosco ganham o direito de receber e ter instalada gratuitamente 1 (uma) película de proteção para a tela do aparelho por mês, durante 12 meses.
                             </p>
+                            <div className="mt-4 flex items-start gap-3 text-sm text-orange-800 bg-orange-50 p-4 rounded-xl border border-orange-200">
+                                <Info size={20} className="shrink-0 mt-0.5" />
+                                <p><strong>Atenção - Promoção Sazonal:</strong> Por ser um benefício de campanha com tempo limitado, o seu direito e a entrega das películas gratuitas dependem <strong>exclusivamente</strong> de a promoção estar ativa e disponível na loja física, seja no momento em que você compra o celular ou nos meses seguintes durante os seus resgates presenciais.</p>
+                            </div>
                         </section>
 
                         <hr className="border-slate-100" />

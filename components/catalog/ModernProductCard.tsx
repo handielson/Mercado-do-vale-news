@@ -339,10 +339,10 @@ export function ModernProductCard({
     return (
         <>
             <div
-                className="group bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer"
+                className="group bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
-                onClick={handleCardClick}
+                onClick={handleTitleClick}
             >
                 {/* Image */}
                 <div

@@ -100,3 +100,8 @@ export interface ShippingCalculationInput {
     length?: number;                // cm
     order_value?: number;           // para verificar min_order_free
 }
+
+export interface ShippingCalculationResult {
+    options: ShippingOption[];
+    missingForFree?: number;
+}

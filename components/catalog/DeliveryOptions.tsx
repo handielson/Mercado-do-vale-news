@@ -18,9 +18,10 @@ interface DeliveryOptionsProps {
     selected: DeliveryOption;
     onSelect: (option: DeliveryOption) => void;
     storeStatus?: StoreStatus | null;
+    subtotal?: number;
 }
 
-export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOptionsProps) {
+export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal }: DeliveryOptionsProps) {
     const [cep, setCep] = useState(selected.address?.cep || '');
     const [isLoadingCEP, setIsLoadingCEP] = useState(false);
     const [cepError, setCepError] = useState('');
@@ -28,6 +29,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
     const [isLoadingShipping, setIsLoadingShipping] = useState(false);
     const [storeAddress, setStoreAddress] = useState('');
     const [addressOpen, setAddressOpen] = useState(false);
+    const [missingForFree, setMissingForFree] = useState<number | undefined>(undefined);
 
     useEffect(() => {
         companySettingsService.get().then(settings => {
@@ -35,16 +37,25 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
                 setStoreAddress(settings.address);
             }
         }).catch(console.error);
-
-        // Carrega opções de frete se já houver CEP salvo
-        if (selected.address?.cep) {
-            setIsLoadingShipping(true);
-            shippingService.calculate({ to_cep: selected.address.cep })
-                .then(setShippingOptions)
-                .catch(() => { })
-                .finally(() => setIsLoadingShipping(false));
-        }
     }, []);
+
+    useEffect(() => {
+        // Limpamos o log e relaxamos a exigência de igualdade estrita do CEP
+        // Se o usuário já buscou um cep válido (selected.address.cep existe), 
+        // sempre reculculamos o frete reagindo às mudanças de subtotal.
+        if (selected.address?.cep && !cepError) {
+            shippingService.calculate({ to_cep: selected.address.cep, order_value: subtotal })
+                .then(res => {
+                    setShippingOptions(res.options);
+                    setMissingForFree(res.missingForFree);
+                    // Atualiza a opção selecionada se a atual não bater ou sumir
+                    if (selected.shippingOption && !res.options.find(o => o.id === selected.shippingOption!.id)) {
+                         onSelect({ ...selected, shippingOption: res.options.length > 0 ? res.options[0] : undefined });
+                    }
+                })
+                .catch(() => { });
+        }
+    }, [selected.address?.cep, subtotal, cepError]);
 
     const handleTypeChange = (type: 'pickup' | 'delivery') => {
         onSelect({ ...selected, type, address: type === 'pickup' ? undefined : selected.address });
@@ -53,22 +64,10 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
     const handleCEPLookup = async () => {
         if (!cep) return;
 
-        // Evita refazer a busca se o CEP for exatamente o mesmo que já está preenchido e já temos um endereço
-        if (selected.address?.cep && selected.address.cep === cep && !cepError) {
-            // Apenas recalcula o frete se por algum motivo as opções de frete estiverem vazias
-            if (shippingOptions.length === 0) {
-                setIsLoadingShipping(true);
-                shippingService.calculate({ to_cep: cep })
-                    .then(setShippingOptions)
-                    .catch(() => { })
-                    .finally(() => setIsLoadingShipping(false));
-            }
-            return;
-        }
-
         setIsLoadingCEP(true);
         setCepError('');
         setShippingOptions([]);
+        
         try {
             const address = await lookupCEP(cep);
             const baseOption: DeliveryOption = {
@@ -78,23 +77,19 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
             };
             onSelect(baseOption);
 
-            // Calculate shipping after address lookup
             setIsLoadingShipping(true);
-            try {
-                const options = await shippingService.calculate({ to_cep: cep });
-                setShippingOptions(options);
-                if (options.length > 0) {
-                    onSelect({ ...baseOption, shippingOption: options[0] });
-                }
-            } catch {
-                // Shipping calc is optional
-            } finally {
-                setIsLoadingShipping(false);
+            const res = await shippingService.calculate({ to_cep: cep, order_value: subtotal });
+            setShippingOptions(res.options);
+            setMissingForFree(res.missingForFree);
+            
+            if (res.options.length > 0) {
+                onSelect({ ...baseOption, shippingOption: res.options[0] });
             }
         } catch (error) {
             setCepError(error instanceof Error ? error.message : 'Erro ao buscar CEP');
         } finally {
             setIsLoadingCEP(false);
+            setIsLoadingShipping(false);
         }
     };
 
@@ -274,6 +269,35 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
                     )}
                     {!isLoadingShipping && shippingOptions.length > 0 && (
                         <div>
+                            {/* Delivery Notes */}
+                            <div className="mb-4">
+                                <label className="block text-xs font-medium text-slate-600 mb-1">
+                                    Observações (opcional)
+                                </label>
+                                <textarea
+                                    value={selected.notes || ''}
+                                    onChange={(e) => onSelect({ ...selected, notes: e.target.value })}
+                                    placeholder="Ex: Portão azul, interfone 45"
+                                    rows={2}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                />
+                            </div>
+
+                            {/* Progress Bar / Aviso de Frete Grátis */}
+                            {missingForFree !== undefined && missingForFree > 0 && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-3 shadow-sm">
+                                    <span className="text-xl">🚚</span>
+                                    <div>
+                                        <p className="text-sm font-semibold text-amber-800">
+                                            Falta pouco para frete grátis!
+                                        </p>
+                                        <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+                                            Adicione mais <strong>R$ {missingForFree.toFixed(2).replace('.', ',')}</strong> em produtos no seu carrinho e ganhe <strong>Entrega Grátis</strong> para a sua região.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             <label className="block text-xs font-medium text-slate-600 mb-2">
                                 🚚 Opções de Frete
                             </label>
@@ -319,19 +343,6 @@ export function DeliveryOptions({ selected, onSelect, storeStatus }: DeliveryOpt
                         </p>
                     )}
 
-                    {/* Delivery Notes */}
-                    <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                            Observações (opcional)
-                        </label>
-                        <textarea
-                            value={selected.notes || ''}
-                            onChange={(e) => onSelect({ ...selected, notes: e.target.value })}
-                            placeholder="Ex: Portão azul, interfone 45"
-                            rows={2}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                        />
-                    </div>
                 </div>
             )}
 
