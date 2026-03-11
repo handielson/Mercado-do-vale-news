@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { CatalogSection, CreateSectionData, UpdateSectionData, SectionType } from '@/types/catalogSections';
 import type { CatalogProduct } from '@/types/catalog';
+import { catalogConfigService } from '@/services/catalogConfigService';
 
 class CatalogSectionsService {
     private cache: Map<string, { data: CatalogSection[]; timestamp: number }> = new Map();
@@ -297,6 +298,10 @@ class CatalogSectionsService {
                     });
                 }
             }
+
+            // Aplicar regras globais de visibilidade (ex: ocultar sem estoque)
+            const settings = await catalogConfigService.getSettings();
+            products = catalogConfigService.applyVisibilityRules(products, settings);
 
             // Update persistent cache
             if (!bypassCache) {

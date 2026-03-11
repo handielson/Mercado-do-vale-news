@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Edit, Package, Trash2, Printer, Power, PowerOff } from 'lucide-react';
+import { Edit, Package, Trash2, Printer, Power, PowerOff, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { ProductStatus } from '../../utils/field-standards';
 import { cn } from '../../utils/cn';
@@ -21,7 +22,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [modelImageUrl, setModelImageUrl] = useState<string | null>(null);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [currentStatus, setCurrentStatus] = useState<ProductStatus>(product.status);
+    const [currentStock, setCurrentStock] = useState<number | undefined>(product.stock_quantity);
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // Update internal state if props change
+    useEffect(() => {
+        setCurrentStatus(product.status);
+        setCurrentStock(product.stock_quantity);
+    }, [product.status, product.stock_quantity]);
 
     const handleToggleStatus = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -38,6 +47,38 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             console.error('[ProductCard] Erro ao alterar status:', err);
         } finally {
             setIsTogglingStatus(false);
+        }
+    };
+
+    const handleSyncStock = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!product.bling_id) return;
+
+        setIsSyncing(true);
+        try {
+            // Chama a rota de proxy do Bling para não expor tokens no client-side
+            const res = await fetch(`/api/bling?resource=product-detail&id=${product.bling_id}`);
+            if (!res.ok) throw new Error('Falha ao consultar Bling');
+            const data = await res.json();
+            
+            const realStock = typeof data.stock_quantity === 'number' ? data.stock_quantity : 0;
+            
+            if (realStock !== currentStock) {
+                const { error } = await supabase
+                    .from('products')
+                    .update({ stock_quantity: realStock })
+                    .eq('id', product.id);
+                if (error) throw error;
+                setCurrentStock(realStock);
+                toast.success(`Estoque sincronizado: ${realStock} un.`);
+            } else {
+                toast.info(`Estoque já estava atualizado: ${realStock} un.`);
+            }
+        } catch (err) {
+            console.error('[ProductCard] Erro ao sincronizar estoque:', err);
+            toast.error('Erro ao sincronizar estoque do Bling');
+        } finally {
+            setIsSyncing(false);
         }
     };
 
@@ -158,15 +199,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 {product.track_inventory && (
                     <div className={cn(
                         'absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-semibold shadow-md',
-                        product.stock_quantity === 0
+                        currentStock === 0
                             ? 'bg-red-100 text-red-700 border border-red-300'
-                            : (product.stock_quantity ?? 0) < 5
+                            : (currentStock ?? 0) < 5
                                 ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
                                 : 'bg-green-100 text-green-700 border border-green-300'
                     )}>
-                        {product.stock_quantity === 0
+                        {currentStock === 0
                             ? 'Sem Estoque'
-                            : `${product.stock_quantity} un.`}
+                            : `${currentStock} un.`}
                     </div>
                 )}
             </div>
@@ -197,6 +238,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         ) : null}
                     </div>
                     <div className="flex items-center gap-1">
+                        {product.bling_id && (
+                            <button
+                                onClick={handleSyncStock}
+                                disabled={isSyncing}
+                                className={cn(
+                                    "p-1.5 rounded-lg transition-colors group",
+                                    isSyncing ? "opacity-50 cursor-not-allowed" : "hover:bg-green-50"
+                                )}
+                                title="Sincronizar Estoque (Bling)"
+                            >
+                                <RefreshCw className={cn("w-4 h-4 text-slate-400 group-hover:text-green-600", isSyncing && "animate-spin text-green-600")} />
+                            </button>
+                        )}
                         <button
                             onClick={() => onEdit?.(product)}
                             className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"

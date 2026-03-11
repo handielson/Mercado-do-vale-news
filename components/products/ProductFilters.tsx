@@ -6,6 +6,7 @@ import { ProductStatus } from '../../utils/field-standards';
 export interface ProductFiltersState {
     search: string;
     status: ProductStatus | 'all';
+    sortBy: 'newest' | 'oldest' | 'name_asc' | 'name_desc';
 }
 
 interface ProductFiltersProps {
@@ -19,7 +20,8 @@ interface ProductFiltersProps {
 export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }) => {
     const [filters, setFilters] = useState<ProductFiltersState>({
         search: '',
-        status: 'all'
+        status: 'all',
+        sortBy: 'newest'
     });
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -30,6 +32,12 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
 
     const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newFilters = { ...filters, status: e.target.value as ProductStatus | 'all' };
+        setFilters(newFilters);
+        onFilterChange(newFilters);
+    };
+
+    const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newFilters = { ...filters, sortBy: e.target.value as ProductFiltersState['sortBy'] };
         setFilters(newFilters);
         onFilterChange(newFilters);
     };
@@ -69,6 +77,20 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
                         <option value={ProductStatus.INACTIVE}>Inativo</option>
                         <option value={ProductStatus.OUT_OF_STOCK}>Sem Estoque</option>
                         <option value={ProductStatus.DISCONTINUED}>Descontinuado</option>
+                    </select>
+                </div>
+
+                {/* Sort Select */}
+                <div className="w-full md:w-56">
+                    <select
+                        value={filters.sortBy}
+                        onChange={handleSortChange}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    >
+                        <option value="newest">Mais Recentes</option>
+                        <option value="oldest">Mais Antigos</option>
+                        <option value="name_asc">Nome (A-Z)</option>
+                        <option value="name_desc">Nome (Z-A)</option>
                     </select>
                 </div>
 

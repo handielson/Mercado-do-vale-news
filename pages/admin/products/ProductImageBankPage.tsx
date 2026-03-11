@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, Images, Trash2, RefreshCw, CheckCircle2, AlertCircle, FileImage, X, Info, Copy, Tag } from 'lucide-react';
+import { Upload, Images, Trash2, RefreshCw, CheckCircle2, AlertCircle, FileImage, X, Info, Copy, Tag, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     uploadImagesToBank,
@@ -28,7 +28,8 @@ export function ProductImageBankPage() {
     const [bankImages, setBankImages] = useState<ImageBankEntry[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isDragging, setIsDragging] = useState(false);
-    const [uploadQueue, setUploadQueue] = useState<File[]>([]);
+    const [uploadQueue, setUploadQueue] = useState<{ id: string; file: File; preview: string }[]>([]);
+    const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
     const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
     const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -148,8 +149,58 @@ export function ProductImageBankPage() {
         }
         if (valid.length < arr.length)
             toast.warning(`${arr.length - valid.length} arquivo(s) não são imagens e foram ignorados.`);
-        setUploadQueue(prev => [...prev, ...valid]);
+        
+        const newItems = valid.map(file => ({
+            id: Math.random().toString(36).substring(7),
+            file,
+            preview: URL.createObjectURL(file)
+        }));
+        
+        setUploadQueue(prev => [...prev, ...newItems]);
     };
+
+    // Cleanup object URLs when component unmounts or queue is cleared
+    useEffect(() => {
+        return () => {
+            uploadQueue.forEach(item => URL.revokeObjectURL(item.preview));
+        };
+    }, []);
+
+    const clearQueue = () => {
+        uploadQueue.forEach(item => URL.revokeObjectURL(item.preview));
+        setUploadQueue([]);
+    };
+
+    const removeFromQueue = (id: string, index: number) => {
+        URL.revokeObjectURL(uploadQueue[index].preview);
+        setUploadQueue(prev => prev.filter(item => item.id !== id));
+    };
+
+    // --- Funcionalidade de Drag and Drop para Ordenação ---
+    const handleDragStartItem = (e: React.DragEvent, index: number) => {
+        e.dataTransfer.effectAllowed = 'move';
+        // Hack para sumir com o ghost padrão e deixar mais limpo se quiser, mas funciona bem o padrão
+        setDraggedItemIndex(index);
+    };
+
+    const handleDragOverItem = (e: React.DragEvent, index: number) => {
+        e.preventDefault(); // Necessário para permitir o drop
+        if (draggedItemIndex === null || draggedItemIndex === index) return;
+        
+        setUploadQueue(prev => {
+            const newQueue = [...prev];
+            const draggedItem = newQueue[draggedItemIndex];
+            newQueue.splice(draggedItemIndex, 1);
+            newQueue.splice(index, 0, draggedItem);
+            setDraggedItemIndex(index); // Atualiza o índice do item sendo arrastado
+            return newQueue;
+        });
+    };
+
+    const handleDragEndItem = () => {
+        setDraggedItemIndex(null);
+    };
+    // ----------------------------------------------------
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
@@ -169,13 +220,15 @@ export function ProductImageBankPage() {
             startOrder: genStart,
         } : undefined;
 
-        const result = await uploadImagesToBank(uploadQueue, (done, total) => {
+        const filesToUpload = uploadQueue.map(item => item.file);
+
+        const result = await uploadImagesToBank(filesToUpload, (done, total) => {
             setUploadProgress({ done, total });
         }, context);
 
         setUploadResult(result);
         setUploadProgress(null);
-        setUploadQueue([]);
+        clearQueue();
 
         if (result.success.length > 0) {
             toast.success(`✅ ${result.success.length} imagem(ns) enviada(s)!`);
@@ -583,25 +636,66 @@ export function ProductImageBankPage() {
                                 {uploadQueue.length} arquivo{uploadQueue.length !== 1 ? 's' : ''} na fila
                             </p>
                             <button
-                                onClick={() => setUploadQueue([])}
+                                onClick={clearQueue}
                                 className="text-xs text-slate-400 hover:text-red-500 transition-colors"
                             >
                                 Limpar fila
                             </button>
                         </div>
-                        <div className="max-h-40 overflow-y-auto space-y-1 mb-4">
-                            {uploadQueue.map((f, i) => (
-                                <div key={i} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                                    <FileImage size={12} className="text-slate-400 shrink-0" />
-                                    <span className="flex-1 truncate font-mono">{f.name}</span>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); setUploadQueue(q => q.filter((_, idx) => idx !== i)); }}
-                                        className="text-slate-300 hover:text-red-400"
-                                    >
-                                        <X size={12} />
-                                    </button>
-                                </div>
-                            ))}
+                        
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4">
+                            <p className="text-xs text-slate-500 mb-3 flex items-center gap-1.5">
+                                <Info size={14} className="text-blue-500" />
+                                <strong>Dica:</strong> Arraste e solte as imagens para ordenar. A capa será a etiqueta <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono font-bold text-[10px]">#01 Principal</span>. As demais seguirão a ordem.
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[300px] overflow-y-auto pr-2 pb-2">
+                                {uploadQueue.map((item, i) => {
+                                    const isDragged = draggedItemIndex === i;
+                                    return (
+                                        <div
+                                            key={item.id}
+                                            draggable
+                                            onDragStart={(e) => handleDragStartItem(e, i)}
+                                            onDragOver={(e) => handleDragOverItem(e, i)}
+                                            onDragEnd={handleDragEndItem}
+                                            className={`relative group bg-white rounded-lg border-2 shadow-sm overflow-hidden flex flex-col cursor-grab active:cursor-grabbing transition-all ${
+                                                isDragged ? 'border-blue-400 opacity-50 scale-95' : 'border-slate-200 hover:border-blue-300'
+                                            }`}
+                                        >
+                                            <div className="absolute top-1 left-1 z-10 bg-black/60 text-white backdrop-blur-sm px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1">
+                                                <GripVertical size={10} className="text-white/70" />
+                                                #{String(i + genStart).padStart(2, '0')}
+                                            </div>
+                                            {i === 0 && (
+                                                <div className="absolute bottom-1 left-1 z-10 bg-blue-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold shadow-sm">
+                                                    Principal
+                                                </div>
+                                            )}
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); removeFromQueue(item.id, i); }}
+                                                className="absolute top-1 right-1 z-10 bg-black/60 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-500 transition-all"
+                                                title="Remover imagem"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                            
+                                            <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
+                                                <img 
+                                                    src={item.preview} 
+                                                    alt={item.file.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                            
+                                            <div className="px-2 py-1.5 border-t border-slate-100 bg-slate-50">
+                                                <p className="text-[10px] text-slate-500 truncate" title={item.file.name}>
+                                                    {item.file.name}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {uploadProgress ? (

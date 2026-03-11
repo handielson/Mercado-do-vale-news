@@ -16,7 +16,8 @@ export const useProducts = () => {
     const [error, setError] = useState<string | null>(null);
     const [filters, setFilters] = useState<ProductFiltersState>({
         search: '',
-        status: 'all'
+        status: 'all',
+        sortBy: 'newest'
     });
 
     /**
@@ -56,6 +57,22 @@ export const useProducts = () => {
         if (filters.status !== 'all') {
             filtered = filtered.filter(product => product.status === filters.status);
         }
+
+        // Sorting
+        filtered.sort((a, b) => {
+            switch (filters.sortBy) {
+                case 'newest':
+                    return new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime();
+                case 'oldest':
+                    return new Date(a.created || 0).getTime() - new Date(b.created || 0).getTime();
+                case 'name_asc':
+                    return a.name.localeCompare(b.name);
+                case 'name_desc':
+                    return b.name.localeCompare(a.name);
+                default:
+                    return 0;
+            }
+        });
 
         setFilteredProducts(filtered);
     }, [products, filters]);

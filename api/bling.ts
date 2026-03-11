@@ -92,8 +92,29 @@ export default async function handler(req: any, res: any) {
     // ─── PRODUCT-DETAIL: busca detalhe completo de um produto por ID ────────
     if (resource === 'product-detail') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-        const authHeader = req.headers['authorization'];
-        if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
+        let authHeader = req.headers['authorization'];
+        if (!authHeader) {
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const { data: settings } = await supabase
+                .from('company_settings')
+                .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
+                .single();
+            if (!settings?.bling_access_token) return res.status(401).json({ error: 'Bling not connected' });
+            let accessToken = settings.bling_access_token;
+            if (settings.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
+                const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: settings.bling_refresh_token, client_id: settings.bling_client_id, client_secret: settings.bling_client_secret }),
+                });
+                if (tokenRes.ok) {
+                    const tokenData = await tokenRes.json();
+                    accessToken = tokenData.access_token;
+                    await supabase.from('company_settings').update({ bling_access_token: tokenData.access_token, bling_refresh_token: tokenData.refresh_token, bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString() }).eq('id', settings.id ?? 1);
+                }
+            }
+            authHeader = `Bearer ${accessToken}`;
+        }
         const { id, variacoes } = req.query;
         if (!id) return res.status(400).json({ error: 'Product ID required' });
         try {

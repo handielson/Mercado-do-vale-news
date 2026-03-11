@@ -481,9 +481,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     onChange={(e) => {
                                         const cursorPosition = e.target.selectionStart || 0;
                                         const rawValue = e.target.value;
-                                        const fieldDef = getFieldDefinition('name');
-                                        const format = fieldDef?.format || 'capitalize';
-                                        const formatted = applyFieldFormat(rawValue, format);
+                                        const formatted = applyFieldFormat(rawValue, 'titlecase');
                                         setName(formatted);
                                         setTimeout(() => {
                                             if (inputRef.current) {
