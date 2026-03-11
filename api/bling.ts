@@ -246,6 +246,12 @@ export default async function handler(req: any, res: any) {
                 return res.status(200).json({ ok: true, ignored: true, reason: 'missing_saldoFisicoTotal' });
             }
 
+            // Diagnóstico: SELECT antes do UPDATE para identificar bling_id mismatch vs RLS
+            const { data: found, error: selErr } = await supabase
+                .from('products')
+                .select('id, sku, bling_id, stock_quantity')
+                .eq('bling_id', blingProductId);
+
             const { data: rows, error } = await supabase
                 .from('products')
                 .update({ stock_quantity: Math.max(0, Math.round(saldoFisicoTotal)) })
@@ -260,7 +266,11 @@ export default async function handler(req: any, res: any) {
                 blingProductId,
                 saldoFisicoTotal,
                 rows: rows?.length ?? 0,
+                selectFound: found?.length ?? 0,
+                selectError: selErr?.message,
+                usingServiceRole: !!(process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY),
             });
+
         } catch (err: any) {
             return res.status(200).json({ ok: false, error: err.message });
         }
