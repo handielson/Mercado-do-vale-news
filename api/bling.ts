@@ -204,7 +204,19 @@ export default async function handler(req: any, res: any) {
         }
     }
 
-    // ─── WEBHOOK: recebe notificações de estoque do Bling ───────────────────
+    // Documentação oficial: https://developer.bling.com.br/webhooks#/estoques
+    // Payload Versão 1 (stock.updated / stock.created):
+    // {
+    //   eventId, date, version, event: "stock.updated", companyId,
+    //   data: {
+    //     produto: { id: 12345678 },
+    //     deposito: { id, saldoFisico, saldoVirtual },
+    //     operacao: "E",
+    //     quantidade: 26,
+    //     saldoFisicoTotal: 1500.75,   <- total somando todos os depósitos
+    //     saldoVirtualTotal: 1500.75
+    //   }
+    // }
     if (resource === 'webhook') {
         if (req.method === 'GET') return res.status(200).json({ ok: true });
         if (req.method !== 'POST') return res.status(405).end();
@@ -215,71 +227,39 @@ export default async function handler(req: any, res: any) {
             // Salva log do payload para diagnóstico
             supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }).catch(() => {});
 
-            // Formato Bling v3: { event: 'stock.updated', data: { produto: {id, codigo}, saldoFisico } }
-            const eventV3 = payload?.event as string | undefined;
-            const isStockEventV3 = typeof eventV3 === 'string' && (eventV3.startsWith('stock.') || eventV3.startsWith('virtual_stock.'));
-
-            // Formato Bling v2/legado: { evento: 'Estoque', ... }
-            const eventoV2 = payload?.evento;
-            const isStockEventV2 = eventoV2 === 'Estoque' || eventoV2 === 'EstoqueVirtual';
-
-            if (!isStockEventV3 && !isStockEventV2) {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'not_stock_event', event: eventV3 || eventoV2 });
+            // event = "stock.updated" ou "stock.created" (conforme documentação)
+            const event: string | undefined = payload?.event;
+            if (typeof event !== 'string' || !event.startsWith('stock.')) {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'not_stock_event', event });
             }
 
-            // Extrai ID e saldo (ambos os formatos v2 e v3)
-            const rawBlingId = payload?.data?.produto?.id
-                || payload?.dados?.produto?.id
-                || payload?.data?.id;
-            const rawSku = payload?.data?.produto?.codigo
-                || payload?.dados?.produto?.codigo;
-            const saldo = payload?.data?.saldoFisico
-                ?? payload?.data?.saldoVirtual
-                ?? payload?.dados?.saldoFisico
-                ?? payload?.dados?.saldoVirtual;
+            // Identifica o produto pelo id (inteiro, conforme documentação)
+            const blingProductId: number | undefined = payload?.data?.produto?.id;
+            // saldoFisicoTotal = saldo total somando todos os depósitos (campo correto)
+            const saldoFisicoTotal: number | undefined = payload?.data?.saldoFisicoTotal;
 
-            if (rawBlingId === undefined && !rawSku) {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_fields', rawBlingId, saldo });
+            if (blingProductId === undefined) {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_produto_id' });
+            }
+            if (saldoFisicoTotal === undefined) {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_saldoFisicoTotal' });
             }
 
-            if (saldo === undefined) {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_saldo', rawBlingId, rawSku });
-            }
+            const { data: rows, error } = await supabase
+                .from('products')
+                .update({ stock_quantity: Math.max(0, Math.round(saldoFisicoTotal)) })
+                .eq('bling_id', blingProductId)
+                .select('id, sku');
 
-            const newQty = Math.max(0, Number(saldo));
-            let updated = false;
+            if (error) return res.status(200).json({ ok: false, error: error.message });
 
-            // Tentativa 1: match por bling_id como número
-            if (rawBlingId !== undefined) {
-                const { data: byIdNum, error: e1 } = await supabase
-                    .from('products')
-                    .update({ stock_quantity: newQty })
-                    .eq('bling_id', Number(rawBlingId))
-                    .select('id');
-                if (!e1 && byIdNum && byIdNum.length > 0) updated = true;
-            }
-
-            // Tentativa 2: match por bling_id como string (fallback de tipo)
-            if (!updated && rawBlingId !== undefined) {
-                const { data: byIdStr, error: e2 } = await supabase
-                    .from('products')
-                    .update({ stock_quantity: newQty })
-                    .eq('bling_id', String(rawBlingId))
-                    .select('id');
-                if (!e2 && byIdStr && byIdStr.length > 0) updated = true;
-            }
-
-            // Tentativa 3: fallback por SKU
-            if (!updated && rawSku) {
-                const { data: bySku, error: e3 } = await supabase
-                    .from('products')
-                    .update({ stock_quantity: newQty })
-                    .eq('sku', String(rawSku))
-                    .select('id');
-                if (!e3 && bySku && bySku.length > 0) updated = true;
-            }
-
-            return res.status(200).json({ ok: true, updated, blingId: rawBlingId, sku: rawSku, newQty });
+            return res.status(200).json({
+                ok: true,
+                updated: (rows?.length ?? 0) > 0,
+                blingProductId,
+                saldoFisicoTotal,
+                rows: rows?.length ?? 0,
+            });
         } catch (err: any) {
             return res.status(200).json({ ok: false, error: err.message });
         }
