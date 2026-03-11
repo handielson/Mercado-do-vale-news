@@ -4,6 +4,7 @@ import { Product } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
 import { productService } from '../services/products';
 import { ProductFiltersState } from '../components/products/ProductFilters';
+import { prefetchModelImages } from '../services/modelImageCache';
 
 const CACHE_KEY = 'admin_products_cache';
 const CACHE_TIMESTAMP_KEY = 'admin_products_cache_ts';
@@ -83,6 +84,14 @@ export const useProducts = () => {
             setFilteredProducts(data);
             saveToCache(data);
             setCacheAge('agora');
+
+            // Pré-aquece o cache de imagens de todos os modelos em UMA query (evita N+1 por card)
+            const modelIds = data
+                .filter(p => p.model_id && (!p.images || p.images.length === 0))
+                .map(p => p.model_id!);
+            if (modelIds.length > 0) {
+                prefetchModelImages(modelIds).catch(() => {}); // fire-and-forget
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Erro ao carregar produtos');
             console.error('Error fetching products:', err);
