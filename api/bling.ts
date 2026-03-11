@@ -252,10 +252,24 @@ export default async function handler(req: any, res: any) {
                 .select('id, sku, bling_id, stock_quantity')
                 .eq('bling_id', blingProductId);
 
+            // Usa o UUID do produto encontrado para o UPDATE (contorna issue de tipo no bling_id)
+            const productId = found?.[0]?.id;
+            if (!productId) {
+                return res.status(200).json({
+                    ok: true,
+                    updated: false,
+                    blingProductId,
+                    saldoFisicoTotal,
+                    rows: 0,
+                    selectFound: 0,
+                    selectError: selErr?.message,
+                });
+            }
+
             const { data: rows, error } = await supabase
                 .from('products')
                 .update({ stock_quantity: Math.max(0, Math.round(saldoFisicoTotal)) })
-                .eq('bling_id', blingProductId)
+                .eq('id', productId)
                 .select('id, sku');
 
             if (error) return res.status(200).json({ ok: false, error: error.message });
@@ -267,9 +281,9 @@ export default async function handler(req: any, res: any) {
                 saldoFisicoTotal,
                 rows: rows?.length ?? 0,
                 selectFound: found?.length ?? 0,
-                selectError: selErr?.message,
-                usingServiceRole: !!(process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY),
+                productId,
             });
+
 
         } catch (err: any) {
             return res.status(200).json({ ok: false, error: err.message });
