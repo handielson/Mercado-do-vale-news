@@ -229,7 +229,18 @@ export default async function handler(req: any, res: any) {
                 || process.env.VITE_SUPABASE_ANON_KEY
                 || process.env.SUPABASE_ANON_KEY!;
             const supabase = createClient(supabaseUrl, srKey);
-            const keyType = (process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) ? 'service_role' : 'anon';
+
+            // Decodifica JWT para confirmar o role real (sem verificação criptográfica)
+            let jwtRole = 'unknown';
+            try {
+                const parts = srKey.split('.');
+                if (parts.length === 3) {
+                    const payload64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                    const decoded = JSON.parse(Buffer.from(payload64, 'base64').toString('utf8'));
+                    jwtRole = decoded.role || 'unknown';
+                }
+            } catch (_) { }
+
 
             // Salva log do payload para diagnóstico (fire-and-forget correto)
             try { await supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }); } catch (_) { }
