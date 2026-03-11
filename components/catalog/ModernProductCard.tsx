@@ -627,7 +627,7 @@ export function ModernProductCard({
                                         <span className="font-semibold text-sm text-slate-500">
                                             {productGroup && productGroup.variants[0] && productGroup.variants[0].colors.length > 1
                                                 ? `${productGroup.variants[0].colors.length} Cores`
-                                                : product.specs?.color || 'Padrão'}
+                                                : product.specs?.color || ''}
                                         </span>
                                     )}
                                     <div className="text-right">
