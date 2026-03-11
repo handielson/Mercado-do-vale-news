@@ -495,21 +495,48 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         Regenerar
                     </button>
                 </div>
-                <input
-                    type="text"
-                    value={watch('keywords')?.join(', ') || ''}
-                    onChange={(e) => {
-                        const keywords = e.target.value
-                            .split(',')
-                            .map(k => k.trim())
-                            .filter(k => k.length > 0);
-                        setValue('keywords', keywords);
-                    }}
-                    className="w-full px-3 py-2 border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="palavra1, palavra2, palavra3, palavra4, palavra5"
-                />
+
+                {/* Tag chips */}
+                <div className="flex flex-wrap gap-2 mb-2 p-3 min-h-[44px] border-2 border-purple-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-purple-500">
+                    {(watch('keywords') || []).map((kw, idx) => (
+                        <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-purple-100 text-purple-800 text-xs font-medium rounded-full"
+                        >
+                            {kw}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const current = watch('keywords') || [];
+                                    setValue('keywords', current.filter((_, i) => i !== idx));
+                                }}
+                                className="text-purple-500 hover:text-purple-900 transition-colors ml-0.5"
+                                title="Remover"
+                            >
+                                <span aria-hidden>×</span>
+                            </button>
+                        </span>
+                    ))}
+                    <input
+                        type="text"
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ',') {
+                                e.preventDefault();
+                                const val = e.currentTarget.value.trim().replace(/,$/, '');
+                                if (!val) return;
+                                const current = watch('keywords') || [];
+                                if (!current.includes(val)) {
+                                    setValue('keywords', [...current, val]);
+                                }
+                                e.currentTarget.value = '';
+                            }
+                        }}
+                        className="flex-1 min-w-[120px] text-sm outline-none bg-transparent placeholder:text-slate-400"
+                        placeholder="Digite e pressione Enter..."
+                    />
+                </div>
                 <p className="mt-1 text-xs text-gray-500">
-                    Separe as palavras-chave com vírgulas. Recomendado: 5-10 palavras-chave relevantes.
+                    O modelo é adicionado automaticamente. Pressione <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px] font-mono border border-slate-300">Enter</kbd> ou <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px] font-mono border border-slate-300">,</kbd> para adicionar. Clique no <strong>×</strong> para remover.
                 </p>
                 {errors.keywords && (
                     <p className="mt-1 text-sm text-red-600">{errors.keywords.message}</p>
