@@ -119,98 +119,145 @@ const DashboardPage = () => {
       )}
 
       {/* Quick Access Cards */}
-      <div className="mt-8">
-        <h3 className="text-lg font-semibold text-slate-700 mb-4">⚡ Acesso Rápido</h3>
+      <div className="mt-8 space-y-8">
 
-        {/* Destaques */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-          <a
-            href="/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-4 p-5 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all"
-          >
-            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-2xl">🛍️</span>
-            </div>
-            <div className="flex-1">
-              <p className="font-bold text-lg leading-tight">Catálogo Público</p>
-              <p className="text-sm text-blue-100 mt-0.5">Ver loja como cliente ↗</p>
-            </div>
-          </a>
+        {/* ── Grupo: Produtos & Catálogo ── */}
+        <div>
+          <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <span>📦</span> Produtos & Catálogo
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
 
-          <button
-            onClick={() => navigate('/admin/settings/shipping?tab=calcular')}
-            className="flex items-center gap-4 p-5 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all text-left"
-          >
-            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-2xl">🚚</span>
-            </div>
-            <div className="flex-1">
-              <p className="font-bold text-lg leading-tight">Calcular Frete</p>
-              <p className="text-sm text-blue-100 mt-0.5">Cotação avulsa com produtos</p>
-            </div>
-          </button>
+            <button onClick={() => navigate('/admin/products')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                  <span className="text-lg">📦</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">Produtos</p>
+              </div>
+              <p className="text-xs text-slate-500">Cadastrar e gerenciar</p>
+            </button>
+
+            <button onClick={() => navigate('/admin/settings/models')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                  <span className="text-lg">📱</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">Modelos</p>
+              </div>
+              <p className="text-xs text-slate-500">Modelos e fotos por cor</p>
+            </button>
+
+            <button onClick={() => navigate('/admin/inventory')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-yellow-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-yellow-100 rounded-lg flex items-center justify-center group-hover:bg-yellow-200 transition-colors">
+                  <span className="text-lg">📊</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">Estoque</p>
+              </div>
+              <p className="text-xs text-slate-500">Movimentações e saldos</p>
+            </button>
+
+            <button onClick={() => navigate('/admin/settings/catalog')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+                  <span className="text-lg">🛍️</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">Catálogo</p>
+              </div>
+              <p className="text-xs text-slate-500">Configurar catálogo</p>
+            </button>
+
+            <a href="/" target="_blank" rel="noopener noreferrer"
+              className="bg-gradient-to-br from-indigo-600 to-blue-700 p-4 rounded-xl shadow-sm hover:shadow-md transition-all text-left text-white">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center">
+                  <span className="text-lg">🛒</span>
+                </div>
+                <p className="font-semibold text-sm">Ver Loja ↗</p>
+              </div>
+              <p className="text-xs text-blue-200">Abrir loja como cliente</p>
+            </a>
+
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <button
-            onClick={() => navigate('/admin/settings/models')}
-            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group text-left"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                <span className="text-xl">📱</span>
-              </div>
-              <p className="font-semibold text-slate-800">Modelos</p>
-            </div>
-            <p className="text-xs text-slate-500">Gerenciar modelos e fotos por cor</p>
-          </button>
+        {/* ── Grupo: Operações Diárias ── */}
+        <div>
+          <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <span>⚡</span> Operações Diárias
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
 
-          <button
-            onClick={() => navigate('/admin/products')}
-            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer group text-left"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                <span className="text-xl">📦</span>
+            <button onClick={() => navigate('/admin/pdv')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-purple-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                  <span className="text-lg">💰</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">PDV</p>
               </div>
-              <p className="font-semibold text-slate-800">Produtos</p>
-            </div>
-            <p className="text-xs text-slate-500">Cadastrar e gerenciar produtos</p>
-          </button>
+              <p className="text-xs text-slate-500">Ponto de venda</p>
+            </button>
 
-          <button
-            onClick={() => navigate('/admin/pdv')}
-            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-purple-400 hover:shadow-md transition-all cursor-pointer group text-left"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                <span className="text-xl">💰</span>
+            <button onClick={() => navigate('/admin/sales')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-sky-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-sky-100 rounded-lg flex items-center justify-center group-hover:bg-sky-200 transition-colors">
+                  <span className="text-lg">📋</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">Vendas</p>
               </div>
-              <p className="font-semibold text-slate-800">PDV</p>
-            </div>
-            <p className="text-xs text-slate-500">Ponto de venda</p>
-          </button>
+              <p className="text-xs text-slate-500">Histórico de vendas</p>
+            </button>
 
-          <button
-            onClick={() => navigate('/admin/settings/catalog')}
-            className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group text-left"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
-                <span className="text-xl">🛍️</span>
+            <button onClick={() => navigate('/admin/orders')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-teal-100 rounded-lg flex items-center justify-center group-hover:bg-teal-200 transition-colors">
+                  <span className="text-lg">🛒</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">Pedidos</p>
               </div>
-              <p className="font-semibold text-slate-800">Catálogo</p>
-            </div>
-            <p className="text-xs text-slate-500">Configurar catálogo público</p>
-          </button>
+              <p className="text-xs text-slate-500">Pedidos online</p>
+            </button>
+
+            <button onClick={() => navigate('/admin/financeiro')}
+              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer group text-left">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                  <span className="text-lg">💳</span>
+                </div>
+                <p className="font-semibold text-slate-800 text-sm">Financeiro</p>
+              </div>
+              <p className="text-xs text-slate-500">Contas e fluxo</p>
+            </button>
+
+            <button onClick={() => navigate('/admin/settings/shipping?tab=calcular')}
+              className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-xl shadow-sm hover:shadow-md transition-all text-left text-white">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center">
+                  <span className="text-lg">🚚</span>
+                </div>
+                <p className="font-semibold text-sm">Calcular Frete</p>
+              </div>
+              <p className="text-xs text-blue-100">Cotação avulsa</p>
+            </button>
+
+          </div>
         </div>
+
       </div>
 
       {/* Stats Cards */}
       <div className="mt-8">
-        <h3 className="text-lg font-semibold text-slate-700 mb-4">📊 Estatísticas</h3>
+        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <span>📊</span> Visão Geral
+        </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
             <p className="text-xs font-semibold text-slate-500 uppercase">Total Operações</p>
@@ -226,6 +273,7 @@ const DashboardPage = () => {
           </div>
         </div>
       </div>
+
     </div>
   );
 };
