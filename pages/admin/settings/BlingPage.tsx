@@ -116,6 +116,10 @@ export default function BlingPage() {
     const [testingWebhook, setTestingWebhook] = useState(false);
     const [checkingBlingIds, setCheckingBlingIds] = useState(false);
     const [blingIdStats, setBlingIdStats] = useState<{ total: number; with_id: number; without_id: number } | null>(null);
+    const [productsWithoutId, setProductsWithoutId] = useState<{ id: string; name: string; sku: string | null }[]>([]);
+    const [reimportingIds, setReimportingIds] = useState<Set<string>>(new Set());
+    const [reimportResults, setReimportResults] = useState<Map<string, { ok: boolean; message: string }>>(new Map());
+    const [reimportingAll, setReimportingAll] = useState(false);
 
     // ─────────────────────────────────────────────────────
     // Load
@@ -1441,19 +1445,56 @@ export default function BlingPage() {
                         async function checkBlingIds() {
                             setCheckingBlingIds(true);
                             setBlingIdStats(null);
+                            setProductsWithoutId([]);
                             try {
                                 const { data, error } = await supabase
                                     .from('products')
-                                    .select('id, bling_id');
+                                    .select('id, name, sku, bling_id');
                                 if (error) throw error;
                                 const total = data?.length || 0;
-                                const with_id = data?.filter((p: any) => p.bling_id).length || 0;
-                                setBlingIdStats({ total, with_id, without_id: total - with_id });
+                                const withId = data?.filter((p: any) => p.bling_id) || [];
+                                const withoutId = data?.filter((p: any) => !p.bling_id) || [];
+                                setBlingIdStats({ total, with_id: withId.length, without_id: withoutId.length });
+                                setProductsWithoutId(withoutId.map((p: any) => ({ id: p.id, name: p.name, sku: p.sku })));
                             } catch (e: any) {
                                 toast.error('Erro ao checar bling_id: ' + e.message);
                             } finally {
                                 setCheckingBlingIds(false);
                             }
+                        }
+
+                        async function reimportProduct(productId: string, sku: string | null, name: string) {
+                            if (!sku && !name) { toast.error('Produto sem SKU ou nome para buscar no Bling'); return; }
+                            setReimportingIds(prev => new Set([...prev, productId]));
+                            setReimportResults(prev => { const m = new Map(prev); m.delete(productId); return m; });
+                            try {
+                                const query = sku || name;
+                                const results = await searchBlingProducts(query);
+                                const match = results.find(p => (sku && p.codigo === sku) || p.nome.toLowerCase() === name.toLowerCase()) || results[0];
+                                if (!match) {
+                                    setReimportResults(prev => new Map(prev).set(productId, { ok: false, message: 'Produto não encontrado no Bling' }));
+                                    return;
+                                }
+                                // atualiza o bling_id diretamente
+                                const { error } = await supabase.from('products').update({ bling_id: match.id }).eq('id', productId);
+                                if (error) throw error;
+                                setReimportResults(prev => new Map(prev).set(productId, { ok: true, message: `bling_id ${match.id} vinculado` }));
+                                setProductsWithoutId(prev => prev.filter(p => p.id !== productId));
+                                setBlingIdStats(prev => prev ? { ...prev, with_id: prev.with_id + 1, without_id: prev.without_id - 1 } : prev);
+                            } catch (e: any) {
+                                setReimportResults(prev => new Map(prev).set(productId, { ok: false, message: e.message }));
+                            } finally {
+                                setReimportingIds(prev => { const s = new Set(prev); s.delete(productId); return s; });
+                            }
+                        }
+
+                        async function reimportAll() {
+                            setReimportingAll(true);
+                            for (const p of productsWithoutId) {
+                                await reimportProduct(p.id, p.sku, p.name);
+                            }
+                            setReimportingAll(false);
+                            toast.success('Reimportação em massa concluída!');
                         }
 
                         return (
@@ -1523,15 +1564,27 @@ export default function BlingPage() {
                                     </ul>
                                 </div>
 
-                                {/* Verificar bling_id */}
-                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
-                                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                                        <Package className="w-5 h-5 text-green-600" />
-                                        Verificar Produtos com Bling ID
-                                    </h2>
+                                {/* Verificar e reimportar bling_id */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                            <Package className="w-5 h-5 text-green-600" />
+                                            Vincular Bling ID nos Produtos
+                                        </h2>
+                                        {productsWithoutId.length > 0 && (
+                                            <button
+                                                onClick={reimportAll}
+                                                disabled={reimportingAll || !isConnected}
+                                                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600 disabled:opacity-50"
+                                            >
+                                                {reimportingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                                {reimportingAll ? 'Vinculando todos...' : `Vincular todos (${productsWithoutId.length})`}
+                                            </button>
+                                        )}
+                                    </div>
                                     <p className="text-sm text-slate-500">
-                                        O webhook só atualiza produtos que foram importados pelo Bling e têm um <code className="bg-slate-100 px-1 py-0.5 rounded text-xs">bling_id</code> salvo.
-                                        Produtos criados manualmente não serão atualizados pelo webhook.
+                                        O webhook só atualiza produtos que têm um <code className="bg-slate-100 px-1 py-0.5 rounded text-xs">bling_id</code> salvo.
+                                        Use os botões abaixo para vincular produtos pelo SKU automaticamente.
                                     </p>
                                     <button
                                         onClick={checkBlingIds}
@@ -1541,6 +1594,7 @@ export default function BlingPage() {
                                         {checkingBlingIds ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                                         {checkingBlingIds ? 'Verificando...' : 'Verificar Produtos'}
                                     </button>
+
                                     {blingIdStats && (
                                         <div className="grid grid-cols-3 gap-3">
                                             <div className="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
@@ -1557,13 +1611,51 @@ export default function BlingPage() {
                                             </div>
                                         </div>
                                     )}
-                                    {blingIdStats && blingIdStats.without_id > 0 && (
-                                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-                                            <strong>Atenção:</strong> {blingIdStats.without_id} produto(s) sem Bling ID não serão atualizados automaticamente.
-                                            Para corrigi-los, reimporte-os pelo Bling na aba <strong>Produtos</strong>.
+
+                                    {/* Lista de produtos sem bling_id */}
+                                    {productsWithoutId.length > 0 && (
+                                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                            <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs font-semibold text-amber-800">
+                                                Produtos sem Bling ID — clique em "Vincular" para buscar no Bling pelo SKU
+                                            </div>
+                                            <div className="divide-y divide-slate-100">
+                                                {productsWithoutId.map(p => {
+                                                    const isLoading = reimportingIds.has(p.id);
+                                                    const result = reimportResults.get(p.id);
+                                                    return (
+                                                        <div key={p.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-slate-800 truncate">{p.name}</p>
+                                                                <p className="text-xs text-slate-400">{p.sku ? `SKU: ${p.sku}` : 'Sem SKU'}</p>
+                                                                {result && (
+                                                                    <p className={`text-xs font-medium mt-0.5 ${result.ok ? 'text-green-600' : 'text-red-500'}`}>
+                                                                        {result.ok ? '✓' : '✗'} {result.message}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => reimportProduct(p.id, p.sku, p.name)}
+                                                                disabled={isLoading || reimportingAll || !isConnected}
+                                                                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
+                                                            >
+                                                                {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                                                {isLoading ? 'Vinculando...' : 'Vincular'}
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {blingIdStats && blingIdStats.without_id === 0 && (
+                                        <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                                            <CheckCircle className="w-4 h-4" />
+                                            Todos os produtos estão vinculados ao Bling ID!
                                         </div>
                                     )}
                                 </div>
+
 
                                 {/* Formato do payload */}
                                 <div className="bg-slate-800 rounded-xl p-5 space-y-2">
