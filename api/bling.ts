@@ -284,6 +284,23 @@ export default async function handler(req: any, res: any) {
         }
     }
 
+    // ─── FIX-BLING-ID: corrige o bling_id de um produto por SKU ─────────────
+    if (resource === 'fix-bling-id') {
+        if (req.method !== 'POST') return res.status(405).end();
+        try {
+            const { sku, blingId } = req.body;
+            if (!sku || !blingId) return res.status(400).json({ error: 'sku e blingId são obrigatórios' });
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            // Busca o produto atual para diagnóstico
+            const { data: before } = await supabase.from('products').select('id, sku, bling_id, stock_quantity').eq('sku', sku).single();
+            const { data: updated, error } = await supabase.from('products').update({ bling_id: Number(blingId) }).eq('sku', sku).select('id, sku, bling_id');
+            if (error) return res.status(200).json({ ok: false, error: error.message });
+            return res.status(200).json({ ok: true, before, after: updated?.[0] });
+        } catch (err: any) {
+            return res.status(200).json({ ok: false, error: err.message });
+        }
+    }
+
     // ─── FINANCE: Contas a Pagar / Receber ──────────────────────────────────
 
     if (resource === 'finance') {
