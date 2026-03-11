@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     Settings, Package, Save, Eye, EyeOff, CheckCircle, AlertCircle,
-    Copy, ExternalLink, Download, Loader2, Search, RefreshCw, Link2
+    Copy, ExternalLink, Download, Loader2, Search, RefreshCw, Link2, Webhook, Activity, ShieldCheck, Info
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
@@ -24,7 +24,7 @@ interface BlingCredentials {
     bling_callback_url: string;
 }
 
-type Tab = 'config' | 'products' | 'mappings';
+type Tab = 'config' | 'products' | 'mappings' | 'webhook';
 
 const CACHE_KEY = 'bling_products_cache';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
@@ -110,6 +110,12 @@ export default function BlingPage() {
     const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
     const [fieldMappings, setFieldMappings] = useState<FieldMappingConfig[]>(loadFieldMappings);
 
+
+    // ── Webhook diagnostics ──
+    const [webhookTestResult, setWebhookTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+    const [testingWebhook, setTestingWebhook] = useState(false);
+    const [checkingBlingIds, setCheckingBlingIds] = useState(false);
+    const [blingIdStats, setBlingIdStats] = useState<{ total: number; with_id: number; without_id: number } | null>(null);
 
     // ─────────────────────────────────────────────────────
     // Load
@@ -432,6 +438,19 @@ export default function BlingPage() {
                                 )}
                             </div>
                             {activeTab === 'mappings' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('webhook')}
+                            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'webhook'
+                                ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                                }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <Activity className={`w-5 h-5 ${activeTab === 'webhook' ? 'text-blue-600' : 'text-slate-400'}`} />
+                                Webhook
+                            </div>
+                            {activeTab === 'webhook' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                         </button>
                     </nav>
                 </div>
@@ -1396,6 +1415,172 @@ export default function BlingPage() {
                             )}
                         </div>
                     )}
+                    {/* ════════════════════════════════════ */}
+                    {/* TAB: WEBHOOK                         */}
+                    {/* ════════════════════════════════════ */}
+                    {activeTab === 'webhook' && (() => {
+                        const webhookUrl = `${window.location.origin}/api/bling?resource=webhook`;
+
+                        async function testWebhookPing() {
+                            setTestingWebhook(true);
+                            setWebhookTestResult(null);
+                            try {
+                                const res = await fetch('/api/bling?resource=webhook');
+                                if (res.ok) {
+                                    setWebhookTestResult({ ok: true, message: 'Endpoint respondeu com 200 — URL válida!' });
+                                } else {
+                                    setWebhookTestResult({ ok: false, message: `Endpoint retornou ${res.status}` });
+                                }
+                            } catch (e: any) {
+                                setWebhookTestResult({ ok: false, message: 'Erro de rede: ' + e.message });
+                            } finally {
+                                setTestingWebhook(false);
+                            }
+                        }
+
+                        async function checkBlingIds() {
+                            setCheckingBlingIds(true);
+                            setBlingIdStats(null);
+                            try {
+                                const { data, error } = await supabase
+                                    .from('products')
+                                    .select('id, bling_id');
+                                if (error) throw error;
+                                const total = data?.length || 0;
+                                const with_id = data?.filter((p: any) => p.bling_id).length || 0;
+                                setBlingIdStats({ total, with_id, without_id: total - with_id });
+                            } catch (e: any) {
+                                toast.error('Erro ao checar bling_id: ' + e.message);
+                            } finally {
+                                setCheckingBlingIds(false);
+                            }
+                        }
+
+                        return (
+                            <div className="space-y-4">
+
+                                {/* URL do Webhook */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
+                                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                        <Activity className="w-5 h-5 text-blue-600" />
+                                        URL do Webhook de Estoque
+                                    </h2>
+                                    <p className="text-sm text-slate-500">
+                                        Configure esta URL no seu app Bling em <strong>Configurar &rarr; Webhooks &rarr; Servidores</strong>,
+                                        depois marque o recurso <strong>Estoque &rarr; updated</strong>.
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <code className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-mono text-slate-800 break-all">
+                                            {webhookUrl}
+                                        </code>
+                                        <button
+                                            onClick={() => { navigator.clipboard.writeText(webhookUrl); toast.success('URL copiada!'); }}
+                                            className="flex-shrink-0 p-3 hover:bg-slate-100 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700"
+                                        >
+                                            <Copy className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={testWebhookPing}
+                                        disabled={testingWebhook}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                                    >
+                                        {testingWebhook ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                                        {testingWebhook ? 'Testando...' : 'Testar Endpoint'}
+                                    </button>
+                                    {webhookTestResult && (
+                                        <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                                            webhookTestResult.ok ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                                        }`}>
+                                            {webhookTestResult.ok ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                                            {webhookTestResult.message}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Checklist de configuração */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
+                                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                        <Info className="w-5 h-5 text-amber-500" />
+                                        Checklist de Configuração
+                                    </h2>
+                                    <ul className="space-y-3 text-sm">
+                                        {[
+                                            { label: 'URL do webhook cadastrada no Bling (Aplicativo → Webhooks → Servidores)', tip: 'Use a URL acima. O Bling faz um GET de verificação — certifique-se que retorna 200.' },
+                                            { label: 'Recurso "Estoque" com ação "updated" marcado no app Bling', tip: 'Sem isso, o Bling não envia notificações quando o estoque muda.' },
+                                            { label: 'Versão do payload: versão 1 (formato recomendado)', tip: 'O sistema suporta v3 (event: stock.updated) e v2 (evento: Estoque).' },
+                                            { label: 'App Bling tem escopo de Estoques habilitado', tip: 'Sem esse escopo, o recurso de Webhook de Estoque não aparece nas opções.' },
+                                            { label: 'Produto importado pelo Bling (tem bling_id salvo)', tip: 'Produtos criados manualmente não têm bling_id — o webhook não consegue associá-los.' },
+                                        ].map((item, i) => (
+                                            <li key={i} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                                                <div className="mt-0.5 w-5 h-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</div>
+                                                <div>
+                                                    <p className="font-medium text-slate-800">{item.label}</p>
+                                                    <p className="text-slate-500 text-xs mt-0.5">{item.tip}</p>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                {/* Verificar bling_id */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
+                                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                        <Package className="w-5 h-5 text-green-600" />
+                                        Verificar Produtos com Bling ID
+                                    </h2>
+                                    <p className="text-sm text-slate-500">
+                                        O webhook só atualiza produtos que foram importados pelo Bling e têm um <code className="bg-slate-100 px-1 py-0.5 rounded text-xs">bling_id</code> salvo.
+                                        Produtos criados manualmente não serão atualizados pelo webhook.
+                                    </p>
+                                    <button
+                                        onClick={checkBlingIds}
+                                        disabled={checkingBlingIds}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+                                    >
+                                        {checkingBlingIds ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                        {checkingBlingIds ? 'Verificando...' : 'Verificar Produtos'}
+                                    </button>
+                                    {blingIdStats && (
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="text-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                                <p className="text-2xl font-bold text-slate-800">{blingIdStats.total}</p>
+                                                <p className="text-xs text-slate-500 mt-1">Total de produtos</p>
+                                            </div>
+                                            <div className="text-center p-4 bg-green-50 rounded-xl border border-green-200">
+                                                <p className="text-2xl font-bold text-green-700">{blingIdStats.with_id}</p>
+                                                <p className="text-xs text-green-600 mt-1">Com Bling ID ✓</p>
+                                            </div>
+                                            <div className="text-center p-4 bg-amber-50 rounded-xl border border-amber-200">
+                                                <p className="text-2xl font-bold text-amber-700">{blingIdStats.without_id}</p>
+                                                <p className="text-xs text-amber-600 mt-1">Sem Bling ID ⚠</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {blingIdStats && blingIdStats.without_id > 0 && (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                                            <strong>Atenção:</strong> {blingIdStats.without_id} produto(s) sem Bling ID não serão atualizados automaticamente.
+                                            Para corrigi-los, reimporte-os pelo Bling na aba <strong>Produtos</strong>.
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Formato do payload */}
+                                <div className="bg-slate-800 rounded-xl p-5 space-y-2">
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Formato esperado do payload (Bling v3)</p>
+                                    <pre className="text-xs text-green-400 overflow-auto">{JSON.stringify({
+                                        eventId: "abc-123",
+                                        event: "stock.updated",
+                                        data: {
+                                            produto: { id: 12345678 },
+                                            saldoFisico: 10
+                                        }
+                                    }, null, 2)}</pre>
+                                </div>
+
+                            </div>
+                        );
+                    })()}
                 </div>
             </div>
         </div>
