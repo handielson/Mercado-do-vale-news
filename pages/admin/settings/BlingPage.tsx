@@ -460,6 +460,41 @@ export default function BlingPage() {
                             {activeTab === 'webhook' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                         </button>
                     </nav>
+
+                    {/* Atalhos rápidos */}
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 px-2 mb-2">
+                            Atalhos
+                        </p>
+                        <div className="flex flex-col gap-1">
+                            <a
+                                href="/admin/settings/models"
+                                className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                            >
+                                <Package className="w-4 h-4 text-slate-400 shrink-0" />
+                                Modelos
+                                <ExternalLink className="w-3 h-3 text-slate-300 ml-auto" />
+                            </a>
+                            <a
+                                href="/admin/products"
+                                className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                            >
+                                <Download className="w-4 h-4 text-slate-400 shrink-0" />
+                                Produtos
+                                <ExternalLink className="w-3 h-3 text-slate-300 ml-auto" />
+                            </a>
+                            <a
+                                href="/"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                            >
+                                <Eye className="w-4 h-4 text-slate-400 shrink-0" />
+                                Página de Vendas
+                                <ExternalLink className="w-3 h-3 text-slate-300 ml-auto" />
+                            </a>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Conteúdo Principal */}
