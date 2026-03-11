@@ -300,7 +300,8 @@ export default async function handler(req: any, res: any) {
                 rows: rows?.length ?? 0,
                 selectFound: found?.length ?? 0,
                 productId,
-                keyType,
+                jwtRole,
+
             });
 
 
