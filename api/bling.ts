@@ -224,8 +224,9 @@ export default async function handler(req: any, res: any) {
             const payload = req.body;
             const supabase = createClient(supabaseUrl, supabaseKey);
 
-            // Salva log do payload para diagnóstico
-            supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }).catch(() => {});
+            // Salva log do payload para diagnóstico (fire-and-forget correto)
+            try { await supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }); } catch (_) { }
+
 
             // event = "stock.updated" ou "stock.created" (conforme documentação)
             const event: string | undefined = payload?.event;
