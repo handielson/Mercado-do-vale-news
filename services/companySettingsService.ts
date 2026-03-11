@@ -113,7 +113,6 @@ export const companySettingsService = {
             show_order_number: true,
             show_timestamp: true,
             show_seller_info: true,
-            show_seller_info: true,
             receipt_show_extra_page: false,
             default_a4_header: `<div style="display: flex; align-items: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px;">
     <div style="flex: 1;">

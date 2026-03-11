@@ -161,7 +161,7 @@ export default function OnlineOrdersPage() {
         const parts = warrantyItem.product_name.split(' \u2014 ');
         const nonWarrantyItems = order.items.filter(i => !i.product_name?.startsWith('Garantia'));
         const mainProduct = nonWarrantyItems.sort((a, b) => (b.subtotal ?? 0) - (a.subtotal ?? 0))[0];
-        const produto = parts[1] || mainProduct?.product_name || '';
+        let produto = parts[1] || mainProduct?.product_name || '';
         const prazoMatch = warrantyItem.product_name.match(/(\d+)m/);
         const meses = prazoMatch ? parseInt(prazoMatch[1]) : 0;
 

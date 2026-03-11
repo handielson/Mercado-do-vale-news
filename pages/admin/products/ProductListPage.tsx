@@ -21,7 +21,6 @@ export const ProductListPage: React.FC = () => {
         isLoading,
         error,
         handleFilterChange,
-        handleFilterChange,
         deleteProduct,
         currentPage,
         setCurrentPage,
