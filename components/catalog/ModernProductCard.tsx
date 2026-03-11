@@ -479,6 +479,11 @@ export function ModernProductCard({
                         {productForDisplay.brand && (
                             <p className="text-sm text-slate-600 mt-1">{productForDisplay.brand}</p>
                         )}
+                        {(currentProduct.sku || product.sku) && (
+                            <p className="font-mono text-[10px] text-slate-400 mt-0.5">
+                                SKU: {currentProduct.sku || product.sku}
+                            </p>
+                        )}
                     </div>
 
 
