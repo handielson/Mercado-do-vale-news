@@ -210,18 +210,48 @@ export default async function handler(req: any, res: any) {
         if (req.method !== 'POST') return res.status(405).end();
         try {
             const payload = req.body;
-            const evento = payload?.evento || payload?.event;
-            const blingId = payload?.data?.produto?.id || payload?.dados?.produto?.id;
-            const saldo = payload?.data?.saldoFisico ?? payload?.dados?.saldoFisico;
-            if (evento !== 'Estoque' || !blingId || saldo === undefined) return res.status(200).json({ ok: true, ignored: true });
             const supabase = createClient(supabaseUrl, supabaseKey);
-            const { error } = await supabase.from('products').update({ stock_quantity: Math.max(0, saldo) }).eq('bling_id', blingId);
+
+            // Salva log do payload para diagnóstico (silencioso se tabela não existir)
+            supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }).catch(() => {});
+
+            // Formato Bling v3: { event: 'stock.updated', data: { produto: {id}, saldoFisico } }
+            const eventV3 = payload?.event as string | undefined;
+            const isStockEventV3 = typeof eventV3 === 'string' && (eventV3.startsWith('stock.') || eventV3.startsWith('virtual_stock.'));
+
+            // Formato Bling v2/legado: { evento: 'Estoque', ... }
+            const eventoV2 = payload?.evento;
+            const isStockEventV2 = eventoV2 === 'Estoque' || eventoV2 === 'EstoqueVirtual';
+
+            if (!isStockEventV3 && !isStockEventV2) {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'not_stock_event', event: eventV3 || eventoV2 });
+            }
+
+            // Extrai ID e saldo (ambos os formatos v2 e v3)
+            const blingId = payload?.data?.produto?.id
+                || payload?.dados?.produto?.id
+                || payload?.data?.id;
+            const saldo = payload?.data?.saldoFisico
+                ?? payload?.data?.saldoVirtual
+                ?? payload?.dados?.saldoFisico
+                ?? payload?.dados?.saldoVirtual;
+
+            if (!blingId || saldo === undefined) {
+                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_fields', blingId, saldo });
+            }
+
+            const { error } = await supabase
+                .from('products')
+                .update({ stock_quantity: Math.max(0, saldo) })
+                .eq('bling_id', String(blingId));
+
             if (error) return res.status(200).json({ ok: false, error: error.message });
-            return res.status(200).json({ ok: true });
+            return res.status(200).json({ ok: true, blingId, saldo });
         } catch (err: any) {
             return res.status(200).json({ ok: false, error: err.message });
         }
     }
+
 
     // ─── FINANCE: Contas a Pagar / Receber ──────────────────────────────────
     if (resource === 'finance') {
