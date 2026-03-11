@@ -403,16 +403,19 @@ export function ProductImageBankPage() {
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
                 <Info size={18} className="text-blue-600 mt-0.5 shrink-0" />
                 <div className="text-sm text-blue-800">
-                    <p className="font-semibold mb-1">📋 Como usar o banco de imagens:</p>
+                    <p className="font-semibold mb-1">📋 Como fazer upload de imagens por SKU:</p>
                     <p className="mt-1 text-blue-700">
-                        1. Selecione o <strong>SKU</strong> no Gerador → copie o nome SEO gerado →
-                        renomeie a foto → arraste para o upload.
+                        <strong>Modo rápido (envio em massa):</strong> renomeie as fotos no padrão{' '}
+                        <code className="font-mono text-xs bg-blue-100 px-1 rounded">SKU_01.jpg</code>,{' '}
+                        <code className="font-mono text-xs bg-blue-100 px-1 rounded">SKU_02.jpg</code>...
+                        e arraste tudo de uma vez — sem precisar selecionar SKU na tela.
                     </p>
                     <p className="mt-1 text-blue-700">
-                        Exemplo de nome: <code className="font-mono text-xs bg-blue-100 px-1 rounded">capa-de-silicone-realme-note-70_preto_01.jpg</code>
+                        Exemplo: <code className="font-mono text-xs bg-blue-100 px-1 rounded">XRN14-T025_01.jpg</code>{' '}
+                        → salvo como <code className="font-mono text-xs bg-blue-100 px-1 rounded">products/XRN14-T025/XRN14-T025_01.webp</code>
                     </p>
                     <p className="mt-1 text-blue-600 text-xs">
-                        O sistema converte para WebP (máx 300KB/1000px) e sincroniza com o produto automaticamente.
+                        💡 Use o <strong>Gerador de Nomes</strong> abaixo para gerar os nomes corretos e copiá-los. O sistema converte automaticamente para WebP (máx 300KB/1000px).
                     </p>
                 </div>
             </div>
