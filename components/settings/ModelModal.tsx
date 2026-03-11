@@ -13,6 +13,7 @@ import { applyFieldFormat, getFieldDefinition } from '../../config/field-diction
 import { UNIQUE_FIELDS } from '../../config/product-fields';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { tableDataService, type TableOption } from '../../services/table-data';
+import { CategorySelect } from '../products/CategorySelect';
 import { ColorImageManager } from './ColorImageManager';
 
 interface ModelModalProps {
@@ -590,18 +591,10 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
                                     Categoria Padrão
                                 </label>
-                                <select
+                                <CategorySelect
                                     value={categoryId}
-                                    onChange={(e) => setCategoryId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="">Nenhuma</option>
-                                    {categories.map((cat) => (
-                                        <option key={cat.id} value={cat.id}>
-                                            {cat.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={setCategoryId}
+                                />
                             </div>
 
                             {/* Description */}
