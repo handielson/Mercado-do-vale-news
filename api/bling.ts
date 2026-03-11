@@ -222,7 +222,14 @@ export default async function handler(req: any, res: any) {
         if (req.method !== 'POST') return res.status(405).end();
         try {
             const payload = req.body;
-            const supabase = createClient(supabaseUrl, supabaseKey);
+
+            // Usa service role key lida em runtime (bypassa RLS para UPDATE)
+            const srKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+                || process.env.SUPABASE_SERVICE_ROLE_KEY
+                || process.env.VITE_SUPABASE_ANON_KEY
+                || process.env.SUPABASE_ANON_KEY!;
+            const supabase = createClient(supabaseUrl, srKey);
+            const keyType = (process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) ? 'service_role' : 'anon';
 
             // Salva log do payload para diagnóstico (fire-and-forget correto)
             try { await supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }); } catch (_) { }
@@ -282,7 +289,9 @@ export default async function handler(req: any, res: any) {
                 rows: rows?.length ?? 0,
                 selectFound: found?.length ?? 0,
                 productId,
+                keyType,
             });
+
 
 
         } catch (err: any) {
