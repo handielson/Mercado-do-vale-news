@@ -97,8 +97,20 @@ const DashboardPage = () => {
 
   return (
     <div className="animate-in fade-in duration-500">
-      <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
-      <p className="text-slate-500">Gestão operacional do ecossistema.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
+          <p className="text-slate-500">Gestão operacional do ecossistema.</p>
+        </div>
+        <a
+          href="/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-indigo-600 to-blue-700 text-white text-sm font-semibold rounded-xl shadow hover:shadow-md hover:-translate-y-0.5 transition-all whitespace-nowrap"
+        >
+          <span>🛒</span> Ver Loja ↗
+        </a>
+      </div>
 
       {/* Alerta de Novas Mensagens */}
       {unreadFeedbacks > 0 && (
@@ -126,7 +138,7 @@ const DashboardPage = () => {
           <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
             <span>📦</span> Produtos & Catálogo
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
 
             <button onClick={() => navigate('/admin/products')}
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer group text-left">
@@ -171,17 +183,6 @@ const DashboardPage = () => {
               </div>
               <p className="text-xs text-slate-500">Configurar catálogo</p>
             </button>
-
-            <a href="/" target="_blank" rel="noopener noreferrer"
-              className="bg-gradient-to-br from-indigo-600 to-blue-700 p-4 rounded-xl shadow-sm hover:shadow-md transition-all text-left text-white">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center">
-                  <span className="text-lg">🛒</span>
-                </div>
-                <p className="font-semibold text-sm">Ver Loja ↗</p>
-              </div>
-              <p className="text-xs text-blue-200">Abrir loja como cliente</p>
-            </a>
 
             <button onClick={() => navigate('/admin/settings/bling')}
               className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group text-left">
