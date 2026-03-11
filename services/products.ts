@@ -33,7 +33,7 @@ async function getCompanyId(): Promise<string> {
 /**
  * List all products
  */
-// Colunas necessárias para a listagem (exclui specs/description pesados)
+// Colunas necessárias para a listagem (exclui apenas description, que pode ser muito pesada)
 const LIST_COLUMNS = [
     'id', 'model_id', 'category_id', 'brand', 'name', 'sku',
     'ean', 'alternative_eans',
@@ -44,6 +44,7 @@ const LIST_COLUMNS = [
     'images', 'status', 'parent_id',
     'bling_id', 'bling_parent_id',
     'slug', 'origin',
+    'specs',
     'created_at', 'updated_at'
 ].join(', ');
 
