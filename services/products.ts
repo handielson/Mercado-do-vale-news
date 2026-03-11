@@ -11,10 +11,14 @@ import { logPriceChange } from './priceHistoryService';
 // TEMPORARY: Hardcoded company_id until we implement auth
 const TEMP_COMPANY_ID = 'mercado-do-vale';
 
+// Módulo-level cache para não buscar o company_id a cada requisição
+let _cachedCompanyId: string | null = null;
+
 /**
- * Get company_id from companies table by slug
+ * Get company_id from companies table by slug (cached in memory)
  */
 async function getCompanyId(): Promise<string> {
+    if (_cachedCompanyId) return _cachedCompanyId;
     const { data, error } = await supabase
         .from('companies')
         .select('id')
@@ -22,18 +26,33 @@ async function getCompanyId(): Promise<string> {
         .single();
 
     if (error) throw new Error(`Failed to get company: ${error.message}`);
+    _cachedCompanyId = data.id;
     return data.id;
 }
 
 /**
  * List all products
  */
+// Colunas necessárias para a listagem (exclui specs/description pesados)
+const LIST_COLUMNS = [
+    'id', 'model_id', 'category_id', 'brand', 'name', 'sku',
+    'ean', 'alternative_eans',
+    'price_cost', 'price_retail', 'price_reseller', 'price_wholesale', 'price_promo',
+    'promo_start', 'promo_end',
+    'stock_quantity', 'track_inventory', 'is_gift',
+    'warranty_type', 'warranty_template_id',
+    'images', 'status', 'parent_id',
+    'bling_id', 'bling_parent_id',
+    'slug', 'origin',
+    'created_at', 'updated_at'
+].join(', ');
+
 async function list(): Promise<Product[]> {
     const companyId = await getCompanyId();
 
     const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select(LIST_COLUMNS)
         .eq('company_id', companyId)
         .order('name');
 
