@@ -20,6 +20,10 @@ export const useProducts = () => {
         sortBy: 'newest'
     });
 
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(24);
+
     /**
      * Fetch products from service
      */
@@ -75,6 +79,7 @@ export const useProducts = () => {
         });
 
         setFilteredProducts(filtered);
+        setCurrentPage(1); // Reset to first page when filters change
     }, [products, filters]);
 
     /**
@@ -116,14 +121,28 @@ export const useProducts = () => {
         applyFilters();
     }, [applyFilters]);
 
+    // Calculate pagination
+    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+    const paginatedProducts = filteredProducts.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
+
     return {
-        products: filteredProducts,
+        products: paginatedProducts,
+        allFilteredProducts: filteredProducts,
         allProducts: products,
         isLoading,
         error,
         filters,
         handleFilterChange,
         refetch,
-        deleteProduct
+        deleteProduct,
+        // Pagination exports
+        currentPage,
+        setCurrentPage,
+        itemsPerPage,
+        setItemsPerPage,
+        totalPages
     };
 };

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
@@ -21,7 +21,14 @@ export const ProductListPage: React.FC = () => {
         isLoading,
         error,
         handleFilterChange,
-        deleteProduct
+        handleFilterChange,
+        deleteProduct,
+        currentPage,
+        setCurrentPage,
+        itemsPerPage,
+        setItemsPerPage,
+        totalPages,
+        allFilteredProducts
     } = useProducts();
 
     const handleNewProduct = () => {
@@ -109,13 +116,56 @@ export const ProductListPage: React.FC = () => {
                 onDeleteProduct={handleDeleteProduct}
             />
 
-            {/* Results Count */}
+            {/* Results Count and Pagination Controls */}
             {!isLoading && (
-                <div className="text-center text-sm text-slate-500">
-                    {products.length === 0 ? (
-                        'Nenhum produto encontrado'
-                    ) : (
-                        `Exibindo ${products.length} ${products.length === 1 ? 'produto' : 'produtos'}`
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200">
+                    <div className="text-sm text-slate-500">
+                        {allFilteredProducts.length === 0 ? (
+                            'Nenhum produto encontrado'
+                        ) : (
+                            `Exibindo ${products.length} de ${allFilteredProducts.length} ${allFilteredProducts.length === 1 ? 'produto' : 'produtos'}`
+                        )}
+                    </div>
+
+                    {allFilteredProducts.length > 0 && (
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-slate-500">Itens por pág:</span>
+                                <select
+                                    value={itemsPerPage}
+                                    onChange={(e) => {
+                                        setItemsPerPage(Number(e.target.value));
+                                        setCurrentPage(1);
+                                    }}
+                                    className="p-1.5 border border-slate-300 rounded text-sm bg-slate-50"
+                                >
+                                    <option value={12}>12</option>
+                                    <option value={24}>24</option>
+                                    <option value={36}>36</option>
+                                    <option value={100}>100</option>
+                                </select>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronLeft size={20} />
+                                </button>
+                                <span className="text-sm font-medium text-slate-700">
+                                    Página {currentPage} de {totalPages || 1}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage >= totalPages}
+                                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronRight size={20} />
+                                </button>
+                            </div>
+                        </div>
                     )}
                 </div>
             )}

@@ -6,6 +6,7 @@ import { Product } from '../../types/product';
 import { ProductStatus } from '../../utils/field-standards';
 import { cn } from '../../utils/cn';
 import { supabase } from '../../services/supabase';
+import { getModelImageWithCache } from '../../services/modelImageCache';
 import { LabelPrintModal } from './LabelPrintModal';
 
 interface ProductCardProps {
@@ -82,60 +83,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
-    // Buscar foto do modelo como fallback quando produto não tem imagem própria
+    // Buscar foto do modelo como fallback quando produto não tem imagem própria (USANDO CACHE)
     useEffect(() => {
         if (product.images && product.images.length > 0) return;
         if (!product.model_id) return;
 
+        let isMounted = true;
+        
         const fetchModelImage = async () => {
-            const { data: company } = await supabase
-                .from('companies')
-                .select('id')
-                .eq('slug', 'mercado-do-vale')
-                .single();
-
-            if (!company?.id) return;
-
-            // Tenta buscar pela cor do produto primeiro, depois qualquer foto do modelo
-            const colorName = product.specs?.color;
-            let imageUrl: string | null = null;
-
-            if (colorName) {
-                // Busca a cor pelo nome para obter o color_id
-                const { data: colorData } = await supabase
-                    .from('colors')
-                    .select('id')
-                    .eq('company_id', company.id)
-                    .ilike('name', colorName)
-                    .maybeSingle();
-
-                if (colorData?.id) {
-                    const { data } = await supabase
-                        .from('model_color_images')
-                        .select('images')
-                        .eq('company_id', company.id)
-                        .eq('model_id', product.model_id)
-                        .eq('color_id', colorData.id)
-                        .maybeSingle();
-                    if (data?.images?.length) imageUrl = data.images[0];
-                }
+            const imageUrl = await getModelImageWithCache(product.model_id!, product.specs?.color);
+            if (isMounted && imageUrl) {
+                setModelImageUrl(imageUrl);
             }
-
-            // Fallback: qualquer foto do modelo
-            if (!imageUrl) {
-                const { data } = await supabase
-                    .from('model_color_images')
-                    .select('images')
-                    .eq('company_id', company.id)
-                    .eq('model_id', product.model_id)
-                    .maybeSingle();
-                if (data?.images?.length) imageUrl = data.images[0];
-            }
-
-            if (imageUrl) setModelImageUrl(imageUrl);
         };
 
         fetchModelImage();
+        
+        return () => { isMounted = false; }
     }, [product.model_id, product.specs?.color]);
 
     const coverImage = (product.images && product.images.length > 0)

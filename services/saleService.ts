@@ -238,7 +238,8 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
             .select(`
                 *,
                 customer:customers(id, name, cpf_cnpj),
-                seller:team_members!seller_id(id, name)
+                seller:team_members!seller_id(id, name),
+                items:sale_items(*)
             `)
             .order('created_at', { ascending: false });
 
@@ -270,22 +271,8 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
         if (salesError) throw salesError;
         if (!sales) return [];
 
-        // Fetch items for each sale
-        const salesWithItems = await Promise.all(
-            sales.map(async (sale) => {
-                const { data: items } = await supabase
-                    .from('sale_items')
-                    .select('*')
-                    .eq('sale_id', sale.id);
-
-                return {
-                    ...sale,
-                    items: items || []
-                };
-            })
-        );
-
-        return salesWithItems;
+        // Convert the returned data to the correct type since items is nested via Join
+        return sales as SaleWithItems[];
     } catch (error) {
         console.error('Error fetching sales:', error);
         throw error;
