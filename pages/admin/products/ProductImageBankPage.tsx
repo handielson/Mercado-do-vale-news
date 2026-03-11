@@ -35,6 +35,15 @@ export function ProductImageBankPage() {
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncResult, setSyncResult] = useState<{ updated: number; notFound: string[] } | null>(null);
     const [previewFile, setPreviewFile] = useState<{ name: string; url: string } | null>(null);
+    const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
+
+    const toggleSkuSelection = (sku: string) => {
+        setSelectedSkus(prev => {
+            const next = new Set(prev);
+            next.has(sku) ? next.delete(sku) : next.add(sku);
+            return next;
+        });
+    };
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Drag-to-reorder no banco de imagens (por SKU)
@@ -314,11 +323,10 @@ export function ProductImageBankPage() {
         }
     };
 
-    const handleSyncToProducts = async () => {
+    const handleSyncToProducts = async (onlySelected = false) => {
         setIsSyncing(true);
         setSyncResult(null);
         try {
-            // Busca todos os produtos via service (que usa o contexto correto de auth/RLS)
             const [allImages, allProductsList] = await Promise.all([
                 listAllBankImages(),
                 productService.list(),
@@ -332,6 +340,8 @@ export function ProductImageBankPage() {
             // Agrupa imagens por (pasta + cor)
             const groups = new Map<string, ImageBankEntry[]>();
             for (const img of allImages) {
+                // Filtra por SKUs selecionados se modo seletivo
+                if (onlySelected && !selectedSkus.has(img.sku)) continue;
                 const key = `${img.sku}|||${img.color}`;
                 if (!groups.has(key)) groups.set(key, []);
                 groups.get(key)!.push(img);
@@ -353,13 +363,10 @@ export function ProductImageBankPage() {
                 if (!matchedSku) {
                     const folderSlug = toSlug(folderName);
                     const colorSlug = colorInFile.toLowerCase();
-                    // Extrai palavras-chave do slug (ignora palavras curtas/comuns)
                     const keywords = folderSlug.split('-').filter(w => w.length > 2);
                     const match = allProductsList.find(p => {
-                        // Cor via specs.color (campo principal)
                         const specColor = toSlug((p as any).specs?.color || (p as any).color_name || '');
                         const colorMatches = specColor === colorSlug;
-                        // Nome do produto deve ter os termos do folder
                         const pSlug = toSlug(p.name);
                         const hasKeywords = keywords.every(w => pSlug.includes(w));
                         return colorMatches && hasKeywords;
@@ -382,6 +389,7 @@ export function ProductImageBankPage() {
             setSyncResult({ updated, notFound });
             toast.success(`✅ ${updated} produto(s) sincronizado(s)!`);
             if (notFound.length) toast.warning(`${notFound.length} grupo(s) não encontrado(s): ${notFound.slice(0, 3).join(', ')}`);
+            if (onlySelected) setSelectedSkus(new Set()); // limpa seleção após sync
         } catch (err: any) {
             toast.error(`Erro na sincronização: ${err.message}`);
         } finally {
@@ -405,7 +413,7 @@ export function ProductImageBankPage() {
                         {bankImages.length} imagem{bankImages.length !== 1 ? 'ns' : ''} em {skuList.length} SKU{skuList.length !== 1 ? 's' : ''}
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                     <button
                         onClick={loadImages}
                         className="flex items-center gap-2 px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
@@ -413,13 +421,23 @@ export function ProductImageBankPage() {
                         <RefreshCw size={14} />
                         Atualizar
                     </button>
+                    {selectedSkus.size > 0 && (
+                        <button
+                            onClick={() => handleSyncToProducts(true)}
+                            disabled={isSyncing}
+                            className="flex items-center gap-2 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                        >
+                            {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                            Sincronizar Selecionados ({selectedSkus.size})
+                        </button>
+                    )}
                     <button
-                        onClick={handleSyncToProducts}
+                        onClick={() => handleSyncToProducts(false)}
                         disabled={isSyncing || bankImages.length === 0}
                         className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                     >
                         {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                        Sincronizar com Produtos
+                        Sincronizar Todos
                     </button>
                 </div>
             </div>
@@ -796,11 +814,37 @@ export function ProductImageBankPage() {
 
             {/* Galeria por SKU */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-                <div className="p-4 border-b border-slate-100">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                     <h2 className="font-semibold text-slate-800 flex items-center gap-2">
                         <Images size={16} className="text-slate-500" />
                         Imagens no Banco
+                        {selectedSkus.size > 0 && (
+                            <span className="text-xs font-normal text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                                {selectedSkus.size} selecionado{selectedSkus.size !== 1 ? 's' : ''}
+                            </span>
+                        )}
                     </h2>
+                    {skuList.length > 0 && (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setSelectedSkus(new Set(skuList))}
+                                className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                            >
+                                Selecionar todos
+                            </button>
+                            {selectedSkus.size > 0 && (
+                                <>
+                                    <span className="text-slate-300">|</span>
+                                    <button
+                                        onClick={() => setSelectedSkus(new Set())}
+                                        className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+                                    >
+                                        Desmarcar
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {isLoading ? (
@@ -817,8 +861,18 @@ export function ProductImageBankPage() {
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {skuList.map(sku => (
-                            <div key={sku} className="p-4">
+                            <div
+                                key={sku}
+                                className={`p-4 transition-colors ${selectedSkus.has(sku) ? 'bg-green-50' : ''}`}
+                            >
                                 <div className="flex items-center gap-2 mb-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedSkus.has(sku)}
+                                        onChange={() => toggleSkuSelection(sku)}
+                                        className="w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500 cursor-pointer"
+                                        title="Selecionar para sincronizar"
+                                    />
                                     <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                                         SKU: {sku}
                                     </span>
