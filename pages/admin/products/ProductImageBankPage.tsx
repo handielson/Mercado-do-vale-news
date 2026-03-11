@@ -99,12 +99,18 @@ export function ProductImageBankPage() {
     const selectedProductName = dbSkus.find(s => s.sku === genSku.trim().toUpperCase())?.name ?? '';
 
     const generatedNames = (() => {
-        if (!genSku.trim() || !genColor.trim()) return [];
-        const colorSlug = toSlug(genColor.trim());
-        const nameSlug = selectedProductName ? toSlug(selectedProductName) : toSlug(genSku.trim());
+        if (!genSku.trim()) return [];
+        const skuUp = genSku.trim().toUpperCase();
         return Array.from({ length: genQty }, (_, i) => {
             const num = String(genStart + i).padStart(2, '0');
-            return `${nameSlug}_${colorSlug}_${num}.${genExt}`;
+            if (genColor.trim()) {
+                // Com cor: {SKU}_{cor}_{num}.ext  (formato legado SEO)
+                const colorSlug = toSlug(genColor.trim());
+                const nameSlug = selectedProductName ? toSlug(selectedProductName) : toSlug(genSku.trim());
+                return `${nameSlug}_${colorSlug}_${num}.${genExt}`;
+            }
+            // Sem cor: {SKU}_{num}.ext  (novo padrão recomendado)
+            return `${skuUp}_${num}.${genExt}`;
         });
     })();
 

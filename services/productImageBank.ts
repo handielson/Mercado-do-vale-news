@@ -49,10 +49,42 @@ export function toSlug(text: string): string {
         .replace(/^-|-$/g, '');
 }
 
+// ─── NOVO PADRÃO: {SKU}_{num}.webp ───────────────────────────────────────────
+// Exemplo: XRN14-T025_01.webp
+// Vantagem: basta renomear a foto para SKU_01.jpg antes do upload.
+// O SKU pode conter hifens. O separador antes do número é sempre underscore.
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Gera o SEO filename para uma imagem:
- * "{produto-slug}_{cor}_{numero}.webp"
- * Exemplo: "capa-de-silicone-realme-note-70_preto_01.webp"
+ * Gera filename no novo padrão: "{SKU}_{num}.webp"
+ * Ex: buildSkuFilename('XRN14-T025', 2) → "XRN14-T025_02.webp"
+ */
+export function buildSkuFilename(sku: string, order: number): string {
+    return `${sku.toUpperCase()}_${String(order).padStart(2, '0')}.webp`;
+}
+
+/**
+ * Parseia o novo padrão: "{SKU}_{num}.{ext}"
+ * Divide pelo último underscore → parte antes = SKU, parte depois = número.
+ * Ex: "XRN14-T025_02.webp" → { sku: "XRN14-T025", order: 2 }
+ */
+export function parseSkuFilename(filename: string): { sku: string; order: number } | null {
+    const base = filename.replace(/\.[^.]+$/, ''); // remove extensão
+    const lastUnderscore = base.lastIndexOf('_');
+    if (lastUnderscore === -1) return null;
+
+    const skuPart = base.substring(0, lastUnderscore);
+    const numPart = base.substring(lastUnderscore + 1);
+    const order = parseInt(numPart, 10);
+
+    if (!skuPart || isNaN(order)) return null;
+    return { sku: skuPart.toUpperCase(), order };
+}
+
+// ─── FORMATOS ANTIGOS (mantidos para retrocompatibilidade) ────────────────────
+
+/**
+ * Gera SEO filename legado: "{produto-slug}_{cor}_{numero}.webp"
  */
 export function buildSeoFilename(productName: string, color: string, order: number): string {
     const nameSlug = toSlug(productName);
@@ -62,11 +94,10 @@ export function buildSeoFilename(productName: string, color: string, order: numb
 }
 
 /**
- * Parseia o SEO filename: "{qualquer-coisa}_{cor}_{numero}.ext"
+ * Parseia formato SEO legado: "{qualquer-coisa}_{cor}_{numero}.ext"
  * O SKU vem do caminho (pasta pai), não do filename.
  */
 export function parseSeoFilename(filename: string): { color: string; order: number } | null {
-    // Normaliza: remove acentos, lowercase
     const normalized = filename.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const base = normalized.replace(/\.[^.]+$/, '');
     const parts = base.split('_');
@@ -83,10 +114,9 @@ export function parseSeoFilename(filename: string): { color: string; order: numb
 }
 
 /**
- * Mantido para compatibilidade retroativa com o formato antigo SKU_COR_NUM.
+ * Compatibilidade retroativa com formato antigo SKU_COR_NUM (raiz do bucket).
  */
 export function parseImageFilename(filename: string): { sku: string; color: string; order: number } | null {
-    // Normaliza: remove acentos
     const normalized = filename.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const base = normalized.replace(/\.[^.]+$/, '');
     const parts = base.split('_');
@@ -103,15 +133,16 @@ export function parseImageFilename(filename: string): { sku: string; color: stri
     return { sku: sku.toUpperCase(), color: color.toUpperCase(), order };
 }
 
+
 /**
- * Faz upload de imagens para o Supabase Storage em formato SEO.
- * O filename do arquivo enviado pode ser qualquer nome de imagem.
- * O sistema salva como: products/{sku}/{seoFilename}
+ * Faz upload de imagens para o Supabase Storage.
  *
- * @param files  Arquivos a enviar
- * @param sku    SKU do produto (vem do contexto de upload na UI)
- * @param productName  Nome do produto (para gerar o slug SEO)
- * @param colorOverride  Cor (opcional — se não passada, tenta ler do filename)
+ * MODO 1 — Upload em massa (sem contexto): o filename já deve estar no padrão
+ *   "{SKU}_{num}.jpg"  →  salvo como  products/{SKU}/{SKU}_{num}.webp
+ *   Ex: "XRN14-T025_01.jpg" → products/XRN14-T025/XRN14-T025_01.webp
+ *
+ * MODO 2 — Upload com contexto (UI do gerador): sku + productName + cor + startOrder
+ *   Salva como products/{SKU}/{produto-slug}_{cor}_{num}.webp  (formato SEO legado)
  */
 export async function uploadImagesToBank(
     files: File[],
@@ -127,27 +158,30 @@ export async function uploadImagesToBank(
         let sku: string;
         let color: string;
         let order: number;
+        let webpName: string;
 
         if (context) {
-            // Modo SEO: contexto passado pela UI
+            // Modo 2: contexto fornecido pela UI
             sku = context.sku.toUpperCase();
             color = (context.color || 'PADRAO').toUpperCase();
             order = (context.startOrder ?? 1) + i;
+            webpName = buildSeoFilename(context.productName, color, order);
         } else {
-            // Modo legado: parseia do filename (SKU_COR_NUM)
-            const parsed = parseImageFilename(file.name);
+            // Modo 1 (novo padrão): "{SKU}_{num}.ext"
+            const parsed = parseSkuFilename(file.name);
             if (!parsed) {
-                result.errors.push({ file: file.name, reason: 'Nome inválido. Use o gerador ou forneça um SKU.' });
+                result.errors.push({
+                    file: file.name,
+                    reason: 'Nome inválido. Renomeie para o padrão: SKU_01.jpg (ex: XRN14-T025_01.jpg)'
+                });
                 continue;
             }
             sku = parsed.sku;
-            color = parsed.color;
+            color = '';
             order = parsed.order;
+            webpName = buildSkuFilename(sku, order);
         }
 
-        const webpName = context
-            ? buildSeoFilename(context.productName, color, order)
-            : `${sku}_${color}_${String(order).padStart(2, '0')}.webp`;
 
         const storagePath = `products/${sku}/${webpName}`;
 
@@ -181,7 +215,6 @@ export async function uploadImagesToBank(
 
 /** Lista todas as imagens do banco agrupadas por SKU (nova estrutura de pastas) */
 export async function listAllBankImages(): Promise<ImageBankEntry[]> {
-    // Lista as "pastas" (SKUs) dentro de products/
     const { data: folders, error: folderError } = await supabase.storage
         .from(BUCKET)
         .list('products', { limit: 200 });
@@ -191,9 +224,8 @@ export async function listAllBankImages(): Promise<ImageBankEntry[]> {
     const all: ImageBankEntry[] = [];
 
     for (const folder of folders) {
-        // Pode ser pasta (id null) ou arquivo legado
         if (folder.name.endsWith('.webp')) {
-            // Arquivo legado no raiz: tenta parsear pelo filename antigo
+            // Arquivo legado no raiz do bucket
             const parsed = parseImageFilename(folder.name);
             if (!parsed) continue;
             const path = `products/${folder.name}`;
@@ -212,18 +244,20 @@ export async function listAllBankImages(): Promise<ImageBankEntry[]> {
 
         for (const f of files) {
             if (!f.name.endsWith('.webp')) continue;
-            const parsed = parseSeoFilename(f.name);
-            if (!parsed) continue;
+
+            // Tenta novo padrão {SKU}_{num}.webp primeiro
+            const skuParsed = parseSkuFilename(f.name);
             const path = `products/${folder.name}/${f.name}`;
             const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-            all.push({
-                path,
-                url: pub.publicUrl,
-                sku,
-                color: parsed.color,
-                order: parsed.order,
-                filename: f.name,
-            });
+
+            if (skuParsed) {
+                all.push({ path, url: pub.publicUrl, sku, color: '', order: skuParsed.order, filename: f.name });
+            } else {
+                // Fallback para formato SEO legado {nome}_{cor}_{num}.webp
+                const seoParsed = parseSeoFilename(f.name);
+                if (!seoParsed) continue;
+                all.push({ path, url: pub.publicUrl, sku, color: seoParsed.color, order: seoParsed.order, filename: f.name });
+            }
         }
     }
 
@@ -241,19 +275,24 @@ export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
     return data
         .filter(f => f.name.endsWith('.webp'))
         .map(f => {
-            const parsed = parseSeoFilename(f.name);
+            // Tenta novo padrão {SKU}_{num}.webp
+            const skuParsed = parseSkuFilename(f.name);
             const path = `products/${sku.toUpperCase()}/${f.name}`;
             const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+            if (skuParsed) {
+                return { path, url: pub.publicUrl, sku: sku.toUpperCase(), color: '', order: skuParsed.order, filename: f.name };
+            }
+            // Fallback formato SEO legado
+            const seoParsed = parseSeoFilename(f.name);
             return {
-                path,
-                url: pub.publicUrl,
+                path, url: pub.publicUrl,
                 sku: sku.toUpperCase(),
-                color: parsed?.color ?? '',
-                order: parsed?.order ?? 0,
+                color: seoParsed?.color ?? '',
+                order: seoParsed?.order ?? 0,
                 filename: f.name,
             };
         })
-        .sort((a, b) => a.color.localeCompare(b.color) || a.order - b.order);
+        .sort((a, b) => a.order - b.order);
 }
 
 /** Deleta uma imagem do banco pelo path */
