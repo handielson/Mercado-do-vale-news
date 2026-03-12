@@ -153,7 +153,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
                     {model.name}
                 </td>
 
-                {/* Preços — cada um em seu próprio <td> */}
+                {/* Preços — cada um em seu próprio <td>, Enter salva */}
                 {loadingPrices ? (
                     <td colSpan={4} className="px-4 py-2.5">
                         <Loader2 size={14} className="animate-spin text-slate-400" />
@@ -165,6 +165,9 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
                                 value={prices[key]}
                                 onChange={cents => setPrices(prev => ({ ...prev, [key]: cents }))}
                                 className="h-7 w-28 text-xs py-1"
+                                onKeyDown={(e: React.KeyboardEvent) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
+                                }}
                             />
                         </td>
                     ))

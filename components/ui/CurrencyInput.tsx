@@ -3,14 +3,15 @@ import React, { useState, useEffect } from 'react';
 import { cn } from '../../utils/cn';
 
 interface CurrencyInputProps {
-  value?: number; // Integer in cents (e.g., 1050 for R$ 10,50)
+  value?: number;
   onChange?: (value: number) => void;
-  onValueChange?: (value: number) => void; // Alias for compatibility
+  onValueChange?: (value: number) => void;
   label?: string;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
   error?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 /**
@@ -30,7 +31,8 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
   placeholder = 'R$ 0,00',
   className,
   disabled,
-  error
+  error,
+  onKeyDown,
 }) => {
   const handleChange = onChange || onValueChange || (() => { });
 
@@ -108,6 +110,7 @@ export const CurrencyInput: React.FC<CurrencyInputProps> = ({
           onChange={handleInputChange}
           onBlur={handleBlur}
           onFocus={handleFocus}
+          onKeyDown={onKeyDown}
           disabled={disabled}
           placeholder={placeholder.replace('R$ ', '')}
           className={cn(
