@@ -1101,10 +1101,21 @@ export function ProductImageBankPage() {
                                     <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                                         SKU: {sku}
                                     </span>
-                                    <span className="text-xs text-slate-400">
+                                    {(() => {
+                                        const prod = dbSkus.find(s => s.sku === sku);
+                                        return prod ? (
+                                            <span className="text-xs text-slate-600 truncate max-w-xs">
+                                                {prod.name}
+                                                {prod.color && (
+                                                    <span className="ml-1.5 text-slate-400 font-medium">· {prod.color}</span>
+                                                )}
+                                            </span>
+                                        ) : null;
+                                    })()}
+                                    <span className="text-xs text-slate-400 shrink-0">
                                         {grouped[sku].length} imagem{grouped[sku].length !== 1 ? 'ns' : ''}
                                         {' — '}
-                                        {[...new Set(grouped[sku].map(i => i.color))].join(', ')}
+                                        {[...new Set(grouped[sku].map(i => i.color))].filter(Boolean).join(', ')}
                                     </span>
                                 </div>
                                 <div className="flex flex-wrap gap-3">
