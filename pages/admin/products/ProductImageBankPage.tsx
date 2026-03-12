@@ -41,6 +41,7 @@ export function ProductImageBankPage() {
     const [uploadingForSku, setUploadingForSku] = useState<string | null>(null);
     const [skuUploadQueue, setSkuUploadQueue] = useState<{ id: string; file: File; preview: string }[]>([]);
     const [skuUploadProgress, setSkuUploadProgress] = useState<{ done: number; total: number } | null>(null);
+    const [draggedSkuItemIndex, setDraggedSkuItemIndex] = useState<number | null>(null);
     const skuFileInputRef = useRef<HTMLInputElement>(null);
 
     const toggleSkuSelection = (sku: string) => {
@@ -981,11 +982,47 @@ export function ProductImageBankPage() {
 
                                                     {/* Pré-visualização */}
                                                     {skuUploadQueue.length > 0 && (
-                                                        <div className="mt-2 flex flex-wrap gap-2">
-                                                            {skuUploadQueue.map((item, idx) => (
-                                                                <div key={item.id} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-slate-200">
+                                                        <div className="mt-2">
+                                                            <p className="text-[10px] text-slate-400 mb-1.5 flex items-center gap-1">
+                                                                <GripVertical size={10} />
+                                                                Arraste para ordenar — a 1ª será a capa
+                                                            </p>
+                                                            <div className="flex flex-wrap gap-2">
+                                                            {skuUploadQueue.map((item, idx) => {
+                                                                const isDragged = draggedSkuItemIndex === idx;
+                                                                return (
+                                                                <div
+                                                                    key={item.id}
+                                                                    draggable
+                                                                    onDragStart={() => setDraggedSkuItemIndex(idx)}
+                                                                    onDragOver={e => {
+                                                                        e.preventDefault();
+                                                                        if (draggedSkuItemIndex === null || draggedSkuItemIndex === idx) return;
+                                                                        setSkuUploadQueue(prev => {
+                                                                            const next = [...prev];
+                                                                            const dragged = next[draggedSkuItemIndex];
+                                                                            next.splice(draggedSkuItemIndex, 1);
+                                                                            next.splice(idx, 0, dragged);
+                                                                            setDraggedSkuItemIndex(idx);
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    onDragEnd={() => setDraggedSkuItemIndex(null)}
+                                                                    className={`relative group w-14 h-14 rounded-lg overflow-hidden border-2 bg-slate-50 cursor-grab active:cursor-grabbing transition-all ${
+                                                                        isDragged
+                                                                            ? 'border-orange-400 opacity-40 scale-95'
+                                                                            : idx === 0
+                                                                                ? 'border-blue-400'
+                                                                                : 'border-slate-200 hover:border-orange-300'
+                                                                    }`}
+                                                                >
+                                                                    {idx === 0 && (
+                                                                        <div className="absolute top-0.5 right-0.5 z-10 bg-blue-600 text-white text-[7px] font-bold px-1 py-0.5 rounded shadow leading-tight">
+                                                                            CAPA
+                                                                        </div>
+                                                                    )}
                                                                     <img src={item.preview} alt={item.file.name} className="w-full h-full object-cover" />
-                                                                    <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100">
+                                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100">
                                                                         <button
                                                                             onClick={() => {
                                                                                 URL.revokeObjectURL(item.preview);
@@ -998,7 +1035,9 @@ export function ProductImageBankPage() {
                                                                     </div>
                                                                     <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">#{idx + 1}</div>
                                                                 </div>
-                                                            ))}
+                                                                );
+                                                            })}
+                                                            </div>
                                                         </div>
                                                     )}
 
