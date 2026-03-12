@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Upload, Images, Trash2, RefreshCw, CheckCircle2, AlertCircle, FileImage, X, Info, Copy, Tag, GripVertical } from 'lucide-react';
+import { Upload, Images, Trash2, RefreshCw, CheckCircle2, AlertCircle, FileImage, X, Info, Copy, Tag, GripVertical, ImagePlus, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     uploadImagesToBank,
@@ -36,6 +36,12 @@ export function ProductImageBankPage() {
     const [syncResult, setSyncResult] = useState<{ updated: number; notFound: string[] } | null>(null);
     const [previewFile, setPreviewFile] = useState<{ name: string; url: string } | null>(null);
     const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
+
+    // Upload inline por SKU (seção "Faltando Fotos")
+    const [uploadingForSku, setUploadingForSku] = useState<string | null>(null);
+    const [skuUploadQueue, setSkuUploadQueue] = useState<{ id: string; file: File; preview: string }[]>([]);
+    const [skuUploadProgress, setSkuUploadProgress] = useState<{ done: number; total: number } | null>(null);
+    const skuFileInputRef = useRef<HTMLInputElement>(null);
 
     const toggleSkuSelection = (sku: string) => {
         setSelectedSkus(prev => {
@@ -307,6 +313,42 @@ export function ProductImageBankPage() {
 
             if (synced > 0) toast.success('🔄 Produto(s) atualizado(s) automaticamente!');
             else toast.warning('Upload OK — clique em Sincronizar para atualizar o produto.');
+        }
+        if (result.errors.length > 0) toast.error(`⚠️ ${result.errors.length} erro(s) no upload`);
+        await loadImages();
+    };
+
+    // Upload inline para um SKU específico (seção "Faltando Fotos")
+    const handleSkuInlineUpload = async (sku: string) => {
+        if (skuUploadQueue.length === 0) return;
+        setSkuUploadProgress({ done: 0, total: skuUploadQueue.length });
+
+        const product = dbSkus.find(s => s.sku === sku);
+        const context = {
+            sku,
+            productName: product?.name || sku,
+            color: 'PADRAO',
+            startOrder: 1,
+        };
+
+        const filesToUpload = skuUploadQueue.map(item => item.file);
+        const result = await uploadImagesToBank(filesToUpload, (done, total) => {
+            setSkuUploadProgress({ done, total });
+        }, context);
+
+        setSkuUploadProgress(null);
+        skuUploadQueue.forEach(item => URL.revokeObjectURL(item.preview));
+        setSkuUploadQueue([]);
+        setUploadingForSku(null);
+
+        if (result.success.length > 0) {
+            toast.success(`✅ ${result.success.length} imagem(ns) enviada(s) para ${sku}!`);
+            // Sincroniza automaticamente
+            const urls = result.success.sort((a, b) => a.order - b.order).map(i => i.url);
+            const { data: prod } = await supabase.from('products').select('images').eq('sku', sku).maybeSingle();
+            const existing: string[] = Array.isArray(prod?.images) ? prod.images : [];
+            const merged = [...new Set([...existing, ...urls])];
+            await supabase.rpc('sync_product_images', { p_sku: sku, p_urls: merged });
         }
         if (result.errors.length > 0) toast.error(`⚠️ ${result.errors.length} erro(s) no upload`);
         await loadImages();
@@ -846,6 +888,145 @@ export function ProductImageBankPage() {
                         </div>
                     )}
                 </div>
+
+                {/* Sub-seção: SKUs sem fotos */}
+                {(() => {
+                    const skuSet = new Set(skuList);
+                    const skusWithoutImages = dbSkus.filter(s => !skuSet.has(s.sku));
+                    if (skusWithoutImages.length === 0) return null;
+                    return (
+                        <div className="border-b border-slate-100">
+                            <div className="px-4 py-3 bg-orange-50 flex items-center gap-2">
+                                <Camera size={15} className="text-orange-500 shrink-0" />
+                                <span className="text-sm font-semibold text-orange-700">Faltando Fotos</span>
+                                <span className="text-xs bg-orange-200 text-orange-800 font-bold px-2 py-0.5 rounded-full">
+                                    {skusWithoutImages.length}
+                                </span>
+                                <span className="text-xs text-orange-500 ml-1">— clique em Enviar foto para fazer upload</span>
+                            </div>
+                            <div className="divide-y divide-slate-50">
+                                {skusWithoutImages.map(s => {
+                                    const isOpen = uploadingForSku === s.sku;
+                                    return (
+                                        <div key={s.sku} className="px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                {/* Placeholder de imagem */}
+                                                <div className="w-10 h-10 rounded-lg bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0">
+                                                    <ImagePlus size={16} className="text-slate-300" />
+                                                </div>
+                                                {/* Info */}
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{s.sku}</span>
+                                                    <p className="text-xs text-slate-500 mt-0.5 truncate">{s.name}</p>
+                                                </div>
+                                                {/* Botão */}
+                                                <button
+                                                    onClick={() => {
+                                                        if (isOpen) {
+                                                            skuUploadQueue.forEach(i => URL.revokeObjectURL(i.preview));
+                                                            setSkuUploadQueue([]);
+                                                            setUploadingForSku(null);
+                                                        } else {
+                                                            setSkuUploadQueue([]);
+                                                            setUploadingForSku(s.sku);
+                                                        }
+                                                    }}
+                                                    className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shrink-0 ${
+                                                        isOpen
+                                                            ? 'bg-slate-100 border-slate-300 text-slate-600'
+                                                            : 'bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100'
+                                                    }`}
+                                                >
+                                                    {isOpen ? <X size={13} /> : <Upload size={13} />}
+                                                    {isOpen ? 'Cancelar' : 'Enviar foto'}
+                                                </button>
+                                            </div>
+
+                                            {/* Mini-uploader inline */}
+                                            {isOpen && (
+                                                <div className="mt-3 ml-13 pl-1">
+                                                    {/* Dropzone compacto */}
+                                                    <div
+                                                        onClick={() => skuFileInputRef.current?.click()}
+                                                        onDragOver={e => e.preventDefault()}
+                                                        onDrop={e => {
+                                                            e.preventDefault();
+                                                            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                                                            const items = files.map(file => ({ id: Math.random().toString(36).slice(7), file, preview: URL.createObjectURL(file) }));
+                                                            setSkuUploadQueue(prev => [...prev, ...items]);
+                                                        }}
+                                                        className="border-2 border-dashed border-orange-300 rounded-lg p-4 text-center cursor-pointer hover:bg-orange-50 transition-colors"
+                                                    >
+                                                        <FileImage size={20} className="mx-auto mb-1 text-orange-400" />
+                                                        <p className="text-xs text-slate-500">Clique ou arraste as fotos aqui</p>
+                                                        <input
+                                                            ref={skuFileInputRef}
+                                                            type="file"
+                                                            accept="image/*"
+                                                            multiple
+                                                            className="hidden"
+                                                            onChange={e => {
+                                                                const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
+                                                                const items = files.map(file => ({ id: Math.random().toString(36).slice(7), file, preview: URL.createObjectURL(file) }));
+                                                                setSkuUploadQueue(prev => [...prev, ...items]);
+                                                                e.target.value = '';
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    {/* Pré-visualização */}
+                                                    {skuUploadQueue.length > 0 && (
+                                                        <div className="mt-2 flex flex-wrap gap-2">
+                                                            {skuUploadQueue.map((item, idx) => (
+                                                                <div key={item.id} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-slate-200">
+                                                                    <img src={item.preview} alt={item.file.name} className="w-full h-full object-cover" />
+                                                                    <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100">
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                URL.revokeObjectURL(item.preview);
+                                                                                setSkuUploadQueue(prev => prev.filter(i => i.id !== item.id));
+                                                                            }}
+                                                                            className="p-1 bg-red-500 text-white rounded-full"
+                                                                        >
+                                                                            <X size={10} />
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">#{idx + 1}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Botão enviar / progresso */}
+                                                    {skuUploadQueue.length > 0 && (
+                                                        skuUploadProgress ? (
+                                                            <div className="mt-2 space-y-1">
+                                                                <div className="flex justify-between text-xs text-slate-500">
+                                                                    <span>Enviando...</span>
+                                                                    <span>{skuUploadProgress.done}/{skuUploadProgress.total}</span>
+                                                                </div>
+                                                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                                    <div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${(skuUploadProgress.done / skuUploadProgress.total) * 100}%` }} />
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleSkuInlineUpload(s.sku)}
+                                                                className="mt-2 w-full py-2 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition-colors"
+                                                            >
+                                                                Enviar {skuUploadQueue.length} foto{skuUploadQueue.length !== 1 ? 's' : ''}
+                                                            </button>
+                                                        )
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {isLoading ? (
                     <div className="p-12 text-center text-slate-400 text-sm">
