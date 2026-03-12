@@ -76,6 +76,7 @@ export const COLOR_MAP: Record<string, string> = {
     // Roxos e Lilás
     'Roxo': '#8B5CF6',
     'Roxo Escuro': '#6D28D9',
+    'Roxo Claro': '#C084FC',
     'Violeta': '#EE82EE',
     'Lilás': '#C8A2C8',
     'Lavanda': '#E6E6FA',
