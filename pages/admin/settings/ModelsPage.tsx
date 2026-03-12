@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
@@ -55,6 +55,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
     const [products, setProducts] = useState<ProductRow[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
     const [prices, setPrices] = useState<PriceState>({
         price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0,
     });
@@ -109,9 +110,10 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
             const variation = { ram: '', storage: '', products };
             await applyPricesToVariation(products, prices);
             toast.success(`Preços salvos para ${products.length} produto(s)!`);
-            // Limpa histórico cacheado
             setHistory({});
             await loadPrices();
+            setSaved(true);
+            setTimeout(() => setSaved(false), 1500);
         } catch (e: any) {
             toast.error('Erro ao salvar preços: ' + e.message);
         } finally {
@@ -169,16 +171,24 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
                     ))
                 )}
 
-                {/* Salvar */}
-                <td className="px-2 py-2.5 whitespace-nowrap">
+                {/* Salvar — ícone animado */}
+                <td className="px-2 py-2.5 text-center">
                     <button
                         onClick={handleSave}
                         disabled={saving || loadingPrices || products.length === 0}
                         title="Salvar preços"
-                        className="flex items-center gap-1 px-2.5 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-40"
+                        className={`p-1.5 rounded-lg transition-all duration-200 disabled:opacity-40 ${
+                            saved
+                                ? 'text-green-600 bg-green-50 scale-110'
+                                : 'text-slate-500 hover:text-green-600 hover:bg-green-50'
+                        }`}
                     >
-                        {saving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
-                        {saving ? 'Salvando…' : `Salvar (${products.length})`}
+                        {saving
+                            ? <Loader2 size={16} className="animate-spin" />
+                            : saved
+                                ? <CheckCircle size={16} className="animate-in zoom-in duration-200" />
+                                : <Save size={16} />
+                        }
                     </button>
                 </td>
 
