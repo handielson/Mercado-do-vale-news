@@ -917,7 +917,12 @@ export function ProductImageBankPage() {
                                                 {/* Info */}
                                                 <div className="flex-1 min-w-0">
                                                     <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{s.sku}</span>
-                                                    <p className="text-xs text-slate-500 mt-0.5 truncate">{s.name}</p>
+                                                     <p className="text-xs text-slate-500 mt-0.5 truncate">
+                                                        {s.name}
+                                                        {s.color && (
+                                                            <span className="ml-1.5 font-medium text-slate-400">· {s.color}</span>
+                                                        )}
+                                                    </p>
                                                 </div>
                                                 {/* Botão */}
                                                 <button
