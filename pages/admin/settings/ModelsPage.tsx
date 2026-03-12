@@ -6,7 +6,6 @@ import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
 import { NextStepBanner } from '../../../components/ui/NextStepBanner';
-import { AIAssistantsPanel } from '../../../components/settings/AIAssistantsPanel';
 import { supabase } from '../../../services/supabase';
 import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../../services/priceHistoryService';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
@@ -404,8 +403,6 @@ export function ModelsPage() {
                     <button onClick={() => setDeleteError('')} className="text-red-500 font-bold ml-4">×</button>
                 </div>
             )}
-
-            <AIAssistantsPanel />
 
             {/* ── Barra de Pesquisa + Filtros ── */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
