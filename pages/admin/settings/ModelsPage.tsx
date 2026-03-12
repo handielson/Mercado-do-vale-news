@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, DollarSign } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
@@ -13,12 +13,6 @@ import { AIAssistantsPanel } from '../../../components/settings/AIAssistantsPane
 /**
  * Models Management Page
  * CRUD interface for managing models
- * 
- * ANTIGRAVITY PROTOCOL:
- * - Follows BrandsPage pattern
- * - Table with edit/delete actions
- * - Shows brand name for each model
- * - Active/Inactive status badges
  */
 export function ModelsPage() {
     const [models, setModels] = useState<Model[]>([]);
@@ -27,7 +21,8 @@ export function ModelsPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
-    const [pricesPanelModel, setPricesPanelModel] = useState<Model | null>(null);
+    // Inline prices: ID do modelo expandido (null = nenhum)
+    const [expandedPricesId, setExpandedPricesId] = useState<string | null>(null);
 
     const loadData = async () => {
         try {
@@ -128,21 +123,11 @@ export function ModelsPage() {
                 <table className="w-full">
                     <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                Marca
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                Modelo
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                Slug
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                Status
-                            </th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                Ações
-                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Modelo</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Slug</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Ações</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -154,55 +139,80 @@ export function ModelsPage() {
                             </tr>
                         ) : (
                             models.map((model) => (
-                                <tr key={model.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-600">
-                                        {getBrandName(model.brand_id)}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-800">
-                                        {model.name}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600">
-                                        <code className="px-2 py-1 bg-slate-100 rounded text-xs">
-                                            {model.slug}
-                                        </code>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm">
-                                        {model.active ? (
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                ✓ Ativo
-                                            </span>
-                                        ) : (
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                                                ○ Inativo
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <button
-                                                onClick={() => setPricesPanelModel(model)}
-                                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                title="Gestão de Preços"
-                                            >
-                                                <DollarSign size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleEdit(model)}
-                                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                title="Editar"
-                                            >
-                                                <Pencil size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(model)}
-                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                title="Excluir"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
+                                <React.Fragment key={model.id}>
+                                    <tr className={`hover:bg-slate-50 transition-colors ${expandedPricesId === model.id ? 'bg-slate-50' : ''}`}>
+                                        <td className="px-6 py-4 text-sm font-medium text-slate-600">
+                                            {getBrandName(model.brand_id)}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm font-medium text-slate-800">
+                                            {model.name}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                            <code className="px-2 py-1 bg-slate-100 rounded text-xs">
+                                                {model.slug}
+                                            </code>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm">
+                                            {model.active ? (
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                    ✓ Ativo
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                                                    ○ Inativo
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                {/* Toggle preços inline */}
+                                                <button
+                                                    onClick={() => setExpandedPricesId(expandedPricesId === model.id ? null : model.id)}
+                                                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                                                        expandedPricesId === model.id
+                                                            ? 'bg-green-600 text-white'
+                                                            : 'text-green-600 hover:bg-green-50 border border-green-200'
+                                                    }`}
+                                                    title="Preços"
+                                                >
+                                                    R$
+                                                    {expandedPricesId === model.id
+                                                        ? <ChevronUp size={13} />
+                                                        : <ChevronDown size={13} />
+                                                    }
+                                                </button>
+                                                <button
+                                                    onClick={() => handleEdit(model)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <Pencil size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(model)}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Excluir"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    {/* Linha expansível de preços */}
+                                    {expandedPricesId === model.id && (
+                                        <tr>
+                                            <td colSpan={5} className="p-0">
+                                                <ModelPricesPanel
+                                                    modelId={model.id}
+                                                    modelName={model.name}
+                                                    onClose={() => setExpandedPricesId(null)}
+                                                    inline
+                                                />
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
                             ))
                         )}
                     </tbody>
@@ -240,22 +250,13 @@ export function ModelsPage() {
                 message="Modelos cadastrados?"
             />
 
-            {/* Modal */}
+            {/* Modal de edição */}
             <ModelModal
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
                 onSave={handleSave}
                 model={editingModel}
             />
-
-            {/* Painel de Preços */}
-            {pricesPanelModel && (
-                <ModelPricesPanel
-                    modelId={pricesPanelModel.id}
-                    modelName={pricesPanelModel.name}
-                    onClose={() => setPricesPanelModel(null)}
-                />
-            )}
         </div>
     );
 }
