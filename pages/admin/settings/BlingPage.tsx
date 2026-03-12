@@ -134,7 +134,11 @@ export default function BlingPage() {
             setCategories(cats);
             if (cats.length > 0) setImportCategoryId(cats[0].id);
         }).catch(() => { });
-        modelService.list().then(mods => setModels(mods)).catch(() => { });
+        modelService.list().then(mods => {
+            const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            setModels(sorted);
+            if (sorted.length > 0) setImportModelId(sorted[0].id);
+        }).catch(() => { });
         colorService.list().then(cols => setSystemColors(cols)).catch(() => { });
 
         const params = new URLSearchParams(window.location.search);
@@ -689,7 +693,11 @@ export default function BlingPage() {
                                             <button
                                                 type="button"
                                                 title="Atualizar modelos"
-                                                onClick={() => modelService.list().then(mods => setModels(mods)).catch(() => { })}
+                                                onClick={() => modelService.list().then(mods => {
+                                                    const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                                                    setModels(sorted);
+                                                    if (sorted.length > 0) setImportModelId(sorted[0].id);
+                                                }).catch(() => { })}
                                                 className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
                                             >
                                                 <RefreshCw className="w-3.5 h-3.5" />
