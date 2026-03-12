@@ -85,6 +85,7 @@ import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
 import { feedbackService } from '../services/feedbackService';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
+import { ReviewsPage } from '../pages/admin/catalog/ReviewsPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -811,6 +812,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><AdminPromotionsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/avaliacoes",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ReviewsPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

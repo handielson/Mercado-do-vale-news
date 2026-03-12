@@ -10,6 +10,7 @@ interface Customer {
   customer_type: 'retail' | 'wholesale' | 'resale' | 'ADMIN';
   cpf_cnpj?: string;
   phone?: string;
+  avatar_url?: string;
 }
 
 interface AuthContextType {

@@ -182,18 +182,41 @@ export const PublicHeader: React.FC = () => {
                             <div className="relative">
                                 <button
                                     onClick={() => setShowUserMenu(!showUserMenu)}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded-lg transition-colors border border-slate-300"
+                                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 rounded-full transition-colors border border-slate-300 shadow-sm"
                                 >
-                                    <User size={18} />
-                                    <span className="font-medium">{customer.name || user.email}</span>
-                                    <ChevronDown size={16} />
+                                    {customer.avatar_url ? (
+                                        <img 
+                                            src={customer.avatar_url} 
+                                            alt="Avatar" 
+                                            className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                                        />
+                                    ) : (
+                                        <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
+                                            <User size={16} />
+                                        </div>
+                                    )}
+                                    <span className="font-medium pr-1">{customer.name.split(' ')[0] || user.email?.split('@')[0]}</span>
+                                    <ChevronDown size={14} className="text-slate-400" />
                                 </button>
 
                                 {showUserMenu && (
                                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-2">
-                                        <div className="px-4 py-2 border-b border-slate-200">
-                                            <p className="text-sm font-semibold text-slate-800">{customer.name}</p>
-                                            <p className="text-xs text-slate-500">{user.email}</p>
+                                        <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3">
+                                            {customer.avatar_url ? (
+                                                <img 
+                                                    src={customer.avatar_url} 
+                                                    alt="Avatar" 
+                                                    className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                                                    <User size={20} />
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-slate-800 truncate">{customer.name}</p>
+                                                <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                                            </div>
                                         </div>
 
                                         {customer?.customer_type === 'ADMIN' && (

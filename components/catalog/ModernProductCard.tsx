@@ -56,13 +56,16 @@ export function ModernProductCard({
     // Selected variant state (defaults to first variant)
     const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
 
-    // Initial color index is -1 to force user selection, or 0 if only 1 color is available
     const [currentColorIndex, setCurrentColorIndex] = useState<number>(() => {
-        if (productGroup && productGroup.variants && productGroup.variants.length > 0) {
+        if (productGroup?.variants && productGroup.variants.length > 0) {
             return productGroup.variants[0].colors.length === 1 ? 0 : -1;
         }
         return -1;
     });
+
+    // We track if the user ever clicked a color manually. 
+    // This helps us decide whether to force reset the color if pagination adds more colors.
+    const [userInteractedWithColor, setUserInteractedWithColor] = useState(false);
 
     // Store installment values for each variant
     const [variantInstallments, setVariantInstallments] = useState<Map<number, string>>(new Map());
@@ -86,11 +89,17 @@ export function ModernProductCard({
     }, [product, productGroup, relatedProducts, selectedVariantIndex]);
 
     useEffect(() => {
-        // Automatically select the first color if there is only 1 color available in the computed variant
-        if (variants && variants.colors.length === 1 && currentColorIndex === -1) {
+        if (!variants) return;
+
+        if (variants.colors.length === 1) {
+            // Se só tem 1 cor disponível, auto-seleciona
             setCurrentColorIndex(0);
+        } else if (variants.colors.length > 1 && currentColorIndex === 0 && !userInteractedWithColor) {
+            // BUGFIX: Se a quantidade de cores subir de 1 para >1 (paginação inserindo mais cores no mesmo card/grupo)
+            // Precisamos RESETAR para -1 para garantir que a mensagem 'Escolha uma cor abaixo' apareça
+            setCurrentColorIndex(-1);
         }
-    }, [variants, currentColorIndex]);
+    }, [variants?.colors.length, userInteractedWithColor]);
 
     // Get the currently selected variant
     const selectedVariant = productGroup?.variants?.[selectedVariantIndex];
@@ -320,6 +329,7 @@ export function ModernProductCard({
 
     const handleColorClick = (index: number) => (e: React.MouseEvent) => {
         e.stopPropagation();
+        setUserInteractedWithColor(true);
         setCurrentColorIndex(index);
     };
 
@@ -428,6 +438,16 @@ export function ModernProductCard({
                                 </span>
                             ))
                         }
+
+                        {/* Gatilho de Escassez: Últimas Unidades */}
+                        {product.track_inventory !== false && 
+                         product.stock_quantity !== undefined && 
+                         product.stock_quantity > 0 && 
+                         product.stock_quantity <= 5 && (
+                            <span className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-1.5 rounded-full font-bold shadow-md animate-pulse">
+                                🔥 Últimas Unidades
+                            </span>
+                        )}
                     </div>
 
                     {/* Action Buttons (bottom right on hover) */}
@@ -591,6 +611,7 @@ export function ModernProductCard({
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setSelectedVariantIndex(idx);
+                                                                setUserInteractedWithColor(true);
                                                                 setCurrentColorIndex(colorIdx);
                                                             }}
                                                             className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer flex items-center justify-center

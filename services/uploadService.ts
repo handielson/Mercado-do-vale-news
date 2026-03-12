@@ -66,6 +66,98 @@ export const uploadService = {
     },
 
     /**
+     * Comprime uma imagem no client-side usando Canvas
+     * Redimensiona mantendo a proporção para caber em maxWidth/maxHeight
+     * @returns Um Blob Otimizado (JPEG)
+     */
+    compressAvatarClientSide: async (file: File): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let { width, height } = img;
+                    const MAX_SIZE = 500;
+
+                    if (width > height) {
+                        if (width > MAX_SIZE) {
+                            height *= MAX_SIZE / width;
+                            width = MAX_SIZE;
+                        }
+                    } else {
+                        if (height > MAX_SIZE) {
+                            width *= MAX_SIZE / height;
+                            height = MAX_SIZE;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return reject(new Error('Canvas não suportado.'));
+
+                    ctx.drawImage(img, 0, 0, width, height);
+                    canvas.toBlob(
+                        (blob) => {
+                            if (blob) resolve(blob);
+                            else reject(new Error('Falha na compressão da imagem.'));
+                        },
+                        'image/jpeg',
+                        0.8 // 80% qualidade
+                    );
+                };
+                img.onerror = () => reject(new Error('Arquivo de imagem inválido.'));
+                if (e.target?.result) {
+                    img.src = e.target.result as string;
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+    },
+
+    /**
+     * Faz upload da imagem de perfil (avatar) para o Storage (já comprimida via client-side)
+     */
+    uploadAvatar: async (file: File, customerId: string): Promise<string> => {
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            throw new Error('Tipo de arquivo não permitido. Use PNG, JPG ou WEBP.');
+        }
+
+        try {
+            // Comprime antes do upload (para o avatar ficar leve)
+            const compressedBlob = await uploadService.compressAvatarClientSide(file);
+            const compressedFile = new File([compressedBlob], `avatar_${customerId}.jpg`, { type: 'image/jpeg' });
+            
+            // O nome do arquivo será atrelado ao usuário.
+            // Sobrescreve a imagem anterior, usando upsert: true
+            const fileName = `${customerId}_avatar.jpg`;
+
+            const { error, data } = await supabase.storage
+                .from('customer-avatars')
+                .upload(fileName, compressedFile, {
+                    cacheControl: '3600',
+                    upsert: true
+                });
+
+            if (error) {
+                console.error('Erro no upload de avatar:', error);
+                throw new Error(`Erro ao fazer upload: ${error.message}`);
+            }
+
+            const { data: publicUrlData } = supabase.storage
+                .from('customer-avatars')
+                .getPublicUrl(fileName);
+
+            // Append query param to bypass cache if image changes
+            return `${publicUrlData.publicUrl}?t=${Date.now()}`;
+        } catch (error: any) {
+            console.error('Erro geral no uploadAvatar:', error);
+            throw new Error(error.message || 'Erro ao processar e enviar foto.');
+        }
+    },
+
+    /**
      * Remove uma imagem de banner do Supabase Storage
      * @param imageUrl - URL da imagem a ser removida
      */

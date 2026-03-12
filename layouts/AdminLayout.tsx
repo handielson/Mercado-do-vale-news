@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star } from 'lucide-react';
 
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -74,6 +74,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <NavItem to="/admin/settings/telegram" icon={<Bot size={18} />} label="Automações Bot" active={location.pathname.startsWith('/admin/settings/telegram')} />
           <NavItem to="/admin/settings/messages" icon={<MessageCircle size={18} />} label="Mensagens Auto" active={location.pathname.startsWith('/admin/settings/messages')} />
           <NavItem to="/admin/feedbacks" icon={<MessageSquareDashed size={18} />} label="Fale Conosco" active={location.pathname.startsWith('/admin/feedbacks')} />
+          <NavItem to="/admin/avaliacoes" icon={<Star size={18} />} label="Avaliações" active={location.pathname.startsWith('/admin/avaliacoes')} />
 
           {/* ESTRUTURA DE CATÁLOGO */}
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Estrutura de Catálogo</div>

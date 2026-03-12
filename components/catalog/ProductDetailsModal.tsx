@@ -6,6 +6,7 @@ import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { supabase } from '@/services/supabase';
 import { customFieldsService, CustomField } from '@/services/custom-fields';
+import { ProductReviewsList } from './ProductReviewsList';
 
 interface ProductDetailsModalProps {
     product: CatalogProduct;
@@ -296,9 +297,20 @@ export function ProductDetailsModal({
                         {/* Header */}
                         <div>
                             <h2 className="text-2xl font-bold text-slate-900">{product.name}</h2>
-                            {product.brand && (
-                                <p className="text-sm text-slate-600 mt-1">{product.brand}</p>
-                            )}
+                            <div className="flex items-center gap-3 mt-1">
+                                {product.brand && (
+                                    <p className="text-sm text-slate-600">{product.brand}</p>
+                                )}
+                                {/* Gatilho de Escassez: Últimas Unidades */}
+                                {product.track_inventory !== false && 
+                                 product.stock_quantity !== undefined && 
+                                 product.stock_quantity > 0 && 
+                                 product.stock_quantity <= 5 && (
+                                    <span className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white px-2.5 py-1 rounded-full font-bold shadow-sm animate-pulse">
+                                        🔥 Últimas Unidades
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                         {/* Image Gallery */}
@@ -586,6 +598,9 @@ export function ProductDetailsModal({
                                 </div>
                             )}
                         </div>
+
+                        {/* Avaliações de Usuários */}
+                        <ProductReviewsList productId={product.id} />
 
                         {/* Action Button */}
                         <button

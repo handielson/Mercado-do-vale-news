@@ -24,6 +24,7 @@ export interface Customer {
     admin_notes?: string;
     custom_data?: Record<string, any>;
     referral_code?: string; // Código único de indicação (Moedas do Vale)
+    avatar_url?: string;    // Avatar do cliente (Foto de Perfil)
     is_active: boolean;
     account_status?: 'pending' | 'active';  // Account activation status
     admin_preview_type?: 'retail' | 'resale' | 'wholesale';  // Admin catalog preview preference
@@ -43,6 +44,7 @@ export interface CustomerInput {
     address?: Partial<CustomerAddress>;
     admin_notes?: string;
     custom_data?: Record<string, any>;
+    avatar_url?: string;
     is_active?: boolean;
 }
 

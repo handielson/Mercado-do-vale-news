@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Loader2, User, Mail, CreditCard, Phone, Calendar, MapPin, Lock, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Loader2, User, Mail, CreditCard, Phone, Calendar, MapPin, Lock, Eye, EyeOff, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
+import { uploadService } from '../../../services/uploadService';
 
 interface AddressData {
     zipCode: string;
@@ -20,6 +21,7 @@ interface AddressData {
  */
 export const PersonalInfoTab: React.FC = () => {
     const { customer, updateProfile } = useSupabaseAuth();
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Personal Data
     const [personalData, setPersonalData] = useState({
@@ -27,7 +29,8 @@ export const PersonalInfoTab: React.FC = () => {
         email: customer?.email || '',
         cpf_cnpj: customer?.cpf_cnpj || '',
         phone: customer?.phone || '',
-        birth_date: customer?.birth_date || ''
+        birth_date: customer?.birth_date || '',
+        avatar_url: customer?.avatar_url || ''
     });
 
     // Address Data
@@ -56,6 +59,7 @@ export const PersonalInfoTab: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [passwordLoading, setPasswordLoading] = useState(false);
     const [cepLoading, setCepLoading] = useState(false);
+    const [avatarLoading, setAvatarLoading] = useState(false);
 
     // Auth methods for password
     const { updatePassword } = useSupabaseAuth();
@@ -99,6 +103,28 @@ export const PersonalInfoTab: React.FC = () => {
             setPersonalData(prev => ({ ...prev, [name]: formatCPF(value) }));
         } else {
             setPersonalData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !customer) return;
+
+        setAvatarLoading(true);
+        try {
+            const publicUrl = await uploadService.uploadAvatar(file, customer.id);
+            setPersonalData(prev => ({ ...prev, avatar_url: publicUrl }));
+            
+            // Auto save para a experiência ficar mais fluida
+            await updateProfile({ avatar_url: publicUrl });
+            toast.success('Foto de perfil atualizada com sucesso!');
+        } catch (error: any) {
+            toast.error(error.message || 'Erro ao enviar foto.');
+        } finally {
+            setAvatarLoading(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''; // Limpa input
+            }
         }
     };
 
@@ -235,6 +261,7 @@ export const PersonalInfoTab: React.FC = () => {
                 name: personalData.name,
                 phone: personalData.phone ? personalData.phone.replace(/\D/g, '') : null,
                 birth_date: personalData.birth_date || null,
+                avatar_url: personalData.avatar_url,
                 address: {
                     zipCode: addressData.zipCode.replace(/\D/g, ''),
                     street: addressData.street,
@@ -267,6 +294,56 @@ export const PersonalInfoTab: React.FC = () => {
                         <User size={20} className="text-blue-600" />
                         Informações Pessoais
                     </h3>
+
+                    {/* Foto de Perfil */}
+                    <div className="mb-8 flex flex-col items-start gap-3">
+                        <label className="text-sm font-semibold text-slate-700">Foto de Perfil (Avatar)</label>
+                        <div className="flex items-center gap-4">
+                            <div className="relative group w-24 h-24 rounded-full overflow-hidden border-4 border-slate-100 bg-slate-100 flex items-center justify-center shrink-0">
+                                {personalData.avatar_url ? (
+                                    <img
+                                        src={personalData.avatar_url}
+                                        alt="Avatar"
+                                        className="w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <User size={40} className="text-slate-400" />
+                                )}
+
+                                {avatarLoading ? (
+                                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                                        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                                    >
+                                        <Camera className="text-white" size={24} />
+                                    </button>
+                                )}
+                            </div>
+                            <div className="text-sm text-slate-500 max-w-[200px]">
+                                <p>Sua foto será exibida em suas <strong>avaliações</strong> e atividades no site.</p>
+                                <button 
+                                    type="button" 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="text-blue-600 mt-1 font-medium hover:underline"
+                                >
+                                    Alterar foto
+                                </button>
+                            </div>
+                        </div>
+                        <input
+                            type="file"
+                            accept="image/png, image/jpeg, image/jpg, image/webp"
+                            ref={fileInputRef}
+                            className="hidden"
+                            onChange={handleAvatarUpload}
+                            disabled={avatarLoading}
+                        />
+                    </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Name */}

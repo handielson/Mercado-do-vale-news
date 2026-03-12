@@ -22,6 +22,7 @@ export default function CoinsInfoPage() {
     const maxRedeemPct = settings?.max_redeem_percent ?? 20;
     const expiryDays = settings?.coins_expire_after_days ?? 0;
     const referralMultiplier = settings?.referral_coins_per_real ?? 0.50;
+    const reviewCoins = settings?.review_coins ?? 0;
 
     const [userCode, setUserCode] = useState<string | null>(null);
 
@@ -156,6 +157,22 @@ export default function CoinsInfoPage() {
                                 )}
                             </div>
                         </div>
+
+                        {/* Avaliações */}
+                        {reviewCoins > 0 && (
+                            <div className="bg-white border border-emerald-200 rounded-xl p-4 flex gap-4 shadow-sm">
+                                <div className="p-2 bg-emerald-100 rounded-xl h-fit">
+                                    <span className="text-xl">⭐</span>
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="font-semibold text-slate-800 mb-1">Avaliando Produtos</h3>
+                                    <p className="text-sm text-slate-600">
+                                        Sua opinião é muito importante! Ao avaliar um produto que você comprou, você ganha{' '}
+                                        <strong className="text-emerald-700">{reviewCoins} moeda{reviewCoins !== 1 ? 's' : ''}</strong> automaticamente para cada avaliação aprovada.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                     </div>
                 </section>

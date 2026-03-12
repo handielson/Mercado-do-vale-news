@@ -62,7 +62,8 @@ export const catalogService = {
         // Construir query
         let query = supabase
             .from('products')
-            .select('*', { count: 'exact' });
+            .select('*', { count: 'exact' })
+            .eq('status', 'active'); // Só produtos ativos (evita desperate slots com inativos)
 
         // Aplicar filtros
         if (filters?.search) {

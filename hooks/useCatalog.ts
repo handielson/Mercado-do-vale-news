@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { catalogService } from '@/services/catalogService';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogProduct } from '@/types/catalog';
@@ -29,6 +29,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
     const [page, setPage] = useState(1);
+    const pageRef = useRef(1); // Ref para leitura síncrona da página atual
     const [hasMore, setHasMore] = useState(true);
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
     const [catalogSettings, setCatalogSettings] = useState<CatalogSettings>(DEFAULT_CATALOG_SETTINGS as CatalogSettings);
@@ -70,25 +71,19 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     }, [catalogSettings]);
 
     // Carregar produtos
-    const loadProducts = useCallback(async (reset = false) => {
+    const loadProducts = useCallback(async (reset = false, forcePage?: number) => {
         try {
+            // Determina a página: reset volta p/ 1, forcePage sobreescreve, senão usa pageRef
+            const currentPage = reset ? 1 : (forcePage ?? pageRef.current);
+
             console.log('[useCatalog] Loading products:', {
                 reset,
                 filters,
                 searchQuery,
-                currentPage: reset ? 1 : page
+                currentPage
             });
             setLoading(true);
             setError(null);
-
-            // Use functional update to get current page without dependency
-            let currentPage = 1;
-            if (!reset) {
-                setPage((prev) => {
-                    currentPage = prev;
-                    return prev;
-                });
-            }
 
             const response = await catalogService.getProducts({
                 search: searchQuery || undefined,
@@ -118,6 +113,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             if (reset) {
                 setProducts(filteredProducts);
                 setPage(1);
+                pageRef.current = 1;
             } else {
                 setProducts((prev) => [...prev, ...filteredProducts]);
             }
@@ -135,7 +131,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         } finally {
             setLoading(false);
         }
-    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache]); // Removed 'page' from dependencies
+    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache]);
 
     // Recarregar quando filtros, busca ou configurações mudarem
     useEffect(() => {
@@ -148,9 +144,10 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     // Carregar mais produtos
     const loadMore = useCallback(() => {
         if (!loading && hasMore) {
-            setPage((prev) => prev + 1);
-            // Wait for next render to call loadProducts with updated page
-            setTimeout(() => loadProducts(false), 0);
+            const nextPage = pageRef.current + 1;
+            pageRef.current = nextPage;
+            setPage(nextPage);
+            loadProducts(false, nextPage);
         }
     }, [loading, hasMore, loadProducts]);
 

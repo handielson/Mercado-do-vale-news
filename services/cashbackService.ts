@@ -154,6 +154,32 @@ export async function earnCoinsForPurchase(
     return coinsEarned;
 }
 
+// ============================================================
+// ACÚMULO — AVALIAÇÃO DE PRODUTO
+// ============================================================
+export async function earnCoinsForReview(
+    customerId: string,
+    reviewId: string
+): Promise<number> {
+    const settings = await getCashbackSettings();
+
+    if (!settings.active || !settings.review_coins || settings.review_coins <= 0) return 0;
+
+    const coinsEarned = settings.review_coins;
+
+    const { error } = await supabase.rpc('add_coins', {
+        p_customer_id: customerId,
+        p_amount: coinsEarned,
+        p_type: 'earn_review',
+        p_description: `Avaliação de produto`,
+        p_reference_id: reviewId,
+        p_reference_type: 'review',
+    });
+
+    if (error) throw new Error(`Erro ao creditar moedas por avaliação: ${error.message}`);
+    return coinsEarned;
+}
+
 // Emissão de moedas pendentes (para novas compras online aguardando pagamento/aprovação)
 export async function addPendingCoinsForPurchase(
     customerId: string,

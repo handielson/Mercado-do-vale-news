@@ -71,7 +71,7 @@ function CatalogContent() {
         hasMore,
         filterStats
     } = useCatalog({
-        pageSize: 12,
+        pageSize: 48,
         initialSearchQuery,
         initialCategory,
         bypassCache: customer?.customer_type === 'ADMIN'

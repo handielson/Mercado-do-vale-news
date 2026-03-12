@@ -14,6 +14,8 @@ export interface CashbackSettings {
     // Indicação (Referral)
     coins_per_referral_purchase?: number; // moedas ganhas por venda indicada (legado)
     referral_coins_per_real: number;      // multiplicador. Ex: 0.50 = 50% do valor da compra
+    // Avaliações
+    review_coins?: number;                // moedas ganhas por avaliar um produto
     // Check-in
     checkin_base_coins: number;
     checkin_streak_milestones: CheckinMilestone[];
@@ -46,9 +48,10 @@ export type CoinTransactionType =
     | 'refund_cancel'
     | 'expire'
     | 'earn_referral'
+    | 'earn_review'
     | 'admin_adjust';
 
-export type CoinReferenceType = 'sale' | 'quote' | 'checkin' | 'admin';
+export type CoinReferenceType = 'sale' | 'quote' | 'checkin' | 'admin' | 'review';
 
 export interface CoinTransaction {
     id: string;
