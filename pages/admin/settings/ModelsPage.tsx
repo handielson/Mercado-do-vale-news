@@ -45,11 +45,12 @@ interface PriceState {
 interface ModelRowProps {
     model: Model;
     brandName: string;
+    index: number;
     onEdit: (m: Model) => void;
     onDelete: (m: Model) => void;
 }
 
-function ModelRow({ model, brandName, onEdit, onDelete }: ModelRowProps) {
+function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) {
     const [expanded, setExpanded] = useState(false);
     const [products, setProducts] = useState<ProductRow[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(true);
@@ -133,61 +134,52 @@ function ModelRow({ model, brandName, onEdit, onDelete }: ModelRowProps) {
         }
     }
 
-    const FIELDS: { key: keyof PriceState; label: string }[] = [
-        { key: 'price_cost', label: 'Custo' },
-        { key: 'price_retail', label: 'Varejo' },
-        { key: 'price_reseller', label: 'Revenda' },
-        { key: 'price_wholesale', label: 'Atacado' },
-    ];
+    const PRICE_KEYS: (keyof PriceState)[] = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
+    const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/70';
+    const expandedBg = index % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
 
     return (
         <>
             {/* ── Linha principal ─────────────────────────────────────── */}
-            <tr className={`transition-colors ${expanded ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
+            <tr className={`transition-colors ${expanded ? expandedBg : rowBg} hover:brightness-95`}>
                 {/* Marca */}
-                <td className="px-4 py-3 text-sm font-medium text-slate-600 whitespace-nowrap">
+                <td className="px-4 py-2.5 text-sm font-medium text-slate-600 whitespace-nowrap">
                     {brandName}
                 </td>
 
-                {/* Modelo + preços inline */}
-                <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-800 whitespace-nowrap mr-1">
-                            {model.name}
-                        </span>
+                {/* Modelo */}
+                <td className="px-4 py-2.5 text-sm font-semibold text-slate-800 whitespace-nowrap">
+                    {model.name}
+                </td>
 
-                        {loadingPrices ? (
-                            <Loader2 size={14} className="animate-spin text-slate-400" />
-                        ) : (
-                            <>
-                                {FIELDS.map(f => (
-                                    <div key={f.key} className="flex items-center gap-1">
-                                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap">
-                                            {f.label}
-                                        </span>
-                                        <CurrencyInput
-                                            value={prices[f.key]}
-                                            onChange={cents => setPrices(prev => ({ ...prev, [f.key]: cents }))}
-                                            className="h-7 w-28 text-xs py-1"
-                                        />
-                                    </div>
-                                ))}
+                {/* Preços — cada um em seu próprio <td> */}
+                {loadingPrices ? (
+                    <td colSpan={4} className="px-4 py-2.5">
+                        <Loader2 size={14} className="animate-spin text-slate-400" />
+                    </td>
+                ) : (
+                    PRICE_KEYS.map(key => (
+                        <td key={key} className="px-2 py-2.5">
+                            <CurrencyInput
+                                value={prices[key]}
+                                onChange={cents => setPrices(prev => ({ ...prev, [key]: cents }))}
+                                className="h-7 w-28 text-xs py-1"
+                            />
+                        </td>
+                    ))
+                )}
 
-                                <button
-                                    onClick={handleSave}
-                                    disabled={saving || products.length === 0}
-                                    title="Salvar preços"
-                                    className="flex items-center gap-1 px-2.5 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-40 whitespace-nowrap"
-                                >
-                                    {saving
-                                        ? <Loader2 size={12} className="animate-spin" />
-                                        : <CheckCircle size={12} />
-                                    }
-                                    {saving ? 'Salvando…' : `Salvar (${products.length})`}
-                                </button>
-                            </>
-                        )}
-                    </div>
+                {/* Salvar */}
+                <td className="px-2 py-2.5 whitespace-nowrap">
+                    <button
+                        onClick={handleSave}
+                        disabled={saving || loadingPrices || products.length === 0}
+                        title="Salvar preços"
+                        className="flex items-center gap-1 px-2.5 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-40"
+                    >
+                        {saving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                        {saving ? 'Salvando…' : `Salvar (${products.length})`}
+                    </button>
                 </td>
 
                 {/* Status */}
@@ -233,8 +225,8 @@ function ModelRow({ model, brandName, onEdit, onDelete }: ModelRowProps) {
 
             {/* ── Linha expandida: Slug + Histórico ───────────────────── */}
             {expanded && (
-                <tr className="bg-slate-50 border-t border-slate-100">
-                    <td colSpan={4} className="px-6 py-3 space-y-3">
+                <tr className={`border-t border-slate-200 ${expandedBg}`}>
+                    <td colSpan={8} className="px-6 py-3 space-y-3">
                         {/* Slug */}
                         <div className="flex items-center gap-2">
                             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Slug:</span>
@@ -477,7 +469,12 @@ export function ModelsPage() {
                     <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Marca</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Modelo · Preços</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Modelo</th>
+                            <th className="px-2 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Custo</th>
+                            <th className="px-2 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Varejo</th>
+                            <th className="px-2 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Revenda</th>
+                            <th className="px-2 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Atacado</th>
+                            <th className="px-2 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Salvar</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Status</th>
                             <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Ações</th>
                         </tr>
@@ -485,15 +482,16 @@ export function ModelsPage() {
                     <tbody className="divide-y divide-slate-100">
                         {filtered.length === 0 ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                                <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
                                     {models.length === 0 ? 'Nenhum modelo cadastrado' : 'Nenhum modelo encontrado para os filtros aplicados'}
                                 </td>
                             </tr>
                         ) : (
-                            filtered.map(model => (
+                            filtered.map((model, i) => (
                                 <ModelRow
                                     key={model.id}
                                     model={model}
+                                    index={i}
                                     brandName={getBrandName(model.brand_id)}
                                     onEdit={handleEdit}
                                     onDelete={handleDelete}
