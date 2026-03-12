@@ -1,19 +1,304 @@
-
-import React, { useEffect, useState } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
-import { ModelPricesPanel } from '../../../components/settings/ModelPricesPanel';
 import { NextStepBanner } from '../../../components/ui/NextStepBanner';
 import { AIAssistantsPanel } from '../../../components/settings/AIAssistantsPanel';
+import { supabase } from '../../../services/supabase';
+import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../../services/priceHistoryService';
+import { CurrencyInput } from '../../../components/ui/CurrencyInput';
+import { toast } from 'sonner';
 
-/**
- * Models Management Page
- * CRUD interface for managing models
- */
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+function fmt(cents: number) {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+}
+
+function dateLabel(iso: string) {
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+interface ProductRow {
+    id: string;
+    name: string;
+    stock_quantity: number;
+    price_cost: number;
+    price_retail: number;
+    price_reseller: number;
+    price_wholesale: number;
+    specs: any;
+}
+
+interface PriceState {
+    price_cost: number;
+    price_retail: number;
+    price_reseller: number;
+    price_wholesale: number;
+}
+
+// ─── ModelRow ────────────────────────────────────────────────────────────────
+
+interface ModelRowProps {
+    model: Model;
+    brandName: string;
+    onEdit: (m: Model) => void;
+    onDelete: (m: Model) => void;
+}
+
+function ModelRow({ model, brandName, onEdit, onDelete }: ModelRowProps) {
+    const [expanded, setExpanded] = useState(false);
+    const [products, setProducts] = useState<ProductRow[]>([]);
+    const [loadingPrices, setLoadingPrices] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [prices, setPrices] = useState<PriceState>({
+        price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0,
+    });
+    // histórico por produto
+    const [history, setHistory] = useState<Record<string, PriceSnapshot[]>>({});
+    const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
+    const loadPrices = useCallback(async () => {
+        setLoadingPrices(true);
+        try {
+            const { data, error } = await supabase
+                .from('products')
+                .select('id, name, specs, stock_quantity, price_cost, price_retail, price_reseller, price_wholesale')
+                .eq('model_id', model.id)
+                .eq('status', 'active')
+                .order('name');
+
+            if (error) throw error;
+
+            const rows: ProductRow[] = data || [];
+            setProducts(rows);
+
+            if (rows.length > 0) {
+                // Média ponderada pelo estoque para o display inicial
+                const total = rows.reduce((s, p) => s + (p.stock_quantity || 0), 0);
+                const wavg = (field: keyof PriceState) =>
+                    total > 0
+                        ? Math.round(rows.reduce((s, p) => s + ((p[field] as number) * (p.stock_quantity || 0)), 0) / total)
+                        : rows[0][field] || 0;
+
+                setPrices({
+                    price_cost: wavg('price_cost'),
+                    price_retail: wavg('price_retail'),
+                    price_reseller: wavg('price_reseller'),
+                    price_wholesale: wavg('price_wholesale'),
+                });
+            }
+        } catch (e: any) {
+            console.error(e);
+        } finally {
+            setLoadingPrices(false);
+        }
+    }, [model.id]);
+
+    useEffect(() => { loadPrices(); }, [loadPrices]);
+
+    async function handleSave() {
+        if (products.length === 0) return;
+        setSaving(true);
+        try {
+            // Agrupa produtos por variação (ram|storage) — aplica os mesmos preços a todos
+            const variation = { ram: '', storage: '', products };
+            await applyPricesToVariation(products, prices);
+            toast.success(`Preços salvos para ${products.length} produto(s)!`);
+            // Limpa histórico cacheado
+            setHistory({});
+            await loadPrices();
+        } catch (e: any) {
+            toast.error('Erro ao salvar preços: ' + e.message);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function loadHistory(productId: string) {
+        if (history[productId]) return;
+        const h = await getPriceHistory(productId, 5);
+        setHistory(prev => ({ ...prev, [productId]: h }));
+    }
+
+    async function toggleHistory(productId: string) {
+        if (expandedHistoryId === productId) {
+            setExpandedHistoryId(null);
+        } else {
+            await loadHistory(productId);
+            setExpandedHistoryId(productId);
+        }
+    }
+
+    const FIELDS: { key: keyof PriceState; label: string }[] = [
+        { key: 'price_cost', label: 'Custo' },
+        { key: 'price_retail', label: 'Varejo' },
+        { key: 'price_reseller', label: 'Revenda' },
+        { key: 'price_wholesale', label: 'Atacado' },
+    ];
+
+    return (
+        <>
+            {/* ── Linha principal ─────────────────────────────────────── */}
+            <tr className={`transition-colors ${expanded ? 'bg-slate-50' : 'hover:bg-slate-50'}`}>
+                {/* Marca */}
+                <td className="px-4 py-3 text-sm font-medium text-slate-600 whitespace-nowrap">
+                    {brandName}
+                </td>
+
+                {/* Modelo + preços inline */}
+                <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-800 whitespace-nowrap mr-1">
+                            {model.name}
+                        </span>
+
+                        {loadingPrices ? (
+                            <Loader2 size={14} className="animate-spin text-slate-400" />
+                        ) : (
+                            <>
+                                {FIELDS.map(f => (
+                                    <div key={f.key} className="flex items-center gap-1">
+                                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap">
+                                            {f.label}
+                                        </span>
+                                        <CurrencyInput
+                                            value={prices[f.key]}
+                                            onChange={cents => setPrices(prev => ({ ...prev, [f.key]: cents }))}
+                                            className="h-7 w-28 text-xs py-1"
+                                        />
+                                    </div>
+                                ))}
+
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saving || products.length === 0}
+                                    title="Salvar preços"
+                                    className="flex items-center gap-1 px-2.5 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-40 whitespace-nowrap"
+                                >
+                                    {saving
+                                        ? <Loader2 size={12} className="animate-spin" />
+                                        : <CheckCircle size={12} />
+                                    }
+                                    {saving ? 'Salvando…' : `Salvar (${products.length})`}
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </td>
+
+                {/* Status */}
+                <td className="px-4 py-3 text-sm whitespace-nowrap">
+                    {model.active ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            ✓ Ativo
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                            ○ Inativo
+                        </span>
+                    )}
+                </td>
+
+                {/* Ações */}
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1">
+                        <button
+                            onClick={() => setExpanded(v => !v)}
+                            className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Slug e Histórico"
+                        >
+                            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                        <button
+                            onClick={() => onEdit(model)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Editar"
+                        >
+                            <Pencil size={16} />
+                        </button>
+                        <button
+                            onClick={() => onDelete(model)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Excluir"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                </td>
+            </tr>
+
+            {/* ── Linha expandida: Slug + Histórico ───────────────────── */}
+            {expanded && (
+                <tr className="bg-slate-50 border-t border-slate-100">
+                    <td colSpan={4} className="px-6 py-3 space-y-3">
+                        {/* Slug */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Slug:</span>
+                            <code className="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs text-slate-700">
+                                {model.slug}
+                            </code>
+                        </div>
+
+                        {/* Histórico por produto */}
+                        {products.length === 0 ? (
+                            <p className="text-xs text-slate-400">Nenhum produto ativo para este modelo.</p>
+                        ) : (
+                            <div className="space-y-1">
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                    Produtos ({products.length})
+                                </p>
+                                {products.map(p => (
+                                    <div key={p.id} className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+                                        <button
+                                            className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                                            onClick={() => toggleHistory(p.id)}
+                                        >
+                                            <Clock size={13} className="text-slate-400 shrink-0" />
+                                            <span className="text-xs text-slate-700 flex-1 truncate">{p.name}</span>
+                                            <span className="text-xs text-slate-400">Varejo: {fmt(p.price_retail)}</span>
+                                            <span className="text-xs text-blue-500 ml-1">
+                                                {expandedHistoryId === p.id ? 'fechar ▴' : 'histórico ▾'}
+                                            </span>
+                                        </button>
+
+                                        {expandedHistoryId === p.id && (
+                                            <div className="px-3 pb-3 border-t border-slate-100">
+                                                {!history[p.id] ? (
+                                                    <p className="text-xs text-slate-400 py-1">Carregando…</p>
+                                                ) : history[p.id].length === 0 ? (
+                                                    <p className="text-xs text-slate-400 py-1">Nenhum histórico registrado.</p>
+                                                ) : (
+                                                    <div className="space-y-1 mt-2">
+                                                        {history[p.id].map(h => (
+                                                            <div key={h.id} className="grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-2 items-center text-xs py-1 border-b border-slate-100 last:border-0">
+                                                                <span className="text-slate-400 whitespace-nowrap">{dateLabel(h.changed_at)}</span>
+                                                                <span className="text-slate-600">Custo: {fmt(h.price_cost)}</span>
+                                                                <span className="text-green-700">Varejo: {fmt(h.price_retail)}</span>
+                                                                <span className="text-blue-700">Revenda: {fmt(h.price_reseller)}</span>
+                                                                <span className="text-orange-700">Atacado: {fmt(h.price_wholesale)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </td>
+                </tr>
+            )}
+        </>
+    );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export function ModelsPage() {
     const [models, setModels] = useState<Model[]>([]);
     const [brands, setBrands] = useState<Brand[]>([]);
@@ -21,8 +306,6 @@ export function ModelsPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
-    // Inline prices: ID do modelo expandido (null = nenhum)
-    const [expandedPricesId, setExpandedPricesId] = useState<string | null>(null);
 
     const loadData = async () => {
         try {
@@ -39,48 +322,29 @@ export function ModelsPage() {
         }
     };
 
-    useEffect(() => {
-        loadData();
-    }, []);
+    useEffect(() => { loadData(); }, []);
 
-    const handleAdd = () => {
-        setEditingModel(null);
-        setModalOpen(true);
-    };
-
-    const handleEdit = (model: Model) => {
-        setEditingModel(model);
-        setModalOpen(true);
-    };
+    const handleEdit = (model: Model) => { setEditingModel(model); setModalOpen(true); };
+    const handleAdd = () => { setEditingModel(null); setModalOpen(true); };
 
     const handleDelete = async (model: Model) => {
-        if (!confirm(`Tem certeza que deseja excluir o modelo "${model.name}"?`)) {
-            return;
-        }
-
+        if (!confirm(`Excluir o modelo "${model.name}"?`)) return;
         try {
             setDeleteError('');
             await modelService.delete(model.id);
             await loadData();
-        } catch (error) {
-            console.error('Error deleting model:', error);
+        } catch {
             setDeleteError('Erro ao excluir modelo. Tente novamente.');
         }
     };
 
-    const handleSave = async () => {
-        await loadData();
-    };
-
-    const getBrandName = (brandId: string): string => {
-        const brand = brands.find(b => b.id === brandId);
-        return brand?.name || 'Marca não encontrada';
-    };
+    const getBrandName = (brandId: string) =>
+        brands.find(b => b.id === brandId)?.name || '—';
 
     if (loading) {
         return (
             <div className="flex items-center justify-center h-96">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
             </div>
         );
     }
@@ -107,112 +371,42 @@ export function ModelsPage() {
                 </button>
             </div>
 
-            {/* Delete Error */}
             {deleteError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center justify-between">
                     {deleteError}
-                    <button onClick={() => setDeleteError('')} className="text-red-500 hover:text-red-700 font-bold ml-4">×</button>
+                    <button onClick={() => setDeleteError('')} className="text-red-500 font-bold ml-4">×</button>
                 </div>
             )}
 
-            {/* AI Shortcuts Panel */}
             <AIAssistantsPanel />
 
-            {/* Models Table */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Tabela */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
                 <table className="w-full">
                     <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Marca</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Modelo</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Slug</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Ações</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Marca</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Modelo · Preços</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Status</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Ações</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {models.length === 0 ? (
                             <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                                <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
                                     Nenhum modelo cadastrado
                                 </td>
                             </tr>
                         ) : (
-                            models.map((model) => (
-                                <React.Fragment key={model.id}>
-                                    <tr className={`hover:bg-slate-50 transition-colors ${expandedPricesId === model.id ? 'bg-slate-50' : ''}`}>
-                                        <td className="px-6 py-4 text-sm font-medium text-slate-600">
-                                            {getBrandName(model.brand_id)}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm font-medium text-slate-800">
-                                            {model.name}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
-                                            <code className="px-2 py-1 bg-slate-100 rounded text-xs">
-                                                {model.slug}
-                                            </code>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm">
-                                            {model.active ? (
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                    ✓ Ativo
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                                                    ○ Inativo
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {/* Toggle preços inline */}
-                                                <button
-                                                    onClick={() => setExpandedPricesId(expandedPricesId === model.id ? null : model.id)}
-                                                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                                                        expandedPricesId === model.id
-                                                            ? 'bg-green-600 text-white'
-                                                            : 'text-green-600 hover:bg-green-50 border border-green-200'
-                                                    }`}
-                                                    title="Preços"
-                                                >
-                                                    R$
-                                                    {expandedPricesId === model.id
-                                                        ? <ChevronUp size={13} />
-                                                        : <ChevronDown size={13} />
-                                                    }
-                                                </button>
-                                                <button
-                                                    onClick={() => handleEdit(model)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Editar"
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(model)}
-                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Excluir"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-
-                                    {/* Linha expansível de preços */}
-                                    {expandedPricesId === model.id && (
-                                        <tr>
-                                            <td colSpan={5} className="p-0">
-                                                <ModelPricesPanel
-                                                    modelId={model.id}
-                                                    modelName={model.name}
-                                                    onClose={() => setExpandedPricesId(null)}
-                                                    inline
-                                                />
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
+                            models.map(model => (
+                                <ModelRow
+                                    key={model.id}
+                                    model={model}
+                                    brandName={getBrandName(model.brand_id)}
+                                    onEdit={handleEdit}
+                                    onDelete={handleDelete}
+                                />
                             ))
                         )}
                     </tbody>
@@ -227,15 +421,11 @@ export function ModelsPage() {
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200">
                     <p className="text-sm text-slate-500">Modelos Ativos</p>
-                    <p className="text-2xl font-bold text-green-600">
-                        {models.filter(m => m.active).length}
-                    </p>
+                    <p className="text-2xl font-bold text-green-600">{models.filter(m => m.active).length}</p>
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200">
                     <p className="text-sm text-slate-500">Marcas com Modelos</p>
-                    <p className="text-2xl font-bold text-purple-600">
-                        {new Set(models.map(m => m.brand_id)).size}
-                    </p>
+                    <p className="text-2xl font-bold text-purple-600">{new Set(models.map(m => m.brand_id)).size}</p>
                 </div>
             </div>
 
@@ -250,11 +440,10 @@ export function ModelsPage() {
                 message="Modelos cadastrados?"
             />
 
-            {/* Modal de edição */}
             <ModelModal
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
-                onSave={handleSave}
+                onSave={loadData}
                 model={editingModel}
             />
         </div>
