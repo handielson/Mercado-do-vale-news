@@ -93,7 +93,7 @@ function generateVariantKey(ram?: string, storage?: string): string {
  * Group products by Brand + Model, with variants for each RAM/Storage combination
  * Each group contains all colors for that variant combination
  */
-export function groupProductsByVariants(products: CatalogProduct[], includeOutOfStock = false): ProductGroup[] {
+export function groupProductsByVariants(products: CatalogProduct[], includeOutOfStock = false, colorHexMap: Record<string, string> = {}): ProductGroup[] {
     // First, filter only available products
     const availableProducts = filterAvailableProducts(products, includeOutOfStock);
 
@@ -139,7 +139,7 @@ export function groupProductsByVariants(products: CatalogProduct[], includeOutOf
                     const colorName = product.specs.color;
                     const colorOption: ColorOption = {
                         name: colorName,
-                        hex: product.specs.color_hex || COLOR_MAP[colorName] || '#9CA3AF'
+                        hex: colorHexMap[colorName] || product.specs.color_hex || COLOR_MAP[colorName] || '#9CA3AF'
                     };
 
                     colorsMap.set(colorName, colorOption);

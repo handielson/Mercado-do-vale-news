@@ -8,6 +8,7 @@ import { catalogSectionsService } from '@/services/catalogSectionsService';
 import type { CatalogSection } from '@/types/catalogSections';
 import type { CatalogProduct } from '@/types/catalog';
 import { groupProductsByVariants } from '@/services/productGrouping';
+import { colorService } from '@/services/colors';
 
 interface CatalogSectionProps {
     section: CatalogSection;
@@ -19,10 +20,17 @@ interface CatalogSectionProps {
 export function CatalogSectionComponent({ section, onFavorite, onShare, favorites = new Set() }: CatalogSectionProps) {
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
+    const [colorHexMap, setColorHexMap] = useState<Record<string, string>>({});
     const { customer } = useSupabaseAuth();
 
     useEffect(() => {
         loadProducts();
+        // Carrega cores do banco uma vez (para resolver hex dinamicamente)
+        colorService.listActive().then(colors => {
+            const map: Record<string, string> = {};
+            colors.forEach(c => { if (c.hex_code) map[c.name] = c.hex_code; });
+            setColorHexMap(map);
+        }).catch(() => {}); // silencia erro — fallback para COLOR_MAP
     }, [section.id]);
 
     const loadProducts = async () => {
@@ -45,7 +53,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
     const displayItems = React.useMemo(() => {
         if (shouldGroup) {
             // Agrupar por modelo — exibe seletor rico de "X Cores"
-            return groupProductsByVariants(products).map(group => ({
+            return groupProductsByVariants(products, false, colorHexMap).map(group => ({
                 key: group.groupKey,
                 product: group.representativeProduct,
                 productGroup: group
@@ -71,7 +79,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
             product: p,
             productGroup: undefined as ProductGroup | undefined
         }));
-    }, [products, shouldGroup]);
+    }, [products, shouldGroup, colorHexMap]);
 
     if (loading) {
         return (
