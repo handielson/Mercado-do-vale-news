@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
@@ -307,6 +307,12 @@ export function ModelsPage() {
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
 
+    // ── Filtros ──
+    const [search, setSearch] = useState('');
+    const [filterBrand, setFilterBrand] = useState('');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+    const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'az' | 'za'>('newest');
+
     const loadData = async () => {
         try {
             const [modelsData, brandsData] = await Promise.all([
@@ -340,6 +346,25 @@ export function ModelsPage() {
 
     const getBrandName = (brandId: string) =>
         brands.find(b => b.id === brandId)?.name || '—';
+
+    // ── Filtragem + Ordenação (client-side) ──
+    const filtered = models
+        .filter(m => {
+            const brandName = getBrandName(m.brand_id).toLowerCase();
+            const term = search.toLowerCase();
+            if (term && !m.name.toLowerCase().includes(term) && !brandName.includes(term)) return false;
+            if (filterBrand && m.brand_id !== filterBrand) return false;
+            if (filterStatus === 'active' && !m.active) return false;
+            if (filterStatus === 'inactive' && m.active) return false;
+            return true;
+        })
+        .sort((a, b) => {
+            if (sortOrder === 'newest') return new Date(b.created).getTime() - new Date(a.created).getTime();
+            if (sortOrder === 'oldest') return new Date(a.created).getTime() - new Date(b.created).getTime();
+            if (sortOrder === 'az') return a.name.localeCompare(b.name, 'pt-BR');
+            if (sortOrder === 'za') return b.name.localeCompare(a.name, 'pt-BR');
+            return 0;
+        });
 
     if (loading) {
         return (
@@ -380,6 +405,72 @@ export function ModelsPage() {
 
             <AIAssistantsPanel />
 
+            {/* ── Barra de Pesquisa + Filtros ── */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                <div className="flex flex-wrap gap-3 items-center">
+                    {/* Pesquisa */}
+                    <div className="relative flex-1 min-w-[200px]">
+                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            placeholder="Pesquisar por nome ou marca…"
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        />
+                    </div>
+
+                    {/* Filtro Marca */}
+                    <select
+                        value={filterBrand}
+                        onChange={e => setFilterBrand(e.target.value)}
+                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="">Todas as marcas</option>
+                        {brands.map(b => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                    </select>
+
+                    {/* Filtro Status */}
+                    <select
+                        value={filterStatus}
+                        onChange={e => setFilterStatus(e.target.value as any)}
+                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="all">Todos os status</option>
+                        <option value="active">Ativos</option>
+                        <option value="inactive">Inativos</option>
+                    </select>
+
+                    {/* Ordenação */}
+                    <select
+                        value={sortOrder}
+                        onChange={e => setSortOrder(e.target.value as any)}
+                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="newest">Mais recentes</option>
+                        <option value="oldest">Mais antigos</option>
+                        <option value="az">Nome A→Z</option>
+                        <option value="za">Nome Z→A</option>
+                    </select>
+
+                    {/* Limpar filtros */}
+                    {(search || filterBrand || filterStatus !== 'all' || sortOrder !== 'newest') && (
+                        <button
+                            onClick={() => { setSearch(''); setFilterBrand(''); setFilterStatus('all'); setSortOrder('newest'); }}
+                            className="text-xs text-slate-500 hover:text-red-500 transition-colors underline whitespace-nowrap"
+                        >
+                            Limpar filtros
+                        </button>
+                    )}
+
+                    <span className="text-xs text-slate-400 ml-auto whitespace-nowrap">
+                        {filtered.length} de {models.length} modelo{models.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
+            </div>
+
             {/* Tabela */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
                 <table className="w-full">
@@ -392,14 +483,14 @@ export function ModelsPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {models.length === 0 ? (
+                        {filtered.length === 0 ? (
                             <tr>
                                 <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
-                                    Nenhum modelo cadastrado
+                                    {models.length === 0 ? 'Nenhum modelo cadastrado' : 'Nenhum modelo encontrado para os filtros aplicados'}
                                 </td>
                             </tr>
                         ) : (
-                            models.map(model => (
+                            filtered.map(model => (
                                 <ModelRow
                                     key={model.id}
                                     model={model}
