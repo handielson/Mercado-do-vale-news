@@ -316,6 +316,51 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
                                 </span>
                             </div>
                         </div>
+
+                        {/* Variações */}
+                        <div className="w-full mt-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wide">Composição de Preços (Variações)</h4>
+                            </div>
+                            <div className="p-4">
+                                <table className="w-full text-left text-xs text-slate-600">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-slate-400">
+                                            <th className="font-medium pb-2">SKU</th>
+                                            <th className="font-medium pb-2">Produto</th>
+                                            <th className="font-medium pb-2 text-right">Estoque</th>
+                                            <th className="font-medium pb-2 text-right">Custo</th>
+                                            <th className="font-medium pb-2 text-right">Varejo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {products.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} className="py-4 text-center text-slate-400 italic">Nenhum produto encontrado neste modelo.</td>
+                                            </tr>
+                                        )}
+                                        {products.map(p => (
+                                            <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                                                <td className="py-2"><code className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-500">{p.specs?.sku || 'Sem SKU'}</code></td>
+                                                <td className="py-2 font-medium text-slate-700">{p.name}</td>
+                                                <td className="py-2 text-right">{p.stock_quantity || 0}</td>
+                                                <td className="py-2 text-right">{fmt(p.price_cost)}</td>
+                                                <td className="py-2 text-right font-semibold text-slate-800">{fmt(p.price_retail)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {products.length > 1 && (
+                                    <div className="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 px-3 py-2 rounded flex items-start gap-2">
+                                        <div className="mt-0.5">ℹ️</div>
+                                        <div>
+                                            <span className="font-semibold block mb-0.5">Por que o número de cima é diferente?</span>
+                                            O preço do Varejo na linha resumida (lá em cima) é uma média ponderada dos valores destas variações. Quando você digita um preço na linha e aperta Enter, ele atualiza todas elas de uma vez!
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </td>
                 </tr>
             )}
