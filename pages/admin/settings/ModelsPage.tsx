@@ -25,6 +25,7 @@ function dateLabel(iso: string) {
 interface ProductRow {
     id: string;
     name: string;
+    sku: string;
     stock_quantity: number;
     price_cost: number;
     price_retail: number;
@@ -71,7 +72,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
         try {
             const { data, error } = await supabase
                 .from('products')
-                .select('id, name, specs, stock_quantity, price_cost, price_retail, price_reseller, price_wholesale')
+                .select('id, name, sku, specs, stock_quantity, price_cost, price_retail, price_reseller, price_wholesale')
                 .eq('model_id', model.id)
                 .eq('status', 'active')
                 .order('name');
@@ -341,8 +342,12 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
                                         )}
                                         {products.map(p => (
                                             <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                                                <td className="py-2"><code className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-500">{p.specs?.sku || 'Sem SKU'}</code></td>
-                                                <td className="py-2 font-medium text-slate-700">{p.name}</td>
+                                                <td className="py-2"><code className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-500">{p.sku || p.specs?.sku || 'Sem SKU'}</code></td>
+                                                <td className="py-2 font-medium text-slate-700">
+                                                    {p.name}
+                                                    {p.specs?.color && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">Cor: {p.specs.color}</span>}
+                                                    {p.specs?.capacity && <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700">{p.specs.capacity}</span>}
+                                                </td>
                                                 <td className="py-2 text-right">{p.stock_quantity || 0}</td>
                                                 <td className="py-2 text-right">{fmt(p.price_cost)}</td>
                                                 <td className="py-2 text-right font-semibold text-slate-800">{fmt(p.price_retail)}</td>
