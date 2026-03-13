@@ -559,6 +559,12 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
     const imagens = item.midia?.imagens?.internas || [];
     const firstImg = imagens[0]?.link || imagens[0]?.url || null;
 
+    // pesoBruto pode estar no root do item (não dentro de dimensoes) — API Bling v3
+    const pesoBruto = dim.pesoBruto || item.pesoBruto || null;
+    const largura = dim.largura || null;
+    const altura = dim.altura || null;
+    const profundidade = dim.profundidade || null;
+
     return {
         // Identificação
         company_id: companyId,
@@ -584,9 +590,9 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         cest: trib.cest || null,
         origin: trib.origem != null ? String(trib.origem) : null,
         // Físico
-        weight_kg: dim.pesoBruto || null,
-        dimensions: (dim.largura || dim.altura || dim.profundidade)
-            ? { width_cm: dim.largura || null, height_cm: dim.altura || null, depth_cm: dim.profundidade || null }
+        weight_kg: pesoBruto,
+        dimensions: (largura || altura || profundidade)
+            ? { width_cm: largura, height_cm: altura, depth_cm: profundidade }
             : null,
         // Estoque
         stock_quantity: item.stock_quantity ?? 0,
@@ -831,6 +837,7 @@ export async function importBlingProducts(
                 gtin: detail.gtin ?? item.gtin,            // EAN do filho ou pai
                 categoria: detail.categoria ?? item.categoria,
                 precoCusto: detail.precoCusto ?? item.precoCusto,
+                preco: detail.preco ?? item.preco,
                 descricaoComplementar: detail.descricaoComplementar || item.descricaoComplementar,
                 descricaoCurta: detail.descricaoCurta || item.descricaoCurta,
                 tributacao: {
@@ -838,6 +845,8 @@ export async function importBlingProducts(
                     cest: detail.cest,
                     origem: detail.origem,
                 },
+                // pesoBruto também no root para fallback em mapBlingToDb
+                pesoBruto: detail.pesoBruto,
                 dimensoes: {
                     pesoBruto: detail.pesoBruto,
                     largura: detail.largura,
