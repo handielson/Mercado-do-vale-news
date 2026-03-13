@@ -110,6 +110,10 @@ export default function BlingPage() {
     const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
     const [fieldMappings, setFieldMappings] = useState<FieldMappingConfig[]>(loadFieldMappings);
 
+    // ── Shortcuts ──
+    const [blingDashboardUrl, setBlingDashboardUrl] = useState(() => localStorage.getItem('bling_dashboard_url') || 'https://www.bling.com.br/b/dashboard');
+
+
 
     // ── Webhook diagnostics ──
     const [webhookTestResult, setWebhookTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -497,6 +501,18 @@ export default function BlingPage() {
                                 Página de Vendas
                                 <ExternalLink className="w-3 h-3 text-slate-300 ml-auto" />
                             </a>
+                            <a
+                                href={blingDashboardUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex flex-col items-center justify-center gap-1.5 px-3 py-3 mt-2 rounded-lg text-sm font-semibold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 transition-colors"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <ExternalLink className="w-4 h-4 shrink-0" />
+                                    Acessar Bling
+                                </div>
+                                <span className="text-[10px] font-normal text-green-600/80">Abrir painel em nova aba</span>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -604,6 +620,29 @@ export default function BlingPage() {
                                     <ExternalLink className="w-5 h-5" />
                                     {isConnected && !tokenExpired ? 'Reconectar com Bling' : 'Conectar com Bling'}
                                 </button>
+                            </div>
+
+                            {/* Link Rápido Bling */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
+                                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-700">4</span>
+                                    Link de Acesso Rápido
+                                </h2>
+                                <p className="text-sm text-slate-500">
+                                    Este link será usado no botão de acesso rápido no menu lateral.
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={blingDashboardUrl}
+                                        onChange={e => {
+                                            setBlingDashboardUrl(e.target.value);
+                                            localStorage.setItem('bling_dashboard_url', e.target.value);
+                                        }}
+                                        className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm bg-slate-50"
+                                        placeholder="https://www.bling.com.br/b/dashboard"
+                                    />
+                                </div>
                             </div>
 
                             {/* Escopos */}
