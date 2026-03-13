@@ -302,7 +302,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
                         <div className="flex items-center gap-2">
                             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Dimensões (LxAxP):</span>
                             <span className="text-xs text-slate-600">
-                                {model.template_values?.dimensions?.width_cm || '0'} x {model.template_values?.dimensions?.height_cm || '0'} x {model.template_values?.dimensions?.depth_cm || '0'} cm
+                                {model.template_values?.['dimensions.width_cm'] || '0'} x {model.template_values?.['dimensions.height_cm'] || '0'} x {model.template_values?.['dimensions.depth_cm'] || '0'} cm
                             </span>
                         </div>
                     </div>
