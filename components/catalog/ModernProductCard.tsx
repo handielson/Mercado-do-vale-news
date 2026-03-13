@@ -16,6 +16,7 @@ import { useCompare } from '@/contexts/CompareContext';
 import { useCart } from '@/contexts/CartContext';
 import { CashbackBadge } from './CashbackBadge';
 import { getActivePromoPrice } from '@/utils/promoPrice';
+import { ProductRatingBadge } from './ProductRatingBadge';
 
 // Utility to determine if a color is dark enough to need white text
 const isDarkColor = (colorHex: string) => {
@@ -486,6 +487,7 @@ export function ModernProductCard({
                 <div className="p-4 space-y-3">
                     {/* Title & Brand */}
                     <div>
+                        <ProductRatingBadge productId={product.id} className="mb-1" />
                         <h3
                             onClick={handleTitleClick}
                             className="font-semibold text-slate-900 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer hover:underline"

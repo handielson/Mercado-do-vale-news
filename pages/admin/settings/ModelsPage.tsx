@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
@@ -8,6 +8,7 @@ import { ModelModal } from '../../../components/settings/ModelModal';
 import { NextStepBanner } from '../../../components/ui/NextStepBanner';
 import { supabase } from '../../../services/supabase';
 import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../../services/priceHistoryService';
+import { blingService } from '../../../services/blingService';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
 import { toast } from 'sonner';
 
@@ -55,6 +56,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
     const [loadingPrices, setLoadingPrices] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [syncingBling, setSyncingBling] = useState(false);
     const [prices, setPrices] = useState<PriceState>({
         price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0,
     });
@@ -117,6 +119,23 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
             toast.error('Erro ao salvar preços: ' + e.message);
         } finally {
             setSaving(false);
+        }
+    }
+
+    async function handleSyncBling() {
+        setSyncingBling(true);
+        try {
+            const res = await blingService.pushModelDimensionsToBling(model.id);
+            if (res.ok) {
+                const count = res.results?.filter((r: { success: boolean }) => r.success).length || 0;
+                toast.success(`Medidas sincronizadas para ${count} produto(s) no Bling!`);
+            } else {
+                toast.error('Ocorreu um erro na conversão com o Bling.');
+            }
+        } catch (e: any) {
+            toast.error(e.message || 'Erro ao sincronizar com o Bling');
+        } finally {
+            setSyncingBling(false);
         }
     }
 
@@ -210,6 +229,14 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
                 {/* Ações */}
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1">
+                        <button
+                            onClick={handleSyncBling}
+                            disabled={syncingBling}
+                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Sincronizar medidas com Bling"
+                        >
+                            {syncingBling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                        </button>
                         <button
                             onClick={() => setExpanded(v => !v)}
                             className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"

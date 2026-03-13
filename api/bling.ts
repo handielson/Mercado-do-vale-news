@@ -145,6 +145,79 @@ export default async function handler(req: any, res: any) {
         }
     }
 
+    // ─── PRODUCT-UPDATE-DIMENSIONS: atualiza produtos no Bling em lote (apenas dimensões) ────────
+    if (resource === 'product-update-dimensions') {
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        const { blingIds, updateData } = req.body;
+        if (!blingIds || !Array.isArray(blingIds) || !updateData) return res.status(400).json({ error: 'blingIds array and updateData required' });
+
+        try {
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const { data: settings } = await supabase
+                .from('company_settings')
+                .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
+                .single();
+            if (!settings?.bling_access_token) return res.status(401).json({ error: 'Bling not connected' });
+            let accessToken = settings.bling_access_token;
+            if (settings.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
+                const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: settings.bling_refresh_token, client_id: settings.bling_client_id, client_secret: settings.bling_client_secret }),
+                });
+                if (tokenRes.ok) {
+                    const tokenData = await tokenRes.json();
+                    accessToken = tokenData.access_token;
+                    await supabase.from('company_settings').update({ bling_access_token: tokenData.access_token, bling_refresh_token: tokenData.refresh_token, bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString() }).eq('id', settings.id ?? 1);
+                }
+            }
+
+            const results = [];
+            for (const blingId of blingIds) {
+                // 1. Fetch current product detail to avoid overwriting existing fields
+                const prodRes = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, { 
+                    headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } 
+                });
+                if (!prodRes.ok) {
+                    results.push({ id: blingId, success: false, error: 'fetch_failed', detail: await prodRes.text() });
+                    continue;
+                }
+                const prodData = await prodRes.json();
+                const produto = prodData.data;
+
+                // 2. Map and merge new dimensions
+                const payload = {
+                    ...produto,
+                    pesoBruto: updateData.pesoBruto !== undefined ? updateData.pesoBruto : produto.pesoBruto,
+                    dimensoes: {
+                        ...(produto.dimensoes || {}),
+                        ...(updateData.dimensoes || {})
+                    }
+                };
+
+                // Remove readonly ou arrays não necessários (para garantir update liso)
+                delete payload.estoque;
+
+                // 3. PUT updated product
+                const putRes = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (putRes.ok) {
+                    results.push({ id: blingId, success: true });
+                } else {
+                    results.push({ id: blingId, success: false, error: 'update_failed', detail: await putRes.text() });
+                }
+            }
+
+            return res.status(200).json({ ok: true, results });
+        } catch (err: any) {
+            return res.status(500).json({ error: 'network_error', message: err.message });
+        }
+    }
+
     // ─── STOCK: busca saldos de estoque ─────────────────────────────────────
     if (resource === 'stock') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });

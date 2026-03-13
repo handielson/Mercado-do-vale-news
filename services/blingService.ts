@@ -913,11 +913,74 @@ export async function importBlingProducts(
     return result;
 }
 
+export async function pushModelDimensionsToBling(modelId: string): Promise<{ ok: boolean; results?: any[]; error?: string }> {
+    const companyId = await getCompanyId();
+
+    // 1. Fetch Model dimensions
+    const { data: model, error: modelErr } = await supabase
+        .from('models')
+        .select('name, weight_kg, width_cm, height_cm, depth_cm')
+        .eq('id', modelId)
+        .eq('company_id', companyId)
+        .single();
+
+    if (modelErr || !model) {
+        throw new Error('Modelo não encontrado ou erro ao buscar.');
+    }
+
+    const { weight_kg, width_cm, height_cm, depth_cm } = model;
+    if (weight_kg == null && width_cm == null && height_cm == null && depth_cm == null) {
+        throw new Error('O modelo não possui dimensões cadastradas para sincronizar.');
+    }
+
+    // 2. Fetch all unique bling_ids associated with this model's products
+    // Note: We group by bling_id as a single model could have multiple variants, but each variant might be a distinct product in Bling.
+    const { data: products, error: prodErr } = await supabase
+        .from('products')
+        .select('bling_id')
+        .eq('model_id', modelId)
+        .eq('company_id', companyId)
+        .not('bling_id', 'is', null);
+
+    if (prodErr) throw new Error(prodErr.message);
+
+    const blingIds = Array.from(new Set(products.map(p => p.bling_id)));
+    if (blingIds.length === 0) {
+        throw new Error('Nenhum produto com Vínculo Bling encontrado para este modelo.');
+    }
+
+    // 3. Prepare payload and call the proxy endpoint
+    const updateData = {
+        pesoBruto: weight_kg !== null ? weight_kg : undefined,
+        dimensoes: {
+            largura: width_cm !== null ? width_cm : undefined,
+            altura: height_cm !== null ? height_cm : undefined,
+            profundidade: depth_cm !== null ? depth_cm : undefined,
+        }
+    };
+
+    const res = await fetch('/api/bling?resource=product-update-dimensions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ blingIds, updateData })
+    });
+
+    if (!res.ok) {
+        throw new Error(`Proxy error: ${res.status}`);
+    }
+
+    const json = await res.json();
+    return json;
+}
+
 export const blingService = {
     getValidToken,
     fetchAllBlingProducts,
     searchBlingProducts,
     importBlingProducts,
     checkExistingBlingProducts,
+    pushModelDimensionsToBling,
 };
 
