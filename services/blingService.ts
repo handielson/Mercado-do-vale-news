@@ -975,6 +975,56 @@ export async function pushModelDimensionsToBling(modelId: string): Promise<{ ok:
     return json;
 }
 
+export async function pullModelDimensionsFromBling(modelId: string): Promise<{ ok: boolean; dimensions?: any; error?: string }> {
+    const companyId = await getCompanyId();
+
+    // 1. Fetch a product with bling_id
+    const { data: products, error: prodErr } = await supabase
+        .from('products')
+        .select('bling_id')
+        .eq('model_id', modelId)
+        .eq('company_id', companyId)
+        .not('bling_id', 'is', null)
+        .limit(1);
+
+    if (prodErr || !products || products.length === 0) {
+        throw new Error('Nenhum produto com Vínculo Bling encontrado para este modelo.');
+    }
+
+    const blingId = products[0].bling_id;
+
+    // 2. Call product-detail API via proxy
+    try {
+        const detail = await fetchBlingProductDetail(blingId);
+        
+        if (!detail) {
+            throw new Error('Produto não encontrado no Bling ou falha ao buscar detalhes.');
+        }
+
+        const weight_kg = detail.pesoBruto || null;
+        const width_cm = detail.largura || null;
+        const height_cm = detail.altura || null;
+        const depth_cm = detail.profundidade || null;
+
+        if (weight_kg == null && width_cm == null && height_cm == null && depth_cm == null) {
+            throw new Error('O produto correspondente no Bling não possui dimensões cadastradas.');
+        }
+
+        // 3. Update Model
+        const { error: updateErr } = await supabase
+            .from('models')
+            .update({ weight_kg, width_cm, height_cm, depth_cm })
+            .eq('id', modelId)
+            .eq('company_id', companyId);
+
+        if (updateErr) throw new Error('Falha ao salvar as dimensões importadas no modelo local.');
+
+        return { ok: true, dimensions: { weight_kg, width_cm, height_cm, depth_cm } };
+    } catch (e: any) {
+        throw new Error(e.message || 'Erro ao puxar dimensões do Bling');
+    }
+}
+
 export const blingService = {
     getValidToken,
     fetchAllBlingProducts,
@@ -982,5 +1032,6 @@ export const blingService = {
     importBlingProducts,
     checkExistingBlingProducts,
     pushModelDimensionsToBling,
+    pullModelDimensionsFromBling,
 };
 

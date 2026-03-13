@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
@@ -57,6 +57,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [syncingBling, setSyncingBling] = useState(false);
+    const [pullingBling, setPullingBling] = useState(false);
     const [prices, setPrices] = useState<PriceState>({
         price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0,
     });
@@ -136,6 +137,20 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
             toast.error(e.message || 'Erro ao sincronizar com o Bling');
         } finally {
             setSyncingBling(false);
+        }
+    }
+
+    async function handlePullBling() {
+        setPullingBling(true);
+        try {
+            const res = await blingService.pullModelDimensionsFromBling(model.id);
+            if (res.ok) {
+                toast.success('Medidas atualizadas com sucesso a partir do Bling!');
+            }
+        } catch (e: any) {
+            toast.error(e.message || 'Erro ao puxar dimensões do Bling');
+        } finally {
+            setPullingBling(false);
         }
     }
 
@@ -230,10 +245,18 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1">
                         <button
+                            onClick={handlePullBling}
+                            disabled={pullingBling || syncingBling}
+                            className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Puxar medidas do Bling para o Sistema"
+                        >
+                            {pullingBling ? <Loader2 size={16} className="animate-spin" /> : <DownloadCloud size={16} />}
+                        </button>
+                        <button
                             onClick={handleSyncBling}
-                            disabled={syncingBling}
+                            disabled={syncingBling || pullingBling}
                             className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
-                            title="Sincronizar medidas com Bling"
+                            title="Enviar medidas do Sistema para o Bling"
                         >
                             {syncingBling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
                         </button>
