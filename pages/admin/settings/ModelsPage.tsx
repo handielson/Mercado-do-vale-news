@@ -628,6 +628,7 @@ export function ModelsPage() {
                     { label: 'Categoria', path: '/admin/settings/categories' },
                     { label: 'Marca', path: '/admin/settings/brands' },
                     { label: 'Modelo', path: '/admin/settings/models' },
+                    { label: 'Integração Bling', path: '/admin/settings/bling' },
                     { label: 'Produto', path: '/admin/products/new' },
                 ]}
                 currentStep={2}
