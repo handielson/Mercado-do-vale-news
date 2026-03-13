@@ -916,10 +916,10 @@ export async function importBlingProducts(
 export async function pushModelDimensionsToBling(modelId: string): Promise<{ ok: boolean; results?: any[]; error?: string }> {
     const companyId = await getCompanyId();
 
-    // 1. Fetch Model dimensions
+    // 1. Fetch Model dimensions from template_values
     const { data: model, error: modelErr } = await supabase
         .from('models')
-        .select('name, weight_kg, width_cm, height_cm, depth_cm')
+        .select('name, template_values')
         .eq('id', modelId)
         .eq('company_id', companyId)
         .single();
@@ -928,9 +928,14 @@ export async function pushModelDimensionsToBling(modelId: string): Promise<{ ok:
         throw new Error('Modelo não encontrado ou erro ao buscar.');
     }
 
-    const { weight_kg, width_cm, height_cm, depth_cm } = model;
+    const { template_values } = model;
+    const weight_kg = template_values?.['weight_kg'];
+    const width_cm = template_values?.['dimensions.width_cm'];
+    const height_cm = template_values?.['dimensions.height_cm'];
+    const depth_cm = template_values?.['dimensions.depth_cm'];
+
     if (weight_kg == null && width_cm == null && height_cm == null && depth_cm == null) {
-        throw new Error('O modelo não possui dimensões cadastradas para sincronizar.');
+        throw new Error('O modelo não possui dimensões cadastradas no Template para sincronizar.');
     }
 
     // 2. Fetch all unique bling_ids associated with this model's products
@@ -1010,10 +1015,26 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
             throw new Error('O produto correspondente no Bling não possui dimensões cadastradas.');
         }
 
-        // 3. Update Model
+        // 3. Fetch existing template_values first so we don't overwrite other fields
+        const { data: existingModel } = await supabase
+            .from('models')
+            .select('template_values')
+            .eq('id', modelId)
+            .eq('company_id', companyId)
+            .single();
+
+        const newTemplateValues = {
+            ...(existingModel?.template_values || {}),
+            'weight_kg': weight_kg,
+            'dimensions.width_cm': width_cm,
+            'dimensions.height_cm': height_cm,
+            'dimensions.depth_cm': depth_cm
+        };
+
+        // 4. Update Model
         const { error: updateErr } = await supabase
             .from('models')
-            .update({ weight_kg, width_cm, height_cm, depth_cm })
+            .update({ template_values: newTemplateValues })
             .eq('id', modelId)
             .eq('company_id', companyId);
 
