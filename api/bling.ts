@@ -449,6 +449,36 @@ export default async function handler(req: any, res: any) {
         }
     }
 
+    // ─── FIX-PROFILE: insere/atualiza o perfil do usuário admin ─────────────
+    if (resource === 'fix-profile') {
+        if (req.method !== 'POST') return res.status(405).end();
+        try {
+            const { userId } = req.body;
+            if (!userId) return res.status(400).json({ error: 'userId is required' });
+            const srKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+                || process.env.SUPABASE_SERVICE_ROLE_KEY
+                || process.env.VITE_SUPABASE_ANON_KEY
+                || process.env.SUPABASE_ANON_KEY!;
+            const supabase = createClient(supabaseUrl, srKey);
+            // Busca o company_id da empresa
+            const { data: company } = await supabase
+                .from('companies')
+                .select('id')
+                .eq('slug', 'mercado-do-vale')
+                .single();
+            if (!company) return res.status(404).json({ error: 'Company not found' });
+            // Upsert do perfil
+            const { data, error } = await supabase
+                .from('profiles')
+                .upsert({ id: userId, company_id: company.id }, { onConflict: 'id' })
+                .select();
+            if (error) return res.status(500).json({ ok: false, error: error.message });
+            return res.status(200).json({ ok: true, profile: data?.[0], company_id: company.id });
+        } catch (err: any) {
+            return res.status(500).json({ error: err.message });
+        }
+    }
+
     // ─── DEBUG-PRODUCT: inspeciona payload cru do Bling ────────────
     if (resource === 'debug-product') {
         if (req.method !== 'GET') return res.status(405).end();
