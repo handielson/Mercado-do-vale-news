@@ -58,6 +58,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
     const [saved, setSaved] = useState(false);
     const [syncingBling, setSyncingBling] = useState(false);
     const [pullingBling, setPullingBling] = useState(false);
+    const [expanded, setExpanded] = useState(false);
     const [prices, setPrices] = useState<PriceState>({
         price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0,
     });
@@ -179,7 +180,15 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
             <tr className={`transition-colors ${rowBg} hover:brightness-95`}>
                 {/* Marca */}
                 <td className="px-4 py-2.5 text-sm font-medium text-slate-600 whitespace-nowrap">
-                    {brandName}
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setExpanded(!expanded)}
+                            className="p-1 hover:bg-slate-200 rounded transition-colors text-slate-400"
+                        >
+                            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                        {brandName}
+                    </div>
                 </td>
 
                 {/* Modelo */}
@@ -279,35 +288,37 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
             </tr>
 
             {/* ── Linha expandida: Slug + Medidas ───────────────────── */}
-            <tr className={`border-b border-slate-200 ${rowBg}`}>
-                <td colSpan={9} className="px-6 py-2.5">
-                    <div className="flex flex-wrap items-center gap-6">
-                        {/* Slug */}
-                        <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Slug:</span>
-                            <code className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs text-slate-600">
-                                {model.slug}
-                            </code>
-                        </div>
+            {expanded && (
+                <tr className={`border-b border-slate-200 ${rowBg}`}>
+                    <td colSpan={9} className="px-6 py-2.5">
+                        <div className="flex flex-wrap items-center gap-6">
+                            {/* Slug */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Slug:</span>
+                                <code className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs text-slate-600">
+                                    {model.slug}
+                                </code>
+                            </div>
 
-                        {/* Peso */}
-                        <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Peso:</span>
-                            <span className="text-xs text-slate-600">
-                                {model.template_values?.weight_kg || '0'} kg
-                            </span>
-                        </div>
+                            {/* Peso */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Peso:</span>
+                                <span className="text-xs text-slate-600">
+                                    {model.template_values?.weight_kg || '0'} kg
+                                </span>
+                            </div>
 
-                        {/* Dimensões */}
-                        <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Dimensões (LxAxP):</span>
-                            <span className="text-xs text-slate-600">
-                                {model.template_values?.['dimensions.width_cm'] || '0'} x {model.template_values?.['dimensions.height_cm'] || '0'} x {model.template_values?.['dimensions.depth_cm'] || '0'} cm
-                            </span>
+                            {/* Dimensões */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Dimensões (LxAxP):</span>
+                                <span className="text-xs text-slate-600">
+                                    {model.template_values?.['dimensions.width_cm'] || '0'} x {model.template_values?.['dimensions.height_cm'] || '0'} x {model.template_values?.['dimensions.depth_cm'] || '0'} cm
+                                </span>
+                            </div>
                         </div>
-                    </div>
-                </td>
-            </tr>
+                    </td>
+                </tr>
+            )}
         </>
     );
 }
