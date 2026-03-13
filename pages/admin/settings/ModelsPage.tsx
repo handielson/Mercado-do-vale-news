@@ -48,10 +48,10 @@ interface ModelRowProps {
     index: number;
     onEdit: (m: Model) => void;
     onDelete: (m: Model) => void;
+    onRefresh: () => void;
 }
 
-function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) {
-    const [expanded, setExpanded] = useState(false);
+function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: ModelRowProps) {
     const [products, setProducts] = useState<ProductRow[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -146,6 +146,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
             const res = await blingService.pullModelDimensionsFromBling(model.id);
             if (res.ok) {
                 toast.success('Medidas atualizadas com sucesso a partir do Bling!');
+                onRefresh();
             }
         } catch (e: any) {
             toast.error(e.message || 'Erro ao puxar dimensões do Bling');
@@ -171,12 +172,11 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
 
     const PRICE_KEYS: (keyof PriceState)[] = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
     const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/70';
-    const expandedBg = index % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100/60';
 
     return (
         <>
             {/* ── Linha principal ─────────────────────────────────────── */}
-            <tr className={`transition-colors ${expanded ? expandedBg : rowBg} hover:brightness-95`}>
+            <tr className={`transition-colors ${rowBg} hover:brightness-95`}>
                 {/* Marca */}
                 <td className="px-4 py-2.5 text-sm font-medium text-slate-600 whitespace-nowrap">
                     {brandName}
@@ -261,13 +261,6 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
                             {syncingBling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
                         </button>
                         <button
-                            onClick={() => setExpanded(v => !v)}
-                            className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Slug e Histórico"
-                        >
-                            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        </button>
-                        <button
                             onClick={() => onEdit(model)}
                             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                             title="Editar"
@@ -285,68 +278,36 @@ function ModelRow({ model, brandName, index, onEdit, onDelete }: ModelRowProps) 
                 </td>
             </tr>
 
-            {/* ── Linha expandida: Slug + Histórico ───────────────────── */}
-            {expanded && (
-                <tr className={`border-t border-slate-200 ${expandedBg}`}>
-                    <td colSpan={8} className="px-6 py-3 space-y-3">
+            {/* ── Linha expandida: Slug + Medidas ───────────────────── */}
+            <tr className={`border-b border-slate-200 ${rowBg}`}>
+                <td colSpan={9} className="px-6 py-2.5">
+                    <div className="flex flex-wrap items-center gap-6">
                         {/* Slug */}
                         <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Slug:</span>
-                            <code className="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs text-slate-700">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Slug:</span>
+                            <code className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs text-slate-600">
                                 {model.slug}
                             </code>
                         </div>
 
-                        {/* Histórico por produto */}
-                        {products.length === 0 ? (
-                            <p className="text-xs text-slate-400">Nenhum produto ativo para este modelo.</p>
-                        ) : (
-                            <div className="space-y-1">
-                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                    Produtos ({products.length})
-                                </p>
-                                {products.map(p => (
-                                    <div key={p.id} className="border border-slate-200 rounded-lg bg-white overflow-hidden">
-                                        <button
-                                            className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
-                                            onClick={() => toggleHistory(p.id)}
-                                        >
-                                            <Clock size={13} className="text-slate-400 shrink-0" />
-                                            <span className="text-xs text-slate-700 flex-1 truncate">{p.name}</span>
-                                            <span className="text-xs text-slate-400">Varejo: {fmt(p.price_retail)}</span>
-                                            <span className="text-xs text-blue-500 ml-1">
-                                                {expandedHistoryId === p.id ? 'fechar ▴' : 'histórico ▾'}
-                                            </span>
-                                        </button>
+                        {/* Peso */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Peso:</span>
+                            <span className="text-xs text-slate-600">
+                                {model.template_values?.weight_kg || '0'} kg
+                            </span>
+                        </div>
 
-                                        {expandedHistoryId === p.id && (
-                                            <div className="px-3 pb-3 border-t border-slate-100">
-                                                {!history[p.id] ? (
-                                                    <p className="text-xs text-slate-400 py-1">Carregando…</p>
-                                                ) : history[p.id].length === 0 ? (
-                                                    <p className="text-xs text-slate-400 py-1">Nenhum histórico registrado.</p>
-                                                ) : (
-                                                    <div className="space-y-1 mt-2">
-                                                        {history[p.id].map(h => (
-                                                            <div key={h.id} className="grid grid-cols-[auto_1fr_1fr_1fr_1fr] gap-2 items-center text-xs py-1 border-b border-slate-100 last:border-0">
-                                                                <span className="text-slate-400 whitespace-nowrap">{dateLabel(h.changed_at)}</span>
-                                                                <span className="text-slate-600">Custo: {fmt(h.price_cost)}</span>
-                                                                <span className="text-green-700">Varejo: {fmt(h.price_retail)}</span>
-                                                                <span className="text-blue-700">Revenda: {fmt(h.price_reseller)}</span>
-                                                                <span className="text-orange-700">Atacado: {fmt(h.price_wholesale)}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </td>
-                </tr>
-            )}
+                        {/* Dimensões */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Dimensões (LxAxP):</span>
+                            <span className="text-xs text-slate-600">
+                                {model.template_values?.dimensions?.width_cm || '0'} x {model.template_values?.dimensions?.height_cm || '0'} x {model.template_values?.dimensions?.depth_cm || '0'} cm
+                            </span>
+                        </div>
+                    </div>
+                </td>
+            </tr>
         </>
     );
 }
@@ -555,6 +516,7 @@ export function ModelsPage() {
                                     brandName={getBrandName(model.brand_id)}
                                     onEdit={handleEdit}
                                     onDelete={handleDelete}
+                                    onRefresh={loadData}
                                 />
                             ))
                         )}
