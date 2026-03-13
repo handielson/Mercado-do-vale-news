@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud, RefreshCw } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
@@ -59,6 +59,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
     const [saved, setSaved] = useState(false);
     const [syncingBling, setSyncingBling] = useState(false);
     const [pullingBling, setPullingBling] = useState(false);
+    const [reimporting, setReimporting] = useState(false);
     const [expanded, setExpanded] = useState(false);
     const [prices, setPrices] = useState<PriceState>({
         price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0,
@@ -154,6 +155,19 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
             toast.error(e.message || 'Erro ao puxar dimensões do Bling');
         } finally {
             setPullingBling(false);
+        }
+    }
+
+    async function handleReimportBling() {
+        setReimporting(true);
+        try {
+            const count = await blingService.reimportModelProductsFromBling(model.id);
+            toast.success(`Foram re-sincronizados ${count} variação(ões) com o Bling com sucesso!`);
+            onRefresh();
+        } catch (e: any) {
+            toast.error(e.message || 'Erro ao sincronizar produtos com o Bling');
+        } finally {
+            setReimporting(false);
         }
     }
 
@@ -256,7 +270,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
                     <div className="flex items-center justify-end gap-1">
                         <button
                             onClick={handlePullBling}
-                            disabled={pullingBling || syncingBling}
+                            disabled={pullingBling || syncingBling || reimporting}
                             className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors disabled:opacity-50"
                             title="Puxar medidas do Bling para o Sistema"
                         >
@@ -264,11 +278,19 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
                         </button>
                         <button
                             onClick={handleSyncBling}
-                            disabled={syncingBling || pullingBling}
+                            disabled={syncingBling || pullingBling || reimporting}
                             className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
                             title="Enviar medidas do Sistema para o Bling"
                         >
                             {syncingBling ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                        </button>
+                        <button
+                            onClick={handleReimportBling}
+                            disabled={reimporting || syncingBling || pullingBling}
+                            className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Re-sincronizar SKUs (Bling -> Sistema)"
+                        >
+                            {reimporting ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
                         </button>
                         <button
                             onClick={() => onEdit(model)}

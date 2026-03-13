@@ -1047,6 +1047,40 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
     }
 }
 
+/** 
+ * Reimporta/Sincroniza os detalhes vitais (SKU, EAN) dos produtos de um modelo específico 
+ * direto do Bling para resolver falhas de importação antiga sem SKU.
+ */
+export async function reimportModelProductsFromBling(modelId: string): Promise<number> {
+    const { data: products, error } = await supabase
+        .from('products')
+        .select('id, bling_id')
+        .eq('model_id', modelId)
+        .not('bling_id', 'is', null);
+        
+    if (error) throw new Error('Falha ao buscar produtos no banco de dados para reimportação.');
+    if (!products || products.length === 0) throw new Error('Nenhum produto com ID do Bling encontrado neste modelo.');
+
+    let count = 0;
+    for (const p of products) {
+        const detail = await fetchBlingProductDetail(Number(p.bling_id));
+        if (!detail) continue;
+
+        // Atualiza campos-chave para corrigir problemas de importação (SKU, EAN, Custo, Preços base)
+        const updateData: any = {};
+        if (detail.codigo) updateData.sku = detail.codigo;
+        if (detail.gtin) updateData.ean = detail.gtin;
+        if (detail.precoCusto) updateData.price_cost = Math.round(detail.precoCusto * 100);
+        // Não sobrescrever nome, categoria para não estragar edições passadas do usuário.
+        
+        if (Object.keys(updateData).length > 0) {
+            await supabase.from('products').update(updateData).eq('id', p.id);
+            count++;
+        }
+    }
+    return count;
+}
+
 export const blingService = {
     getValidToken,
     fetchAllBlingProducts,
@@ -1055,5 +1089,6 @@ export const blingService = {
     checkExistingBlingProducts,
     pushModelDimensionsToBling,
     pullModelDimensionsFromBling,
+    reimportModelProductsFromBling,
 };
 
