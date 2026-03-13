@@ -1071,6 +1071,7 @@ export async function reimportModelProductsFromBling(modelId: string): Promise<n
         if (detail.codigo) updateData.sku = detail.codigo;
         if (detail.gtin) updateData.ean = detail.gtin;
         if (detail.precoCusto) updateData.price_cost = Math.round(detail.precoCusto * 100);
+        if (detail.preco) updateData.price_retail = Math.round(detail.preco * 100);
         // Não sobrescrever nome, categoria para não estragar edições passadas do usuário.
         
         if (Object.keys(updateData).length > 0) {
