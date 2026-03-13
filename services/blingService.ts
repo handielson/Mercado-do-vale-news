@@ -678,6 +678,24 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
 
 // ------- Search specific products in Bling -------
 
+export async function checkExistingBlingProducts(blingIds: number[]): Promise<Set<number>> {
+    if (blingIds.length === 0) return new Set();
+    const companyId = await getCompanyId();
+
+    const { data, error } = await supabase
+        .from('products')
+        .select('bling_id')
+        .eq('company_id', companyId)
+        .in('bling_id', blingIds);
+
+    if (error) {
+        console.error('[checkExistingBlingProducts] Falha:', error.message);
+        return new Set();
+    }
+
+    return new Set(data.filter(p => p.bling_id != null).map(p => p.bling_id));
+}
+
 export async function searchBlingProducts(query: string): Promise<BlingProduct[]> {
     const accessToken = await getValidToken();
 
@@ -900,4 +918,6 @@ export const blingService = {
     fetchAllBlingProducts,
     searchBlingProducts,
     importBlingProducts,
+    checkExistingBlingProducts,
 };
+

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
-import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings, ColorMapping, loadColorMappings, saveColorMappings } from '../../../services/blingService';
+import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings, ColorMapping, loadColorMappings, saveColorMappings, blingService } from '../../../services/blingService';
 import { categoryService } from '../../../services/categories';
 import { modelService } from '../../../services/models-new';
 import { colorService } from '../../../services/colors';
@@ -85,6 +85,7 @@ export default function BlingPage() {
     const [fetching, setFetching] = useState(false);
     const [importing, setImporting] = useState(false);
     const [blingProducts, setBlingProducts] = useState<BlingProduct[]>([]);
+    const [existingBlingIds, setExistingBlingIds] = useState<Set<number>>(new Set());
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [productSearch, setProductSearch] = useState('');
     const [blingSearch, setBlingSearch] = useState('');
@@ -296,7 +297,14 @@ export default function BlingPage() {
             }
 
             setBlingProducts(products);
-            const activeIds = new Set(products.filter(p => p.situacao === 'A').map(p => p.id));
+
+            // Verifica quais já existem no sistema
+            const ids = products.map(p => p.id);
+            const existing = await blingService.checkExistingBlingProducts(ids);
+            setExistingBlingIds(existing);
+
+            // Seleciona por padrão apenas os ativos E não importados
+            const activeIds = new Set(products.filter(p => p.situacao === 'A' && !existing.has(p.id)).map(p => p.id));
             setSelectedIds(activeIds);
         } catch (err: any) {
             toast.error('Erro ao buscar produtos: ' + err.message);
@@ -354,10 +362,14 @@ export default function BlingPage() {
     );
 
     function toggleSelectAll() {
-        const allSelected = filteredProducts.every(p => selectedIds.has(p.id));
+        // We only consider products that are NOT already existing for the "Select All" logic.
+        // If they want to select an existing product, they must do it individually.
+        const nonExistingFiltered = filteredProducts.filter(p => !existingBlingIds.has(p.id));
+        const allSelected = nonExistingFiltered.length > 0 && nonExistingFiltered.every(p => selectedIds.has(p.id));
+
         setSelectedIds(prev => {
             const next = new Set(prev);
-            filteredProducts.forEach(p => allSelected ? next.delete(p.id) : next.add(p.id));
+            nonExistingFiltered.forEach(p => allSelected ? next.delete(p.id) : next.add(p.id));
             return next;
         });
     }
@@ -820,10 +832,11 @@ export default function BlingPage() {
                                                         const detail = productDetails.get(p.id);
                                                         const isLoadingDetail = loadingDetailId === p.id;
                                                         const displayProduct = detail || p;
+                                                        const isExisting = existingBlingIds.has(p.id);
                                                         return (
-                                                            <div key={p.id} className="border-b border-slate-100 last:border-0">
+                                                            <div key={p.id} className={`border-b border-slate-100 last:border-0 ${isExisting ? 'opacity-70 bg-slate-50/50' : ''}`}>
                                                                 {/* Summary row */}
-                                                                <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+                                                                <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors">
                                                                     <input
                                                                         type="checkbox"
                                                                         checked={selectedIds.has(p.id)}
@@ -842,10 +855,17 @@ export default function BlingPage() {
                                                                         {displayProduct.preco != null && (
                                                                             <p className="text-sm font-semibold text-slate-700">R$ {displayProduct.preco.toFixed(2).replace('.', ',')}</p>
                                                                         )}
-                                                                        <p className={`text-xs font-medium ${displayProduct.stock_quantity > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
-                                                                            {detail ? displayProduct.stock_quantity : p.stock_quantity} estoque
-                                                                        </p>
-                                                                        <span className={`text-xs font-medium ${displayProduct.situacao === 'A' ? 'text-green-600' : 'text-slate-400'}`}>
+                                                                        <div className="flex items-center justify-end gap-2 mt-0.5">
+                                                                            {isExisting && (
+                                                                                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                                                                    Já importado
+                                                                                </span>
+                                                                            )}
+                                                                            <p className={`text-xs font-medium ${displayProduct.stock_quantity > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                                                {detail ? displayProduct.stock_quantity : p.stock_quantity} estoque
+                                                                            </p>
+                                                                        </div>
+                                                                        <span className={`text-xs font-medium mt-1 inline-block ${displayProduct.situacao === 'A' ? 'text-green-600' : 'text-slate-400'}`}>
                                                                             {displayProduct.situacao === 'A' ? 'Ativo' : 'Inativo'}
                                                                         </span>
                                                                     </div>
