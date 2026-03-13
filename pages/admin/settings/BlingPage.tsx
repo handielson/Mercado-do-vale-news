@@ -642,6 +642,15 @@ export default function BlingPage() {
                                         className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm bg-slate-50"
                                         placeholder="https://www.bling.com.br/b/dashboard"
                                     />
+                                    <a
+                                        href={blingDashboardUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex-shrink-0 p-3 hover:bg-slate-100 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                                        title="Acessar link"
+                                    >
+                                        <ExternalLink className="w-5 h-5" />
+                                    </a>
                                 </div>
                             </div>
 
