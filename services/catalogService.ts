@@ -106,17 +106,17 @@ export const catalogService = {
         // Ordenação dinâmica
         switch (filters?.sortBy) {
             case 'price_asc':
-                query = query.order('price_retail', { ascending: true });
+                query = query.order('price_retail', { ascending: true }).order('id', { ascending: true });
                 break;
             case 'price_desc':
-                query = query.order('price_retail', { ascending: false });
+                query = query.order('price_retail', { ascending: false }).order('id', { ascending: true });
                 break;
             case 'featured':
-                query = query.order('featured', { ascending: false }).order('created_at', { ascending: false });
+                query = query.order('featured', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: true });
                 break;
             case 'recent':
             default:
-                query = query.order('featured', { ascending: false }).order('created_at', { ascending: false });
+                query = query.order('featured', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: true });
                 break;
         }
 
@@ -329,7 +329,8 @@ export const catalogService = {
             .select('*')
             .eq('category_id', category)
             .order('featured', { ascending: false })
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: true });
 
         if (error) throw error;
 
