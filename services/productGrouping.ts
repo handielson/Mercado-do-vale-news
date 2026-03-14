@@ -72,12 +72,25 @@ function generateGroupKey(product: CatalogProduct): string {
     // Use model_id (UUID) as the grouping key — most reliable
     if (product.model_id) return product.model_id;
 
-    // Fallback: brand + model name (desnormalized text, may not exist)
+    // Fallback: brand + base name
     const brand = product.brand || 'unknown';
-    const rawModel = product.model || product.name || 'unknown';
+    
+    // Prioritize product.name over product.model because Bling often sets model to a generic category (e.g., "Capa de Silicone")
+    // If we use that generic category, ALL silicone covers merge into one card.
+    let baseName = product.name || product.model || 'unknown';
+    
+    // Bling variants are usually appended with " - " (e.g., "Capa 360 - Azul").
+    // We strip the last " - [Variant]" part so siblings group together by their true base name.
+    if (baseName.includes(' - ')) {
+        const parts = baseName.split(' - ');
+        if (parts.length > 1) {
+            parts.pop(); // Remove the last part (the variant/color)
+            baseName = parts.join(' - ');
+        }
+    }
+    
     // Normaliza: remove artigos PT iniciais ("o ", "a ", "os ", "as ") para agrupar
-    // "O Suporte Carona Universal" e "Suporte Carona Universal" na mesma chave
-    const model = rawModel.replace(/^(o|a|os|as|um|uma)\s+/i, '');
+    const model = baseName.replace(/^(o|a|os|as|um|uma)\s+/i, '');
     return `${brand}_${model}`.toLowerCase().replace(/\s+/g, '-');
 }
 
