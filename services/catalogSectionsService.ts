@@ -217,6 +217,28 @@ class CatalogSectionsService {
                 query = query.lte('price_retail', section.filter_max_price);
             }
 
+            // Get global catalog settings to apply DB-level filtering BEFORE pagination
+            const settings = await catalogConfigService.getSettings();
+
+            // Aplicar regras globais (ativo, estoque, preço) no DB para não quebrar o .limit()
+            if (settings.hide_inactive) {
+                query = query.eq('status', 'active');
+            } else {
+                query = query.eq('status', 'active');
+            }
+
+            if (settings.hide_out_of_stock) {
+                query = query.gt('stock_quantity', 0);
+            }
+
+            if (settings.hide_zero_price) {
+                query = query.gt('price_retail', 0);
+            }
+
+            if (settings.min_stock_to_show && settings.min_stock_to_show > 0) {
+                query = query.gte('stock_quantity', settings.min_stock_to_show);
+            }
+
             // Aplicar ordenação
             query = this.applySorting(query, section.sort_by, section.sort_direction);
 

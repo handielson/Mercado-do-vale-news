@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { CatalogProduct, FilterState } from '@/types/catalog';
+import { catalogConfigService } from '@/services/catalogConfigService';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos (Para revalidação silenciosa)
@@ -62,8 +63,30 @@ export const catalogService = {
         // Construir query
         let query = supabase
             .from('products')
-            .select('*', { count: 'exact' })
-            .eq('status', 'active'); // Só produtos ativos (evita desperate slots com inativos)
+            .select('*', { count: 'exact' });
+
+        // Get global catalog settings to apply DB-level filtering BEFORE pagination
+        const settings = await catalogConfigService.getSettings();
+
+        // Aplicar regras de visibilidade globais
+        if (settings.hide_inactive) {
+            query = query.eq('status', 'active');
+        } else {
+            // Default rule: always filter active to avoid desperate slots unless disabled
+            query = query.eq('status', 'active');
+        }
+
+        if (settings.hide_out_of_stock) {
+            query = query.gt('stock_quantity', 0);
+        }
+
+        if (settings.hide_zero_price) {
+            query = query.gt('price_retail', 0);
+        }
+
+        if (settings.min_stock_to_show && settings.min_stock_to_show > 0) {
+            query = query.gte('stock_quantity', settings.min_stock_to_show);
+        }
 
         // Aplicar filtros
         if (filters?.search) {
