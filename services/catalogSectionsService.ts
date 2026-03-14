@@ -242,8 +242,10 @@ class CatalogSectionsService {
             // Aplicar ordenação
             query = this.applySorting(query, section.sort_by, section.sort_direction);
 
-            // Limitar quantidade
-            query = query.limit(section.max_products);
+            // Limitar quantidade (Buscamos muito mais produtos brutos porque eles serão agrupados em cards no frontend)
+            // Se o usuário quer 12 cards, precisamos de até 120 produtos (cores/capacidades)
+            const fetchLimit = Math.min((section.max_products || 12) * 10, 200);
+            query = query.limit(fetchLimit);
 
             const { data, error } = await query;
 
@@ -256,7 +258,7 @@ class CatalogSectionsService {
                     .from('products')
                     .select('*')
                     .in('id', section.pinned_product_ids)
-                    .limit(section.max_products);
+                    .limit(fetchLimit);
 
                 if (!pinnedError && pinnedData) {
                     // Preserva a ordem definida pelo usuário
