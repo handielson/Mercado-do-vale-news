@@ -71,7 +71,7 @@ function CatalogContent() {
         hasMore,
         filterStats
     } = useCatalog({
-        pageSize: 48,
+        pageSize: 150, // Alto, pois ao agrupar os cards, 150 produtos brutos podem virar apenas 10 ou 15 cards únicos
         initialSearchQuery,
         initialCategory,
         bypassCache: customer?.customer_type === 'ADMIN'
