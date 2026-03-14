@@ -1,5 +1,5 @@
 import type { CatalogProduct } from '@/types/catalog';
-import { COLOR_MAP } from './colors';
+import { getColorHex } from './colors';
 
 /**
  * Product variant specifications
@@ -77,7 +77,7 @@ export function extractVariants(products: CatalogProduct[]): ProductVariants {
             if (!colors.has(colorName)) {
                 colors.set(colorName, {
                     name: colorName,
-                hex: product.specs.color_hex || COLOR_MAP[colorName] || '#9CA3AF'
+                    hex: product.specs.color_hex || getColorHex(colorName) || '#9CA3AF'
                 });
             }
         }

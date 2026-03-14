@@ -1,6 +1,6 @@
 import type { CatalogProduct, ProductVariant, ProductGroup } from '@/types/catalog';
 import { ProductStatus } from '@/utils/field-standards';
-import { COLOR_MAP } from './colors';
+import { getColorHex } from './colors';
 
 /**
  * Color option with hex value
@@ -139,7 +139,7 @@ export function groupProductsByVariants(products: CatalogProduct[], includeOutOf
                     const colorName = product.specs.color;
                     const colorOption: ColorOption = {
                         name: colorName,
-                        hex: colorHexMap[colorName] || product.specs.color_hex || COLOR_MAP[colorName] || '#9CA3AF'
+                        hex: colorHexMap[colorName] || product.specs.color_hex || getColorHex(colorName) || '#9CA3AF'
                     };
 
                     colorsMap.set(colorName, colorOption);

@@ -316,10 +316,15 @@ async function listActive(): Promise<Color[]> {
 /**
  * Get color hex code (from entity or COLOR_MAP)
  */
-function getColorHex(colorName: string): string | undefined {
-    // This is a synchronous helper, so we can't query DB
-    // It's used for preview only, fallback to COLOR_MAP
-    return COLOR_MAP[colorName];
+export function getColorHex(colorName: string): string | undefined {
+    if (!colorName) return undefined;
+    // Exact match first
+    if (COLOR_MAP[colorName]) return COLOR_MAP[colorName];
+    
+    // Case-insensitive fallback
+    const lowerName = colorName.toLowerCase().trim();
+    const key = Object.keys(COLOR_MAP).find(k => k.toLowerCase().trim() === lowerName);
+    return key ? COLOR_MAP[key] : undefined;
 }
 
 export const colorService = {
