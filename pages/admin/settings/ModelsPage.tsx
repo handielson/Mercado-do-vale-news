@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud, RefreshCw } from 'lucide-react';
+import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud, RefreshCw, Sparkles } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
+import { BulkSeoModal } from '../../../components/settings/BulkSeoModal';
 import { NextStepBanner } from '../../../components/ui/NextStepBanner';
 import { supabase } from '../../../services/supabase';
 import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../../services/priceHistoryService';
@@ -47,12 +48,14 @@ interface ModelRowProps {
     model: Model;
     brandName: string;
     index: number;
+    isSelected: boolean;
+    onToggleSelect: (id: string) => void;
     onEdit: (m: Model) => void;
     onDelete: (m: Model) => void;
     onRefresh: () => void;
 }
 
-function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: ModelRowProps) {
+function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit, onDelete, onRefresh }: ModelRowProps) {
     const [products, setProducts] = useState<ProductRow[]>([]);
     const [loadingPrices, setLoadingPrices] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -188,11 +191,23 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
 
     const PRICE_KEYS: (keyof PriceState)[] = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
     const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/70';
+    
+    const hasSeo = Boolean(model.description?.trim() || model.template_values?.meta_title?.trim());
 
     return (
         <>
             {/* ── Linha principal ─────────────────────────────────────── */}
-            <tr className={`transition-colors ${rowBg} hover:brightness-95`}>
+            <tr className={`transition-colors ${rowBg} hover:brightness-95 ${isSelected ? 'bg-purple-50/50' : ''}`}>
+                {/* Seleção */}
+                <td className="px-4 py-2.5 whitespace-nowrap w-10">
+                    <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => onToggleSelect(model.id)}
+                        className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                    />
+                </td>
+
                 {/* Marca */}
                 <td className="px-4 py-2.5 text-sm font-medium text-slate-600 whitespace-nowrap">
                     <div className="flex items-center gap-2">
@@ -208,7 +223,14 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
 
                 {/* Modelo */}
                 <td className="px-4 py-2.5 text-sm font-semibold text-slate-800 whitespace-nowrap">
-                    {model.name}
+                    <div className="flex items-center gap-2">
+                        {model.name}
+                        {hasSeo && (
+                            <div title="SEO preenchido" className="flex items-center text-purple-600 bg-purple-50 p-1 rounded">
+                                <Sparkles size={14} />
+                            </div>
+                        )}
+                    </div>
                 </td>
 
                 {/* Preços — cada um em seu próprio <td>, Enter salva */}
@@ -313,7 +335,7 @@ function ModelRow({ model, brandName, index, onEdit, onDelete, onRefresh }: Mode
             {/* ── Linha expandida: Slug + Medidas ───────────────────── */}
             {expanded && (
                 <tr className={`border-b border-slate-200 ${rowBg}`}>
-                    <td colSpan={9} className="px-6 py-2.5">
+                    <td colSpan={10} className="px-6 py-2.5">
                         <div className="flex flex-wrap items-center gap-6">
                             {/* Slug */}
                             <div className="flex items-center gap-2">
@@ -402,8 +424,10 @@ export function ModelsPage() {
     const [brands, setBrands] = useState<Brand[]>([]);
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
+    const [seoModalOpen, setSeoModalOpen] = useState(false);
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
+    const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
 
     // ── Filtros ──
     const [search, setSearch] = useState('');
@@ -463,6 +487,21 @@ export function ModelsPage() {
             if (sortOrder === 'za') return b.name.localeCompare(a.name, 'pt-BR');
             return 0;
         });
+
+    const toggleSelectAll = () => {
+        if (selectedModelIds.size === filtered.length && filtered.length > 0) {
+            setSelectedModelIds(new Set());
+        } else {
+            setSelectedModelIds(new Set(filtered.map(m => m.id)));
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        const newSet = new Set(selectedModelIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedModelIds(newSet);
+    };
 
     if (loading) {
         return (
@@ -561,9 +600,21 @@ export function ModelsPage() {
                         </button>
                     )}
 
-                    <span className="text-xs text-slate-400 ml-auto whitespace-nowrap">
-                        {filtered.length} de {models.length} modelo{models.length !== 1 ? 's' : ''}
-                    </span>
+                    <div className="flex-1 flex justify-end items-center gap-3">
+                        <span className="text-xs text-slate-400 whitespace-nowrap">
+                            {filtered.length} de {models.length} modelo{models.length !== 1 ? 's' : ''}
+                        </span>
+                        
+                        {selectedModelIds.size > 0 && (
+                            <button
+                                onClick={() => setSeoModalOpen(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg text-xs font-bold transition-colors animate-in fade-in"
+                            >
+                                <Sparkles size={14} />
+                                SEO em Massa ({selectedModelIds.size})
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -572,6 +623,15 @@ export function ModelsPage() {
                 <table className="w-full relative">
                     <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
                         <tr>
+                            <th className="px-4 py-3 text-left w-10">
+                                <input
+                                    type="checkbox"
+                                    checked={filtered.length > 0 && selectedModelIds.size === filtered.length}
+                                    onChange={toggleSelectAll}
+                                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                    title="Selecionar todos os filtrados"
+                                />
+                            </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Marca</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Modelo</th>
                             <th className="px-2 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Custo</th>
@@ -586,7 +646,7 @@ export function ModelsPage() {
                     <tbody className="divide-y divide-slate-100">
                         {filtered.length === 0 ? (
                             <tr>
-                                <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
+                                <td colSpan={10} className="px-6 py-12 text-center text-slate-500">
                                     {models.length === 0 ? 'Nenhum modelo cadastrado' : 'Nenhum modelo encontrado para os filtros aplicados'}
                                 </td>
                             </tr>
@@ -597,6 +657,8 @@ export function ModelsPage() {
                                     model={model}
                                     index={i}
                                     brandName={getBrandName(model.brand_id)}
+                                    isSelected={selectedModelIds.has(model.id)}
+                                    onToggleSelect={toggleSelect}
                                     onEdit={handleEdit}
                                     onDelete={handleDelete}
                                     onRefresh={loadData}
@@ -640,6 +702,17 @@ export function ModelsPage() {
                 onClose={() => setModalOpen(false)}
                 onSave={loadData}
                 model={editingModel}
+            />
+
+            <BulkSeoModal
+                isOpen={seoModalOpen}
+                onClose={() => setSeoModalOpen(false)}
+                models={models.filter(m => selectedModelIds.has(m.id))}
+                brands={brands}
+                onSuccess={() => {
+                    setSelectedModelIds(new Set());
+                    loadData();
+                }}
             />
         </div>
     );

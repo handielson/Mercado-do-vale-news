@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
 import { ProductInput } from '../../../types/product';
 import { CurrencyInput } from '../../ui/CurrencyInput';
@@ -48,6 +48,47 @@ export function ProductPricing({ watch, setValue, modelId }: ProductPricingProps
     const priceRetail = watch('price_retail') || 0;
     const priceReseller = watch('price_reseller') || 0;
     const priceWholesale = watch('price_wholesale') || 0;
+    const categoryId = watch('category_id');
+
+    // --- Margens automáticas da categoria ---
+    const [marginWholesale, setMarginWholesale] = useState<number>(0);
+    const [marginReseller, setMarginReseller] = useState<number>(0);
+    const prevRetailRef = useRef(priceRetail);
+
+    useEffect(() => {
+        if (!categoryId) {
+            setMarginWholesale(0);
+            setMarginReseller(0);
+            return;
+        }
+        const fetchMargins = async () => {
+            const { data } = await supabase
+                .from('categories')
+                .select('margin_wholesale, margin_reseller')
+                .eq('id', categoryId)
+                .maybeSingle();
+            if (data) {
+                setMarginWholesale(data.margin_wholesale || 0);
+                setMarginReseller(data.margin_reseller || 0);
+            }
+        };
+        fetchMargins();
+    }, [categoryId]);
+
+    // Recalcula Atacado e Revenda sempre que o Varejo mudar (se houver margem configurada)
+    useEffect(() => {
+        if (priceRetail !== prevRetailRef.current) {
+            prevRetailRef.current = priceRetail;
+            if (priceRetail > 0) {
+                if (marginWholesale > 0) {
+                    setValue('price_wholesale', Math.round(priceRetail * (1 - (marginWholesale / 100))));
+                }
+                if (marginReseller > 0) {
+                    setValue('price_reseller', Math.round(priceRetail * (1 - (marginReseller / 100))));
+                }
+            }
+        }
+    }, [priceRetail, marginWholesale, marginReseller, setValue]);
 
     // --- Médias do estoque atual ---
     const [stockAverages, setStockAverages] = useState<StockAverages | null>(null);
@@ -136,6 +177,16 @@ export function ProductPricing({ watch, setValue, modelId }: ProductPricingProps
                 <DollarSign size={18} className="text-slate-600" />
                 <h3 className="font-semibold text-slate-800">Precificação</h3>
             </div>
+
+            {(marginWholesale > 0 || marginReseller > 0) && (
+                <div className="bg-blue-50 text-blue-800 text-sm px-4 py-2 rounded-lg border border-blue-200">
+                    💡 <strong>Auto-Preços ativado:</strong> Esta categoria possui margem automática. Ao preencher o Preço de Varejo, os preços abaixo serão calculados sozinhos.
+                    <div className="mt-1 flex gap-4 text-xs mt-1 text-blue-600">
+                        {marginWholesale > 0 && <span>Atacado: -{marginWholesale}%</span>}
+                        {marginReseller > 0 && <span>Revenda: -{marginReseller}%</span>}
+                    </div>
+                </div>
+            )}
 
             {/* Painel de Médias do Estoque Atual */}
             {modelId && (

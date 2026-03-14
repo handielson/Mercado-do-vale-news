@@ -97,6 +97,7 @@ export default function BlingPage() {
     const [importCategoryId, setImportCategoryId] = useState('');
     const [models, setModels] = useState<Model[]>([]);
     const [importModelId, setImportModelId] = useState('');
+    const [autoCreateModel, setAutoCreateModel] = useState(false);
     const [systemColors, setSystemColors] = useState<Color[]>([]);
     const [colorMappings, setColorMappings] = useState<ColorMapping[]>(loadColorMappings);
 
@@ -331,7 +332,7 @@ export default function BlingPage() {
         try {
             const result = await importBlingProducts(toImport, enabledFields, importCategoryId, (current, total) => {
                 setImportProgress({ current, total });
-            }, importModelId || undefined);
+            }, importModelId || undefined, autoCreateModel);
 
             setImportResult(result);
 
@@ -737,41 +738,59 @@ export default function BlingPage() {
                                         </div>
 
                                         {/* Default model selector */}
-                                        <div className="flex items-center gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50">
-                                            <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📱 Modelo padrão:</label>
-                                            <select
-                                                value={importModelId}
-                                                onChange={e => setImportModelId(e.target.value)}
-                                                className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                            >
-                                                <option value="">-- Nenhum modelo --</option>
-                                                {models.map(m => (
-                                                    <option key={m.id} value={m.id}>{m.name}</option>
-                                                ))}
-                                            </select>
-                                            {/* Atualizar lista */}
-                                            <button
-                                                type="button"
-                                                title="Atualizar modelos"
-                                                onClick={() => modelService.list().then(mods => {
-                                                    const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-                                                    setModels(sorted);
-                                                    if (sorted.length > 0) setImportModelId(sorted[0].id);
-                                                }).catch(() => { })}
-                                                className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
-                                            >
-                                                <RefreshCw className="w-3.5 h-3.5" />
-                                            </button>
-                                            {/* Atalho para criar modelo */}
-                                            <a
-                                                href="/admin/settings/models"
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                title="Cadastrar novo modelo (abre em nova aba)"
-                                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-colors text-xs font-semibold text-blue-600 whitespace-nowrap flex-shrink-0"
-                                            >
-                                                + Modelo
-                                            </a>
+                                        <div className="flex flex-col gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50">
+                                            <div className="flex items-center gap-2">
+                                                <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📱 Modelo padrão:</label>
+                                                <select
+                                                    value={importModelId}
+                                                    onChange={e => setImportModelId(e.target.value)}
+                                                    disabled={autoCreateModel}
+                                                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50 disabled:bg-slate-100"
+                                                >
+                                                    <option value="">-- Nenhum modelo --</option>
+                                                    {models.map(m => (
+                                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                                    ))}
+                                                </select>
+                                                {/* Atualizar lista */}
+                                                <button
+                                                    type="button"
+                                                    title="Atualizar modelos"
+                                                    onClick={() => modelService.list().then(mods => {
+                                                        const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                                                        setModels(sorted);
+                                                        if (sorted.length > 0 && !importModelId && !autoCreateModel) setImportModelId(sorted[0].id);
+                                                    }).catch(() => { })}
+                                                    className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
+                                                >
+                                                    <RefreshCw className="w-3.5 h-3.5" />
+                                                </button>
+                                                {/* Atalho para criar modelo */}
+                                                <a
+                                                    href="/admin/settings/models"
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    title="Cadastrar novo modelo (abre em nova aba)"
+                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-colors text-xs font-semibold text-blue-600 whitespace-nowrap flex-shrink-0"
+                                                >
+                                                    + Modelo
+                                                </a>
+                                            </div>
+                                            
+                                            <label className="flex items-center gap-2 cursor-pointer pt-2 border-t border-slate-200">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={autoCreateModel}
+                                                    onChange={e => {
+                                                        setAutoCreateModel(e.target.checked);
+                                                        if (e.target.checked) setImportModelId('');
+                                                    }}
+                                                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm font-medium text-slate-700">
+                                                    Criar marcas e modelos automaticamente <span className="font-normal text-slate-500">(baseado no nome do Bling)</span>
+                                                </span>
+                                            </label>
                                         </div>
 
 

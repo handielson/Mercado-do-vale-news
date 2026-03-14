@@ -1,5 +1,9 @@
 import { supabase } from './supabase';
 import { modelColorImagesService } from './model-color-images';
+import { modelService } from './models';
+import { brandService } from './brands';
+import { crossSellTagsService } from './cross-sell-tags';
+import { compressImage } from '../utils/image-compression';
 
 const BLING_API_BASE = 'https://www.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -537,7 +541,7 @@ function extractVariacaoFromName(nome: string): string | undefined {
 /** Mapeia TODOS os campos disponíveis do Bling para o banco — sem condicional.
  *  O campo `_color_id` é auxiliar (não vai para a tabela products).
  */
-function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string, modelId?: string): Record<string, any> {
+function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string, modelId?: string, marginWholesale: number = 0, marginReseller: number = 0): Record<string, any> {
     // variacaoNome vem da API quando o produto é uma variação explícita;
     // se não vier, tenta extrair padrões CHAVE:VALOR do próprio nome
     const variacaoNome: string | undefined =
@@ -556,14 +560,18 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
 
     const dim = item.dimensoes || {};
     const trib = item.tributacao || {};
-    const imagens = item.midia?.imagens?.internas || [];
-    const firstImg = imagens[0]?.link || imagens[0]?.url || null;
+    const imagens = item.midia?.imagens?.internas || item.imagens || [];
+    const firstImg = imagens[0]?.link || imagens[0]?.url || (typeof imagens[0] === 'string' ? imagens[0] : null);
 
     // pesoBruto pode estar no root do item (não dentro de dimensoes) — API Bling v3
     const pesoBruto = dim.pesoBruto || item.pesoBruto || null;
     const largura = dim.largura || null;
     const altura = dim.altura || null;
     const profundidade = dim.profundidade || null;
+
+    const basePrice = item.preco ? Math.round(item.preco * 100) : 0;
+    const wholesalePrice = item._precoAtacado ? Math.round(item._precoAtacado * 100) : (marginWholesale > 0 ? Math.round(basePrice * (1 - (marginWholesale / 100))) : basePrice);
+    const resellerPrice = item._precoRevenda ? Math.round(item._precoRevenda * 100) : (marginReseller > 0 ? Math.round(basePrice * (1 - (marginReseller / 100))) : basePrice);
 
     return {
         // Identificação
@@ -581,9 +589,9 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         // Categoria
         category_id: resolveCategoryId(item.categoria?.id, categoryId),
         // Preços (em centavos)
-        price_retail: item.preco ? Math.round(item.preco * 100) : 0,
-        price_reseller: item._precoRevenda ? Math.round(item._precoRevenda * 100) : (item.preco ? Math.round(item.preco * 100) : 0),
-        price_wholesale: item._precoAtacado ? Math.round(item._precoAtacado * 100) : (item.preco ? Math.round(item.preco * 100) : 0),
+        price_retail: basePrice,
+        price_reseller: resellerPrice,
+        price_wholesale: wholesalePrice,
         price_cost: item.precoCusto ? Math.round(item.precoCusto * 100) : null,
         // Fiscal
         ncm: trib.ncm || null,
@@ -799,14 +807,52 @@ function humanizeImportError(operation: string, rawMessage: string): string {
     return `Falha na ${operation}: ${rawMessage}`;
 }
 
+// Helper: Baixa a imagem via proxy, converte pra blob, comprime e retorna base64
+async function fetchAndCompressImage(url: string): Promise<string | null> {
+    try {
+        const proxyUrl = `/api/bling?resource=image-proxy&url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl);
+        if (!res.ok) return null;
+        
+        const blob = await res.blob();
+        const file = new File([blob], 'bling-image.jpg', { type: blob.type || 'image/jpeg' });
+        
+        const compressed = await compressImage(file);
+        return new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(compressed);
+        });
+    } catch (e) {
+        console.warn('Failed to fetch/compress Bling image:', e);
+        return null;
+    }
+}
+
 export async function importBlingProducts(
     selectedProducts: BlingProduct[],
     enabledFields: Set<string>,
     categoryId: string,
     onProgress: (current: number, total: number, result: Partial<ImportResult>) => void,
-    modelId?: string
+    modelId?: string,
+    autoCreateModel: boolean = false
 ): Promise<ImportResult> {
     const companyId = await getCompanyId();
+
+    // Fetch Category Margins
+    let marginWholesale = 0;
+    let marginReseller = 0;
+    if (categoryId) {
+        const { supabase } = await import('./supabase');
+        const { data: catData } = await supabase
+            .from('categories')
+            .select('margin_wholesale, margin_reseller')
+            .eq('id', categoryId)
+            .maybeSingle();
+        marginWholesale = catData?.margin_wholesale || 0;
+        marginReseller = catData?.margin_reseller || 0;
+    }
 
     const result: ImportResult = { created: 0, updated: 0, errors: [] };
     const total = selectedProducts.length;
@@ -823,6 +869,11 @@ export async function importBlingProducts(
         modelBrandName = (modelData?.brands as any)?.name || null;
         modelName = modelData?.name || null;
     }
+
+    // Caches for auto-create mode to avoid duplicate db lookups/inserts
+    const brandCache = new Map<string, string>(); // name -> id
+    const modelCache = new Map<string, string>(); // cacheKey -> id
+    const crossSellTagCache = new Set<string>(); // name defined
 
     for (let i = 0; i < selectedProducts.length; i++) {
 
@@ -857,10 +908,81 @@ export async function importBlingProducts(
                 stock_quantity: detail.stock_quantity ?? item.stock_quantity,
             } : item;
 
-            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId);
+            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId, marginWholesale, marginReseller);
+            let finalModelId = modelId;
 
-            // Fallback: if Bling didn't provide a brand, use the one from the selected model
-            if (!row.brand && modelBrandName) row.brand = modelBrandName;
+            // --- AUTO-CREATE MODEL LOGIC ---
+            if (autoCreateModel && !finalModelId) {
+                const brandName = enriched.marca || 'Diversos';
+                let newModelName = row.name || 'Produto sem nome';
+                
+                // Extrai apenas o modelo de dispositivo (ex: tudo após ' para ')
+                const paraIndex = newModelName.toLowerCase().lastIndexOf(' para ');
+                if (paraIndex !== -1) {
+                    newModelName = newModelName.substring(paraIndex + 6).trim();
+                }
+                
+                // 1. Resolve/Create Brand
+                let resolvedBrandId = brandCache.get(brandName);
+                if (!resolvedBrandId) {
+                    const brands = await brandService.listActive();
+                    const existingBrand = brands.find(b => b.name.toLowerCase() === brandName.toLowerCase());
+                    if (existingBrand) {
+                        resolvedBrandId = existingBrand.id;
+                    } else {
+                        const newBrand = await brandService.create({ name: brandName, active: true, warranty_days: 90 });
+                        resolvedBrandId = newBrand.id;
+                    }
+                    brandCache.set(brandName, resolvedBrandId);
+                }
+                
+                // 2. Resolve/Create Model
+                const cacheKey = `${resolvedBrandId}_${newModelName}`.toLowerCase();
+                let resolvedModelId = modelCache.get(cacheKey);
+                if (!resolvedModelId) {
+                    const models = await modelService.list();
+                    const existingModel = models.find(m => m.brand_id === resolvedBrandId && m.name.toLowerCase() === newModelName.toLowerCase());
+                    
+                    if (existingModel) {
+                        resolvedModelId = existingModel.id;
+                    } else {
+                        // Create Cross-Sell Tag
+                        if (!crossSellTagCache.has(newModelName.toLowerCase())) {
+                            try {
+                                await crossSellTagsService.create({ name: newModelName });
+                            } catch(e) { /* silently ignore if already exists but wasn't in cache */ }
+                            crossSellTagCache.add(newModelName.toLowerCase());
+                        }
+
+                        // Create Model with Dimensions and Tag
+                        const newModel = await modelService.create({
+                            name: newModelName,
+                            brand_id: resolvedBrandId,
+                            category_id: categoryId || undefined,
+                            active: true,
+                            template_values: {
+                                'weight_kg': enriched.pesoBruto,
+                                'dimensions.width_cm': enriched.dimensoes?.largura,
+                                'dimensions.height_cm': enriched.dimensoes?.altura,
+                                'dimensions.depth_cm': enriched.dimensoes?.profundidade,
+                                'tags_venda': [newModelName]
+                            }
+                        });
+                        resolvedModelId = newModel.id;
+                    }
+                    modelCache.set(cacheKey, resolvedModelId);
+                }
+                
+                finalModelId = resolvedModelId;
+                
+                // Set the brand to the inferred brand
+                row.brand = brandName;
+            }
+
+            // Fallback: if Bling didn't provide a brand, use the one from the selected model (only if we didn't just auto-create it)
+            if (!row.brand && modelBrandName && finalModelId === modelId) row.brand = modelBrandName;
+
+            row.model_id = finalModelId || null;
 
             operation = 'verificação de duplicata';
             const { data: existing, error: checkError } = await supabase
@@ -871,6 +993,18 @@ export async function importBlingProducts(
                 .maybeSingle();
 
             if (checkError) throw new Error(checkError.message);
+
+            // Fetch e Compress da imagem principal antes do Upsert
+            if (row.images && row.images.length > 0) {
+                const imgUrl = row.images[0];
+                if (imgUrl && imgUrl.startsWith('http')) {
+                    operation = 'download de imagem';
+                    const base64 = await fetchAndCompressImage(imgUrl);
+                    if (base64) {
+                        row.images = [base64];
+                    }
+                }
+            }
 
             // Extrai _color_id auxiliar antes de enviar para o banco
             const { _color_id: resolvedColorId, ...dbRow } = row;
@@ -1063,24 +1197,56 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
 export async function reimportModelProductsFromBling(modelId: string): Promise<number> {
     const { data: products, error } = await supabase
         .from('products')
-        .select('id, bling_id')
+        .select('id, bling_id, specs')
         .eq('model_id', modelId)
         .not('bling_id', 'is', null);
         
     if (error) throw new Error('Falha ao buscar produtos no banco de dados para reimportação.');
     if (!products || products.length === 0) throw new Error('Nenhum produto com ID do Bling encontrado neste modelo.');
 
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
     let count = 0;
     for (const p of products) {
+        // Wait 1000ms between requests to respect Bling's 3 req/sec limit
+        // (Since fetchBlingProductDetail can make 2 requests: parent + child)
+        await sleep(1000);
+        
         const detail = await fetchBlingProductDetail(Number(p.bling_id));
         if (!detail) continue;
 
-        // Atualiza campos-chave para corrigir problemas de importação (SKU, EAN, Custo, Preços base)
+        // Atualiza campos-chave para corrigir problemas de importação (SKU, EAN, Custo, Preços base, Imagens)
         const updateData: any = {};
         if (detail.codigo) updateData.sku = detail.codigo;
         if (detail.gtin) updateData.ean = detail.gtin;
         if (detail.precoCusto) updateData.price_cost = Math.round(detail.precoCusto * 100);
         if (detail.preco) updateData.price_retail = Math.round(detail.preco * 100);
+        
+        // Verifica e extrai imagens
+        const imagens = detail.midia?.imagens?.internas || detail.imagens || [];
+        const firstImgUrl = imagens[0]?.link || imagens[0]?.url || (typeof imagens[0] === 'string' ? imagens[0] : null);
+
+        if (firstImgUrl && firstImgUrl.startsWith('http')) {
+            const base64 = await fetchAndCompressImage(firstImgUrl);
+            if (base64) {
+                updateData.images = [base64];
+                
+                // Também atualiza a galeria compartilhada da cor, se houver
+                const colorId = resolveColorId(p.specs?.color);
+                if (colorId && modelId) {
+                    try {
+                        // Fazemos um upsert seguro garantindo que a base64 esteja lá. 
+                        // Idealmente preservaria caso tenha outras, mas o reimport assume a do Bling.
+                        await modelColorImagesService.upsert({
+                            model_id: modelId,
+                            color_id: colorId,
+                            images: [base64]
+                        });
+                    } catch (e) { console.error('Erro ao resincronizar cor-imagem no reimport', e); }
+                }
+            }
+        }
+        
         // Não sobrescrever nome, categoria para não estragar edições passadas do usuário.
         
         if (Object.keys(updateData).length > 0) {

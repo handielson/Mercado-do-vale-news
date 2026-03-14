@@ -47,6 +47,8 @@ async function list(): Promise<Category[]> {
         config: row.config,
         warranty_days: row.warranty_days || 90,
         extended_warranty_enabled: row.extended_warranty_enabled ?? false,
+        margin_wholesale: row.margin_wholesale,
+        margin_reseller: row.margin_reseller,
         created: row.created_at,
         updated: row.updated_at
     }));
@@ -73,7 +75,9 @@ async function create(input: CategoryInput): Promise<Category> {
             slug,
             config: input.config,
             warranty_days: input.warranty_days || 90,
-            extended_warranty_enabled: input.extended_warranty_enabled ?? false
+            extended_warranty_enabled: input.extended_warranty_enabled ?? false,
+            margin_wholesale: input.margin_wholesale,
+            margin_reseller: input.margin_reseller
         })
         .select()
         .single();
@@ -87,6 +91,8 @@ async function create(input: CategoryInput): Promise<Category> {
         config: data.config,
         warranty_days: data.warranty_days || 90,
         extended_warranty_enabled: data.extended_warranty_enabled ?? false,
+        margin_wholesale: data.margin_wholesale,
+        margin_reseller: data.margin_reseller,
         created: data.created_at,
         updated: data.updated_at
     };
@@ -117,6 +123,8 @@ async function getById(id: string): Promise<Category | null> {
         config: data.config,
         warranty_days: data.warranty_days || 90,
         extended_warranty_enabled: data.extended_warranty_enabled ?? false,
+        margin_wholesale: data.margin_wholesale,
+        margin_reseller: data.margin_reseller,
         created: data.created_at,
         updated: data.updated_at
     };
@@ -143,7 +151,9 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
             slug,
             config: input.config,
             warranty_days: input.warranty_days || 90,
-            extended_warranty_enabled: input.extended_warranty_enabled ?? false
+            extended_warranty_enabled: input.extended_warranty_enabled ?? false,
+            margin_wholesale: input.margin_wholesale,
+            margin_reseller: input.margin_reseller
         })
         .eq('id', id)
         .eq('company_id', companyId);

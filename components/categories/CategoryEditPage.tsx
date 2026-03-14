@@ -7,6 +7,7 @@ import { BasicInfoSection } from './sections/BasicInfoSection';
 import { UniqueFieldsSection } from './sections/UniqueFieldsSection';
 import { FieldConfigSection } from './sections/FieldConfigSection';
 import { CustomFieldsSection } from './sections/CustomFieldsSection';
+import { toast } from 'react-hot-toast';
 
 interface CategoryEditPageProps {
     categoryId?: string; // undefined = criar nova
@@ -31,6 +32,8 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
     const [name, setName] = useState('');
     const [warrantyDays, setWarrantyDays] = useState(90);
     const [extendedWarrantyEnabled, setExtendedWarrantyEnabled] = useState(false);
+    const [marginWholesale, setMarginWholesale] = useState<number | undefined>();
+    const [marginReseller, setMarginReseller] = useState<number | undefined>();
     const [config, setConfig] = useState<CategoryConfig>({
         imei1: 'optional',
         imei2: 'optional',
@@ -60,6 +63,8 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                 setName(category.name);
                 setWarrantyDays(category.warranty_days || 90);
                 setExtendedWarrantyEnabled(category.extended_warranty_enabled ?? false);
+                setMarginWholesale(category.margin_wholesale);
+                setMarginReseller(category.margin_reseller);
 
                 console.log('[CategoryEditPage] Loading category:', category.name);
                 console.log('[CategoryEditPage] Config:', category.config);
@@ -120,7 +125,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
         e.preventDefault();
 
         if (!name.trim()) {
-            alert('Por favor, preencha o nome da categoria');
+            toast.error('Por favor, preencha o nome da categoria');
             return;
         }
 
@@ -133,22 +138,26 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                 name: name.trim(),
                 config,
                 warranty_days: warrantyDays,
-                extended_warranty_enabled: extendedWarrantyEnabled
+                extended_warranty_enabled: extendedWarrantyEnabled,
+                margin_wholesale: marginWholesale,
+                margin_reseller: marginReseller
             };
 
             if (categoryId) {
                 // Update existing
                 await categoryService.update(categoryId, categoryData);
+                toast.success('Categoria atualizada com sucesso!');
             } else {
                 // Create new
                 await categoryService.create(categoryData);
+                toast.success('Categoria criada com sucesso!');
             }
 
             // Redirect back to list
             navigate('/admin/settings/categories');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving category:', error);
-            alert('Erro ao salvar categoria');
+            toast.error(error.message || 'Erro ao salvar categoria');
         } finally {
             setIsSaving(false);
         }
@@ -199,6 +208,60 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                         onWarrantyDaysChange={setWarrantyDays}
                         isEditing={!!categoryId}
                     />
+
+                    {/* Margens de Precificação */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-5">
+                        <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                            💰 Margens de Precificação
+                        </h3>
+                        <p className="text-sm text-slate-600 mb-4">
+                            Defina o desconto automático que esta categoria recebe em relação ao <b>Preço de Varejo</b>. O Bling sempre enviará o Preço de Varejo, e o sistema preencherá o Atacado e a Revenda baseado nestas porcentagens.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Desconto Atacado (%)
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        step="0.01"
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Ex: 30"
+                                        value={marginWholesale ?? ''}
+                                        onChange={e => setMarginWholesale(e.target.value ? parseFloat(e.target.value) : undefined)}
+                                    />
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <span className="text-slate-400 sm:text-sm">%</span>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">Ex: Se varejo = R$100 e desconto = 30%, atacado será R$70.</p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Desconto Revenda (%)
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        step="0.01"
+                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Ex: 15"
+                                        value={marginReseller ?? ''}
+                                        onChange={e => setMarginReseller(e.target.value ? parseFloat(e.target.value) : undefined)}
+                                    />
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                        <span className="text-slate-400 sm:text-sm">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     {/* Toggle: Garantia Estendida */}
                     <div className="bg-white rounded-xl border border-slate-200 p-5">

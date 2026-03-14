@@ -218,6 +218,27 @@ export default async function handler(req: any, res: any) {
         }
     }
 
+    // ─── IMAGE-PROXY: baixa a imagem do Bling ignorando CORS ──────────────
+    if (resource === 'image-proxy') {
+        if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+        const { url } = req.query;
+        if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
+        
+        try {
+            const imgRes = await fetch(url);
+            if (!imgRes.ok) return res.status(imgRes.status).json({ error: 'Failed to fetch image from URL' });
+            
+            const arrayBuffer = await imgRes.arrayBuffer();
+            const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+            
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            return res.status(200).send(Buffer.from(arrayBuffer));
+        } catch (err: any) {
+            return res.status(500).json({ error: 'network_error', message: err.message });
+        }
+    }
+
     // ─── STOCK: busca saldos de estoque ─────────────────────────────────────
     if (resource === 'stock') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
