@@ -84,8 +84,22 @@ function generateGroupKey(product: CatalogProduct): string {
     if (baseName.includes(' - ')) {
         const parts = baseName.split(' - ');
         if (parts.length > 1) {
-            parts.pop(); // Remove the last part (the variant/color)
-            baseName = parts.join(' - ');
+            const lastPart = parts[parts.length - 1].trim().toLowerCase();
+            const color = product.specs?.color?.toLowerCase();
+            const ram = product.specs?.ram?.toLowerCase();
+            const storage = product.specs?.storage?.toLowerCase();
+            
+            // Check if suffix is a variant description rather than part of the model name
+            const isVariantSuffix = 
+                (color && lastPart === color) || 
+                (ram && lastPart === ram) || 
+                (storage && lastPart === storage) ||
+                ['preto', 'preta', 'branco', 'branca', 'azul', 'vermelho', 'vermelha', 'rosa', 'verde', 'amarelo', 'amarela', 'cinza', 'prata', 'dourado', 'ouro', 'incolor', 'transparente', 'grafite', 'lilas', 'lilás', 'roxo', 'roxa'].includes(lastPart);
+
+            if (isVariantSuffix) {
+                parts.pop(); // Remove the last part because it's just a color/variant, not the base model name
+                baseName = parts.join(' - ');
+            }
         }
     }
     
