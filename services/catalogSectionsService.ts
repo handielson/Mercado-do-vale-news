@@ -322,7 +322,6 @@ class CatalogSectionsService {
             }
 
             // Aplicar regras globais de visibilidade (ex: ocultar sem estoque)
-            const settings = await catalogConfigService.getSettings();
             products = catalogConfigService.applyVisibilityRules(products, settings);
 
             // Update persistent cache
