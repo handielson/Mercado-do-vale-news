@@ -11,35 +11,34 @@ class CatalogConfigService {
      */
     async getSettings(userId?: string): Promise<CatalogSettings> {
         try {
-            // Se não passar userId, pegar do usuário autenticado
+            // Tenta obter o usuário logado se não foi passado
             if (!userId) {
                 const { data: { user } } = await supabase.auth.getUser();
-                if (!user) {
-                    // Usuário não autenticado - retornar configurações padrão para catálogo público
-                    console.log('Usando configurações padrão para catálogo público');
-                    return { ...DEFAULT_CATALOG_SETTINGS } as CatalogSettings;
+                if (user) {
+                    userId = user.id;
                 }
-                userId = user.id;
             }
 
-            // Verificar cache
-            const cacheKey = `settings_${userId}`;
+            // Verificar cache global independente de cookie
+            const cacheKey = userId ? `settings_${userId}` : 'settings_global';
             const cached = this.cache.get(cacheKey);
             if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
                 return cached.data;
             }
 
-            const { data, error } = await supabase
-                .from('catalog_settings')
-                .select('*')
-                .eq('user_id', userId)
-                .single();
+            let query = supabase.from('catalog_settings').select('*');
+            if (userId) {
+                query = query.eq('user_id', userId);
+            }
+            
+            // Para visitantes públicos, pega a primeira (e única) config global do catálogo
+            const { data, error } = await query.limit(1).single();
 
             if (error && error.code !== 'PGRST116') { // PGRST116 = not found
-                throw error;
+                console.error('Erro ao buscar catalog_settings:', error);
             }
 
-            // Se não existir, retornar padrões
+            // Se não existir na base, retornar padrões
             const settings = data || { ...DEFAULT_CATALOG_SETTINGS, user_id: userId };
 
             // Atualizar cache
