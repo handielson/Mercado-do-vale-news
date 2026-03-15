@@ -47,38 +47,22 @@ export const PublicProductPage: React.FC = () => {
     // Dicionário de chaves para nomes amigáveis baseados nos campos customizados do BD
     const [customFieldNames, setCustomFieldNames] = useState<Record<string, string>>({});
 
-    // Silent Video Auto-Link Check
-    useEffect(() => {
-        if (!product || !companySettings?.synologyVideoBaseUrl || product.video_url || !product.sku) return;
-
-        // Limpa a base url para garantir a / no final
-        const baseUrl = companySettings.synologyVideoBaseUrl.endsWith('/') ? companySettings.synologyVideoBaseUrl : `${companySettings.synologyVideoBaseUrl}/`;
-        // Usa encodeURIComponent apenas se houver espaços, mas idealmente SKU não tem.
-        const testUrl = `${baseUrl}${product.sku}.mp4`;
-
-        const video = document.createElement('video');
-        video.muted = true; // Necessário em alguns navegadores para autoplay/preload invisível
-        video.playsInline = true;
-        video.preload = 'metadata';
+    // Computed Video URL baseada na flag do modelo (has_video) e no SKU
+    const effectiveVideoUrl = React.useMemo(() => {
+        if (product?.video_url) return product.video_url; // Prioridade para video setado diretamente no produto
         
-        const handleSuccess = () => {
-            console.log("🔗 [Video Auto-Link] Vídeo encontrado e testado com sucesso:", testUrl);
-            setAutoVideoUrl(testUrl);
-        };
-
-        video.onloadedmetadata = handleSuccess;
-        video.oncanplay = handleSuccess;
-        video.onloadeddata = handleSuccess;
+        const hasVideo = product?.specs?.has_video === true;
+        const videoBaseUrl = (companySettings as any)?.synology_video_base_url || (companySettings as any)?.synologyVideoBaseUrl;
         
-        video.onerror = (err) => {
-            console.warn("🔗 [Video Auto-Link] Falha ao testar vídeo silenciosamente. Pode não existir, ou ser bloqueio de CORS/Mixed Content (HTTPS site rodando conteúdo HTTP HTTP):", testUrl);
-        };
+        if (hasVideo && product?.sku && videoBaseUrl) {
+            const baseUrl = videoBaseUrl.endsWith('/') 
+                ? videoBaseUrl 
+                : `${videoBaseUrl}/`;
+            return `${baseUrl}${product.sku.replace(/\s+/g, '')}.mp4`;
+        }
         
-        video.src = testUrl;
-        video.load(); // Força o navegador a despachar o request de teste
-    }, [product?.id, product?.video_url, product?.sku, companySettings?.synologyVideoBaseUrl]);
-
-    const effectiveVideoUrl = product?.video_url || autoVideoUrl;
+        return null;
+    }, [product?.video_url, product?.specs?.has_video, product?.sku, companySettings]);
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -542,7 +526,7 @@ export const PublicProductPage: React.FC = () => {
                                         )}
                                     </div>
                                 )
-                            ) : selectedImage ? (
+                            ) : selectedImage && selectedImage !== 'VIDEO' ? (
                                 <img
                                     src={selectedImage}
                                     alt={product.meta_title || product.name}
@@ -552,7 +536,7 @@ export const PublicProductPage: React.FC = () => {
                                 <div className="text-slate-400 font-medium">Sem imagem</div>
                             )}
                         </div>
-                        {((product.images && product.images.length > 1) || (product.images && product.images.length > 0 && effectiveVideoUrl)) && (
+                        {((product.images && product.images.length > 1) || effectiveVideoUrl) && (
                             <div className="flex gap-3 overflow-x-auto pb-2">
                                 {effectiveVideoUrl && (
                                     <button
@@ -565,7 +549,7 @@ export const PublicProductPage: React.FC = () => {
                                         </div>
                                     </button>
                                 )}
-                                {product.images.map((img, idx) => (
+                                {product.images?.map((img, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => setSelectedImage(img)}

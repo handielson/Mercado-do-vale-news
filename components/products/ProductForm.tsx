@@ -442,6 +442,33 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }
     };
 
+    const handleGenerateSynologyLink = async () => {
+        const sku = watch('sku');
+        if (!sku) {
+            toast.warning('Preencha o SKU primeiro para gerar o link do vídeo.');
+            return;
+        }
+        try {
+            const { companySettingsService } = await import('../../services/companySettingsService');
+            const settings = await companySettingsService.get() as any;
+            const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
+            
+            if (!videoBaseUrl) {
+                toast.error('URL base do Synology não configurada nas Definições da Empresa.');
+                return;
+            }
+
+            const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
+            const videoUrl = `${baseUrl}${sku.replace(/\s+/g, '')}.mp4`;
+            
+            setValue('video_url', videoUrl, { shouldDirty: true, shouldValidate: true });
+            toast.success('Link do vídeo gerado com sucesso!');
+        } catch (error) {
+            console.error('Error fetching settings:', error);
+            toast.error('Erro ao buscar definições da Empresa.');
+        }
+    };
+
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(
         async (data) => {
@@ -804,6 +831,15 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             placeholder="Ex: https://youtube.com/watch?v=... ou https://seu-synology.to/video.mp4"
                             className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.video_url ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'}`}
                         />
+                        <button
+                            type="button"
+                            onClick={handleGenerateSynologyLink}
+                            className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors flex items-center justify-center shrink-0 border border-purple-200 font-medium text-sm"
+                            title="Gerar link no formato padrão usando o SKU do produto e Servidor Synology"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            Gerar do Synology
+                        </button>
                         {watch('video_url') && (
                             <a
                                 href={watch('video_url')}

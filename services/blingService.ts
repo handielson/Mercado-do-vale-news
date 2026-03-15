@@ -916,10 +916,11 @@ export async function importBlingProducts(
                 const brandName = enriched.marca || 'Diversos';
                 let newModelName = row.name || 'Produto sem nome';
                 
-                // Extrai apenas o modelo de dispositivo (ex: tudo após ' para ')
+                // Extrai apenas o modelo de dispositivo para gerar a TAG Limpa (ex: tudo após ' para ')
+                let cleanTag = newModelName;
                 const paraIndex = newModelName.toLowerCase().lastIndexOf(' para ');
                 if (paraIndex !== -1) {
-                    newModelName = newModelName.substring(paraIndex + 6).trim();
+                    cleanTag = newModelName.substring(paraIndex + 6).trim();
                 }
                 
                 // 1. Resolve/Create Brand
@@ -946,12 +947,12 @@ export async function importBlingProducts(
                     if (existingModel) {
                         resolvedModelId = existingModel.id;
                     } else {
-                        // Create Cross-Sell Tag
-                        if (!crossSellTagCache.has(newModelName.toLowerCase())) {
+                        // Create Cross-Sell Tag usando apenas o nome limpo
+                        if (!crossSellTagCache.has(cleanTag.toLowerCase())) {
                             try {
-                                await crossSellTagsService.create({ name: newModelName });
+                                await crossSellTagsService.create({ name: cleanTag });
                             } catch(e) { /* silently ignore if already exists but wasn't in cache */ }
-                            crossSellTagCache.add(newModelName.toLowerCase());
+                            crossSellTagCache.add(cleanTag.toLowerCase());
                         }
 
                         // Create Model with Dimensions and Tag
@@ -965,7 +966,7 @@ export async function importBlingProducts(
                                 'dimensions.width_cm': enriched.dimensoes?.largura,
                                 'dimensions.height_cm': enriched.dimensoes?.altura,
                                 'dimensions.depth_cm': enriched.dimensoes?.profundidade,
-                                'tags_venda': [newModelName]
+                                'tags_venda': [cleanTag]
                             }
                         });
                         resolvedModelId = newModel.id;

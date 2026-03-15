@@ -86,6 +86,7 @@ import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
 import { feedbackService } from '../services/feedbackService';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
 import { ReviewsPage } from '../pages/admin/catalog/ReviewsPage';
+import { RoadmapPage } from '../pages/admin/settings/RoadmapPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -643,6 +644,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><WhatsAppPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/roadmap",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><RoadmapPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
