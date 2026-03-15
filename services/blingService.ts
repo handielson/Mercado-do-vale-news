@@ -168,7 +168,7 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         return {
 
             id: data.id,
-            nome: cleanVariacaoNome(data.nome || '', variacaoNomeDetalhe),
+            nome: data.nome || '',
             codigo: data.codigo || null,
             gtin: data.gtin || parentData?.gtin || null,
             preco: data.preco ?? parentData?.preco ?? null,
@@ -579,7 +579,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         bling_id: item.id,
         bling_parent_id: parentId ?? null,
         // Básico
-        name: nomeLimpo,
+        name: item.nome || 'Produto sem nome',
         sku: item.codigo || null,
         ean: item.gtin || null,
         alternative_eans: item.gtin ? [item.gtin] : [],
