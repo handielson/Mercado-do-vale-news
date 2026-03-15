@@ -153,6 +153,22 @@ async function create(input: ProductInput): Promise<Product> {
     const category_id = modelData.category_id || input.category_id;
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
+    
+    // Auto-generate video_url if not provided but model specifies has_video
+    let finalVideoUrl = input.video_url || null;
+    if (!finalVideoUrl && modelData.template_values?.has_video && input.sku) {
+        try {
+            const { companySettingsService } = await import('./companySettingsService');
+            const settings = await companySettingsService.get() as any;
+            const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
+            if (videoBaseUrl) {
+                const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
+                finalVideoUrl = `${baseUrl}${input.sku.replace(/\s+/g, '')}.mp4`;
+            }
+        } catch (e) {
+            console.error('Failed to auto-generate video URL:', e);
+        }
+    }
 
     const { data, error } = await supabase
         .from('products')
@@ -189,7 +205,7 @@ async function create(input: ProductInput): Promise<Product> {
             promo_end: input.promo_end || null,
             bling_id: input.bling_id || null,
             bling_parent_id: input.bling_parent_id || null,
-            video_url: input.video_url || null,
+            video_url: finalVideoUrl,
             // SEO Additions
             slug: input.slug || null,
             meta_title: input.meta_title || null,
@@ -251,6 +267,22 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
 
+    // Auto-generate video_url if not provided but model specifies has_video
+    let finalVideoUrl = input.video_url || null;
+    if (!finalVideoUrl && modelData.template_values?.has_video && input.sku) {
+        try {
+            const { companySettingsService } = await import('./companySettingsService');
+            const settings = await companySettingsService.get() as any;
+            const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
+            if (videoBaseUrl) {
+                const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
+                finalVideoUrl = `${baseUrl}${input.sku.replace(/\s+/g, '')}.mp4`;
+            }
+        } catch (e) {
+            console.error('Failed to auto-generate video URL:', e);
+        }
+    }
+
     const { data, error } = await supabase
         .from('products')
         .update({
@@ -285,7 +317,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             promo_end: input.promo_end || null,
             bling_id: input.bling_id || null,
             bling_parent_id: input.bling_parent_id || null,
-            video_url: input.video_url || null,
+            video_url: finalVideoUrl,
             // SEO Additions
             slug: input.slug || null,
             meta_title: input.meta_title || null,
@@ -334,7 +366,7 @@ async function deleteProduct(id: string): Promise<void> {
     const { error } = await supabase
         .from('products')
         .delete()
-        .eq('id', id)
+        .or(`id.eq.${id},parent_id.eq.${id}`)
         .eq('company_id', companyId);
 
     if (error) throw new Error(`Failed to delete product: ${error.message}`);
