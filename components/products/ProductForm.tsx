@@ -775,7 +775,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 readOnly
             />
 
-            {/* 4. IMAGENS */}
+            {/* 4. IMAGENS & VÍDEO */}
             <ProductImages
                 imagePreviews={imagePreviews}
                 isCompressing={isCompressing}
@@ -785,6 +785,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 onToggleCustomImages={setUseCustomImages}
                 hasDefaultImages={!!selectedModel?.id && !!selectedColor}
             />
+
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-4">
+                <h3 className="font-semibold text-slate-800 mb-4">Vídeo do Produto (Opcional)</h3>
+                <SmartInput
+                    label="URL do Vídeo"
+                    type="url"
+                    placeholder="Ex: https://youtube.com/... ou https://seu-synology.to/video.mp4"
+                    value={watch('video_url') || ''}
+                    onChange={(val) => setValue('video_url', val)}
+                    error={errors.video_url?.message}
+                    helperText="Cole o link público de um vídeo do YouTube ou do seu Synology NAS. Ele aparecerá junto com as imagens do produto."
+                />
+            </div>
 
             {/* VÍNCULO COM BLING */}
             <BlingLinkSection

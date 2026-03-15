@@ -42,7 +42,7 @@ const LIST_COLUMNS = [
     'stock_quantity', 'track_inventory', 'is_gift',
     'warranty_type', 'warranty_template_id',
     'images', 'status', 'parent_id',
-    'bling_id', 'bling_parent_id',
+    'bling_id', 'bling_parent_id', 'video_url',
     'slug', 'origin',
     'specs',
     'created_at', 'updated_at'
@@ -189,11 +189,12 @@ async function create(input: ProductInput): Promise<Product> {
             promo_end: input.promo_end || null,
             bling_id: input.bling_id || null,
             bling_parent_id: input.bling_parent_id || null,
+            video_url: input.video_url || null,
             // SEO Additions
             slug: input.slug || null,
             meta_title: input.meta_title || null,
             meta_description: input.meta_description || null,
-            seo_keywords: input.seo_keywords || [],
+            seo_keywords: input.keywords || [],
         })
         .select('*')
         .single();
@@ -284,11 +285,12 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             promo_end: input.promo_end || null,
             bling_id: input.bling_id || null,
             bling_parent_id: input.bling_parent_id || null,
+            video_url: input.video_url || null,
             // SEO Additions
             slug: input.slug || null,
             meta_title: input.meta_title || null,
             meta_description: input.meta_description || null,
-            seo_keywords: input.seo_keywords || [],
+            seo_keywords: input.keywords || [],
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -426,6 +428,7 @@ function transformFromDB(row: any): Product {
         parent_id: row.parent_id || undefined,
         bling_id: row.bling_id || undefined,
         bling_parent_id: row.bling_parent_id || undefined,
+        video_url: row.video_url || undefined,
         price_promo: row.price_promo || undefined,
         promo_start: row.promo_start || undefined,
         promo_end: row.promo_end || undefined,
