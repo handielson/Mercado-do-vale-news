@@ -58,9 +58,9 @@ export const FIELD_DICTIONARY: Record<string, FieldDefinition> = {
     name: {
         label: 'Nome do Produto',
         placeholder: 'Ex: iPhone 14 Pro Max',
-        format: 'capitalize',
+        format: 'none',
         required: true,
-        description: 'Nome completo do produto com capitalização automática'
+        description: 'Nome completo do produto sem formatação de caixa (exato como configurado)'
     },
     sku: {
         label: 'SKU (Código)',
@@ -87,10 +87,10 @@ export const FIELD_DICTIONARY: Record<string, FieldDefinition> = {
     },
     model_name: {
         label: 'Nome do Modelo',
-        placeholder: 'Ex: Iphone 14 pro max',
-        format: 'capitalize',
+        placeholder: 'Ex: iPhone 14 Pro Max',
+        format: 'none',
         required: true,
-        description: 'Nome do modelo com capitalização automática (mesma formatação do nome do produto)'
+        description: 'Nome do modelo sem formatação automática'
     },
     nome_cor: {
         label: 'Nome da Cor',

@@ -482,7 +482,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     onChange={(e) => {
                                         const cursorPosition = e.target.selectionStart || 0;
                                         const rawValue = e.target.value;
-                                        const formatted = applyFieldFormat(rawValue, 'titlecase');
+                                        const formatted = rawValue;
                                         setName(formatted);
                                         setTimeout(() => {
                                             if (inputRef.current) {
@@ -569,6 +569,20 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 />
                                 <label htmlFor="model-active" className="text-sm text-slate-700 cursor-pointer">
                                     Modelo Ativo (visível no cadastro de produtos)
+                                </label>
+                            </div>
+
+                            {/* Has Video Checkbox */}
+                            <div className="flex items-center gap-2 mt-4 bg-purple-50 p-3 rounded-lg border border-purple-100">
+                                <input
+                                    type="checkbox"
+                                    id="model-has-video"
+                                    checked={templateValues['has_video'] === true}
+                                    onChange={(e) => handleTemplateValueChange('has_video', e.target.checked)}
+                                    className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
+                                />
+                                <label htmlFor="model-has-video" className="text-sm text-purple-900 cursor-pointer font-medium">
+                                    🎥 Este modelo possui vídeo de demonstração (via SKU) no Synology
                                 </label>
                             </div>
                         </>
