@@ -65,6 +65,7 @@ export interface Company {
 
     // Integrations
     googleAnalyticsId?: string; // Google Analytics Measurement ID (ex: G-XXXXXXXXXX)
+    synologyVideoBaseUrl?: string; // URL base para vídeos no Synology (ex: http://192.168.1.2/videos/)
 
     // Maintenance Mode
     maintenanceMode?: boolean;
@@ -114,6 +115,8 @@ export const defaultCompany: Company = {
     catalogFooterText: '© 2026 Mercado do Vale. Todos os direitos reservados. As informações, preços e disponibilidade de produtos estão sujeitos a alterações sem aviso prévio.',
     aboutUsText: '',
     aboutUsImageUrl: '',
+    googleAnalyticsId: '',
+    synologyVideoBaseUrl: '',
     maintenanceMode: false,
     maintenanceMessage: 'Voltamos logo! Estamos realizando manutenções no servidor para melhorar sua experiência.',
     maintenanceBypassKey: 'liberado'

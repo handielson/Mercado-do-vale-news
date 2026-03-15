@@ -41,10 +41,36 @@ export const PublicProductPage: React.FC = () => {
     const [shippingResult, setShippingResult] = useState<{ name: string, price: string, days: string }[] | null>(null);
     const [cashbackSettings, setCashbackSettings] = useState<CashbackSettings | null>(null);
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+    const [autoVideoUrl, setAutoVideoUrl] = useState<string | null>(null);
     // Config da categoria: define quais campos existem no template
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
     // Dicionário de chaves para nomes amigáveis baseados nos campos customizados do BD
     const [customFieldNames, setCustomFieldNames] = useState<Record<string, string>>({});
+
+    // Silent Video Auto-Link Check
+    useEffect(() => {
+        if (!product || !companySettings?.synologyVideoBaseUrl || product.video_url || !product.sku) return;
+
+        // Limpa a base url para garantir a / no final
+        const baseUrl = companySettings.synologyVideoBaseUrl.endsWith('/') ? companySettings.synologyVideoBaseUrl : `${companySettings.synologyVideoBaseUrl}/`;
+        const testUrl = `${baseUrl}${product.sku}.mp4`;
+
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        
+        video.onloadedmetadata = () => {
+            console.log("🔗 [Video Auto-Link] Vídeo encontrado por SKU:", testUrl);
+            setAutoVideoUrl(testUrl);
+        };
+        
+        video.onerror = () => {
+            console.log("🔗 [Video Auto-Link] Nenhum vídeo encontrado para o SKU. Ignorando silenciosamente.");
+        };
+        
+        video.src = testUrl;
+    }, [product?.id, product?.video_url, product?.sku, companySettings?.synologyVideoBaseUrl]);
+
+    const effectiveVideoUrl = product?.video_url || autoVideoUrl;
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -490,19 +516,19 @@ export const PublicProductPage: React.FC = () => {
                     {/* Galeria de Imagens (Esquerda) */}
                     <div className="space-y-4">
                         <div className="aspect-square bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-4">
-                            {selectedImage === 'VIDEO' && product.video_url ? (
-                                product.video_url.toLowerCase().endsWith('.mp4') ? (
-                                    <video src={product.video_url} controls className="w-full h-full object-contain shadow-lg rounded-lg bg-black" />
+                            {selectedImage === 'VIDEO' && effectiveVideoUrl ? (
+                                effectiveVideoUrl.toLowerCase().endsWith('.mp4') ? (
+                                    <video src={effectiveVideoUrl} controls autoPlay className="w-full h-full object-contain shadow-lg rounded-lg bg-black" />
                                 ) : (
                                     <div className="w-full h-full flex flex-col">
                                         <iframe 
-                                            src={product.video_url.includes('youtube.com/watch?v=') ? product.video_url.replace('watch?v=', 'embed/') : product.video_url.includes('youtu.be/') ? product.video_url.replace('youtu.be/', 'youtube.com/embed/') : product.video_url} 
+                                            src={effectiveVideoUrl.includes('youtube.com/watch?v=') ? effectiveVideoUrl.replace('watch?v=', 'embed/') : effectiveVideoUrl.includes('youtu.be/') ? effectiveVideoUrl.replace('youtu.be/', 'youtube.com/embed/') : effectiveVideoUrl} 
                                             className="w-full h-full rounded-lg shadow-sm bg-white" 
                                             allowFullScreen
                                             title="Vídeo do Produto"
                                         ></iframe>
-                                        {!product.video_url.includes('youtube.com') && !product.video_url.includes('youtu.be') && (
-                                            <a href={product.video_url} target="_blank" rel="noreferrer" className="mt-4 text-sm text-center font-bold text-blue-600 hover:underline">
+                                        {!effectiveVideoUrl.includes('youtube.com') && !effectiveVideoUrl.includes('youtu.be') && (
+                                            <a href={effectiveVideoUrl} target="_blank" rel="noreferrer" className="mt-4 text-sm text-center font-bold text-blue-600 hover:underline">
                                                 🔗 O vídeo não carregou? Clique aqui para abrir
                                             </a>
                                         )}
@@ -518,9 +544,9 @@ export const PublicProductPage: React.FC = () => {
                                 <div className="text-slate-400 font-medium">Sem imagem</div>
                             )}
                         </div>
-                        {((product.images && product.images.length > 1) || (product.images && product.images.length > 0 && product.video_url)) && (
+                        {((product.images && product.images.length > 1) || (product.images && product.images.length > 0 && effectiveVideoUrl)) && (
                             <div className="flex gap-3 overflow-x-auto pb-2">
-                                {product.video_url && (
+                                {effectiveVideoUrl && (
                                     <button
                                         onClick={() => setSelectedImage('VIDEO')}
                                         className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden flex items-center justify-center ${selectedImage === 'VIDEO' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}

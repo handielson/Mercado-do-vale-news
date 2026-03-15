@@ -49,6 +49,7 @@ interface CompanySettingsRow {
     description: string | null;
     internal_notes: string | null;
     google_analytics_id: string | null;
+    synology_video_base_url: string | null;
     catalog_footer_text: string | null;
     maintenance_mode: boolean | null;
     maintenance_message: string | null;
@@ -106,6 +107,7 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     description: row.description || '',
     internalNotes: row.internal_notes || '',
     googleAnalyticsId: row.google_analytics_id || '',
+    synologyVideoBaseUrl: row.synology_video_base_url || '',
     catalogFooterText: row.catalog_footer_text || '',
     maintenanceMode: row.maintenance_mode ?? false,
     maintenanceMessage: row.maintenance_message || '',
@@ -156,8 +158,9 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     description: company.description || null,
     internal_notes: company.internalNotes || null,
     google_analytics_id: company.googleAnalyticsId || null,
+    synology_video_base_url: company.synologyVideoBaseUrl || null,
     catalog_footer_text: company.catalogFooterText || null,
-    maintenance_mode: company.maintenanceMode ?? false,
+    maintenance_mode: company.maintenanceMode ?? null,
     maintenance_message: company.maintenanceMessage || null,
     maintenance_bypass_key: company.maintenanceBypassKey || null,
     about_us_text: company.aboutUsText || null,

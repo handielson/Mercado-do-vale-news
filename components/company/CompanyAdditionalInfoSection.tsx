@@ -85,6 +85,23 @@ export const CompanyAdditionalInfoSection: React.FC<CompanyAdditionalInfoSection
                 />
             </div>
 
+            <div className="mt-6 pt-6 border-t border-slate-100">
+                <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                    URL Base de Vídeos (Servidor Próprio / NAS)
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                    Se preenchido, o site tentará carregar automaticamente os vídeos dos produtos procurando pelo arquivo <strong>SKU.mp4</strong> neste endereço. (Ex: <em>http://192.168.1.X/videos/</em>)
+                </p>
+                <input
+                    type="url"
+                    value={form.synologyVideoBaseUrl || ''}
+                    onChange={(e) => onChange({ synologyVideoBaseUrl: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono"
+                    placeholder="Ex: http://seu-ddns.synology.me/videos/"
+                />
+            </div>
+
             {/* SEÇÃO DE MANUTENÇÃO */}
             <div className="mt-8 pt-6 border-t border-red-100 bg-red-50/50 -mx-6 px-6 pb-6 rounded-b-2xl">
                 <h2 className="flex items-center gap-2 font-bold text-red-700 text-lg mb-4">
