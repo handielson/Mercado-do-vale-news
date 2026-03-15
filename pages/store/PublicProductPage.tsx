@@ -53,21 +53,29 @@ export const PublicProductPage: React.FC = () => {
 
         // Limpa a base url para garantir a / no final
         const baseUrl = companySettings.synologyVideoBaseUrl.endsWith('/') ? companySettings.synologyVideoBaseUrl : `${companySettings.synologyVideoBaseUrl}/`;
+        // Usa encodeURIComponent apenas se houver espaços, mas idealmente SKU não tem.
         const testUrl = `${baseUrl}${product.sku}.mp4`;
 
         const video = document.createElement('video');
+        video.muted = true; // Necessário em alguns navegadores para autoplay/preload invisível
+        video.playsInline = true;
         video.preload = 'metadata';
         
-        video.onloadedmetadata = () => {
-            console.log("🔗 [Video Auto-Link] Vídeo encontrado por SKU:", testUrl);
+        const handleSuccess = () => {
+            console.log("🔗 [Video Auto-Link] Vídeo encontrado e testado com sucesso:", testUrl);
             setAutoVideoUrl(testUrl);
         };
+
+        video.onloadedmetadata = handleSuccess;
+        video.oncanplay = handleSuccess;
+        video.onloadeddata = handleSuccess;
         
-        video.onerror = () => {
-            console.log("🔗 [Video Auto-Link] Nenhum vídeo encontrado para o SKU. Ignorando silenciosamente.");
+        video.onerror = (err) => {
+            console.warn("🔗 [Video Auto-Link] Falha ao testar vídeo silenciosamente. Pode não existir, ou ser bloqueio de CORS/Mixed Content (HTTPS site rodando conteúdo HTTP HTTP):", testUrl);
         };
         
         video.src = testUrl;
+        video.load(); // Força o navegador a despachar o request de teste
     }, [product?.id, product?.video_url, product?.sku, companySettings?.synologyVideoBaseUrl]);
 
     const effectiveVideoUrl = product?.video_url || autoVideoUrl;
