@@ -106,6 +106,20 @@ export const RoadmapPage = () => {
               </p>
             </div>
 
+            <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-4">
+              <h4 className="font-semibold text-sky-800 text-sm flex items-center gap-2">
+                <Server size={16} /> Portas Externas Liberadas (Operadora)
+              </h4>
+              <p className="text-sm text-sky-700 mt-1">
+                A operadora Vero/Leste liberou 3 portas externas exclusivas para este IP. Elas podem ser usadas no Roteador ZTE para qualquer serviço futuro do Synology:
+              </p>
+              <div className="flex gap-2 mt-3">
+                <code className="bg-sky-100 text-sky-800 font-bold px-2 py-1 rounded text-xs border border-sky-200">59996 (Usando p/ HTTP)</code>
+                <code className="bg-sky-100 text-sky-800 font-bold px-2 py-1 rounded text-xs border border-sky-200">59997 (Usando p/ HTTPS)</code>
+                <code className="bg-sky-100 text-sky-800 font-bold px-2 py-1 rounded text-xs border border-sky-200">60532 (Livre)</code>
+              </div>
+            </div>
+
             <ul className="space-y-3 mt-4">
               <li className="flex items-start gap-3 text-sm text-slate-600">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
