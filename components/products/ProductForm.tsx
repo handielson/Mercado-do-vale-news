@@ -786,17 +786,44 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 hasDefaultImages={!!selectedModel?.id && !!selectedColor}
             />
 
+            {/* VÍDEO DO PRODUTO */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-4">
-                <h3 className="font-semibold text-slate-800 mb-4">Vídeo do Produto (Opcional)</h3>
-                <SmartInput
-                    label="URL do Vídeo"
-                    type="url"
-                    placeholder="Ex: https://youtube.com/... ou https://seu-synology.to/video.mp4"
-                    value={watch('video_url') || ''}
-                    onChange={(val) => setValue('video_url', val)}
-                    error={errors.video_url?.message}
-                    helperText="Cole o link público de um vídeo do YouTube ou do seu Synology NAS. Ele aparecerá junto com as imagens do produto."
-                />
+                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                    Vídeo do Produto (Opcional)
+                </h3>
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                        URL do Vídeo
+                    </label>
+                    <div className="flex gap-2">
+                        <input
+                            type="url"
+                            value={watch('video_url') || ''}
+                            onChange={(e) => setValue('video_url', e.target.value, { shouldDirty: true, shouldValidate: true })}
+                            placeholder="Ex: https://youtube.com/watch?v=... ou https://seu-synology.to/video.mp4"
+                            className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.video_url ? 'border-red-300 focus:ring-red-500' : 'border-slate-200 focus:ring-blue-500'}`}
+                        />
+                        {watch('video_url') && (
+                            <a
+                                href={watch('video_url')}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center shrink-0 border border-blue-200 font-medium text-sm"
+                                title="Testar abertura do vídeo"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                Testar Vídeo
+                            </a>
+                        )}
+                    </div>
+                    {errors.video_url && (
+                        <p className="text-xs text-red-600 mt-1">{errors.video_url.message}</p>
+                    )}
+                    <p className="text-xs text-slate-500 mt-1">
+                        Cole o link público de um vídeo do YouTube ou do seu Synology NAS. Ele aparecerá junto com as imagens do produto.
+                    </p>
+                </div>
             </div>
 
             {/* VÍNCULO COM BLING */}
