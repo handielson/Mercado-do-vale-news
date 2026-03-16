@@ -89,7 +89,7 @@ export default function BlingPage() {
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [productSearch, setProductSearch] = useState('');
     const [blingSearch, setBlingSearch] = useState('');
-    const [productListFilter, setProductListFilter] = useState<'new' | 'imported' | 'all'>('new');
+    const [productListFilter, setProductListFilter] = useState<'new' | 'imported' | 'out_of_stock' | 'all'>('new');
     const [enabledFields, setEnabledFields] = useState<Set<string>>(new Set(DEFAULT_ENABLED_FIELDS));
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -304,8 +304,8 @@ export default function BlingPage() {
             const existing = await blingService.checkExistingBlingProducts(ids);
             setExistingBlingIds(existing);
 
-            // Seleciona por padrão apenas os ativos E não importados
-            const activeIds = new Set(products.filter(p => p.situacao === 'A' && !existing.has(p.id)).map(p => p.id));
+            // Seleciona por padrão apenas os ativos, não importados, e com estoque > 0
+            const activeIds = new Set(products.filter(p => p.situacao === 'A' && !existing.has(p.id) && Number(p.stock_quantity) > 0).map(p => p.id));
             setSelectedIds(activeIds);
         } catch (err: any) {
             toast.error('Erro ao buscar produtos: ' + err.message);
@@ -365,9 +365,11 @@ export default function BlingPage() {
 
         // 2. Tab Filter
         if (productListFilter === 'new') {
-            return !existingBlingIds.has(p.id);
+            return !existingBlingIds.has(p.id) && Number(p.stock_quantity) > 0;
         } else if (productListFilter === 'imported') {
             return existingBlingIds.has(p.id);
+        } else if (productListFilter === 'out_of_stock') {
+            return !existingBlingIds.has(p.id) && Number(p.stock_quantity) <= 0;
         }
         return true;
     });
@@ -848,7 +850,14 @@ export default function BlingPage() {
                                                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'new' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                                                     >
                                                         ✨ Produtos Novos
-                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => !existingBlingIds.has(p.id)).length})</span>
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => !existingBlingIds.has(p.id) && Number(p.stock_quantity) > 0).length})</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setProductListFilter('out_of_stock')}
+                                                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'out_of_stock' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                                                    >
+                                                        🚫 Sem Estoque
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => !existingBlingIds.has(p.id) && Number(p.stock_quantity) <= 0).length})</span>
                                                     </button>
                                                     <button
                                                         onClick={() => setProductListFilter('imported')}
