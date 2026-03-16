@@ -507,7 +507,7 @@ export function ModernProductCard({
                         <ProductRatingBadge productId={product.id} className="mb-1" />
                         <h3
                             onClick={handleTitleClick}
-                            className="font-semibold text-slate-900 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
+                            className="font-semibold text-slate-900 line-clamp-3 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
                         >
                             {productGroup
                                 ? productGroup.model

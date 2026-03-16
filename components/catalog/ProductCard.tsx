@@ -261,7 +261,7 @@ export function ProductCard({
                 <div className="mb-3">
                     <h3
                         onClick={handleTitleClick}
-                        className="font-semibold text-slate-900 mb-1 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
+                        className="font-semibold text-slate-900 mb-1 line-clamp-3 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
                     >
                         {product.name}
                     </h3>
