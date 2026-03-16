@@ -459,39 +459,32 @@ export async function fetchBlingCategories(): Promise<BlingCategory[]> {
 }
 
 /** Busca todos os saldos de estoque e retorna Map<productId, saldoFisico total> */
-async function fetchStockMap(accessToken: string): Promise<Map<number, number>> {
+async function fetchStockMap(accessToken: string, productIds: number[]): Promise<Map<number, number>> {
     const map = new Map<number, number>();
-    let page = 1;
+    if (!productIds || productIds.length === 0) return map;
 
-    do {
-        const res = await fetch(`/api/bling?resource=stock&page=${page}`, {
+    // chunk requests into batches of 50 to avoid URL length issues
+    const chunkSize = 50;
+    for (let i = 0; i < productIds.length; i += chunkSize) {
+        const chunk = productIds.slice(i, i + chunkSize);
+        const queryParams = chunk.map(id => `idsProdutos[]=${id}`).join('&');
+
+        const res = await fetch(`/api/bling?resource=stock&${queryParams}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
-        if (!res.ok) break;
+        if (!res.ok) continue;
 
         const json = await res.json();
         const items: any[] = json.data || [];
-        if (items.length === 0) break;
-
-        // DEBUG PROVISÓRIO: Exibir como o Bling manda os itens de stock (apenas o 1º de teste)
-        if (page === 1 && items.length > 0) {
-            import('sonner').then(sonner => {
-                sonner.toast.error("Bling Stock Item [F12 p/ mais]: " + JSON.stringify(items[0]).slice(0, 150));
-                console.log("=== DEBUG STOCK BLING ===");
-                console.log(items[0]);
-            });
-        }
 
         for (const item of items) {
             const productId = item.produto?.id;
             if (!productId) continue;
+            // A API do Bling pode retornar o saldo de várias formas dependendo da versão
             const qty = item.saldoFisicoTotal ?? item.saldoFisico ?? item.saldoVirtualTotal ?? item.saldoVirtual ?? 0;
             map.set(productId, (map.get(productId) || 0) + qty);
         }
-
-        if (items.length < 100) break;
-        page++;
-    } while (true);
+    }
 
     return map;
 }
@@ -672,11 +665,7 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
     const all: BlingProduct[] = [];
     let page = 1;
 
-    // Busca produtos e saldos em paralelo
-    const [, stockMap] = await Promise.all([
-        Promise.resolve(),
-        fetchStockMap(accessToken),
-    ]);
+    // O estoque será buscado *depois* que os produtos forem carregados
 
     do {
         const { items } = await fetchProductsPage(accessToken, page);
@@ -689,7 +678,7 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
             preco: item.preco || null,
             precoCusto: item.precoCusto || null,
             situacao: item.situacao || 'A',
-            stock_quantity: stockMap.get(item.id) ?? 0,
+            stock_quantity: 0, // Será preenchido abaixo
             categoria: item.categoria || undefined,
             marca: item.marca || undefined,
             imagens: item.imagens || [],
@@ -699,6 +688,14 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
         if (items.length < 100) break;
         page++;
     } while (true);
+
+    // Busca os estoques (Bling v3 exige passar idsProdutos[])
+    const productIds = all.map(p => p.id);
+    const stockMap = await fetchStockMap(accessToken, productIds);
+
+    for (const p of all) {
+        p.stock_quantity = stockMap.get(p.id) ?? 0;
+    }
 
     // A API do Bling não retorna `formato` na listagem paginada.
     // Identificamos os Produtos Pai como aqueles cujo ID aparece como
@@ -742,10 +739,7 @@ export async function checkExistingBlingProducts(blingIds: number[]): Promise<Se
 export async function searchBlingProducts(query: string): Promise<BlingProduct[]> {
     const accessToken = await getValidToken();
 
-    const [, stockMap] = await Promise.all([
-        Promise.resolve(),
-        fetchStockMap(accessToken),
-    ]);
+    // O estoque será buscado *depois* que os produtos forem carregados
 
     const all: BlingProduct[] = [];
     let page = 1;
@@ -769,7 +763,7 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
             preco: item.preco || null,
             precoCusto: item.precoCusto || null,
             situacao: item.situacao || 'A',
-            stock_quantity: stockMap.get(item.id) ?? 0,
+            stock_quantity: 0, // Será preenchido abaixo
             categoria: item.categoria || undefined,
             marca: item.marca || undefined,
             imagens: item.imagens || [],
@@ -780,6 +774,14 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
         if (items.length < 100) break;
         page++;
     } while (true);
+
+    // Busca os estoques (Bling v3 exige passar idsProdutos[])
+    const productIds = all.map(p => p.id);
+    const stockMap = await fetchStockMap(accessToken, productIds);
+
+    for (const p of all) {
+        p.stock_quantity = stockMap.get(p.id) ?? 0;
+    }
 
     const parentIds = new Set<number>();
     for (const p of all) {
