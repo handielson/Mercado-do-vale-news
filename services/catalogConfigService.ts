@@ -45,8 +45,10 @@ class CatalogConfigService {
             this.cache.set(cacheKey, { data: settings, timestamp: Date.now() });
 
             return settings as CatalogSettings;
-        } catch (error) {
-            console.error('Erro ao buscar configurações:', error);
+        } catch (error: any) {
+            if (error.name !== 'AbortError' && error.message !== 'AbortError' && !error.message?.includes('aborted')) {
+                console.error('Erro ao buscar configurações:', error);
+            }
             return { ...DEFAULT_CATALOG_SETTINGS } as CatalogSettings;
         }
     }

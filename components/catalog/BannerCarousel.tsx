@@ -49,8 +49,10 @@ export function BannerCarousel({
             data.forEach(banner => {
                 bannerService.trackBannerView(banner.id);
             });
-        } catch (error) {
-            console.error('Erro ao carregar banners:', error);
+        } catch (error: any) {
+            if (error.code !== '20' && error.name !== 'AbortError' && !error.message?.includes('aborted')) {
+                console.error('Erro ao carregar banners:', error);
+            }
         } finally {
             setLoading(false);
         }
