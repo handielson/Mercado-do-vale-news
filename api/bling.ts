@@ -246,7 +246,19 @@ export default async function handler(req: any, res: any) {
         if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
         const page = req.query.page || 1;
         try {
-            const blingRes = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`, {
+            let url = `https://www.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`;
+            
+            // Forward idsProdutos[] array if present
+            if (req.query['idsProdutos[]']) {
+                const ids = Array.isArray(req.query['idsProdutos[]']) 
+                    ? req.query['idsProdutos[]'] 
+                    : [req.query['idsProdutos[]']];
+                
+                const idsQuery = ids.map(id => `idsProdutos[]=${id}`).join('&');
+                url = `https://www.bling.com.br/Api/v3/estoques/saldos?${idsQuery}`;
+            }
+
+            const blingRes = await fetch(url, {
                 headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
             });
             if (blingRes.status === 400) return res.status(200).json({ data: [] });

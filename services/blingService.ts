@@ -745,8 +745,9 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
     let page = 1;
 
     do {
-        const res = await fetch(`/api/bling?resource=products&page=${page}&search=${encodeURIComponent(query)}`, {
+        const res = await fetch(`/api/bling?resource=products&page=${page}&search=${encodeURIComponent(query)}&_t=${Date.now()}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
+            cache: 'no-store'
         });
 
         if (!res.ok) throw new Error(`Bling API error ${res.status}`);
