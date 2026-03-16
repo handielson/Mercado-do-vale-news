@@ -1017,10 +1017,22 @@ export async function importBlingProducts(
                 let resolvedModelId = modelCache.get(cacheKey);
                 if (!resolvedModelId) {
                     const models = await modelService.list();
-                    const existingModel = models.find(m => m.brand_id === resolvedBrandId && m.name.toLowerCase() === newModelName.toLowerCase());
+                    const existingModel = models.find(m => m.name.toLowerCase() === newModelName.toLowerCase());
                     
                     if (existingModel) {
                         resolvedModelId = existingModel.id;
+                        // If the model was previously under "Diversos" (or another brand), update it to the true brand
+                        if (existingModel.brand_id !== resolvedBrandId) {
+                            try {
+                                await supabase
+                                    .from('models')
+                                    .update({ brand_id: resolvedBrandId })
+                                    .eq('id', existingModel.id);
+                                existingModel.brand_id = resolvedBrandId;
+                            } catch (e) {
+                                console.warn('Failed to update existing model brand:', e);
+                            }
+                        }
                     } else {
                         // Create Cross-Sell Tag usando apenas o nome limpo
                         if (!crossSellTagCache.has(cleanTag.toLowerCase())) {
