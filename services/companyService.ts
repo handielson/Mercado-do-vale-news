@@ -180,9 +180,10 @@ export const getCompanyData = async (): Promise<Company> => {
             .single();
 
         if (error) {
-            // Se foi cancelado (AbortError), apenas lança para quem chamou lidar silenciosamente
-            if (error.code === '20' || error.message?.includes('aborted')) {
-                 throw new Error('AbortError');
+            // Requisição abortada (AbortError / CORS / timeout) – retornar padrão sem bloquear
+            if (error.code === '20' || error.message?.includes('aborted') || error.message?.includes('abort')) {
+                console.log('[companyService] Fetch aborted – returning defaults');
+                return defaultCompany;
             }
             // If no record exists, return default
             if (error.code === 'PGRST116') {
@@ -190,15 +191,16 @@ export const getCompanyData = async (): Promise<Company> => {
                 return defaultCompany;
             }
             console.error('Error fetching company data:', error);
-            throw error;
+            return defaultCompany;
         }
 
         console.log('Company data loaded successfully');
         return rowToCompany(data as CompanySettingsRow);
     } catch (error: any) {
-        if (error.name === 'AbortError' || error.message === 'AbortError') {
-             console.log('[companyService] Fetch aborted');
-             throw error; 
+        // Qualquer erro (AbortError, CORS, timeout) retorna padrão sem explodir
+        if (error?.name === 'AbortError' || error?.message === 'AbortError' || error?.message?.includes('aborted')) {
+            console.log('[companyService] Fetch aborted – returning defaults');
+            return defaultCompany;
         }
         console.error('Error loading company data:', error);
         return defaultCompany;
