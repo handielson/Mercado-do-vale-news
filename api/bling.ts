@@ -518,6 +518,31 @@ export default async function handler(req: any, res: any) {
         }
     }
 
+    // ─── DEBUG-DIAGNOSTIC: Test stock endpoint ────────────
+    if (resource === 'debug-diagnostic') {
+        if (req.method !== 'GET') return res.status(405).end();
+        try {
+            const { blingId } = req.query;
+            if (!blingId) return res.status(400).json({ error: 'blingId is required' });
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const { data: settings } = await supabase.from('company_settings').select('bling_access_token').single();
+            
+            const resBling = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${blingId}`, { 
+                headers: { 'Authorization': `Bearer ${settings?.bling_access_token}`, 'Accept': 'application/json' } 
+            });
+            const data = await resBling.json();
+            
+            const resProd = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, {
+                headers: { 'Authorization': `Bearer ${settings?.bling_access_token}`, 'Accept': 'application/json' }
+            });
+            const prodData = await resProd.json();
+            
+            return res.status(200).json({ stock: data, product: prodData });
+        } catch (err: any) {
+            return res.status(500).json({ error: err.message });
+        }
+    }
+
     // ─── FIX-BLING-ID: corrige o bling_id de um produto por SKU ─────────────
     if (resource === 'fix-bling-id') {
         if (req.method !== 'POST') return res.status(405).end();
