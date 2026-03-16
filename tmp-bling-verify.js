@@ -1,32 +1,28 @@
-import fs from 'fs';
+import * as dotenv from 'dotenv';
+import { createClient } from '@supabase/supabase-js';
 
-const env = fs.readFileSync('.env.local', 'utf8');
-const url = env.match(/VITE_SUPABASE_URL=([^\r\n]+)/)[1].replace(/["']/g, '');
-const key = env.match(/VITE_SUPABASE_ANON_KEY=([^\r\n]+)/)[1].replace(/["']/g, '');
+dotenv.config();
 
-fetch(url + '/rest/v1/company_settings?select=bling_access_token', {
-    headers: { apikey: key, 'Authorization': 'Bearer ' + key }
-}).then(r => r.json()).then(data => {
-    const token = data[0].bling_access_token;
-
-    const dInicial = '2025-12-01';
-    const dFinal = '2025-12-31';
-
-    // Test 1: no situacoes
-    fetch(`https://api.bling.com.br/Api/v3/contas/receber?limite=100&pagina=1&dataVencimentoInicial=${dInicial}&dataVencimentoFinal=${dFinal}`, {
-        headers: { 'Authorization': 'Bearer ' + token }
-    }).then(r => r.json()).then(res => {
-        console.log('--- Test 1 (Sem situacoes) ---');
-        console.log('Total returned:', res.data?.length);
-        res.data?.forEach(c => console.log('  -', c.contato.nome, '| Venc:', c.vencimento, '| Situação:', c.situacao));
+async function check() {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data: settings } = await supabase.from('company_settings').select('id, bling_refresh_token, bling_client_id, bling_client_secret').limit(1).single();
+    
+    // Refresh token
+    const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${Buffer.from(settings.bling_client_id + ':' + settings.bling_client_secret).toString('base64')}` },
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: settings.bling_refresh_token }),
     });
-
-    // Test 2: situacoes=1,2,3,4
-    fetch(`https://api.bling.com.br/Api/v3/contas/receber?limite=100&pagina=1&dataVencimentoInicial=${dInicial}&dataVencimentoFinal=${dFinal}&situacoes[]=1&situacoes[]=2&situacoes[]=3&situacoes[]=4`, {
-        headers: { 'Authorization': 'Bearer ' + token }
-    }).then(r => r.json()).then(res => {
-        console.log('\n--- Test 2 (Com situacoes=1,2,3,4) ---');
-        console.log('Total returned:', res.data?.length);
-        res.data?.forEach(c => console.log('  -', c.contato.nome, '| Venc:', c.vencimento, '| Situação:', c.situacao));
+    const { access_token } = await tokenRes.json();
+    
+    // Test API call to /estoques/saldos
+    const res = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=5`, {
+        headers: { 'Authorization': `Bearer ${access_token}` }
     });
-});
+    const json = await res.json();
+    console.log(JSON.stringify(json, null, 2));
+}
+
+check().catch(console.error);

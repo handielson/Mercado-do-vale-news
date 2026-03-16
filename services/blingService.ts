@@ -476,7 +476,7 @@ async function fetchStockMap(accessToken: string): Promise<Map<number, number>> 
         for (const item of items) {
             const productId = item.produto?.id;
             if (!productId) continue;
-            const qty = item.saldoFisico ?? 0;
+            const qty = item.saldoFisicoTotal ?? item.saldoFisico ?? item.saldoVirtualTotal ?? item.saldoVirtual ?? 0;
             map.set(productId, (map.get(productId) || 0) + qty);
         }
 
