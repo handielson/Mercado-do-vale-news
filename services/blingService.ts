@@ -473,6 +473,15 @@ async function fetchStockMap(accessToken: string): Promise<Map<number, number>> 
         const items: any[] = json.data || [];
         if (items.length === 0) break;
 
+        // DEBUG PROVISÓRIO: Exibir como o Bling manda os itens de stock (apenas o 1º de teste)
+        if (page === 1 && items.length > 0) {
+            import('sonner').then(sonner => {
+                sonner.toast.error("Bling Stock Item [F12 p/ mais]: " + JSON.stringify(items[0]).slice(0, 150));
+                console.log("=== DEBUG STOCK BLING ===");
+                console.log(items[0]);
+            });
+        }
+
         for (const item of items) {
             const productId = item.produto?.id;
             if (!productId) continue;
