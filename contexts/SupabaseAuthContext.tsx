@@ -24,10 +24,22 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.log('[DEBUG] SupabaseAuthContext MOUNTED');
         let isMounted = true;
 
+        // Timeout de segurança: se o Supabase não responder em 5s (ex: CORS bloqueando),
+        // desbloquear a aplicação para que usuários anônimos possam navegar normalmente.
+        const authTimeout = setTimeout(() => {
+            if (isMounted) {
+                console.warn('[SupabaseAuth] Auth timeout – forcing isLoading=false to unblock app.');
+                setIsLoading(false);
+            }
+        }, 5000);
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             (event, session) => { // NOT async - synchronous to prevent concurrent callbacks
                 if (!isMounted) return;
                 console.log('Auth state changed:', event);
+
+                // Limpar timeout pois o Supabase respondeu
+                clearTimeout(authTimeout);
 
                 setUser(session?.user ?? null);
 
@@ -46,6 +58,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
         return () => {
             isMounted = false;
+            clearTimeout(authTimeout);
             subscription.unsubscribe();
         };
     }, [])
