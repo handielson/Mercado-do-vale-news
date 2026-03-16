@@ -691,6 +691,20 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
         page++;
     } while (true);
 
+    // A API do Bling não retorna `formato` na listagem paginada.
+    // Identificamos os Produtos Pai como aqueles cujo ID aparece como
+    // variacao.produtoPai.id em algum filho da mesma listagem.
+    const parentIds = new Set<number>();
+    for (const p of all) {
+        const paiId = (p.variacao as any)?.produtoPai?.id;
+        if (paiId) parentIds.add(paiId);
+    }
+    for (const p of all) {
+        if (!p.formato && parentIds.has(p.id)) {
+            p.formato = 'E';
+        }
+    }
+
     return all;
 }
 
