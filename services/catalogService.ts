@@ -60,10 +60,12 @@ export const catalogService = {
 
         console.log(`🌐 [catalogService] Fetching from Supabase (bypassCache: ${bypassCache})`);
 
-        // Construir query
+        const queryStartTime = performance.now();
+        
+        // Construir query - Trocado exact por estimated para evitar Full Table Scan e gargalo na contagem de linhas
         let query = supabase
             .from('products')
-            .select('*', { count: 'exact' });
+            .select('*', { count: 'estimated' });
 
         // Get global catalog settings to apply DB-level filtering BEFORE pagination
         const settings = await catalogConfigService.getSettings();
@@ -158,104 +160,83 @@ export const catalogService = {
 
         let products = (data || []) as CatalogProduct[];
 
-        // Resolve category slugs via separate query (FK join unreliable without formal constraint)
+        // Extrai identificadores únicos necessários para as consultas de enriquecimento
         const categoryIds = [...new Set(products.filter(p => p.category_id).map(p => p.category_id!))];
-        if (categoryIds.length > 0) {
-            const { data: catData } = await supabase
-                .from('categories')
-                .select('id, slug')
-                .in('id', categoryIds);
-            if (catData && catData.length > 0) {
-                const catSlugMap = new Map<string, string>(
-                    (catData as any[]).map((c: any) => [c.id, c.slug])
-                );
-                products = products.map(p => ({
-                    ...p,
-                    category_slug: catSlugMap.get(p.category_id!) || undefined,
-                }));
-            }
-        }
-
-        // Enrich products with model images if they have no custom images
-        const productsNeedingImages = products.filter(
-            p => (!p.images || p.images.length === 0) && p.model_id
-        );
-
-        if (productsNeedingImages.length > 0) {
-            const modelIds = [...new Set(productsNeedingImages.map(p => p.model_id))];
-
-            // Collect unique color names to resolve to IDs
-            const colorNames = [...new Set(
-                productsNeedingImages
-                    .map(p => p.specs?.color)
-                    .filter(Boolean) as string[]
-            )];
-
-            // Buscar imagens dos modelos e cores (se houver)
-            const [{ data: modelImages }, { data: colorRows }] = await Promise.all([
-                supabase
-                    .from('model_color_images')
-                    .select('model_id, color_id, images')
-                    .in('model_id', modelIds),
-                colorNames.length > 0
-                    ? supabase.from('colors').select('id, name').in('name', colorNames)
-                    : Promise.resolve({ data: [] })
-            ]);
-
-            if (modelImages && modelImages.length > 0) {
-                // Build color name → id map
-                const colorNameToId = new Map<string, string>(
-                    (colorRows || []).map(c => [c.name, c.id])
-                );
-
-                products = products.map(product => {
-                    if (product.images && product.images.length > 0) return product;
-                    if (!product.model_id) return product;
-
-                    const entriesForModel = modelImages.filter(mi => mi.model_id === product.model_id);
-                    if (entriesForModel.length === 0) return product;
-
-                    // Try to find the entry matching the product's color
-                    const colorName = product.specs?.color;
-                    const colorId = colorName ? colorNameToId.get(colorName) : undefined;
-
-                    let chosen = colorId
-                        ? entriesForModel.find(mi => mi.color_id === colorId)
-                        : undefined;
-
-                    // Fallback: use first available entry for the model
-                    if (!chosen) chosen = entriesForModel[0];
-
-                    if (chosen?.images?.length > 0) {
-                        return { ...product, images: chosen.images };
-                    }
-                    return product;
-                });
-            }
-        }
-
-        // Enrich product.specs with model template_values (for badge fields like NFC, 5G etc.)
-        // Only fills in fields missing from product.specs — product.specs always wins.
+        const productsNeedingImages = products.filter(p => (!p.images || p.images.length === 0) && p.model_id);
+        const modelIdsForImages = [...new Set(productsNeedingImages.map(p => p.model_id!))];
+        const colorNames = [...new Set(productsNeedingImages.map(p => p.specs?.color).filter(Boolean) as string[])];
         const modelIdsForSpecs = [...new Set(products.filter(p => p.model_id).map(p => p.model_id!))];
-        if (modelIdsForSpecs.length > 0) {
-            const { data: modelTemplates } = await supabase
-                .from('models')
-                .select('id, template_values')
-                .in('id', modelIdsForSpecs);
 
-            if (modelTemplates && modelTemplates.length > 0) {
-                const templateMap = new Map<string, Record<string, any>>(
-                    modelTemplates.map((m: any) => [m.id, m.template_values || {}])
-                );
-                products = products.map(product => {
-                    if (!product.model_id) return product;
-                    const tmpl = templateMap.get(product.model_id);
-                    if (!tmpl || Object.keys(tmpl).length === 0) return product;
-                    // Template fills missing fields; product.specs overrides
-                    const mergedSpecs = { ...tmpl, ...(product.specs || {}) };
-                    return { ...product, specs: mergedSpecs };
-                });
-            }
+        // Dispara todas as consultas de enriquecimento em paralelo
+        const [
+            catResponse,
+            modelImagesResponse,
+            colorRowsResponse,
+            modelTemplatesResponse
+        ] = await Promise.all([
+            categoryIds.length > 0
+                ? supabase.from('categories').select('id, slug').in('id', categoryIds)
+                : Promise.resolve({ data: [] }),
+            modelIdsForImages.length > 0
+                ? supabase.from('model_color_images').select('model_id, color_id, images').in('model_id', modelIdsForImages)
+                : Promise.resolve({ data: [] }),
+            colorNames.length > 0
+                ? supabase.from('colors').select('id, name').in('name', colorNames)
+                : Promise.resolve({ data: [] }),
+            modelIdsForSpecs.length > 0
+                ? supabase.from('models').select('id, template_values').in('id', modelIdsForSpecs)
+                : Promise.resolve({ data: [] })
+        ]);
+
+        // Processa categorias
+        if (catResponse.data && catResponse.data.length > 0) {
+            const catSlugMap = new Map<string, string>(
+                (catResponse.data as any[]).map((c: any) => [c.id, c.slug])
+            );
+            products = products.map(p => ({
+                ...p,
+                category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
+            }));
+        }
+
+        // Processa cores e imagens
+        if (modelImagesResponse.data && modelImagesResponse.data.length > 0) {
+            const colorNameToId = new Map<string, string>(
+                (colorRowsResponse.data || []).map(c => [c.name, c.id])
+            );
+            
+            products = products.map(product => {
+                if (product.images && product.images.length > 0) return product;
+                if (!product.model_id) return product;
+
+                const entriesForModel = (modelImagesResponse.data as any[]).filter(mi => mi.model_id === product.model_id);
+                if (entriesForModel.length === 0) return product;
+
+                const colorName = product.specs?.color;
+                const colorId = colorName ? colorNameToId.get(colorName) : undefined;
+                let chosen = colorId ? entriesForModel.find(mi => mi.color_id === colorId) : undefined;
+                
+                if (!chosen) chosen = entriesForModel[0]; // fallback
+                if (chosen?.images?.length > 0) {
+                    return { ...product, images: chosen.images };
+                }
+                return product;
+            });
+        }
+
+        // Processa templates de modelo (Specs complementares)
+        if (modelTemplatesResponse.data && modelTemplatesResponse.data.length > 0) {
+            const templateMap = new Map<string, Record<string, any>>(
+                (modelTemplatesResponse.data as any[]).map((m: any) => [m.id, m.template_values || {}])
+            );
+            products = products.map(product => {
+                if (!product.model_id) return product;
+                const tmpl = templateMap.get(product.model_id);
+                if (!tmpl || Object.keys(tmpl).length === 0) return product;
+                
+                const mergedSpecs = { ...tmpl, ...(product.specs || {}) };
+                return { ...product, specs: mergedSpecs };
+            });
         }
 
         // Atualizar cache
