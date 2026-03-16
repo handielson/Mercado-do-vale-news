@@ -11,14 +11,6 @@ class CatalogConfigService {
      */
     async getSettings(userId?: string): Promise<CatalogSettings> {
         try {
-            // Tenta obter o usuário logado se não foi passado
-            if (!userId) {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    userId = user.id;
-                }
-            }
-
             // Verificar cache global independente de cookie
             const cacheKey = userId ? `settings_${userId}` : 'settings_global';
             const cached = this.cache.get(cacheKey);
@@ -35,6 +27,10 @@ class CatalogConfigService {
             const { data, error } = await query.limit(1).single();
 
             if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+                // AbortError/CORS: retornar padrões sem logar erro
+                if (error.code === '20' || error.message?.includes('aborted') || error.message?.includes('abort')) {
+                    return { ...DEFAULT_CATALOG_SETTINGS } as CatalogSettings;
+                }
                 console.error('Erro ao buscar catalog_settings:', error);
             }
 
