@@ -879,7 +879,7 @@ export default function BlingPage() {
                                                         <span className="text-xs text-slate-400 whitespace-nowrap">{selectedIds.size} selecionados</span>
                                                         <button 
                                                             onClick={() => {
-                                                                const selectableProducts = filteredProducts.filter(p => p.formato !== 'E');
+                                                                const selectableProducts = filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V');
                                                                 if (selectableProducts.every(p => selectedIds.has(p.id))) {
                                                                     setSelectedIds(new Set()); // Desmarca todos
                                                                 } else {
@@ -888,7 +888,7 @@ export default function BlingPage() {
                                                             }} 
                                                             className="text-xs text-blue-600 hover:underline font-medium whitespace-nowrap ml-2"
                                                         >
-                                                            {filteredProducts.filter(p => p.formato !== 'E').every(p => selectedIds.has(p.id)) && filteredProducts.filter(p => p.formato !== 'E').length > 0 ? 'Desmarcar' : 'Todos'}
+                                                            {filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V').every(p => selectedIds.has(p.id)) && filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V').length > 0 ? 'Desmarcar' : 'Todos'}
                                                         </button>
                                                     </div>
                                                 <div className="divide-y divide-slate-100">
@@ -901,8 +901,8 @@ export default function BlingPage() {
                                                         return (
                                                             <div key={p.id} className={`border-b border-slate-100 last:border-0 ${isExisting ? 'opacity-70 bg-slate-50/50' : ''}`}>
                                                                 {/* Summary row */}
-                                                                <div className={`flex items-center gap-3 py-2.5 transition-colors ${p.formato === 'E' ? 'bg-slate-100 border-l-[3px] border-slate-300 pl-[13px] pr-4 opacity-90' : 'px-4 hover:bg-slate-50'}`}>
-                                                                    {p.formato !== 'E' ? (
+                                                                <div className={`flex items-center gap-3 py-2.5 transition-colors ${(p.formato === 'E' || p.formato === 'V') ? 'bg-slate-100 border-l-[3px] border-slate-300 pl-[13px] pr-4 opacity-90' : 'px-4 hover:bg-slate-50'}`}>
+                                                                    {(p.formato !== 'E' && p.formato !== 'V') ? (
                                                                         <input
                                                                             type="checkbox"
                                                                             checked={selectedIds.has(p.id)}
@@ -915,7 +915,7 @@ export default function BlingPage() {
                                                                     <div className="flex-1 min-w-0">
                                                                         <div className="flex items-center gap-2">
                                                                              <p className="text-sm font-medium text-slate-800 truncate">{displayProduct.nome}</p>
-                                                                             {p.formato === 'E' && (
+                                                                             {(p.formato === 'E' || p.formato === 'V') && (
                                                                                 <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap border border-slate-300">
                                                                                     Produto Pai
                                                                                 </span>
