@@ -244,12 +244,9 @@ export const catalogService = {
             const storage = getStorage();
             if (storage) {
                 try {
-                    storage.setItem(cacheKey, JSON.stringify({
-                        data: products,
-                        total: count || 0,
-                        hasMore: products.length === pageSize,
-                        timestamp: Date.now()
-                    }));
+                    // Caching the entire product list per category/filter easily hits the 5MB localStorage limit.
+                    // We only cache the result if it's a very light payload, or we rely on browser memory/React Query.
+                    // Disabled local storage persistence for large product arrays to avoid QuotaExceededError. 
                 } catch (e) {
                     console.warn('Failed to save catalog to cache (storage full?)', e);
                 }

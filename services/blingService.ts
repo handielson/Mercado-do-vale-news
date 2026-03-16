@@ -588,7 +588,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         sku: item.codigo || null,
         ean: item.gtin || null,
         alternative_eans: item.gtin ? [item.gtin] : [],
-        brand: item.marca || null,
+        brand: typeof item.marca === 'object' ? item.marca?.nome || null : item.marca || null,
         description: item.descricao || item.descricaoComplementar || item.descricaoCurta || null,
         status: item.situacao === 'A' ? 'active' : 'inactive',
         // Categoria
@@ -972,7 +972,12 @@ export async function importBlingProducts(
 
             // --- AUTO-CREATE/RESOLVE BRAND LOGIC (Always runs) ---
             // Extrai a marca do Bling ou assume "Diversos" caso falhe e precisemos gerar um modelo
-            let rawBrandName = enriched.marca ? enriched.marca.trim() : 'Diversos';
+            let rawBrandName = 'Diversos';
+            const extractedMarca = typeof enriched.marca === 'object' ? enriched.marca?.nome : enriched.marca;
+            if (typeof extractedMarca === 'string' && extractedMarca.trim()) {
+                rawBrandName = extractedMarca.trim();
+            }
+
             // Formata para Title Case (ex: "CINEBOX" -> "Cinebox", "cinebox supremo" -> "Cinebox Supremo")
             let brandName = rawBrandName.toLowerCase().replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
             
@@ -990,7 +995,7 @@ export async function importBlingProducts(
             }
             
             // Grava a marca real, formatada, no produto inserido. Se não existia no Bling, mantemos null no produto de Varejo (Products Table).
-            row.brand = enriched.marca ? brandName : null;
+            row.brand = (extractedMarca && typeof extractedMarca === 'string' && extractedMarca.trim()) ? brandName : null;
 
             // --- AUTO-CREATE MODEL LOGIC ---
             if (autoCreateModel && !finalModelId) {

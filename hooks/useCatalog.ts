@@ -35,8 +35,10 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     const [catalogSettings, setCatalogSettings] = useState<CatalogSettings>(DEFAULT_CATALOG_SETTINGS as CatalogSettings);
     const [settingsLoading, setSettingsLoading] = useState(true);
 
+    const initialCategoryIsUuid = initialCategory && /^[0-9a-f]{8}-/i.test(initialCategory);
+
     const [filters, setFilters] = useState<FilterState>({
-        categories: initialCategory ? [initialCategory] : [],
+        categories: initialCategoryIsUuid ? [initialCategory] : [],
         brands: [],
         priceRange: null,
         inStockOnly: false,
