@@ -582,7 +582,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         bling_id: item.id,
         bling_parent_id: parentId ?? null,
         // Básico
-        name: item.nome || 'Produto sem nome',
+        name: nomeLimpo,
         sku: item.codigo || null,
         ean: item.gtin || null,
         alternative_eans: item.gtin ? [item.gtin] : [],
