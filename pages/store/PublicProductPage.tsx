@@ -393,7 +393,7 @@ export const PublicProductPage: React.FC = () => {
         ? Math.floor(discountedPrice * (cashbackSettings.coins_per_real || 0))
         : 0;
 
-    const title = product.meta_title || `${product.name} | Mercado do Vale`;
+    const title = product.meta_title || `${toTitleCase(product.name)} | Mercado do Vale`;
     const description = product.meta_description || product.description || `Compre ${product.name} no Mercado do Vale.`;
 
     const handleAddToCart = () => {
@@ -477,7 +477,7 @@ export const PublicProductPage: React.FC = () => {
                     {JSON.stringify({
                         "@context": "https://schema.org/",
                         "@type": "Product",
-                        "name": product.name,
+                        "name": toTitleCase(product.name),
                         "image": product.images || [],
                         "description": description,
                         "sku": product.sku || '',
@@ -547,7 +547,7 @@ export const PublicProductPage: React.FC = () => {
                             ) : selectedImage && selectedImage !== 'VIDEO' ? (
                                 <img
                                     src={selectedImage}
-                                    alt={product.meta_title || product.name}
+                                    alt={product.meta_title || toTitleCase(product.name)}
                                     className="w-full h-full object-contain"
                                 />
                             ) : (
@@ -573,7 +573,7 @@ export const PublicProductPage: React.FC = () => {
                                         onClick={() => setSelectedImage(img)}
                                         className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden ${selectedImage === img ? 'border-blue-600' : 'border-slate-200 hover:border-slate-300'}`}
                                     >
-                                        <img src={img} alt={`${product.meta_title || product.name} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
+                                        <img src={img} alt={`${product.meta_title || toTitleCase(product.name)} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
                                     </button>
                                 ))}
                             </div>
