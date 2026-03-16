@@ -849,7 +849,7 @@ export default function BlingPage() {
                                                         onClick={() => setProductListFilter('new')}
                                                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'new' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                                                     >
-                                                        ✨ Produtos Novos
+                                                        ✨ Novos c/ Estoque
                                                         <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => !existingBlingIds.has(p.id) && Number(p.stock_quantity) > 0).length})</span>
                                                     </button>
                                                     <button
