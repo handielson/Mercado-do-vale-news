@@ -139,7 +139,6 @@ export default function BlingPage() {
         loadCredentials();
         categoryService.list().then(cats => {
             setCategories(cats);
-            if (cats.length > 0) setImportCategoryId(cats[0].id);
         }).catch(() => { });
         modelService.list().then(mods => {
             const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -731,7 +730,7 @@ export default function BlingPage() {
                                             <button
                                                 type="button"
                                                 title="Atualizar categorias"
-                                                onClick={() => categoryService.list().then(cats => { setCategories(cats); if (cats.length > 0 && !importCategoryId) setImportCategoryId(cats[0].id); }).catch(() => { })}
+                                                onClick={() => categoryService.list().then(cats => { setCategories(cats); }).catch(() => { })}
                                                 className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
                                             >
                                                 <RefreshCw className="w-3.5 h-3.5" />
