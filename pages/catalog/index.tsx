@@ -53,7 +53,7 @@ function CatalogContent() {
     })();
 
     // Ler ?search= e ?categoria= da URL para suportar links compartilhados e botões de atalho
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const initialSearchQuery = searchParams.get('search') ?? '';
     const initialCategory = searchParams.get('categoria') ?? undefined;
 
@@ -212,6 +212,16 @@ function CatalogContent() {
                         ...filters,
                         categories: categoryId ? [categoryId] : []
                     });
+                    
+                    const newParams = new URLSearchParams(searchParams);
+                    if (categoryId) {
+                        // Tentar usar o nome legível na URL se achado, senão o ID
+                        const catMetadata = filterStats?.categories.find(c => c.id === categoryId);
+                        newParams.set('categoria', catMetadata ? catMetadata.name : categoryId);
+                    } else {
+                        newParams.delete('categoria');
+                    }
+                    setSearchParams(newParams, { replace: true });
                 }}
                 categories={(filterStats?.categories || []).map(cat => ({
                     id: cat.id,
@@ -281,7 +291,7 @@ function CatalogContent() {
                         {/* Share and View Controls */}
                         <div className="flex items-center gap-3">
                             {/* Share Catalog Button */}
-                            <ShareCatalogButton />
+                            <ShareCatalogButton categoryId={filters.categories[0] || undefined} />
                         </div>
                     </div>
 

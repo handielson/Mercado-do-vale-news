@@ -2,11 +2,15 @@
 
 import { useState } from 'react';
 import { Share2, MessageCircle, Copy, Check, FileText } from 'lucide-react';
-import { generateFullCatalogMessage } from '@/utils/catalogMessageGenerator';
-import { generateFullCatalogPDF } from '@/utils/catalogPDFGenerator';
+import { generateFullCatalogMessage, generateCategoryMessage } from '@/utils/catalogMessageGenerator';
+import { generateFullCatalogPDF, generateCategoryPDF } from '@/utils/catalogPDFGenerator';
 import toast from 'react-hot-toast';
 
-export function ShareCatalogButton() {
+interface ShareCatalogButtonProps {
+    categoryId?: string;
+}
+
+export function ShareCatalogButton({ categoryId }: ShareCatalogButtonProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -14,7 +18,9 @@ export function ShareCatalogButton() {
     const handleShareWhatsApp = async () => {
         setIsLoading(true);
         try {
-            const message = await generateFullCatalogMessage('retail'); // Public always uses retail
+            const message = categoryId 
+                ? await generateCategoryMessage(categoryId, 'retail')
+                : await generateFullCatalogMessage('retail');
             const encodedMessage = encodeURIComponent(message);
             const whatsappLink = `whatsapp://send?text=${encodedMessage}`;
 
@@ -32,7 +38,9 @@ export function ShareCatalogButton() {
     const handleCopyMessage = async () => {
         setIsLoading(true);
         try {
-            const message = await generateFullCatalogMessage('retail');
+            const message = categoryId 
+                ? await generateCategoryMessage(categoryId, 'retail')
+                : await generateFullCatalogMessage('retail');
             await navigator.clipboard.writeText(message);
             setIsCopied(true);
             toast.success('Mensagem copiada!');
@@ -52,7 +60,11 @@ export function ShareCatalogButton() {
     const handleDownloadPDF = async () => {
         setIsLoading(true);
         try {
-            await generateFullCatalogPDF('retail'); // Public always uses retail
+            if (categoryId) {
+                await generateCategoryPDF(categoryId, 'retail');
+            } else {
+                await generateFullCatalogPDF('retail'); // Public always uses retail
+            }
             toast.success('PDF baixado com sucesso!');
             setIsOpen(false);
         } catch (error) {
@@ -70,7 +82,9 @@ export function ShareCatalogButton() {
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
             >
                 <Share2 className="w-4 h-4" />
-                <span className="font-medium">Compartilhar Catálogo</span>
+                <span className="font-medium">
+                    {categoryId ? 'Compartilhar Categoria' : 'Compartilhar Catálogo'}
+                </span>
             </button>
 
             {isOpen && (
