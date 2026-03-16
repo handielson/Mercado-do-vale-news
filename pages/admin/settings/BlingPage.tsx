@@ -89,6 +89,7 @@ export default function BlingPage() {
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [productSearch, setProductSearch] = useState('');
     const [blingSearch, setBlingSearch] = useState('');
+    const [productListFilter, setProductListFilter] = useState<'new' | 'imported' | 'all'>('new');
     const [enabledFields, setEnabledFields] = useState<Set<string>>(new Set(DEFAULT_ENABLED_FIELDS));
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -356,11 +357,21 @@ export default function BlingPage() {
         });
     }
 
-    const filteredProducts = blingProducts.filter(p =>
-        !productSearch ||
-        p.nome.toLowerCase().includes(productSearch.toLowerCase()) ||
-        (p.codigo || '').toLowerCase().includes(productSearch.toLowerCase())
-    );
+    const filteredProducts = blingProducts.filter(p => {
+        // 1. Text Search Filter
+        const matchesSearch = !productSearch ||
+            p.nome.toLowerCase().includes(productSearch.toLowerCase()) ||
+            (p.codigo || '').toLowerCase().includes(productSearch.toLowerCase());
+        if (!matchesSearch) return false;
+
+        // 2. Tab Filter
+        if (productListFilter === 'new') {
+            return !existingBlingIds.has(p.id);
+        } else if (productListFilter === 'imported') {
+            return existingBlingIds.has(p.id);
+        }
+        return true;
+    });
 
     function toggleSelectAll() {
         // We only consider products that are NOT already existing for the "Select All" logic.
@@ -830,21 +841,57 @@ export default function BlingPage() {
 
                                         {/* Product list */}
                                         {blingProducts.length > 0 && (
-                                            <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                                <div className="flex items-center gap-2 p-3 bg-slate-50 border-b border-slate-200">
-                                                    <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                                                    <input
-                                                        type="text"
-                                                        value={productSearch}
-                                                        onChange={e => setProductSearch(e.target.value)}
-                                                        placeholder="Filtrar por nome ou SKU..."
-                                                        className="flex-1 bg-transparent text-sm outline-none text-slate-700"
-                                                    />
-                                                    <span className="text-xs text-slate-400 whitespace-nowrap">{selectedIds.size} selecionados</span>
-                                                    <button onClick={toggleSelectAll} className="text-xs text-blue-600 hover:underline font-medium whitespace-nowrap ml-2">
-                                                        {filteredProducts.every(p => selectedIds.has(p.id)) ? 'Desmarcar' : 'Todos'}
+                                            <div className="space-y-3">
+                                                {/* UI Das Abas Segmentadas */}
+                                                <div className="flex bg-slate-100 p-1 rounded-lg w-fit">
+                                                    <button
+                                                        onClick={() => setProductListFilter('new')}
+                                                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'new' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                                                    >
+                                                        ✨ Produtos Novos
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => !existingBlingIds.has(p.id)).length})</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setProductListFilter('imported')}
+                                                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'imported' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                                                    >
+                                                        ✅ Já Importados
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => existingBlingIds.has(p.id)).length})</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setProductListFilter('all')}
+                                                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                                                    >
+                                                        📦 Todos
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.length})</span>
                                                     </button>
                                                 </div>
+
+                                                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                                    <div className="flex items-center gap-2 p-3 bg-slate-50 border-b border-slate-200">
+                                                        <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                                                        <input
+                                                            type="text"
+                                                            value={productSearch}
+                                                            onChange={e => setProductSearch(e.target.value)}
+                                                            placeholder="Filtrar por nome ou SKU..."
+                                                            className="flex-1 bg-transparent text-sm outline-none text-slate-700"
+                                                        />
+                                                        <span className="text-xs text-slate-400 whitespace-nowrap">{selectedIds.size} selecionados</span>
+                                                        <button 
+                                                            onClick={() => {
+                                                                const selectableProducts = filteredProducts.filter(p => p.formato !== 'E');
+                                                                if (selectableProducts.every(p => selectedIds.has(p.id))) {
+                                                                    setSelectedIds(new Set()); // Desmarca todos
+                                                                } else {
+                                                                    setSelectedIds(new Set(selectableProducts.map(p => p.id))); // Marca todos os selecionáveis
+                                                                }
+                                                            }} 
+                                                            className="text-xs text-blue-600 hover:underline font-medium whitespace-nowrap ml-2"
+                                                        >
+                                                            {filteredProducts.filter(p => p.formato !== 'E').every(p => selectedIds.has(p.id)) && filteredProducts.filter(p => p.formato !== 'E').length > 0 ? 'Desmarcar' : 'Todos'}
+                                                        </button>
+                                                    </div>
                                                 <div className="divide-y divide-slate-100">
                                                     {filteredProducts.map(p => {
                                                         const isExpanded = expandedProductId === p.id;
@@ -855,17 +902,28 @@ export default function BlingPage() {
                                                         return (
                                                             <div key={p.id} className={`border-b border-slate-100 last:border-0 ${isExisting ? 'opacity-70 bg-slate-50/50' : ''}`}>
                                                                 {/* Summary row */}
-                                                                <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={selectedIds.has(p.id)}
-                                                                        onChange={() => toggleSelect(p.id)}
-                                                                        className="w-4 h-4 accent-green-600 flex-shrink-0"
-                                                                    />
+                                                                <div className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${p.formato === 'E' ? 'bg-slate-50 opacity-75' : 'hover:bg-slate-50'}`}>
+                                                                    {p.formato !== 'E' ? (
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={selectedIds.has(p.id)}
+                                                                            onChange={() => toggleSelect(p.id)}
+                                                                            className="w-4 h-4 accent-green-600 flex-shrink-0"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-4 h-4 flex-shrink-0" title="Produtos Pai não podem ser importados sozinhos." />
+                                                                    )}
                                                                     <div className="flex-1 min-w-0">
-                                                                        <p className="text-sm font-medium text-slate-800 truncate">{displayProduct.nome}</p>
+                                                                        <div className="flex items-center gap-2">
+                                                                             <p className="text-sm font-medium text-slate-800 truncate">{displayProduct.nome}</p>
+                                                                             {p.formato === 'E' && (
+                                                                                <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap border border-slate-300">
+                                                                                    Produto Pai
+                                                                                </span>
+                                                                             )}
+                                                                        </div>
                                                                         <p className="text-xs text-slate-400">
-                                                                            {displayProduct.codigo ? `SKU: ${displayProduct.codigo}` : ''}
+                                                                            {displayProduct.codigo && displayProduct.codigo !== displayProduct.nome ? `SKU: ${displayProduct.codigo}` : ''}
                                                                             {displayProduct.gtin ? ` · EAN: ${displayProduct.gtin}` : ''}
                                                                             {displayProduct.marca ? ` · ${displayProduct.marca}` : ''}
                                                                         </p>
@@ -1109,6 +1167,7 @@ export default function BlingPage() {
                                                     )}
                                                 </div>
                                             </div>
+                                            </div>
                                         )}
 
                                         {/* Import button */}
@@ -1119,8 +1178,8 @@ export default function BlingPage() {
                                                 className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
                                             >
                                                 {importing
-                                                    ? <><Loader2 className="w-5 h-5 animate-spin" /> Importando {importProgress.current}/{importProgress.total}...</>
-                                                    : <><Download className="w-5 h-5" /> Importar {selectedIds.size} produto{selectedIds.size !== 1 ? 's' : ''}</>}
+                                                    ? <><Loader2 className="w-5 h-5 animate-spin" /> {productListFilter === 'imported' ? 'Sincronizando' : 'Importando'} {importProgress.current}/{importProgress.total}...</>
+                                                    : <><Download className="w-5 h-5" /> {productListFilter === 'imported' ? 'Sincronizar' : 'Importar'} {selectedIds.size} produto{selectedIds.size !== 1 ? 's' : ''}</>}
                                             </button>
                                         )}
 
@@ -1153,21 +1212,38 @@ export default function BlingPage() {
                                                     </div>
                                                 </div>
                                                 {importResult.errors.length > 0 && (
-                                                    <div className="space-y-2">
-                                                        <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Detalhes dos Erros</p>
-                                                        <div className="max-h-48 overflow-y-auto space-y-1.5">
-                                                            {importResult.errors.map((e, i) => (
-                                                                <div key={i} className="bg-white border border-red-200 rounded-lg px-3 py-2">
-                                                                    <div className="flex items-start justify-between gap-2">
-                                                                        <div className="min-w-0">
-                                                                            <p className="text-xs font-semibold text-slate-800 truncate">{e.name}</p>
-                                                                            {e.sku && <p className="text-xs text-slate-400">SKU: {e.sku}</p>}
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2">
+                                                            <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Detalhes dos Erros</p>
+                                                            <div className="max-h-48 overflow-y-auto space-y-1.5">
+                                                                {importResult.errors.map((e, i) => (
+                                                                    <div key={i} className="bg-white border border-red-200 rounded-lg px-3 py-2">
+                                                                        <div className="flex items-start justify-between gap-2">
+                                                                            <div className="min-w-0">
+                                                                                <p className="text-xs font-semibold text-slate-800 truncate">{e.name}</p>
+                                                                                {e.sku && <p className="text-xs text-slate-400">SKU: {e.sku}</p>}
+                                                                            </div>
                                                                         </div>
+                                                                        <p className="text-xs text-red-600 mt-1">⚠️ {e.reason}</p>
                                                                     </div>
-                                                                    <p className="text-xs text-red-600 mt-1">⚠️ {e.reason}</p>
-                                                                </div>
-                                                            ))}
+                                                                ))}
+                                                            </div>
                                                         </div>
+                                                        
+                                                        {/* Re-import errors button */}
+                                                        {importResult.errors.some((e: any) => e.id) && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    const idsToRetry = importResult.errors.filter((e: any) => e.id).map((e: any) => e.id as number);
+                                                                    setSelectedIds(new Set(idsToRetry));
+                                                                    setImportResult(null); // Clear previous results
+                                                                }}
+                                                                className="w-full flex justify-center items-center gap-2 px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 transition-colors rounded-lg text-sm font-semibold"
+                                                            >
+                                                                <RefreshCw className="w-4 h-4" />
+                                                                Tentar importar os {importResult.errors.length} com erro novamente
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>

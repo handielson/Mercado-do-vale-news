@@ -82,6 +82,7 @@ export interface BlingProduct {
     marca?: string;
     imagens?: Array<{ link?: string; url?: string }>;
     variacao?: { nome: string; produtoPai?: { id: number } };
+    formato?: string; // 'S' para Simples, 'E' para Estrutura/Pai
 }
 
 /** Detalhes completos de um produto do Bling (retornados pelo endpoint individual) */
@@ -103,6 +104,7 @@ export interface BlingProductDetail extends BlingProduct {
     _edited?: boolean;
     _precoRevenda?: number;
     _precoAtacado?: number;
+    nomePai?: string;
 }
 
 /** Busca todos os campos de um produto Bling + estoque real por depósito */
@@ -169,6 +171,7 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
 
             id: data.id,
             nome: data.nome || '',
+            nomePai: parentData?.nome || undefined,
             codigo: data.codigo || null,
             gtin: data.gtin || parentData?.gtin || null,
             preco: data.preco ?? parentData?.preco ?? null,
@@ -700,7 +703,9 @@ export async function checkExistingBlingProducts(blingIds: number[]): Promise<Se
         .from('products')
         .select('bling_id')
         .eq('company_id', companyId)
-        .in('bling_id', blingIds);
+        .in('bling_id', blingIds)
+        .not('model_id', 'is', null) // Ignora produtos que ficaram órfãos ao deletar modelo
+        .neq('status', 'draft');     // Ignora produtos "pai" estruturais
 
     if (error) {
         console.error('[checkExistingBlingProducts] Falha:', error.message);
@@ -723,20 +728,22 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
     if (!res.ok) throw new Error(`Bling API error ${res.status}`);
     const json = await res.json();
 
-    return (json.data || []).map((item: any) => ({
-        id: item.id,
-        nome: item.nome || 'Produto sem nome',
-        codigo: item.codigo || null,
-        gtin: item.gtin || null,
-        preco: item.preco || null,
-        precoCusto: item.precoCusto || null,
-        situacao: item.situacao || 'A',
-        stock_quantity: stockMap.get(item.id) ?? 0,
-        categoria: item.categoria || undefined,
-        marca: item.marca || undefined,
-        imagens: item.imagens || [],
-        variacao: item.variacao || undefined,
-    }));
+    return (json.data || [])
+        .map((item: any) => ({
+            id: item.id,
+            nome: item.nome || 'Produto sem nome',
+            codigo: item.codigo || null,
+            gtin: item.gtin || null,
+            preco: item.preco || null,
+            precoCusto: item.precoCusto || null,
+            situacao: item.situacao || 'A',
+            stock_quantity: stockMap.get(item.id) ?? 0,
+            categoria: item.categoria || undefined,
+            marca: item.marca || undefined,
+            imagens: item.imagens || [],
+            variacao: item.variacao || undefined,
+            formato: item.formato, // Necessário para a UI saber se ignora o click
+        }));
 }
 
 
@@ -914,13 +921,19 @@ export async function importBlingProducts(
             // --- AUTO-CREATE MODEL LOGIC ---
             if (autoCreateModel && !finalModelId) {
                 const brandName = enriched.marca || 'Diversos';
-                let newModelName = row.name || 'Produto sem nome';
+                
+                // Prioriza o nome literal da Estrutura/Pai. Se não houver, tenta limpar variações explícitas do titulo
+                let baseName = enriched.nomePai || row.name || 'Produto sem nome';
+                let newModelName = baseName.replace(/\s?-?\s?(Cor|Tamanho):?\s?.*$/i, '').trim();
                 
                 // Extrai apenas o modelo de dispositivo para gerar a TAG Limpa (ex: tudo após ' para ')
                 let cleanTag = newModelName;
                 const paraIndex = newModelName.toLowerCase().lastIndexOf(' para ');
                 if (paraIndex !== -1) {
                     cleanTag = newModelName.substring(paraIndex + 6).trim();
+                } else {
+                    // Tenta remover a palavra capa/capinha caso não exista " para "
+                    cleanTag = cleanTag.replace(/^(Capa\sde\s[^\s]+|Capa\s[a-zA-Z]+|Capinha|Película(\s3D|\sVidro)?)\s/i, '').trim();
                 }
                 
                 // 1. Resolve/Create Brand

@@ -433,6 +433,7 @@ export function ModelsPage() {
     const [search, setSearch] = useState('');
     const [filterBrand, setFilterBrand] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+    const [filterSeo, setFilterSeo] = useState<'all' | 'with_seo' | 'without_seo'>('all');
     const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'az' | 'za'>('newest');
 
     const loadData = async () => {
@@ -475,9 +476,16 @@ export function ModelsPage() {
             const brandName = getBrandName(m.brand_id).toLowerCase();
             const term = search.toLowerCase();
             if (term && !m.name.toLowerCase().includes(term) && !brandName.includes(term)) return false;
+            
             if (filterBrand && m.brand_id !== filterBrand) return false;
             if (filterStatus === 'active' && !m.active) return false;
             if (filterStatus === 'inactive' && m.active) return false;
+            
+            // Filtro de SEO
+            const hasSeo = Boolean(m.description?.trim() || m.template_values?.meta_title?.trim());
+            if (filterSeo === 'with_seo' && !hasSeo) return false;
+            if (filterSeo === 'without_seo' && hasSeo) return false;
+
             return true;
         })
         .sort((a, b) => {
@@ -578,6 +586,17 @@ export function ModelsPage() {
                         <option value="inactive">Inativos</option>
                     </select>
 
+                    {/* Filtro SEO */}
+                    <select
+                        value={filterSeo}
+                        onChange={e => setFilterSeo(e.target.value as any)}
+                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                        <option value="all">SEO: Todos</option>
+                        <option value="with_seo">✨ Com SEO</option>
+                        <option value="without_seo">⚠️ Sem SEO (Pendentes)</option>
+                    </select>
+
                     {/* Ordenação */}
                     <select
                         value={sortOrder}
@@ -591,9 +610,9 @@ export function ModelsPage() {
                     </select>
 
                     {/* Limpar filtros */}
-                    {(search || filterBrand || filterStatus !== 'all' || sortOrder !== 'newest') && (
+                    {(search || filterBrand || filterStatus !== 'all' || filterSeo !== 'all' || sortOrder !== 'newest') && (
                         <button
-                            onClick={() => { setSearch(''); setFilterBrand(''); setFilterStatus('all'); setSortOrder('newest'); }}
+                            onClick={() => { setSearch(''); setFilterBrand(''); setFilterStatus('all'); setFilterSeo('all'); setSortOrder('newest'); }}
                             className="text-xs text-slate-500 hover:text-red-500 transition-colors underline whitespace-nowrap"
                         >
                             Limpar filtros
