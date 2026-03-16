@@ -180,10 +180,6 @@ export const getCompanyData = async (): Promise<Company> => {
             .single();
 
         if (error) {
-            // Se foi cancelado (AbortError), apenas lança para quem chamou lidar silenciosamente
-            if (error.code === '20' || error.message?.includes('aborted')) {
-                 throw new Error('AbortError');
-            }
             // If no record exists, return default
             if (error.code === 'PGRST116') {
                 console.log('No company settings found, returning default');
@@ -195,11 +191,7 @@ export const getCompanyData = async (): Promise<Company> => {
 
         console.log('Company data loaded successfully');
         return rowToCompany(data as CompanySettingsRow);
-    } catch (error: any) {
-        if (error.name === 'AbortError' || error.message === 'AbortError') {
-             console.log('[companyService] Fetch aborted');
-             throw error; 
-        }
+    } catch (error) {
         console.error('Error loading company data:', error);
         return defaultCompany;
     }

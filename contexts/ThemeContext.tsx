@@ -70,11 +70,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         console.log('[ThemeContext] Settings loaded and applied successfully');
-      } catch (error: any) {
-        if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
-            console.log('[ThemeContext] Fetch aborted (expected in React StrictMode)');
-            return;
-        }
+      } catch (error) {
         console.warn('[ThemeContext] Failed to load theme settings. Keeping defaults.', error);
       }
     }
