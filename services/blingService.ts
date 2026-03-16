@@ -5,7 +5,7 @@ import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { compressImage } from '../utils/image-compression';
 
-const BLING_API_BASE = 'https://www.bling.com.br/Api/v3';
+const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
 
 // ------- Types -------
