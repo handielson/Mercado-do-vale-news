@@ -13,6 +13,7 @@ interface ProductDetailsModalProps {
     isOpen: boolean;
     onClose: () => void;
     onQuote: () => void;
+    totalStock?: number;
 }
 
 /** Maps technical field keys to Portuguese display labels */
@@ -127,7 +128,8 @@ export function ProductDetailsModal({
     product,
     isOpen,
     onClose,
-    onQuote
+    onQuote,
+    totalStock
 }: ProductDetailsModalProps) {
     // Get customer context for pricing
     const { customer } = useSupabaseAuth();
@@ -303,9 +305,9 @@ export function ProductDetailsModal({
                                 )}
                                 {/* Gatilho de Escassez: Últimas Unidades */}
                                 {product.track_inventory !== false && 
-                                 product.stock_quantity !== undefined && 
-                                 product.stock_quantity > 0 && 
-                                 product.stock_quantity <= 5 && (
+                                 (totalStock !== undefined ? totalStock : product.stock_quantity) !== undefined && 
+                                 (totalStock !== undefined ? totalStock : product.stock_quantity)! > 0 && 
+                                 (totalStock !== undefined ? totalStock : product.stock_quantity)! <= 2 && (
                                     <span className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white px-2.5 py-1 rounded-full font-bold shadow-sm animate-pulse">
                                         🔥 Últimas Unidades
                                     </span>

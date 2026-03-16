@@ -364,6 +364,23 @@ export const PublicProductPage: React.FC = () => {
 
     if (!product) return null;
 
+    // Calculate total stock across all siblings (variants)
+    const totalGroupStock = (() => {
+        let sum = (product.track_inventory && product.stock_quantity !== undefined) ? product.stock_quantity : 0;
+        let hasTracked = product.track_inventory !== false;
+        
+        siblings.forEach(sib => {
+            if (sib.id !== product.id) {
+                if (sib.track_inventory !== false && sib.stock_quantity !== undefined) {
+                    sum += sib.stock_quantity;
+                    hasTracked = true;
+                }
+            }
+        });
+        
+        return hasTracked ? sum : undefined;
+    })();
+
     // Prices calculation
     const effectivePrice = getEffectivePrice(product, customer);
     const originalPrice = effectivePrice / 100;
@@ -670,12 +687,12 @@ export const PublicProductPage: React.FC = () => {
 
                         {/* Preço */}
                         <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm relative overflow-hidden">
-                            {product.track_inventory && (product.stock_quantity || 0) > 0 && (product.stock_quantity || 0) <= 5 && (
+                            {totalGroupStock !== undefined && totalGroupStock > 0 && totalGroupStock <= 2 && (
                                 <div className="absolute top-0 left-0 w-full bg-red-500 text-white text-xs font-bold text-center py-1 animate-pulse">
                                     Últimas unidades em estoque!
                                 </div>
                             )}
-                            <div className={product.track_inventory && (product.stock_quantity || 0) > 0 && (product.stock_quantity || 0) <= 5 ? "mt-4" : ""}>
+                            <div className={totalGroupStock !== undefined && totalGroupStock > 0 && totalGroupStock <= 2 ? "mt-4" : ""}>
                                 {product.discount_percentage ? (
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">

@@ -71,6 +71,24 @@ export function ModernProductCard({
     // Store installment values for each variant
     const [variantInstallments, setVariantInstallments] = useState<Map<number, string>>(new Map());
 
+    // Calculate total stock across all variants/colors
+    const totalGroupStock = useMemo(() => {
+        if (productGroup?.variants) {
+            let sum = 0;
+            let hasTrackedInventory = false;
+            productGroup.variants.forEach(v => {
+                v.products.forEach(p => {
+                    if (p.track_inventory !== false && typeof p.stock_quantity === 'number') {
+                        sum += p.stock_quantity;
+                        hasTrackedInventory = true;
+                    }
+                });
+            });
+            return hasTrackedInventory ? sum : undefined;
+        }
+        return (product.track_inventory !== false) ? product.stock_quantity : undefined;
+    }, [productGroup, product]);
+
     // Extract variants from productGroup or related products (using useMemo to prevent infinite loop)
     const variants = useMemo<ProductVariants | null>(() => {
         if (productGroup && productGroup.variants && productGroup.variants.length > 0) {
@@ -441,10 +459,9 @@ export function ModernProductCard({
                         }
 
                         {/* Gatilho de Escassez: Últimas Unidades */}
-                        {product.track_inventory !== false && 
-                         product.stock_quantity !== undefined && 
-                         product.stock_quantity > 0 && 
-                         product.stock_quantity <= 5 && (
+                        {totalGroupStock !== undefined && 
+                         totalGroupStock > 0 && 
+                         totalGroupStock <= 2 && (
                             <span className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-1.5 rounded-full font-bold shadow-md animate-pulse">
                                 🔥 Últimas Unidades
                             </span>
@@ -778,6 +795,7 @@ export function ModernProductCard({
                         isOpen={showDetailsModal}
                         onClose={() => setShowDetailsModal(false)}
                         onQuote={() => setShowQuoteModal(true)}
+                        totalStock={totalGroupStock}
                     />
                     <QuoteModal
                         product={currentProduct}
