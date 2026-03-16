@@ -3,6 +3,7 @@ import { supabase } from '@/services/supabase';
 import { Search, AlertTriangle, CheckCircle, BarChart2, RefreshCw, Link as LinkIcon, Edit3, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { generateSlug } from '@/utils/urlHelpers';
+import { toTitleCase } from '@/utils/stringFormatters';
 import { toast } from 'sonner';
 
 interface SEOStats {
@@ -137,10 +138,27 @@ export const SEODashboardPage: React.FC = () => {
 
         try {
             for (const p of missing) {
-                const title = p.meta_title || `${p.name} | Mercado do Vale`;
-                // Pega a descrição limpa, ou usa um genérico
-                const desc = p.meta_description ||
-                    (p.description ? p.description.substring(0, 150).replace(/\n/g, ' ') + '...' : `Compre ${p.name} com os melhores preços e garantia no Mercado do Vale.`);
+                let title = p.meta_title;
+                if (!title) {
+                    const baseName = toTitleCase(p.name);
+                    const suffix = ' | Mercado do Vale';
+                    title = baseName.length + suffix.length <= 60 
+                        ? baseName + suffix 
+                        : baseName.substring(0, 60);
+                }
+
+                // Pega a descrição limpa, ou usa um genérico, respeitando limites (ex: varchar(160))
+                let desc = p.meta_description;
+                if (!desc) {
+                    const fallback = `Compre ${toTitleCase(p.name)} com os melhores preços e garantia no Mercado do Vale.`;
+                    desc = p.description 
+                        ? p.description.substring(0, 150).replace(/\n/g, ' ') + '...' 
+                        : fallback;
+                    
+                    if (desc.length > 160) {
+                         desc = desc.substring(0, 157) + '...';
+                    }
+                }
 
                 const { error } = await supabase.from('products').update({
                     meta_title: title,
