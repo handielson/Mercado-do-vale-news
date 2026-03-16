@@ -21,7 +21,13 @@ export function StoreStatusBadge() {
                 });
                 if (isMounted) setStatus(currentStatus);
             } catch (error) {
-                console.error('Failed to get store status:', error);
+                // Supabase indisponível — usar horários padrão para não sumir o badge
+                try {
+                    const fallbackStatus = await getStoreStatus();
+                    if (isMounted) setStatus(fallbackStatus);
+                } catch {
+                    // silenciar completamente
+                }
             }
         };
 
