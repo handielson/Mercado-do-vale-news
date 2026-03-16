@@ -13,7 +13,9 @@ export const catalogMetadataService = {
             .in('id', categoryIds);
 
         if (error) {
-            console.error('Erro ao buscar categorias:', error);
+            if (error.code !== '20' && !error.message?.includes('aborted')) {
+                console.error('Erro ao buscar categorias:', error);
+            }
             return new Map();
         }
 
@@ -32,7 +34,9 @@ export const catalogMetadataService = {
             .order('name', { ascending: true });
 
         if (catsError) {
-            console.error('Erro ao buscar categorias:', catsError);
+            if (catsError.code !== '20' && !catsError.message?.includes('aborted')) {
+                console.error('Erro ao buscar categorias:', catsError);
+            }
             return [];
         }
 
@@ -43,7 +47,9 @@ export const catalogMetadataService = {
             .not('category_id', 'is', null);
 
         if (countsError) {
-            console.error('Erro ao contar produtos:', countsError);
+            if (countsError.code !== '20' && !countsError.message?.includes('aborted')) {
+                console.error('Erro ao contar produtos:', countsError);
+            }
             return (cats || []).map(cat => ({ ...cat, count: 0 }));
         }
 
@@ -71,7 +77,9 @@ export const catalogMetadataService = {
             .select('brand');
 
         if (error) {
-            console.error('Erro ao buscar marcas:', error);
+            if (error.code !== '20' && !error.message?.includes('aborted')) {
+                console.error('Erro ao buscar marcas:', error);
+            }
             return [];
         }
 

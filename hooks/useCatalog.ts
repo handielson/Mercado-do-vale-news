@@ -123,7 +123,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             setHasMore(response.hasMore);
         } catch (err: any) {
             // Ignore abort errors - they're expected when requests are cancelled
-            if (err.name === 'AbortError') {
+            if (err.name === 'AbortError' || err.message === 'AbortError' || err.message?.includes('aborted')) {
                 console.log('[useCatalog] Request was aborted (expected behavior)');
                 return;
             }

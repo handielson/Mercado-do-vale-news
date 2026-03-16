@@ -127,8 +127,10 @@ function CatalogContent() {
             setSectionsLoading(true);
             const data = await catalogSectionsService.getActiveSections();
             setSections(data);
-        } catch (error) {
-            console.error('Erro ao carregar seções:', error);
+        } catch (error: any) {
+            if (error.code !== '20' && error.name !== 'AbortError' && !error.message?.includes('aborted')) {
+                console.error('Erro ao carregar seções:', error);
+            }
         } finally {
             setSectionsLoading(false);
         }
