@@ -970,10 +970,30 @@ export async function importBlingProducts(
             const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId, marginWholesale, marginReseller);
             let finalModelId = modelId;
 
+            // --- AUTO-CREATE/RESOLVE BRAND LOGIC (Always runs) ---
+            // Extrai a marca do Bling ou assume "Diversos" caso falhe e precisemos gerar um modelo
+            let rawBrandName = enriched.marca ? enriched.marca.trim() : 'Diversos';
+            // Formata para Title Case (ex: "CINEBOX" -> "Cinebox", "cinebox supremo" -> "Cinebox Supremo")
+            let brandName = rawBrandName.toLowerCase().replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
+            
+            let resolvedBrandId = brandCache.get(brandName);
+            if (!resolvedBrandId) {
+                const brands = await brandService.listActive();
+                const existingBrand = brands.find(b => b.name.toLowerCase() === brandName.toLowerCase());
+                if (existingBrand) {
+                    resolvedBrandId = existingBrand.id;
+                } else {
+                    const newBrand = await brandService.create({ name: brandName, active: true, warranty_days: 90 });
+                    resolvedBrandId = newBrand.id;
+                }
+                brandCache.set(brandName, resolvedBrandId);
+            }
+            
+            // Grava a marca real, formatada, no produto inserido. Se não existia no Bling, mantemos null no produto de Varejo (Products Table).
+            row.brand = enriched.marca ? brandName : null;
+
             // --- AUTO-CREATE MODEL LOGIC ---
             if (autoCreateModel && !finalModelId) {
-                const brandName = enriched.marca || 'Diversos';
-                
                 // Prioriza o nome literal da Estrutura/Pai. Se não houver, tenta limpar variações explícitas do titulo
                 let baseName = enriched.nomePai || row.name || 'Produto sem nome';
                 let newModelName = baseName.replace(/\s?-?\s?(Cor|Tamanho):?\s?.*$/i, '').trim();
@@ -987,21 +1007,6 @@ export async function importBlingProducts(
                     // Tenta remover a palavra capa/capinha caso não exista " para "
                     cleanTag = cleanTag.replace(/^(Capa\sde\s[^\s]+|Capa\s[a-zA-Z]+|Capinha|Película(\s3D|\sVidro)?)\s/i, '').trim();
                 }
-                
-                // 1. Resolve/Create Brand
-                let resolvedBrandId = brandCache.get(brandName);
-                if (!resolvedBrandId) {
-                    const brands = await brandService.listActive();
-                    const existingBrand = brands.find(b => b.name.toLowerCase() === brandName.toLowerCase());
-                    if (existingBrand) {
-                        resolvedBrandId = existingBrand.id;
-                    } else {
-                        const newBrand = await brandService.create({ name: brandName, active: true, warranty_days: 90 });
-                        resolvedBrandId = newBrand.id;
-                    }
-                    brandCache.set(brandName, resolvedBrandId);
-                }
-                
                 // 2. Resolve/Create Model
                 const cacheKey = `${resolvedBrandId}_${newModelName}`.toLowerCase();
                 let resolvedModelId = modelCache.get(cacheKey);
