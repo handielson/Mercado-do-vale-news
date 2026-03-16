@@ -4,6 +4,7 @@ import { Heart, Share2, ShoppingCart } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
+import { toTitleCase } from '@/utils/stringFormatters';
 import { CashbackBadge } from './CashbackBadge';
 
 interface ProductCardProps {
@@ -119,7 +120,7 @@ export function ProductCard({
                                 onClick={handleTitleClick}
                                 className="font-semibold text-lg text-slate-900 mb-1 cursor-pointer hover:text-blue-600 hover:underline"
                             >
-                                {product.name}
+                                {toTitleCase(product.name)}
                             </h3>
                             <p className="text-sm text-slate-600 mb-2">{product.brand}</p>
                         </div>
@@ -263,7 +264,7 @@ export function ProductCard({
                         onClick={handleTitleClick}
                         className="font-semibold text-slate-900 mb-1 line-clamp-3 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
                     >
-                        {product.name}
+                        {toTitleCase(product.name)}
                     </h3>
                     <p className="text-sm text-slate-600">{product.brand}</p>
                 </div>
