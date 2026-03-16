@@ -171,6 +171,7 @@ export const ProductListPage: React.FC = () => {
                                     <option value={12}>12</option>
                                     <option value={24}>24</option>
                                     <option value={36}>36</option>
+                                    <option value={100}>100</option>
                                 </select>
                             </div>
 
