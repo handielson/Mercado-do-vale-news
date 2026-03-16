@@ -8,26 +8,49 @@ export const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ chil
     const [isMaintenance, setIsMaintenance] = useState(false);
 
     useEffect(() => {
+        let mounted = true;
+
+        // Timeout de segurança: se o fetch demorar mais de 5s ou abortar, libera o catálogo
+        const timeout = setTimeout(() => {
+            if (mounted) {
+                console.warn('[MaintenanceGuard] Timeout atingido – liberando catálogo por segurança.');
+                setIsChecking(false);
+                setIsMaintenance(false);
+            }
+        }, 5000);
+
         const checkMaintenanceStatus = async () => {
             try {
                 const company = await getCompanyData();
-                const bypassKey = localStorage.getItem('@MercadoDoVale:maintenance_bypass');
+                if (!mounted) return;
 
-                // Se o banco apontar que não está em manutenção, ou se a chave bypass armazenada for igual a configurada no admin, está liberado:
+                const bypassKey = localStorage.getItem('@MercadoDoVale:maintenance_bypass');
                 if (company.maintenanceMode && bypassKey !== company.maintenanceBypassKey) {
                     setIsMaintenance(true);
                 } else {
                     setIsMaintenance(false);
                 }
-            } catch (error) {
-                console.error("Maintenance Check Error:", error);
-                setIsMaintenance(false); // Em caso de erro na checagem da empresa, libera o catálogo por segurança.
+            } catch (error: any) {
+                if (!mounted) return;
+                // AbortError é esperado no React StrictMode (double-invoke) – não bloquear
+                if (error?.name !== 'AbortError' && error?.message !== 'AbortError') {
+                    console.error("Maintenance Check Error:", error);
+                }
+                setIsMaintenance(false); // Em caso de erro, libera o catálogo por segurança.
             } finally {
-                setIsChecking(false);
+                if (mounted) {
+                    clearTimeout(timeout);
+                    setIsChecking(false);
+                }
             }
         };
 
         checkMaintenanceStatus();
+
+        return () => {
+            mounted = false;
+            clearTimeout(timeout);
+        };
     }, []);
 
     if (isChecking) {
