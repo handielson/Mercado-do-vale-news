@@ -733,18 +733,26 @@ export async function checkExistingBlingProducts(blingIds: number[]): Promise<Se
 export async function searchBlingProducts(query: string): Promise<BlingProduct[]> {
     const accessToken = await getValidToken();
 
-    const [res, stockMap] = await Promise.all([
-        fetch(`/api/bling?resource=products&page=1&search=${encodeURIComponent(query)}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        }),
+    const [, stockMap] = await Promise.all([
+        Promise.resolve(),
         fetchStockMap(accessToken),
     ]);
 
-    if (!res.ok) throw new Error(`Bling API error ${res.status}`);
-    const json = await res.json();
+    const all: BlingProduct[] = [];
+    let page = 1;
 
-    return (json.data || [])
-        .map((item: any) => ({
+    do {
+        const res = await fetch(`/api/bling?resource=products&page=${page}&search=${encodeURIComponent(query)}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+
+        if (!res.ok) throw new Error(`Bling API error ${res.status}`);
+        const json = await res.json();
+        const items = json.data || [];
+        
+        if (items.length === 0) break;
+
+        all.push(...items.map((item: any) => ({
             id: item.id,
             nome: item.nome || 'Produto sem nome',
             codigo: item.codigo || null,
@@ -758,7 +766,24 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
             imagens: item.imagens || [],
             variacao: item.variacao || undefined,
             formato: item.formato, // Necessário para a UI saber se ignora o click
-        }));
+        })));
+
+        if (items.length < 100) break;
+        page++;
+    } while (true);
+
+    const parentIds = new Set<number>();
+    for (const p of all) {
+        const paiId = (p.variacao as any)?.produtoPai?.id;
+        if (paiId) parentIds.add(paiId);
+    }
+    for (const p of all) {
+        if (!p.formato && parentIds.has(p.id)) {
+            p.formato = 'E';
+        }
+    }
+
+    return all;
 }
 
 
