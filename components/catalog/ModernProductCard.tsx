@@ -510,9 +510,7 @@ export function ModernProductCard({
                             onClick={handleTitleClick}
                             className="font-semibold text-slate-900 line-clamp-3 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
                         >
-                            {toTitleCase(productGroup
-                                ? productGroup.model
-                                : product.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim())}
+                            {toTitleCase(productForDisplay.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim())}
                         </h3>
                         {productForDisplay.brand && (
                             <p className="text-sm text-slate-600 mt-1">{productForDisplay.brand}</p>
