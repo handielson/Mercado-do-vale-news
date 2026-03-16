@@ -48,6 +48,40 @@ export const AdminLoginPage: React.FC = () => {
         }
     }, [user, customer, isLoading, awaitingAuth, navigate]);
 
+    // Timeout de segurança: se o contexto carregou o user mas não o customer
+    // em 10s (banco degradado), busca direto e redireciona se for admin.
+    useEffect(() => {
+        if (!awaitingAuth || !user) return;
+
+        const timer = setTimeout(async () => {
+            if (!customer) {
+                console.warn('🔐 [Admin Login] Customer timeout – fetching directly...');
+                try {
+                    const { data } = await supabase
+                        .from('customers')
+                        .select('customer_type')
+                        .eq('user_id', user.id)
+                        .single();
+                    if (data?.customer_type === 'ADMIN') {
+                        toast.success('Login admin realizado com sucesso!');
+                        navigate('/admin');
+                    } else {
+                        toast.error('Acesso negado ou conta sem permissão admin.');
+                        supabase.auth.signOut();
+                        setLoading(false);
+                        setAwaitingAuth(false);
+                    }
+                } catch {
+                    toast.error('Não foi possível verificar as permissões. Tente novamente.');
+                    setLoading(false);
+                    setAwaitingAuth(false);
+                }
+            }
+        }, 10000);
+
+        return () => clearTimeout(timer);
+    }, [awaitingAuth, user, customer, navigate]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
