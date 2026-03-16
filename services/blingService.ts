@@ -685,6 +685,7 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
             marca: item.marca || undefined,
             imagens: item.imagens || [],
             variacao: item.variacao || undefined,
+            formato: item.formato, // Necessário para exibir Produto Pai corretamente
         })));
         if (items.length < 100) break;
         page++;
