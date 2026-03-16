@@ -65,7 +65,7 @@ export const useProducts = () => {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(24);
+    const [itemsPerPage, setItemsPerPage] = useState(12);
 
     /**
      * Fetch products from Supabase.
