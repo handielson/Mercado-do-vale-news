@@ -901,7 +901,7 @@ export default function BlingPage() {
                                                         return (
                                                             <div key={p.id} className={`border-b border-slate-100 last:border-0 ${isExisting ? 'opacity-70 bg-slate-50/50' : ''}`}>
                                                                 {/* Summary row */}
-                                                                <div className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${p.formato === 'E' ? 'bg-slate-50 opacity-75' : 'hover:bg-slate-50'}`}>
+                                                                <div className={`flex items-center gap-3 py-2.5 transition-colors ${p.formato === 'E' ? 'bg-slate-100 border-l-[3px] border-slate-300 pl-[13px] pr-4 opacity-90' : 'px-4 hover:bg-slate-50'}`}>
                                                                     {p.formato !== 'E' ? (
                                                                         <input
                                                                             type="checkbox"
