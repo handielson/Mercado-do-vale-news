@@ -18,6 +18,7 @@ import { getCashbackSettings } from '@/services/cashbackService';
 import type { CashbackSettings } from '@/types/cashback';
 import { companySettingsService } from '@/services/companySettingsService';
 import type { CompanySettings } from '@/types/companySettings';
+import { toTitleCase } from '@/utils/stringFormatters';
 
 /**
  * PublicProductPage
@@ -583,7 +584,7 @@ export const PublicProductPage: React.FC = () => {
                     <div className="space-y-6">
                         <div>
                             <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight">
-                                {product.name}
+                                {toTitleCase(product.name)}
                             </h1>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-slate-500">
                                 <span>
