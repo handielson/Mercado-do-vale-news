@@ -17,7 +17,7 @@ import { WeatherWidget } from './WeatherWidget';
  * - Customer type badge
  */
 export const PublicHeader: React.FC = () => {
-    const { user, customer, signOut } = useSupabaseAuth();
+    const { user, customer, signOut, setAdminPreviewType } = useSupabaseAuth();
     const { settings: themeSettings } = useTheme();
     const navigate = useNavigate();
     const [showLoginDropdown, setShowLoginDropdown] = useState(false);
@@ -143,30 +143,12 @@ export const PublicHeader: React.FC = () => {
                                         className="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white text-slate-700 font-medium hover:bg-slate-50 transition-colors cursor-pointer"
                                         value={customer.admin_preview_type || 'retail'}
                                         onChange={async (e) => {
-                                            // Capture value immediately to avoid React synthetic event pooling issues
-                                            const newPreviewType = e.target.value;
-                                            console.log('[PublicHeader] Preview type changing from', customer.admin_preview_type, 'to', newPreviewType);
-                                            try {
-                                                // Update in Supabase
-                                                const { supabase } = await import('../services/supabase');
-                                                console.log('[PublicHeader] Updating customer', customer.id, 'with preview type:', newPreviewType);
-
-                                                const { error } = await supabase
-                                                    .from('customers')
-                                                    .update({ admin_preview_type: newPreviewType })
-                                                    .eq('id', customer.id);
-
-                                                if (error) {
-                                                    console.error('[PublicHeader] Supabase error:', error);
-                                                    throw error;
-                                                }
-
-                                                console.log('[PublicHeader] Update successful, reloading page...');
-                                                // Reload page to apply new pricing
-                                                window.location.reload();
-                                            } catch (error) {
-                                                console.error('[PublicHeader] Error updating preview type:', error);
-                                                alert('Erro ao salvar preferência de visualização');
+                                            const newPreviewType = e.target.value as 'retail' | 'resale' | 'wholesale';
+                                            console.log('[PublicHeader] Preview type changing to', newPreviewType);
+                                            
+                                            // Call the context function which handles optimistic update + localStorage
+                                            if (setAdminPreviewType) {
+                                                await setAdminPreviewType(newPreviewType);
                                             }
                                         }}
                                         title="Visualizar catálogo como..."

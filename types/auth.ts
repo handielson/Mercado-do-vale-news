@@ -34,6 +34,9 @@ export interface AuthContextType {
     // Type upgrade requests
     requestTypeUpgrade: (requestedType: 'wholesale' | 'resale') => Promise<any>
     getUpgradeRequestStatus: () => Promise<any>
+    
+    // Admin features
+    setAdminPreviewType?: (type: 'retail' | 'resale' | 'wholesale') => Promise<void>
 }
 
 // Data for activating existing customer account

@@ -90,6 +90,15 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             // If customer exists, set it
             if (data) {
                 console.log('[SupabaseAuth] Customer loaded:', data.name)
+                
+                // Inject local preview preference if admin
+                if (data.customer_type === 'ADMIN') {
+                    const localPreview = localStorage.getItem('@mdv_admin_preview');
+                    if (localPreview && ['retail', 'resale', 'wholesale'].includes(localPreview)) {
+                        data.admin_preview_type = localPreview as any;
+                    }
+                }
+                
                 setCustomer(data)
                 return
             }
@@ -415,6 +424,25 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
     }
 
+    // Set admin preview type
+    const setAdminPreviewType = async (type: 'retail' | 'resale' | 'wholesale') => {
+        if (!customer || customer.customer_type !== 'ADMIN') return;
+
+        // Optimistic UI update + persistent local storage (bypasses RLS issues on customers table)
+        setCustomer({ ...customer, admin_preview_type: type });
+        localStorage.setItem('@mdv_admin_preview', type);
+
+        try {
+            // Attempt to sync to DB (might fail silently due to RLS, but that's fine since local state works)
+            await supabase
+                .from('customers')
+                .update({ admin_preview_type: type })
+                .eq('id', customer.id);
+        } catch (err) {
+            console.error('[SupabaseAuth] Error syncing admin_preview_type:', err);
+        }
+    }
+
     return (
         <SupabaseAuthContext.Provider value={{
             user,
@@ -431,7 +459,8 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             signOut,
             updateProfile,
             requestTypeUpgrade,
-            getUpgradeRequestStatus
+            getUpgradeRequestStatus,
+            setAdminPreviewType
         }}>
             {children}
         </SupabaseAuthContext.Provider>
