@@ -292,23 +292,10 @@ export function ProductImageBankPage() {
             let synced = 0;
             for (const [sku, newItems] of urlsBySku.entries()) {
                 try {
-                    const { data: prod } = await supabase
-                        .from('products')
-                        .select('images')
-                        .eq('sku', sku)
-                        .maybeSingle();
-
-                    const existingUrls: string[] = Array.isArray(prod?.images) ? prod.images : [];
                     const newUrls = newItems.sort((a, b) => a.order - b.order).map(i => i.url);
-                    const merged = [...new Set([...existingUrls, ...newUrls])];
-
-                    const { error } = await supabase.rpc('sync_product_images', {
-                        p_sku: sku,
-                        p_urls: merged,
-                    });
-                    // Sync VPS MySQL (fire-and-forget)
-                    vpsApiService.updateProductImagesBySku(sku, merged).catch(() => {});
-                    if (!error) synced++;
+                    // Sync VPS MySQL (source of truth)
+                    await vpsApiService.updateProductImagesBySku(sku, newUrls);
+                    synced++;
                 } catch { /* ignora erros individuais */ }
             }
 
@@ -346,11 +333,7 @@ export function ProductImageBankPage() {
             toast.success(`✅ ${result.success.length} imagem(ns) enviada(s) para ${sku}!`);
             // Sincroniza automaticamente
             const urls = result.success.sort((a, b) => a.order - b.order).map(i => i.url);
-            const { data: prod } = await supabase.from('products').select('images').eq('sku', sku).maybeSingle();
-            const existing: string[] = Array.isArray(prod?.images) ? prod.images : [];
-            const merged = [...new Set([...existing, ...urls])];
-            await supabase.rpc('sync_product_images', { p_sku: sku, p_urls: merged });
-            vpsApiService.updateProductImagesBySku(sku, merged).catch(() => {});
+            await vpsApiService.updateProductImagesBySku(sku, urls);
         }
         if (result.errors.length > 0) toast.error(`⚠️ ${result.errors.length} erro(s) no upload`);
         await loadImages();
@@ -420,16 +403,9 @@ export function ProductImageBankPage() {
 
                 if (!matchedSku) { notFound.push(`${folderName}/${colorInFile}`); continue; }
 
-                const { error } = await supabase.rpc('sync_product_images', {
-                    p_sku: matchedSku,
-                    p_urls: urls,
-                });
-                // Sync VPS MySQL (fire-and-forget)
+                // Sync VPS MySQL (source of truth)
                 vpsApiService.updateProductImagesBySku(matchedSku, urls).catch(() => {});
-                if (error) {
-                    console.error('RPC error para', matchedSku, error);
-                    notFound.push(`${matchedSku}: ${error.message}`);
-                } else updated++;
+                updated++;
             }
 
             setSyncResult({ updated, notFound });

@@ -67,8 +67,18 @@ async function list(): Promise<Product[]> {
  * Get product by ID
  */
 async function getById(id: string): Promise<Product | null> {
-    const companyId = await getCompanyId();
+    // VPS MySQL primeiro (fonte de verdade para imagens e dados sincronizados)
+    try {
+        const vpsData = await vpsApiService.getProductById(id);
+        if (vpsData && !vpsData.error) {
+            console.log('[productService.getById] using VPS MySQL');
+            return transformFromDB(vpsData);
+        }
+    } catch { /* fallback silencioso */ }
 
+    // Fallback: Supabase
+    console.log('[productService.getById] fallback: Supabase');
+    const companyId = await getCompanyId();
     const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -80,10 +90,6 @@ async function getById(id: string): Promise<Product | null> {
         if (error.code === 'PGRST116') return null;
         throw new Error(`Failed to fetch product: ${error.message}`);
     }
-
-    console.log('🔍 [productService.getById] Raw database data:', data);
-    console.log('🔍 [productService.getById] data.specs:', data.specs);
-    console.log('🔍 [productService.getById] typeof data.specs:', typeof data.specs);
 
     return transformFromDB(data);
 }
@@ -463,7 +469,7 @@ function transformFromDB(row: any): Product {
         stock_quantity: row.stock_quantity || 0,
         images: row.images || [],
         status: row.status || ProductStatus.ACTIVE,
-        track_inventory: row.track_inventory !== false,
+        track_inventory: Boolean(row.track_inventory), // MySQL 0/1 + Supabase true/false
         is_gift: row.is_gift || false,
         warranty_type: row.warranty_type || 'brand',
         warranty_template_id: row.warranty_template_id || null,
