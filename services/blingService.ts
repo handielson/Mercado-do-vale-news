@@ -4,6 +4,7 @@ import { modelService } from './models';
 import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { compressImage } from '../utils/image-compression';
+import { vpsApiService } from './vpsApiService';
 
 const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -915,6 +916,7 @@ export async function importBlingProducts(
 
     const result: ImportResult = { created: 0, updated: 0, errors: [] };
     const total = selectedProducts.length;
+    const vpsRows: any[] = []; // collect successful rows for batch VPS sync
 
     // Resolve brand and model name for use as fallback values
     let modelBrandName: string | null = null;
@@ -1109,6 +1111,7 @@ export async function importBlingProducts(
                     .eq('id', existing.id);
                 if (error) throw new Error(error.message);
                 result.updated++;
+                vpsRows.push({ ...dbRow, id: existing.id });
             } else {
                 operation = 'criação';
                 const { error } = await supabase
@@ -1116,6 +1119,7 @@ export async function importBlingProducts(
                     .insert(dbRow);
                 if (error) throw new Error(error.message);
                 result.created++;
+                vpsRows.push(dbRow);
             }
 
             // Associa cor ao model_color_images se o produto tiver model_id e cor mapeada
@@ -1140,6 +1144,13 @@ export async function importBlingProducts(
         }
 
         onProgress(i + 1, total, result);
+    }
+
+    // Batch sync all successfully imported products to VPS MySQL (fire-and-forget)
+    if (vpsRows.length > 0) {
+        vpsApiService.syncProducts(vpsRows).catch(err =>
+            console.warn('[blingService] VPS batch sync failed (not critical):', err)
+        );
     }
 
     return result;

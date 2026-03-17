@@ -2,6 +2,7 @@ import { Product, ProductInput } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
 import { supabase } from './supabase';
 import { logPriceChange } from './priceHistoryService';
+import { vpsApiService } from './vpsApiService';
 
 /**
  * PRODUCT SERVICE - Supabase Implementation
@@ -217,7 +218,10 @@ async function create(input: ProductInput): Promise<Product> {
 
     if (error) throw new Error(`Failed to create product: ${error.message}`);
 
-    return transformFromDB(data);
+    const created = transformFromDB(data);
+    // Fire-and-forget VPS sync — never blocks admin UI
+    vpsApiService.syncProducts([data]).catch(console.warn);
+    return created;
 }
 
 /**
@@ -331,6 +335,9 @@ async function update(id: string, input: ProductInput): Promise<Product> {
 
     if (error) throw new Error(`Failed to update product: ${error.message}`);
 
+    // Fire-and-forget VPS sync — never blocks admin UI
+    vpsApiService.updateProduct(id, data).catch(console.warn);
+
     // Log price change if any price field changed
     try {
         const oldProduct = await getById(id);
@@ -370,6 +377,9 @@ async function deleteProduct(id: string): Promise<void> {
         .eq('company_id', companyId);
 
     if (error) throw new Error(`Failed to delete product: ${error.message}`);
+
+    // Fire-and-forget VPS sync
+    vpsApiService.deleteProduct(id).catch(console.warn);
 }
 
 /**

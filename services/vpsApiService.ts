@@ -1,12 +1,14 @@
 /**
  * VPS API Service — Mercado do Vale
- * Busca dados do MySQL na VPS com timeout e fallback silencioso.
- * Usar apenas para operações de LEITURA do catálogo público.
+ * Leitura: catálogo público via MySQL na VPS (com timeout e fallback silencioso).
+ * Escrita: sync fire-and-forget após writes no Supabase (autenticado com X-Sync-Key).
  */
 
 const VPS_BASE_URL = 'https://api.xiaomipetrolina.com.br';
-const TIMEOUT_MS = 3000; // 3 segundos
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+const TIMEOUT_MS = 3000;
+const WRITE_TIMEOUT_MS = 10000;
+const CACHE_DURATION = 5 * 60 * 1000;
+const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
 
 interface CacheEntry<T> {
   data: T;
@@ -30,47 +32,58 @@ class VpsApiService {
     this.cache.set(key, { data, timestamp: Date.now() });
   }
 
-  /**
-   * Faz fetch com timeout. Retorna null em caso de erro (não lança exceção).
-   */
   private async fetchSafe<T>(path: string): Promise<T | null> {
-    const cacheKey = path;
-    const cached = this.isCached<T>(cacheKey);
+    const cached = this.isCached<T>(path);
     if (cached !== null) return cached;
-
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
       const res = await fetch(`${VPS_BASE_URL}${path}`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
       });
       clearTimeout(timer);
-
       if (!res.ok) return null;
       const data = (await res.json()) as T;
-      this.setCache<T>(cacheKey, data);
+      this.setCache<T>(path, data);
       return data;
     } catch {
-      // Timeout ou falha de rede — retorna null silenciosamente
       return null;
     }
   }
 
-  /** Buscar categorias do catálogo */
+  private async writeSafe(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<boolean> {
+    if (!SYNC_KEY) {
+      console.warn('[vpsApiService] VITE_VPS_SYNC_KEY não configurado');
+      return false;
+    }
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), WRITE_TIMEOUT_MS);
+      const res = await fetch(`${VPS_BASE_URL}${path}`, {
+        method,
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Sync-Key': SYNC_KEY },
+        body: body != null ? JSON.stringify(body) : undefined,
+      });
+      clearTimeout(timer);
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private invalidateProductCache() {
+    [...this.cache.keys()].filter(k => k.startsWith('/products')).forEach(k => this.cache.delete(k));
+  }
+
+  // ── READ ──────────────────────────────────────────────────────────────
+
   async getCategories(): Promise<any[] | null> {
     return this.fetchSafe<any[]>('/categories');
   }
 
-  /** Buscar produtos do catálogo */
-  async getProducts(params?: {
-    category?: string;
-    status?: string;
-    limit?: number;
-    offset?: number;
-    search?: string;
-  }): Promise<any[] | null> {
+  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string }): Promise<any[] | null> {
     const qs = new URLSearchParams();
     if (params?.category) qs.set('category', params.category);
     if (params?.status)   qs.set('status', params.status);
@@ -81,27 +94,58 @@ class VpsApiService {
     return this.fetchSafe<any[]>(`/products${query}`);
   }
 
-  /** Buscar produto por ID */
   async getProductById(id: string): Promise<any | null> {
     return this.fetchSafe<any>(`/products/${id}`);
   }
 
-  /** Buscar marcas */
   async getBrands(): Promise<any[] | null> {
     return this.fetchSafe<any[]>('/brands');
   }
 
-  /** Buscar configurações do catálogo */
   async getCatalogSettings(): Promise<any | null> {
     return this.fetchSafe<any>('/catalog-settings');
   }
 
-  /** Buscar configurações da empresa */
   async getCompanySettings(): Promise<any | null> {
     return this.fetchSafe<any>('/company-settings');
   }
 
-  /** Limpar cache manualmente */
+  // ── WRITE (fire-and-forget após Supabase) ─────────────────────────────
+
+  async syncProducts(products: any[]): Promise<boolean> {
+    if (!products?.length) return true;
+    this.invalidateProductCache();
+    const ok = await this.writeSafe('POST', '/products/batch', products);
+    console.log(`[vpsApiService] syncProducts(${products.length}) → ${ok ? 'OK' : 'FAIL'}`);
+    return ok;
+  }
+
+  async updateProduct(id: string, data: any): Promise<boolean> {
+    this.cache.delete(`/products/${id}`);
+    this.invalidateProductCache();
+    return this.writeSafe('PUT', `/products/${id}`, data);
+  }
+
+  async deleteProduct(id: string): Promise<boolean> {
+    this.invalidateProductCache();
+    return this.writeSafe('DELETE', `/products/${id}`);
+  }
+
+  async syncBrand(brand: any): Promise<boolean> {
+    this.cache.delete('/brands');
+    return this.writeSafe('POST', '/brands', brand);
+  }
+
+  async updateBrand(id: string, data: any): Promise<boolean> {
+    this.cache.delete('/brands');
+    return this.writeSafe('PUT', `/brands/${id}`, data);
+  }
+
+  async deleteBrand(id: string): Promise<boolean> {
+    this.cache.delete('/brands');
+    return this.writeSafe('DELETE', `/brands/${id}`);
+  }
+
   clearCache(): void {
     this.cache.clear();
   }

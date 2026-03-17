@@ -1,5 +1,6 @@
 import { Brand, BrandInput } from '../types/brand';
 import { supabase } from './supabase';
+import { vpsApiService } from './vpsApiService';
 
 /**
  * BRAND SERVICE - Supabase Implementation
@@ -110,7 +111,7 @@ async function create(input: BrandInput): Promise<Brand> {
 
     if (error) throw new Error(`Failed to create brand: ${error.message}`);
 
-    return {
+    const result = {
         id: data.id,
         name: data.name,
         slug: data.slug,
@@ -119,6 +120,9 @@ async function create(input: BrandInput): Promise<Brand> {
         created: data.created_at,
         updated: data.updated_at
     };
+    // Fire-and-forget VPS sync
+    vpsApiService.syncBrand({ ...data, company_id: data.company_id }).catch(console.warn);
+    return result;
 }
 
 /**
@@ -168,6 +172,8 @@ async function update(id: string, input: BrandInput): Promise<Brand> {
     // 4. Fetch updated brand via separate SELECT
     const updated = await getById(id);
     if (!updated) throw new Error('Brand not found after update.');
+    // Fire-and-forget VPS sync
+    vpsApiService.updateBrand(id, { name: input.name, slug, warranty_days: input.warranty_days || 90, active: input.active }).catch(console.warn);
     return updated;
 }
 
@@ -182,6 +188,9 @@ async function deleteBrand(id: string): Promise<void> {
         .eq('id', id);
 
     if (error) throw new Error(`Failed to delete brand: ${error.message}`);
+
+    // Fire-and-forget VPS sync
+    vpsApiService.deleteBrand(id).catch(console.warn);
 }
 
 
