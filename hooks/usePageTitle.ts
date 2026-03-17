@@ -58,7 +58,14 @@ const getPageTitleFromRoute = (pathname: string): string => {
         '/admin/settings/custom-fields': 'Biblioteca de Campos',
         '/test-tabs': 'Teste de Abas',
         '/store': 'Loja',
-        '/login': 'Login'
+        '/login': 'Login',
+        '/': 'Loja de Smartphones e Eletrônicos',
+        '/catalogo': 'Catálogo de Produtos',
+        '/carrinho': 'Carrinho',
+        '/checkout': 'Finalizar Compra',
+        '/pedido-confirmado': 'Pedido Confirmado',
+        '/acompanhar-pedido': 'Acompanhar Pedido',
+        '/produto': 'Produto',
     };
 
     // Tentar match exato primeiro
@@ -81,5 +88,5 @@ const getPageTitleFromRoute = (pathname: string): string => {
         }
     }
 
-    return 'Sistema de Gestão';
+    return 'Loja de Smartphones e Eletrônicos';
 };
