@@ -95,6 +95,22 @@ class VpsApiService {
     return this.fetchSafe<any[]>(`/products${query}`);
   }
 
+  /** Atualiza o array de imagens de um produto pelo SKU (image bank sync) */
+  async updateProductImagesBySku(sku: string, images: string[]): Promise<void> {
+    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return; }
+    try {
+      await fetch(`${VPS_BASE}/products/images`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        body: JSON.stringify({ sku, images }),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+    } catch (err) {
+      console.warn('[vpsApiService] updateProductImagesBySku error:', err);
+    }
+  }
+
+
   async getProductById(id: string): Promise<any | null> {
     return this.fetchSafe<any>(`/products/${id}`);
   }

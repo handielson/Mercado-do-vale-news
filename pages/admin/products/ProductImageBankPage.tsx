@@ -13,6 +13,7 @@ import {
 import { supabase } from '../../../services/supabase';
 import { productService } from '../../../services/products';
 import { colorService } from '../../../services/colors';
+import { vpsApiService } from '../../../services/vpsApiService';
 
 // Agrupar por SKU
 function groupBySku(images: ImageBankEntry[]): Record<string, ImageBankEntry[]> {
@@ -291,7 +292,6 @@ export function ProductImageBankPage() {
             let synced = 0;
             for (const [sku, newItems] of urlsBySku.entries()) {
                 try {
-                    // Existentes no banco (campo images atual)
                     const { data: prod } = await supabase
                         .from('products')
                         .select('images')
@@ -299,8 +299,6 @@ export function ProductImageBankPage() {
                         .maybeSingle();
 
                     const existingUrls: string[] = Array.isArray(prod?.images) ? prod.images : [];
-
-                    // Merge: adiciona novos sem duplicar
                     const newUrls = newItems.sort((a, b) => a.order - b.order).map(i => i.url);
                     const merged = [...new Set([...existingUrls, ...newUrls])];
 
@@ -308,6 +306,8 @@ export function ProductImageBankPage() {
                         p_sku: sku,
                         p_urls: merged,
                     });
+                    // Sync VPS MySQL (fire-and-forget)
+                    vpsApiService.updateProductImagesBySku(sku, merged).catch(() => {});
                     if (!error) synced++;
                 } catch { /* ignora erros individuais */ }
             }
@@ -350,6 +350,7 @@ export function ProductImageBankPage() {
             const existing: string[] = Array.isArray(prod?.images) ? prod.images : [];
             const merged = [...new Set([...existing, ...urls])];
             await supabase.rpc('sync_product_images', { p_sku: sku, p_urls: merged });
+            vpsApiService.updateProductImagesBySku(sku, merged).catch(() => {});
         }
         if (result.errors.length > 0) toast.error(`⚠️ ${result.errors.length} erro(s) no upload`);
         await loadImages();
@@ -423,6 +424,8 @@ export function ProductImageBankPage() {
                     p_sku: matchedSku,
                     p_urls: urls,
                 });
+                // Sync VPS MySQL (fire-and-forget)
+                vpsApiService.updateProductImagesBySku(matchedSku, urls).catch(() => {});
                 if (error) {
                     console.error('RPC error para', matchedSku, error);
                     notFound.push(`${matchedSku}: ${error.message}`);
