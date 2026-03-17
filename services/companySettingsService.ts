@@ -4,7 +4,38 @@ import { CompanySettings, CompanySettingsInput } from '../types/companySettings'
 /**
  * Company Settings Service
  * Manages company information for receipts and documents
+ *
+ * CACHE STRATEGY (two layers):
+ *  1. In-memory: 5 minutes — zero latency for same-session reloads
+ *  2. localStorage: 30 minutes — zero Supabase queries on cold reload
  */
+
+const LS_KEY = 'mdv_company_settings';
+const LS_TTL = 30 * 60 * 1000; // 30 min
+const MEM_TTL = 5 * 60 * 1000; // 5 min
+
+let _memCache: { data: CompanySettings; expiresAt: number } | null = null;
+
+function _readLocalStorage(): CompanySettings | null {
+    try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) return null;
+        const { data, expiresAt } = JSON.parse(raw);
+        if (Date.now() > expiresAt) { localStorage.removeItem(LS_KEY); return null; }
+        return data as CompanySettings;
+    } catch { return null; }
+}
+
+function _writeLocalStorage(data: CompanySettings): void {
+    try {
+        localStorage.setItem(LS_KEY, JSON.stringify({ data, expiresAt: Date.now() + LS_TTL }));
+    } catch { /* quota exceeded — silenciar */ }
+}
+
+function _invalidateCache(): void {
+    _memCache = null;
+    try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+}
 
 export const companySettingsService = {
     /**
@@ -12,6 +43,15 @@ export const companySettingsService = {
      * Returns the first (and should be only) company settings record
      */
     async get(): Promise<CompanySettings | null> {
+        // 1. In-memory cache
+        if (_memCache && Date.now() < _memCache.expiresAt) return _memCache.data;
+
+        // 2. localStorage cache
+        const cached = _readLocalStorage();
+        if (cached) {
+            _memCache = { data: cached, expiresAt: Date.now() + MEM_TTL };
+            return cached;
+        }
         try {
             const { data, error } = await supabase
                 .from('company_settings')
@@ -52,6 +92,12 @@ export const companySettingsService = {
                 data.extended_warranty_template = data.extended_warranty_template || defaults.extended_warranty_template;
             }
 
+            // 3. Save to both caches
+            if (data) {
+                _memCache = { data, expiresAt: Date.now() + MEM_TTL };
+                _writeLocalStorage(data);
+            }
+
             return data;
         } catch (error) {
             console.error('Error fetching company settings:', error);
@@ -64,6 +110,7 @@ export const companySettingsService = {
      * If no settings exist, creates a new record
      */
     async update(settings: CompanySettingsInput): Promise<CompanySettings> {
+        _invalidateCache(); // Limpa cache antes de atualizar
         try {
             // First, check if settings exist
             const existing = await this.get();
