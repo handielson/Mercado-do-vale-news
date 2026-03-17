@@ -87,6 +87,7 @@ import { feedbackService } from '../services/feedbackService';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
 import { ReviewsPage } from '../pages/admin/catalog/ReviewsPage';
 import { RoadmapPage } from '../pages/admin/settings/RoadmapPage';
+import { VpsStatusPage } from '../pages/admin/settings/VpsStatusPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -652,6 +653,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><RoadmapPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/vps-status",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><VpsStatusPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

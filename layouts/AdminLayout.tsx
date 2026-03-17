@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity } from 'lucide-react';
 
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -104,9 +104,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
           {/* SISTEMA */}
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Sistema</div>
+          <NavItem to="/admin/settings/vps-status" icon={<Activity size={18} />} label="Status VPS" active={location.pathname.startsWith('/admin/settings/vps-status')} />
           <NavItem to="/admin/settings/roadmap" icon={<Rocket size={18} />} label="Roadmap & Docs" active={location.pathname.startsWith('/admin/settings/roadmap')} />
           <NavItem to="/admin/migration" icon={<Database size={18} />} label="Migração" active={location.pathname.startsWith('/admin/migration')} />
           <NavItem to="/test-tabs" icon={<Tags size={18} />} label="🧪 Teste de Abas" active={location.pathname === '/test-tabs'} />
+
         </nav>
 
         {user && (
