@@ -153,56 +153,10 @@ export async function uploadImagesToBank(
     return result;
 }
 
-/** Lista TODOS os images: VPS filesystem (novos) + Supabase Storage (existentes) */
+/** Lista todas as imagens do banco (VPS filesystem) */
 export async function listAllBankImages(): Promise<ImageBankEntry[]> {
-    const [vpsImages, supabaseImages] = await Promise.all([
-        _listVpsImages('products'),
-        _listSupabaseImages(),
-    ]);
-
-    // Dedup: VPS tem prioridade sobre Supabase (mesmo path)
-    const seen = new Set<string>(vpsImages.map(i => i.path));
-    const merged = [
-        ...vpsImages,
-        ...supabaseImages.filter(i => !seen.has(i.path)),
-    ];
-    return merged;
-}
-
-/** Lista imagens de um SKU específico (VPS + Supabase) */
-export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
-    const [vpsImgs, supImgs] = await Promise.all([
-        _listVpsImages(`products/${sku.toUpperCase()}`),
-        _listSupabaseImagesForSku(sku.toUpperCase()),
-    ]);
-    const seen = new Set<string>(vpsImgs.map(i => i.path));
-    const merged = [...vpsImgs, ...supImgs.filter(i => !seen.has(i.path))];
-    return merged.sort((a, b) => a.order - b.order);
-}
-
-/** Deleta imagem: tenta VPS primeiro, se não existir deleta no Supabase Storage */
-export async function deleteImageFromBank(filePath: string): Promise<void> {
-    // Tenta VPS
-    const res = await fetch(`${VPS_BASE}/images/file`, {
-        method: 'DELETE',
-        headers: { 'X-Sync-Key': SYNC_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: filePath }),
-    });
-    if (res.ok) return;
-    if (res.status !== 404) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || 'Erro ao deletar imagem na VPS');
-    }
-    // Fallback: Supabase Storage
-    const { error } = await supabase.storage.from(BUCKET).remove([filePath]);
-    if (error) throw new Error(error.message);
-}
-
-// ─── Helpers privados ──────────────────────────────────────────────────────
-
-async function _listVpsImages(prefix: string): Promise<ImageBankEntry[]> {
     try {
-        const res = await fetch(`${VPS_BASE}/images/list?prefix=${encodeURIComponent(prefix)}`);
+        const res = await fetch(`${VPS_BASE}/images/list?prefix=products`);
         if (!res.ok) return [];
         const files: { path: string; url: string; filename: string }[] = await res.json();
         return files.map(f => {
@@ -216,52 +170,30 @@ async function _listVpsImages(prefix: string): Promise<ImageBankEntry[]> {
     } catch { return []; }
 }
 
-async function _listSupabaseImages(): Promise<ImageBankEntry[]> {
-    const { data: folders, error } = await supabase.storage
-        .from(BUCKET).list('products', { limit: 200 });
-    if (error || !folders) return [];
-
-    const all: ImageBankEntry[] = [];
-    for (const folder of folders) {
-        if (folder.name.endsWith('.webp')) {
-            const parsed = parseImageFilename(folder.name);
-            if (!parsed) continue;
-            const path = `products/${folder.name}`;
-            const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-            all.push({ path, url: pub.publicUrl, ...parsed, filename: folder.name });
-            continue;
-        }
-        const sku = folder.name.toUpperCase();
-        const { data: files } = await supabase.storage
-            .from(BUCKET).list(`products/${folder.name}`, { limit: 100 });
-        if (!files) continue;
-        for (const f of files) {
-            if (!f.name.endsWith('.webp')) continue;
-            const path = `products/${folder.name}/${f.name}`;
-            const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-            const skuParsed = parseSkuFilename(f.name);
-            if (skuParsed) {
-                all.push({ path, url: pub.publicUrl, sku, color: '', order: skuParsed.order, filename: f.name });
-            } else {
-                const seoParsed = parseSeoFilename(f.name);
-                if (!seoParsed) continue;
-                all.push({ path, url: pub.publicUrl, sku, color: seoParsed.color, order: seoParsed.order, filename: f.name });
-            }
-        }
-    }
-    return all;
+/** Lista imagens de um SKU específico (VPS filesystem) */
+export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
+    try {
+        const res = await fetch(`${VPS_BASE}/images/list?prefix=products/${sku.toUpperCase()}`);
+        if (!res.ok) return [];
+        const files: { path: string; url: string; filename: string }[] = await res.json();
+        return files.map(f => {
+            const skuParsed = parseSkuFilename(f.filename);
+            if (skuParsed) return { ...f, sku: sku.toUpperCase(), color: '', order: skuParsed.order };
+            const seoParsed = parseSeoFilename(f.filename);
+            return { ...f, sku: sku.toUpperCase(), color: seoParsed?.color ?? '', order: seoParsed?.order ?? 0 };
+        }).sort((a, b) => a.order - b.order);
+    } catch { return []; }
 }
 
-async function _listSupabaseImagesForSku(sku: string): Promise<ImageBankEntry[]> {
-    const { data } = await supabase.storage
-        .from(BUCKET).list(`products/${sku}`, { limit: 100 });
-    if (!data) return [];
-    return data.filter(f => f.name.endsWith('.webp')).map(f => {
-        const path = `products/${sku}/${f.name}`;
-        const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-        const skuParsed = parseSkuFilename(f.name);
-        if (skuParsed) return { path, url: pub.publicUrl, sku, color: '', order: skuParsed.order, filename: f.name };
-        const seoParsed = parseSeoFilename(f.name);
-        return { path, url: pub.publicUrl, sku, color: seoParsed?.color ?? '', order: seoParsed?.order ?? 0, filename: f.name };
+/** Deleta uma imagem da VPS pelo path */
+export async function deleteImageFromBank(filePath: string): Promise<void> {
+    const res = await fetch(`${VPS_BASE}/images/file`, {
+        method: 'DELETE',
+        headers: { 'X-Sync-Key': SYNC_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: filePath }),
     });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || 'Erro ao deletar imagem');
+    }
 }
