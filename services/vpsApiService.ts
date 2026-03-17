@@ -83,13 +83,14 @@ class VpsApiService {
     return this.fetchSafe<any[]>('/categories');
   }
 
-  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string }): Promise<any[] | null> {
+  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean }): Promise<any[] | null> {
     const qs = new URLSearchParams();
     if (params?.category) qs.set('category', params.category);
     if (params?.status)   qs.set('status', params.status);
     if (params?.limit)    qs.set('limit', String(params.limit));
     if (params?.offset)   qs.set('offset', String(params.offset));
     if (params?.search)   qs.set('search', params.search);
+    if (params?.compact)  qs.set('compact', 'true');
     const query = qs.toString() ? `?${qs.toString()}` : '';
     return this.fetchSafe<any[]>(`/products${query}`);
   }

@@ -120,9 +120,9 @@ export const useProducts = () => {
             if (mode === 'refresh') setIsRefreshing(true);
             setError(null);
 
-            // VPS MySQL primeiro (rápido) — fallback para Supabase
+            // VPS MySQL primeiro (rápido, sem images base64) — fallback Supabase
             let data: Product[];
-            const vpsData = await vpsApiService.getProducts({ status: 'all', limit: 2000 });
+            const vpsData = await vpsApiService.getProducts({ status: 'all', limit: 2000, compact: true });
             if (vpsData) {
                 data = vpsData.map(mapVpsProduct);
                 console.log(`[useProducts] VPS: ${data.length} produtos`);
