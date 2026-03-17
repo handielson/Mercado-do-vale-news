@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { vpsApiService } from './vpsApiService';
 import type { CatalogSettings, CategoryDisplayConfig } from '@/types/catalogSettings';
 import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
 
@@ -11,35 +12,39 @@ class CatalogConfigService {
      */
     async getSettings(userId?: string): Promise<CatalogSettings> {
         try {
-            // Verificar cache global independente de cookie
             const cacheKey = userId ? `settings_${userId}` : 'settings_global';
             const cached = this.cache.get(cacheKey);
             if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
                 return cached.data;
             }
 
+            // Tentar VPS API primeiro (apenas para leitura pública, sem userId)
+            if (!userId) {
+                const vpsData = await vpsApiService.getCatalogSettings();
+                if (vpsData) {
+                    const settings = { ...DEFAULT_CATALOG_SETTINGS, ...vpsData } as CatalogSettings;
+                    this.cache.set(cacheKey, { data: settings, timestamp: Date.now() });
+                    return settings;
+                }
+            }
+
+            // Fallback: Supabase
             let query = supabase.from('catalog_settings').select('*');
             if (userId) {
                 query = query.eq('user_id', userId);
             }
-            
-            // Para visitantes públicos, pega a primeira (e única) config global do catálogo
+
             const { data, error } = await query.limit(1).single();
 
-            if (error && error.code !== 'PGRST116') { // PGRST116 = not found
-                // AbortError/CORS: retornar padrões sem logar erro
+            if (error && error.code !== 'PGRST116') {
                 if (error.code === '20' || error.message?.includes('aborted') || error.message?.includes('abort')) {
                     return { ...DEFAULT_CATALOG_SETTINGS } as CatalogSettings;
                 }
                 console.error('Erro ao buscar catalog_settings:', error);
             }
 
-            // Se não existir na base, retornar padrões
             const settings = data || { ...DEFAULT_CATALOG_SETTINGS, user_id: userId };
-
-            // Atualizar cache
             this.cache.set(cacheKey, { data: settings, timestamp: Date.now() });
-
             return settings as CatalogSettings;
         } catch (error: any) {
             if (error.name !== 'AbortError' && error.message !== 'AbortError' && !error.message?.includes('aborted')) {

@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { CatalogProduct, FilterState } from '@/types/catalog';
 import { catalogConfigService } from '@/services/catalogConfigService';
+import { vpsApiService } from '@/services/vpsApiService';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos (Para revalidação silenciosa)
@@ -60,8 +61,75 @@ export const catalogService = {
 
         console.log(`🌐 [catalogService] Fetching from Supabase (bypassCache: ${bypassCache})`);
 
-        const queryStartTime = performance.now();
-        
+        // ── VPS API FAST PATH ──────────────────────────────────────────────────
+        // Use for simple queries: no text search, no brands, no price range, no special flags.
+        // Products from MySQL already include images; category slugs come from /categories.
+        const isSimpleQuery = !filters?.search
+            && (!filters?.brands || filters.brands.length === 0)
+            && !filters?.priceRange
+            && !filters?.inStockOnly
+            && !filters?.featuredOnly
+            && !filters?.newOnly;
+
+        if (isSimpleQuery) {
+            try {
+                const [vpsRaw, vpsCats] = await Promise.all([
+                    vpsApiService.getProducts({
+                        status: 'active',
+                        // send a single category id if filtered, otherwise fetch all
+                        category: filters?.categories?.length === 1 ? filters.categories[0] : undefined,
+                        limit: 1000,
+                    }),
+                    vpsApiService.getCategories(),
+                ]);
+
+                if (vpsRaw !== null) {
+                    const settings = await catalogConfigService.getSettings();
+
+                    // Category slug map from VPS
+                    const catSlugMap = new Map<string, string>(
+                        (vpsCats || []).map((c: any) => [c.id, c.slug])
+                    );
+
+                    // Apply visibility rules + multi-category filter client-side
+                    let result = (vpsRaw as CatalogProduct[]).map(p => ({
+                        ...p,
+                        category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
+                    }));
+
+                    if (settings.hide_out_of_stock) result = result.filter(p => (p.stock_quantity || 0) > 0);
+                    if (settings.hide_zero_price)   result = result.filter(p => (p.price_retail || 0) > 0);
+                    if (settings.min_stock_to_show > 0) result = result.filter(p => (p.stock_quantity || 0) >= settings.min_stock_to_show);
+                    if (filters?.categories && filters.categories.length > 1) {
+                        result = result.filter(p => p.category_id && filters.categories!.includes(p.category_id));
+                    }
+
+                    // Client-side sort
+                    switch (filters?.sortBy) {
+                        case 'price_asc':  result.sort((a, b) => (a.price_retail || 0) - (b.price_retail || 0)); break;
+                        case 'price_desc': result.sort((a, b) => (b.price_retail || 0) - (a.price_retail || 0)); break;
+                        default:
+                            // recent / featured: newest first (images-first for display)
+                            result.sort((a, b) => {
+                                const dateA = new Date(a.created_at || 0).getTime();
+                                const dateB = new Date(b.created_at || 0).getTime();
+                                return dateB - dateA;
+                            });
+                    }
+
+                    // Client-side pagination
+                    const from = (page - 1) * pageSize;
+                    const paginated = result.slice(from, from + pageSize);
+
+                    console.log(`⚡ [catalogService] VPS served ${paginated.length}/${result.length} products`);
+                    return { products: paginated, total: result.length, hasMore: paginated.length === pageSize };
+                }
+            } catch (vpsErr) {
+                console.warn('[catalogService] VPS API failed, falling back to Supabase:', vpsErr);
+            }
+        }
+        // ── END VPS FAST PATH ─────────────────────────────────────────────────
+
         // Construir query - Trocado exact por estimated para evitar Full Table Scan e gargalo na contagem de linhas
         let query = supabase
             .from('products')
