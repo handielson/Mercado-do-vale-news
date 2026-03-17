@@ -3,8 +3,49 @@ import { useState, useEffect, useCallback } from 'react';
 import { Product } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
 import { productService } from '../services/products';
+import { vpsApiService } from '../services/vpsApiService';
 import { ProductFiltersState } from '../components/products/ProductFilters';
 import { prefetchModelImages } from '../services/modelImageCache';
+
+/** Converte resposta do VPS MySQL para o tipo Product */
+function mapVpsProduct(row: any): Product {
+    return {
+        id: row.id,
+        model_id: row.model_id || undefined,
+        model: '',
+        category_id: row.category_id || undefined,
+        brand: row.brand || undefined,
+        name: row.name,
+        sku: row.sku || '',
+        description: undefined,
+        eans: Array.isArray(row.alternative_eans) && row.alternative_eans.length
+            ? row.alternative_eans
+            : (row.ean ? [row.ean] : []),
+        specs: row.specs || {},
+        price_cost: row.price_cost ?? undefined,
+        price_retail: row.price_retail ?? undefined,
+        price_reseller: row.price_reseller ?? undefined,
+        price_wholesale: row.price_wholesale ?? undefined,
+        stock_quantity: row.stock_quantity || 0,
+        images: row.images || [],
+        status: row.status || ProductStatus.ACTIVE,
+        track_inventory: Boolean(row.track_inventory),
+        is_gift: Boolean(row.is_gift),
+        warranty_type: row.warranty_type || 'brand',
+        warranty_template_id: row.warranty_template_id || undefined,
+        parent_id: row.parent_id || undefined,
+        bling_id: row.bling_id || undefined,
+        bling_parent_id: row.bling_parent_id || undefined,
+        video_url: row.video_url || undefined,
+        price_promo: row.price_promo ?? undefined,
+        promo_start: row.promo_start || undefined,
+        promo_end: row.promo_end || undefined,
+        slug: row.slug || undefined,
+        origin: row.origin || undefined,
+        created: row.created_at,
+        updated: row.updated_at,
+    };
+}
 
 const CACHE_KEY = 'admin_products_cache';
 const CACHE_TIMESTAMP_KEY = 'admin_products_cache_ts';
@@ -77,21 +118,29 @@ export const useProducts = () => {
         try {
             if (mode === 'spinner') setIsLoading(true);
             if (mode === 'refresh') setIsRefreshing(true);
-            // background: nenhum indicador visual — dados do cache já estão na tela
             setError(null);
-            const data = await productService.list();
+
+            // VPS MySQL primeiro (rápido) — fallback para Supabase
+            let data: Product[];
+            const vpsData = await vpsApiService.getProducts({ status: 'all', limit: 2000 });
+            if (vpsData) {
+                data = vpsData.map(mapVpsProduct);
+                console.log(`[useProducts] VPS: ${data.length} produtos`);
+            } else {
+                console.warn('[useProducts] VPS indisponível — usando Supabase');
+                data = await productService.list();
+            }
+
             setProducts(data);
             setFilteredProducts(data);
             saveToCache(data);
             setCacheAge('agora');
 
-            // Pré-aquece o cache de imagens de todos os modelos em UMA query (evita N+1 por card)
+            // Pré-aquece cache de imagens
             const modelIds = data
                 .filter(p => p.model_id && (!p.images || p.images.length === 0))
                 .map(p => p.model_id!);
-            if (modelIds.length > 0) {
-                prefetchModelImages(modelIds).catch(() => {}); // fire-and-forget
-            }
+            if (modelIds.length > 0) prefetchModelImages(modelIds).catch(() => {});
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Erro ao carregar produtos');
             console.error('Error fetching products:', err);
@@ -149,7 +198,7 @@ export const useProducts = () => {
     }, []);
 
     /**
-     * Force-refresh data from Supabase (used by the refresh button in the UI)
+     * Force-refresh data (used by the refresh button in the UI)
      */
     const refresh = useCallback(() => {
         fetchProducts('refresh');
