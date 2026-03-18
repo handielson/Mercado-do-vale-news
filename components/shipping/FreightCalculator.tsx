@@ -407,6 +407,10 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         const fromCep = useSecondary && secondaryCep ? secondaryCep : originCep;
         const allCarriers: CarrierResult[] = [];
 
+        // Debug: mostrar estado das configurações de transportadoras
+        console.log('[FreightCalculator] ME token:', settings?.melhor_envio_token ? '✅ presente' : '❌ ausente');
+        console.log('[FreightCalculator] Frenet token:', settings?.frenet_token ? '✅ presente' : '❌ ausente', '| frenet_enabled:', settings?.frenet_enabled);
+
         const tasks: Promise<void>[] = [];
 
         // Melhor Envio
