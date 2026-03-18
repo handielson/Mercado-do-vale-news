@@ -265,7 +265,9 @@ export default function ShippingPage() {
     const [editingRange, setEditingRange] = useState<ShippingPriceRange | undefined>();
     const [settingsForm, setSettingsForm] = useState({
         origin_cep: '',
+        origin_label: '',
         secondary_origin_cep: '',
+        secondary_origin_label: '',
         melhor_envio_token: '',
         melhor_envio_sandbox: true,
         melhor_envio_enabled: false,
@@ -289,7 +291,9 @@ export default function ShippingPage() {
             setSettings(s);
             setSettingsForm({
                 origin_cep: s.origin_cep,
+                origin_label: (s as any).origin_label ?? '',
                 secondary_origin_cep: (s as any).secondary_origin_cep ?? '',
+                secondary_origin_label: (s as any).secondary_origin_label ?? '',
                 melhor_envio_token: s.melhor_envio_token ?? '',
                 melhor_envio_sandbox: s.melhor_envio_sandbox,
                 melhor_envio_enabled: s.melhor_envio_enabled,
@@ -430,21 +434,39 @@ export default function ShippingPage() {
                     {activeTab === 'config' && (
                         <div className="space-y-5">
                             <h2 className="text-base font-semibold text-slate-800">Configurações Gerais</h2>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">CEP de Origem (loja)</label>
-                                <input className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={settingsForm.origin_cep}
-                                    onChange={e => setSettingsForm(p => ({ ...p, origin_cep: e.target.value }))}
-                                    placeholder="56000-000" maxLength={9} />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">CEP de Origem (loja) *</label>
+                                    <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={settingsForm.origin_cep}
+                                        onChange={e => setSettingsForm(p => ({ ...p, origin_cep: e.target.value }))}
+                                        placeholder="56000-000" maxLength={9} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nome do depósito principal</label>
+                                    <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={settingsForm.origin_label}
+                                        onChange={e => setSettingsForm(p => ({ ...p, origin_label: e.target.value }))}
+                                        placeholder="Ex: Petrolina" />
+                                </div>
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">CEP Alternativo (ex: depósito)</label>
-                                <input className="w-full max-w-xs border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={settingsForm.secondary_origin_cep}
-                                    onChange={e => setSettingsForm(p => ({ ...p, secondary_origin_cep: e.target.value }))}
-                                    placeholder="56000-000" maxLength={9} />
-                                <p className="text-xs text-slate-400 mt-1">Usado como segunda opção na calculadora de frete avulso.</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">CEP Alternativo (2º depósito)</label>
+                                    <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={settingsForm.secondary_origin_cep}
+                                        onChange={e => setSettingsForm(p => ({ ...p, secondary_origin_cep: e.target.value }))}
+                                        placeholder="56000-000" maxLength={9} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nome do 2º depósito</label>
+                                    <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={settingsForm.secondary_origin_label}
+                                        onChange={e => setSettingsForm(p => ({ ...p, secondary_origin_label: e.target.value }))}
+                                        placeholder="Ex: Juazeiro" />
+                                    <p className="text-xs text-slate-400 mt-1">Ativa o comparativo de 2 depósitos na calculadora.</p>
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-3">

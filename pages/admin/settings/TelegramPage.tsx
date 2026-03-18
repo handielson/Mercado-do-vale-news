@@ -85,7 +85,7 @@ export default function TelegramPage() {
     }
 
     // --- DICIONÁRIO E LÓGICA DE VARIÁVEIS INTELIGENTES ---
-    const getTagsForTemplate = (templateType?: 'action' | 'scheduled', actionType?: 'sale' | 'new_customer' | null) => {
+    const getTagsForTemplate = (templateType?: 'action' | 'scheduled', actionType?: 'sale' | 'new_customer' | 'online_order' | null) => {
         if (templateType === 'scheduled') {
             return [
                 { tag: '{qtd_vendas}', desc: 'Ex: 15 (Soma de vendas do dia)' },
@@ -94,7 +94,7 @@ export default function TelegramPage() {
                 { tag: '{data}', desc: 'Ex: 21/05/2026 (Data do relatório)' },
                 { tag: '{estoque_celulares}', desc: 'Ex: 14 (Contagem global)' },
                 { tag: '{estoque_geral_loja}', desc: 'Soma total de estoque da loja' },
-                { tag: '{estoque_lista_celulares}', desc: 'Ex: 3x iPhone 15 Pro Max 256GB - Azul\n2x S24 Ultra...' },
+                { tag: '{estoque_lista_celulares}', desc: 'Ex: 3x iPhone 15 Pro Max 256GB - Azul\\n2x S24 Ultra...' },
                 { tag: '{agenda_instagram_semana}', desc: 'Cronograma completo Instagram da semana' },
                 { tag: '{empresa_nome}', desc: 'Nome da empresa' },
                 { tag: '{empresa_telefone}', desc: 'Telefone/WhatsApp da loja' },
@@ -113,7 +113,20 @@ export default function TelegramPage() {
             ];
         }
 
-        // Default: Venda 
+        if (actionType === 'online_order') {
+            return [
+                { tag: '{id_pedido}', desc: 'ID do Pedido Online' },
+                { tag: '{cliente}', desc: 'Nome do Comprador' },
+                { tag: '{telefone}', desc: 'Celular do Cliente' },
+                { tag: '{itens}', desc: 'Lista de Itens do Pedido' },
+                { tag: '{valor}', desc: 'Valor total do Pedido' },
+                { tag: '{pagamento}', desc: 'Forma de Pagamento' },
+                { tag: '{entrega}', desc: 'Tipo de Entrega' },
+                { tag: '{endereco}', desc: 'Endereço de Entrega' }
+            ];
+        }
+
+        // Default: Venda
         return [
             { tag: '{id_venda}', desc: 'ID Resumido' },
             { tag: '{cliente}', desc: 'Nome do Comprador' },

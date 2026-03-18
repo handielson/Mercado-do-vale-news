@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
+import { USE_VPS } from '@/config/migration';
 import type { Banner } from '@/types/catalog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,8 +27,12 @@ export const bannerService = {
      * Filtra por is_active + datas de agendamento + tipo de cliente.
      */
     getActiveBanners: async (customerType?: CustomerType): Promise<Banner[]> => {
-        const now = new Date().toISOString();
+        if (USE_VPS.banners) {
+            const params = customerType ? `?customerType=${customerType}` : '';
+            return vpsClient.get<Banner[]>(`/banners/active${params}`);
+        }
 
+        const now = new Date().toISOString();
         const { data, error } = await supabase
             .from('catalog_banners')
             .select('*')
@@ -38,8 +44,6 @@ export const bannerService = {
         if (error) throw error;
 
         let banners = (data || []) as Banner[];
-
-        // Filtrar por tipo de cliente se informado
         if (customerType) {
             banners = banners.filter(b =>
                 !b.target_audience ||
@@ -47,7 +51,6 @@ export const bannerService = {
                 b.target_audience.includes(customerType)
             );
         }
-
         return banners;
     },
 
@@ -55,6 +58,8 @@ export const bannerService = {
      * Buscar todos os banners (uso admin — sem filtro de ativo/data)
      */
     getAllBanners: async (): Promise<Banner[]> => {
+        if (USE_VPS.banners) return vpsClient.get<Banner[]>('/banners');
+
         const { data, error } = await supabase
             .from('catalog_banners')
             .select('*')
@@ -68,6 +73,10 @@ export const bannerService = {
      * Buscar banner por ID
      */
     getBannerById: async (id: string): Promise<Banner | null> => {
+        if (USE_VPS.banners) {
+            return vpsClient.get<Banner | null>(`/banners/${id}`);
+        }
+
         const { data, error } = await supabase
             .from('catalog_banners')
             .select('*')
@@ -87,6 +96,8 @@ export const bannerService = {
     createBanner: async (
         banner: Omit<Banner, 'id' | 'created_at' | 'updated_at' | 'clicks_count' | 'views_count'>
     ): Promise<Banner> => {
+        if (USE_VPS.banners) return vpsClient.post<Banner>('/banners', banner);
+
         const { data, error } = await supabase
             .from('catalog_banners')
             .insert(banner)
@@ -101,6 +112,8 @@ export const bannerService = {
      * Atualizar banner
      */
     updateBanner: async (id: string, updates: Partial<Banner>): Promise<Banner> => {
+        if (USE_VPS.banners) return vpsClient.patch<Banner>(`/banners/${id}`, updates);
+
         const { data, error } = await supabase
             .from('catalog_banners')
             .update({ ...updates, updated_at: new Date().toISOString() })
@@ -116,6 +129,8 @@ export const bannerService = {
      * Deletar banner
      */
     deleteBanner: async (id: string): Promise<void> => {
+        if (USE_VPS.banners) return vpsClient.delete(`/banners/${id}`);
+
         const { error } = await supabase
             .from('catalog_banners')
             .delete()
@@ -198,6 +213,10 @@ export const bannerService = {
      * Registrar clique no banner via RPC
      */
     trackBannerClick: async (bannerId: string): Promise<void> => {
+        if (USE_VPS.banners) {
+            await vpsClient.post(`/banners/${bannerId}/click`, {});
+            return;
+        }
         await supabase.rpc('increment_banner_clicks', { banner_id: bannerId });
     },
 
@@ -205,6 +224,10 @@ export const bannerService = {
      * Registrar visualização do banner via RPC
      */
     trackBannerView: async (bannerId: string): Promise<void> => {
+        if (USE_VPS.banners) {
+            await vpsClient.post(`/banners/${bannerId}/view`, {});
+            return;
+        }
         await supabase.rpc('increment_banner_views', { banner_id: bannerId });
     },
 };

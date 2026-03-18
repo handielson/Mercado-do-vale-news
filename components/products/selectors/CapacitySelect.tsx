@@ -1,9 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Plus, X, RefreshCw } from 'lucide-react';
-import { storageService } from '../../../services/storages-supabase';
-import { ramService } from '../../../services/rams-supabase';
-import { Storage } from '../../../types/storage';
+import { storageService } from '../../../services/storages';
+import { ramService } from '../../../services/rams';
 
 interface CapacitySelectProps {
     value: string;
@@ -33,48 +31,44 @@ export const CapacitySelect: React.FC<CapacitySelectProps> = ({
     technicalName,
     type
 }) => {
-    const [capacities, setCapacities] = useState<Storage[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [showCreateDialog, setShowCreateDialog] = useState(false);
-    const [newCapacityName, setNewCapacityName] = useState('');
-    const [isCreating, setIsCreating] = useState(false);
+    const [capacities, setCapacities] = useState<Array<{id: string; label: string; value: number; active?: boolean}>>([]);
 
-    useEffect(() => {
-        loadCapacities();
-    }, [type]);
+    useEffect(() => { loadCapacities(); }, [type]);
 
     const loadCapacities = async () => {
         try {
             setIsLoading(true);
-            // Use ramService for RAM fields, storageService for storage fields
             const data = type === 'ram'
                 ? await ramService.listActive()
                 : await storageService.listActive();
-            setCapacities(data as Storage[]);
-        } catch (error) {
-            console.error('Error loading capacities:', error);
+            setCapacities(data);
+        } catch (err) {
+            console.error('Error loading capacities:', err);
         } finally {
             setIsLoading(false);
         }
     };
 
+    const [isLoading, setIsLoading] = useState(false);
+    const [showCreateDialog, setShowCreateDialog] = useState(false);
+    const [newCapacityName, setNewCapacityName] = useState('');
+    const [isCreating, setIsCreating] = useState(false);
+
     const handleCreateCapacity = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!newCapacityName.trim()) return;
-
         try {
             setIsCreating(true);
-            const newCapacity = await storageService.create({
-                name: newCapacityName.trim(),
-                active: true
-            });
-            await loadCapacities(); // Reload to get updated list
-            onChange(newCapacity.name); // Set the new capacity as selected
+            const gb = parseInt(newCapacityName.trim().replace(/[^0-9]/g, '')) || 0;
+            const newItems = type === 'ram'
+                ? await ramService.create({ value: gb, label: newCapacityName.trim(), active: true })
+                : await storageService.create({ value: gb, label: newCapacityName.trim(), active: true });
+            await loadCapacities();
+            onChange((newItems as { label: string }).label);
             setNewCapacityName('');
             setShowCreateDialog(false);
-        } catch (error) {
-            console.error('Error creating capacity:', error);
+        } catch (err) {
+            console.error('Error creating capacity:', err);
             alert('Erro ao criar capacidade');
         } finally {
             setIsCreating(false);
@@ -97,9 +91,9 @@ export const CapacitySelect: React.FC<CapacitySelectProps> = ({
                     className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
                 >
                     <option value="">{placeholder}</option>
-                    {capacities.map((capacity) => (
-                        <option key={capacity.id} value={capacity.name}>
-                            {capacity.name}
+                    {capacities.map((c) => (
+                        <option key={c.id} value={c.label}>
+                            {c.label}
                         </option>
                     ))}
                 </select>

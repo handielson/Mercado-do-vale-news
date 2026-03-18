@@ -1,8 +1,6 @@
-
 import React, { useEffect, useState } from 'react';
 import { MemoryStick, Plus, Pencil, Trash2 } from 'lucide-react';
-import { Ram } from '../../../types/ram';
-import { ramService } from '../../../services/rams-supabase';
+import { ramService, Ram } from '../../../services/rams';
 import { RamModal } from '../../../components/settings/RamModal';
 
 /**
@@ -46,9 +44,7 @@ export function RamsPage() {
     };
 
     const handleDelete = async (ram: Ram) => {
-        if (!confirm(`Tem certeza que deseja excluir a memória "${ram.name}"?`)) {
-            return;
-        }
+        if (!confirm(`Tem certeza que deseja excluir a memória "${ram.label}"?`)) return;
 
         try {
             await ramService.delete(ram.id);
@@ -102,7 +98,7 @@ export function RamsPage() {
                                 Memória RAM
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                Slug
+                                GB
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                                 Status
@@ -123,11 +119,11 @@ export function RamsPage() {
                             rams.map((ram) => (
                                 <tr key={ram.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-sm font-medium text-slate-800">
-                                        {ram.name}
+                                        {ram.label}
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-600">
                                         <code className="px-2 py-1 bg-slate-100 rounded text-xs">
-                                            {ram.slug}
+                                            {ram.value} GB
                                         </code>
                                     </td>
                                     <td className="px-6 py-4 text-sm">

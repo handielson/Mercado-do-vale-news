@@ -44,6 +44,11 @@ export interface SaleItem {
     // Garantia Estendida
     warranty_months?: number; // Meses de garantia estendida
     warranty_price?: number; // Valor da garantia em centavos
+
+    // Campos extras para o Termo de Garantia (não enviados ao banco)
+    product_specs?: { color?: string; ram?: string; storage?: string; imei1?: string; imei2?: string; [key: string]: string | undefined };
+    product_brand?: string; // Marca do produto
+    product_model?: string; // Modelo do produto
 }
 
 /**

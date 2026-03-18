@@ -486,9 +486,9 @@ export default function ReceiptPreview({
             {companySettings?.receipt_show_extra_page && (
                 <div className={`print-only-extra-page hidden print:block mt-8 pt-8 border-t-2 border-dashed border-slate-300 mx-auto ${getReceiptMaxWidthClass()}`} style={{ pageBreakBefore: 'always' }}>
                     <div className="flex flex-col items-center justify-center text-center p-8">
-                        {companySettings.logo_url && (
+                        {companySettings.receipt_logo_url && (
                             <img
-                                src={companySettings.logo_url}
+                                src={companySettings.receipt_logo_url}
                                 alt="Logo Empresa"
                                 className="max-w-[200px] max-h-[100px] object-contain mb-8"
                             />

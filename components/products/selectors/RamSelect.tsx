@@ -1,8 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
-import { ramService } from '../../../services/rams-supabase';
-import { Ram } from '../../../types/ram';
+import { ramService, Ram } from '../../../services/rams';
 
 interface RamSelectProps {
     value: string;
@@ -44,21 +42,21 @@ export const RamSelect: React.FC<RamSelectProps> = ({ value, onChange, error }) 
 
     const handleCreateRam = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!newRamName.trim()) return;
-
         try {
             setIsCreating(true);
+            const gb = parseInt(newRamName.trim().replace(/[^0-9]/g, '')) || 0;
             const newRam = await ramService.create({
-                name: newRamName.trim(),
-                active: true
+                value: gb,
+                label: newRamName.trim(),
+                active: true,
             });
-            await loadRams(); // Reload to get updated list
-            onChange(newRam.name); // Set the new RAM as selected
+            await loadRams();
+            onChange(newRam.label);
             setNewRamName('');
             setShowCreateDialog(false);
-        } catch (error) {
-            console.error('Error creating RAM:', error);
+        } catch (err) {
+            console.error('Error creating RAM:', err);
             alert('Erro ao criar memória RAM');
         } finally {
             setIsCreating(false);
@@ -80,8 +78,8 @@ export const RamSelect: React.FC<RamSelectProps> = ({ value, onChange, error }) 
                 >
                     <option value="">Selecione a memória RAM</option>
                     {rams.map((ram) => (
-                        <option key={ram.id} value={ram.name}>
-                            {ram.name}
+                        <option key={ram.id} value={ram.label}>
+                            {ram.label}
                         </option>
                     ))}
                 </select>

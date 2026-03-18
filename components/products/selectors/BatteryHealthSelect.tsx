@@ -1,8 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
-import { batteryHealthService } from '../../../services/batteryHealths-supabase';
-import { BatteryHealth } from '../../../types/batteryHealth';
+import { batteryHealthService, BatteryHealth } from '../../../services/batteryHealths';
 
 interface BatteryHealthSelectProps {
     value: string;
@@ -33,10 +31,10 @@ export const BatteryHealthSelect: React.FC<BatteryHealthSelectProps> = ({ value,
     const loadBatteryHealths = async () => {
         try {
             setIsLoading(true);
-            const data = await batteryHealthService.listActive(); // Only active battery healths
+            const data = await batteryHealthService.list();
             setBatteryHealths(data);
-        } catch (error) {
-            console.error('Error loading battery healths:', error);
+        } catch (err) {
+            console.error('Error loading battery healths:', err);
         } finally {
             setIsLoading(false);
         }
@@ -44,21 +42,20 @@ export const BatteryHealthSelect: React.FC<BatteryHealthSelectProps> = ({ value,
 
     const handleCreateBatteryHealth = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!newBatteryHealthName.trim()) return;
-
         try {
             setIsCreating(true);
-            const newBatteryHealth = await batteryHealthService.create({
-                name: newBatteryHealthName.trim(),
-                active: true
+            const pct = parseInt(newBatteryHealthName.trim().replace(/[^0-9]/g, '')) || 0;
+            const newBH = await batteryHealthService.create({
+                value: pct,
+                label: newBatteryHealthName.trim(),
             });
-            await loadBatteryHealths(); // Reload to get updated list
-            onChange(newBatteryHealth.name); // Set the new battery health as selected
+            await loadBatteryHealths();
+            onChange(newBH.label);
             setNewBatteryHealthName('');
             setShowCreateDialog(false);
-        } catch (error) {
-            console.error('Error creating battery health:', error);
+        } catch (err) {
+            console.error('Error creating battery health:', err);
             alert('Erro ao criar saúde da bateria');
         } finally {
             setIsCreating(false);
@@ -79,9 +76,9 @@ export const BatteryHealthSelect: React.FC<BatteryHealthSelectProps> = ({ value,
                     className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
                 >
                     <option value="">Selecione a saúde da bateria</option>
-                    {batteryHealths.map((batteryHealth) => (
-                        <option key={batteryHealth.id} value={batteryHealth.name}>
-                            {batteryHealth.name}
+                    {batteryHealths.map((bh) => (
+                        <option key={bh.id} value={bh.label}>
+                            {bh.label}
                         </option>
                     ))}
                 </select>

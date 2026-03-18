@@ -1,4 +1,4 @@
-import { PaymentFee } from '../types/payment-fees';
+import { PaymentFee } from '../services/payment-fees';
 
 /**
  * Calculate final price with payment fee
@@ -28,12 +28,12 @@ export function getPriceForPayment(
     fees: PaymentFee[]
 ): number {
     const fee = fees.find(
-        f => f.payment_method === paymentMethod && f.installments === installments
+        f => (f.method === paymentMethod || (f as any).payment_method === paymentMethod) && f.installments === installments
     );
 
     if (!fee) return basePrice;
 
-    return calculateFinalPrice(basePrice, fee.applied_fee);
+    return calculateFinalPrice(basePrice, (fee as any).applied_fee_pct ?? (fee as any).applied_fee ?? 0);
 }
 
 /**

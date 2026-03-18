@@ -1,8 +1,6 @@
-
 import React, { useEffect, useState } from 'react';
 import { HardDrive, Plus, Pencil, Trash2 } from 'lucide-react';
-import { Storage } from '../../../types/storage';
-import { storageService } from '../../../services/storages-supabase';
+import { storageService, Storage } from '../../../services/storages';
 import { StorageModal } from '../../../components/settings/StorageModal';
 
 /**
@@ -46,9 +44,7 @@ export function StoragesPage() {
     };
 
     const handleDelete = async (storage: Storage) => {
-        if (!confirm(`Tem certeza que deseja excluir a capacidade "${storage.name}"?`)) {
-            return;
-        }
+        if (!confirm(`Excluir capacidade "${storage.label}"?`)) return;
 
         try {
             await storageService.delete(storage.id);
@@ -102,7 +98,7 @@ export function StoragesPage() {
                                 Capacidade
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                Slug
+                                GB
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                                 Status
@@ -123,11 +119,11 @@ export function StoragesPage() {
                             storages.map((storage) => (
                                 <tr key={storage.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-sm font-medium text-slate-800">
-                                        {storage.name}
+                                        {storage.label}
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-600">
                                         <code className="px-2 py-1 bg-slate-100 rounded text-xs">
-                                            {storage.slug}
+                                            {storage.value} GB
                                         </code>
                                     </td>
                                     <td className="px-6 py-4 text-sm">

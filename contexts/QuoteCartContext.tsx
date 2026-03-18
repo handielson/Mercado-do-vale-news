@@ -11,6 +11,7 @@ export interface QuoteCartItem {
     variant: {
         ram: string;
         storage: string;
+        color?: string;
     };
     availableColors: string[];
     price: number; // effective price in cents

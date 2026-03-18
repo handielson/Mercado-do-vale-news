@@ -11,7 +11,7 @@ import { WarrantyTagData } from '../types/warrantyDocument';
  */
 export function replaceWarrantyTags(
     template: string,
-    data: WarrantyTagData
+    data: WarrantyTagData | Record<string, string>
 ): string {
     let result = template;
 

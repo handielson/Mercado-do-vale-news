@@ -72,13 +72,14 @@ export interface CompanySettings {
     business_hours?: BusinessHours;
     holiday_overrides?: string[];
     local_holidays?: LocalHoliday[];
+    business_hours_display_text?: string; // Texto editável exibido publicamente nos horários
 
     created_at: string;
     updated_at: string;
 }
 
 export interface CompanySettingsInput {
-    company_name: string;
+    company_name?: string;
     address?: string;
     phone?: string;
     cnpj?: string;
@@ -117,5 +118,6 @@ export interface CompanySettingsInput {
     business_hours?: BusinessHours;
     holiday_overrides?: string[];
     local_holidays?: LocalHoliday[];
+    business_hours_display_text?: string;
 
 }

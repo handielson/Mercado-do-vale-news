@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { X, Printer, Settings } from 'lucide-react';
 import Barcode from 'react-barcode';
-import { Product } from '../../../types/product';
+import { Product } from '../../types/product';
 import { useReactToPrint } from 'react-to-print';
 
 interface LabelPrintModalProps {
@@ -30,7 +30,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     const printRef = useRef<HTMLDivElement>(null);
 
     const handlePrint = useReactToPrint({
-        content: () => printRef.current,
+        contentRef: printRef,
         documentTitle: `Etiqueta_${product?.sku || 'Produto'}`,
     });
 

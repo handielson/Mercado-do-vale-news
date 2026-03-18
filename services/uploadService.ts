@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
+import { USE_VPS } from '@/config/migration';
 
 /**
  * Serviço para gerenciar uploads de arquivos para Supabase Storage
@@ -15,52 +17,41 @@ export const uploadService = {
      * @returns URL pública da imagem
      */
     uploadBannerImage: async (file: File): Promise<string> => {
-        // Validar tipo de arquivo
         if (!ALLOWED_TYPES.includes(file.type)) {
-            throw new Error(
-                'Tipo de arquivo não permitido. Use PNG, JPG ou WEBP.'
-            );
+            throw new Error('Tipo de arquivo não permitido. Use PNG, JPG ou WEBP.');
         }
-
-        // Validar tamanho do arquivo
         if (file.size > MAX_FILE_SIZE) {
-            throw new Error(
-                `Arquivo muito grande. Tamanho máximo: ${MAX_FILE_SIZE / 1024 / 1024}MB`
-            );
+            throw new Error(`Arquivo muito grande. Tamanho máximo: ${MAX_FILE_SIZE / 1024 / 1024}MB`);
         }
 
-        // Gerar nome único para o arquivo
+        // Upload para VPS
+        if (USE_VPS.banners) {
+            const formData = new FormData();
+            formData.append('file', file);
+            const { url } = await vpsClient.upload<{ url: string }>('/banners/upload', formData);
+            return url;
+        }
+
+        // Upload para Supabase Storage (fallback)
         const timestamp = Date.now();
         const randomString = Math.random().toString(36).substring(2, 10);
         const extension = file.name.split('.').pop() || 'png';
         const fileName = `${timestamp}_${randomString}.${extension}`;
 
         try {
-            // Fazer upload para o Supabase Storage
-            const { data, error } = await supabase.storage
+            const { error } = await supabase.storage
                 .from(BANNER_BUCKET)
-                .upload(fileName, file, {
-                    cacheControl: '3600',
-                    upsert: false
-                });
+                .upload(fileName, file, { cacheControl: '3600', upsert: false });
 
-            if (error) {
-                console.error('Erro ao fazer upload:', error);
-                throw new Error(`Erro ao fazer upload: ${error.message}`);
-            }
+            if (error) throw new Error(`Erro ao fazer upload: ${error.message}`);
 
-            // Obter URL pública da imagem
             const { data: publicUrlData } = supabase.storage
                 .from(BANNER_BUCKET)
                 .getPublicUrl(fileName);
 
-            if (!publicUrlData?.publicUrl) {
-                throw new Error('Erro ao obter URL pública da imagem');
-            }
-
+            if (!publicUrlData?.publicUrl) throw new Error('Erro ao obter URL pública da imagem');
             return publicUrlData.publicUrl;
         } catch (error: any) {
-            console.error('Erro no upload:', error);
             throw new Error(error.message || 'Erro ao fazer upload da imagem');
         }
     },
@@ -163,25 +154,24 @@ export const uploadService = {
      */
     deleteBannerImage: async (imageUrl: string): Promise<void> => {
         try {
-            // Extrair o nome do arquivo da URL
             const fileName = imageUrl.split('/').pop();
-            if (!fileName) {
-                throw new Error('URL de imagem inválida');
+            if (!fileName) throw new Error('URL de imagem inválida');
+
+            // Deletar da VPS
+            if (USE_VPS.banners) {
+                await vpsClient.delete(`/banners/upload/${fileName}`);
+                return;
             }
 
-            // Deletar do Supabase Storage
+            // Deletar do Supabase Storage (fallback)
             const { error } = await supabase.storage
                 .from(BANNER_BUCKET)
                 .remove([fileName]);
 
-            if (error) {
-                console.error('Erro ao deletar imagem:', error);
-                throw new Error(`Erro ao deletar imagem: ${error.message}`);
-            }
+            if (error) throw new Error(`Erro ao deletar imagem: ${error.message}`);
         } catch (error: any) {
             console.error('Erro ao deletar:', error);
-            // Não lançar erro aqui para não bloquear a exclusão do banner
-            // A imagem órfã será removida manualmente se necessário
+            // Não lançar erro para não bloquear a exclusão do banner
         }
     },
 

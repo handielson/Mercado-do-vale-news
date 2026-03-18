@@ -1,9 +1,9 @@
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 
 export interface Coupon {
     id: string;
     code: string;
-    description: string | null;
+    description?: string | null;
     type: 'percent' | 'fixed';
     value: number;
     min_order: number;
@@ -12,21 +12,17 @@ export interface Coupon {
     expires_at: string | null;
     active: boolean;
     target_type: 'all' | 'varejo' | 'atacado' | 'revenda' | 'ADMIN';
-    created_at: string;
+    created_at?: string;
 }
 
 export interface CouponValidation {
     valid: boolean;
     error?: string;
     coupon?: Coupon;
-    discount?: number;    // valor monetário em R$
-    finalPrice?: number;  // totalPrice - discount
+    discount?: number;
+    finalPrice?: number;
 }
 
-/**
- * Validates a coupon code against the given total and customer type.
- * Returns the computed discount amount in R$.
- */
 export async function validateCoupon(
     code: string,
     totalPrice: number,
@@ -34,33 +30,25 @@ export async function validateCoupon(
 ): Promise<CouponValidation> {
     if (!code.trim()) return { valid: false, error: 'Informe o código do cupom' };
 
-    const { data: coupon, error } = await supabase
-        .from('coupons')
-        .select('*')
-        .eq('active', true)
-        .ilike('code', code.trim())
-        .single();
-
-    if (error || !coupon) {
+    let coupon: Coupon;
+    try {
+        coupon = await vpsClient.get<Coupon>(`/coupons/validate/${encodeURIComponent(code.trim().toUpperCase())}`);
+    } catch {
         return { valid: false, error: 'Cupom inválido ou não encontrado' };
     }
 
-    // Check target type
     if (coupon.target_type !== 'all' && coupon.target_type !== customerType) {
         return { valid: false, error: 'Cupom não disponível para o seu tipo de cliente' };
     }
 
-    // Check expiration
     if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
         return { valid: false, error: 'Este cupom está expirado' };
     }
 
-    // Check usage limit
     if (coupon.max_uses !== null && coupon.uses_count >= coupon.max_uses) {
         return { valid: false, error: 'Este cupom atingiu o limite de usos' };
     }
 
-    // Check minimum order
     if (totalPrice < coupon.min_order) {
         return {
             valid: false,
@@ -68,7 +56,6 @@ export async function validateCoupon(
         };
     }
 
-    // Calculate discount (capped at totalPrice)
     const raw = coupon.type === 'percent'
         ? (totalPrice * coupon.value) / 100
         : coupon.value;
@@ -79,52 +66,25 @@ export async function validateCoupon(
     return { valid: true, coupon, discount, finalPrice };
 }
 
-/**
- * Increments the uses_count for a coupon after a successful purchase.
- */
-export async function applyCoupon(couponId: string): Promise<void> {
-    await supabase.rpc('increment_coupon_uses', { coupon_id: couponId });
+export async function applyCoupon(couponCode: string): Promise<void> {
+    await vpsClient.post<{ ok: boolean }>(`/coupons/${encodeURIComponent(couponCode)}/use`, {});
 }
 
-// Admin CRUD
 export async function listCoupons(): Promise<Coupon[]> {
-    const { data, error } = await supabase
-        .from('coupons')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data ?? [];
+    return vpsClient.get<Coupon[]>('/coupons');
 }
 
 export async function createCoupon(coupon: Omit<Coupon, 'id' | 'uses_count' | 'created_at'>): Promise<Coupon> {
-    const { data, error } = await supabase
-        .from('coupons')
-        .insert({ ...coupon, code: coupon.code.toUpperCase() })
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
+    const { id } = await vpsClient.post<{ ok: boolean; id: string }>('/coupons', coupon);
+    return { ...coupon, id, uses_count: 0 };
 }
 
 export async function updateCoupon(id: string, updates: Partial<Omit<Coupon, 'id' | 'created_at'>>): Promise<Coupon> {
-    const payload = updates.code
-        ? { ...updates, code: updates.code.toUpperCase() }
-        : updates;
-
-    const { data, error } = await supabase
-        .from('coupons')
-        .update(payload)
-        .eq('id', id)
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
+    await vpsClient.patch<{ ok: boolean }>(`/coupons/${id}`, updates);
+    const all = await listCoupons();
+    return all.find(c => c.id === id) as Coupon;
 }
 
 export async function deleteCoupon(id: string): Promise<void> {
-    const { error } = await supabase.from('coupons').delete().eq('id', id);
-    if (error) throw error;
+    await vpsClient.delete(`/coupons/${id}`);
 }

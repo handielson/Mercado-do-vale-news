@@ -1,8 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { Ram, RamInput } from '../../types/ram';
-import { ramService } from '../../services/rams';
+import { ramService, Ram } from '../../services/rams';
 
 interface RamModalProps {
     isOpen: boolean;
@@ -21,53 +19,38 @@ interface RamModalProps {
  * - Follows established modal pattern
  */
 export const RamModal: React.FC<RamModalProps> = ({ isOpen, onClose, onSave, ram }) => {
-    const [name, setName] = useState('');
+    const [label, setLabel] = useState('');
+    const [valueGb, setValueGb] = useState<number | ''>('');
     const [active, setActive] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (ram) {
-            setName(ram.name);
+            setLabel(ram.label);
+            setValueGb(ram.value);
             setActive(ram.active);
         } else {
-            setName('');
+            setLabel('');
+            setValueGb('');
             setActive(true);
         }
         setError('');
     }, [ram, isOpen]);
 
     const handleSave = async () => {
-        // Validation
-        if (!name.trim()) {
-            setError('Nome da memória RAM é obrigatório');
-            return;
-        }
-
-        if (name.trim().length < 2) {
-            setError('Nome deve ter pelo menos 2 caracteres');
-            return;
-        }
-
-        setSaving(true);
-        setError('');
-
+        if (!label.trim()) { setError('Label é obrigatório'); return; }
+        const numValue = typeof valueGb === 'number' ? valueGb : parseInt(String(valueGb).replace(/[^0-9]/g, '')) || 0;
+        setSaving(true); setError('');
         try {
-            const input: RamInput = {
-                name: name.trim(),
-                active
-            };
-
             if (ram) {
-                await ramService.update(ram.id, input);
+                await ramService.update(ram.id, { label: label.trim(), value: numValue, active });
             } else {
-                await ramService.create(input);
+                await ramService.create({ label: label.trim(), value: numValue, active });
             }
-
-            onSave();
-            onClose();
+            onSave(); onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Erro ao salvar memória RAM');
+            setError(err instanceof Error ? err.message : 'Erro ao salvar');
         } finally {
             setSaving(false);
         }
@@ -96,19 +79,26 @@ export const RamModal: React.FC<RamModalProps> = ({ isOpen, onClose, onSave, ram
                     {/* Name Input */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Memória RAM <span className="text-red-500">*</span>
+                            Label <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            value={label}
+                            onChange={(e) => setLabel(e.target.value)}
                             placeholder="Ex: 8GB, 16GB, 32GB..."
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoFocus
                         />
-                        <p className="text-xs text-slate-500 mt-1">
-                            Use formato padrão: 2GB, 4GB, 8GB, 16GB, 32GB, etc.
-                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">GB (numérico)</label>
+                        <input
+                            type="number"
+                            value={valueGb}
+                            onChange={(e) => setValueGb(e.target.value === '' ? '' : Number(e.target.value))}
+                            placeholder="Ex: 8"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
                     </div>
 
                     {/* Active Checkbox */}

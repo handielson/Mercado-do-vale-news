@@ -24,9 +24,10 @@ export async function calculateInstallments(
     const fees = await paymentFeesService.list();
 
     // PIX (à vista - 0% fee)
-    const pixFee = fees.find(f => f.payment_method === 'pix' && f.installments === 1);
+    const pixFee = fees.find(f => (f.method === 'pix' || (f as any).payment_method === 'pix') && f.installments === 1);
+    const appliedPixFee = (pixFee as any)?.applied_fee_pct ?? (pixFee as any)?.applied_fee ?? 0;
     const pixTotal = pixFee
-        ? Math.round(priceInCents * (1 + pixFee.applied_fee / 100))
+        ? Math.round(priceInCents * (1 + appliedPixFee / 100))
         : priceInCents;
 
     plans.push({
@@ -39,12 +40,12 @@ export async function calculateInstallments(
 
     // Credit card installments (1x-12x)
     for (let i = 1; i <= maxInstallments; i++) {
-        const fee = fees.find(f => f.payment_method === 'credit' && f.installments === i);
+        const fee = fees.find(f => (f.method === 'credit' || (f as any).payment_method === 'credit') && f.installments === i);
 
         if (!fee) continue;
 
         // Calculate total with compound interest
-        const appliedFeeDecimal = fee.applied_fee / 100;
+        const appliedFeeDecimal = ((fee as any).applied_fee_pct ?? (fee as any).applied_fee ?? 0) / 100;
         const total = Math.round(priceInCents * Math.pow(1 + appliedFeeDecimal, 1));
         const installmentValue = Math.round(total / i);
 

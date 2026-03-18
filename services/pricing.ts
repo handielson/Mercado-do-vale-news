@@ -1,5 +1,4 @@
-import { paymentFeesService } from './payment-fees';
-import { PaymentFee } from '../types/payment-fees';
+import { paymentFeesService, PaymentFee } from './payment-fees';
 import {
     getPriceForPayment,
     calculateInstallmentValue,
@@ -38,13 +37,13 @@ function calculatePricesForClientType(
         credit: Array.from({ length: 18 }, (_, i) => {
             const installments = i + 1;
             const totalPrice = getPriceForPayment(basePrice, 'credit', installments, fees);
-            const fee = fees.find(f => f.payment_method === 'credit' && f.installments === installments);
+            const fee = fees.find(f => (f.method === 'credit' || (f as any).payment_method === 'credit') && f.installments === installments);
 
             return {
                 installments,
                 totalPrice,
                 installmentValue: calculateInstallmentValue(totalPrice, installments),
-                fee: fee?.applied_fee || 0
+                fee: (fee as any)?.applied_fee_pct ?? (fee as any)?.applied_fee ?? 0
             };
         })
     };
@@ -72,14 +71,9 @@ export const pricingService = {
         };
     },
 
-    /**
-     * Get best price (PIX) for a specific client type
-     * @param basePrice - Base margin price in cents
-     * @returns PIX price in cents
-     */
     async getBestPrice(basePrice: number): Promise<number> {
         const fees = await paymentFeesService.list();
-        const pixFee = fees.find(f => f.payment_method === 'pix');
+        const pixFee = fees.find(f => f.method === 'pix' || (f as any).payment_method === 'pix');
 
         if (pixFee) {
             return getPriceForPayment(basePrice, 'pix', 1, fees);

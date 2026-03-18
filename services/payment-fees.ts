@@ -1,90 +1,31 @@
-import { supabase } from './supabase';
-import { PaymentFee, PaymentFeeInput, PaymentChannel } from '../types/payment-fees';
+import { vpsClient } from './vpsClient';
 
-// TEMPORARY: Hardcoded company_id until we implement auth
-const TEMP_COMPANY_ID = 'mercado-do-vale';
-
-/**
- * Get company_id from companies table by slug
- */
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
+export interface PaymentFee {
+    id: string;
+    method: string | null;
+    installments: number;
+    operator_fee_pct: number;
+    applied_fee_pct: number;
+    channel: 'presencial' | 'online_mp' | 'online_ps' | 'all';
+    created_at?: string;
+    updated_at?: string;
 }
 
 export const paymentFeesService = {
     async list(): Promise<PaymentFee[]> {
-        const { data, error } = await supabase
-            .from('payment_fees')
-            .select('*')
-            .order('payment_method', { ascending: true })
-            .order('installments', { ascending: true })
-            .order('channel', { ascending: true });
-
-        if (error) throw error;
-        return data || [];
+        return vpsClient.get<PaymentFee[]>('/payment-fees');
     },
 
-    async update(id: string, input: PaymentFeeInput): Promise<void> {
-        const { error } = await supabase
-            .from('payment_fees')
-            .update({
-                operator_name: input.operator_name,
-                operator_fee: input.operator_fee,
-                applied_fee: input.applied_fee,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id);
-
-        if (error) throw error;
+    /** Replace ALL fees atomically (PUT replaces entire list) */
+    async replaceAll(fees: Omit<PaymentFee, 'id' | 'created_at' | 'updated_at'>[]): Promise<void> {
+        await vpsClient.put<{ ok: boolean; count: number }>('/payment-fees', fees);
     },
 
-    async initializeDefaults(): Promise<void> {
-        // Check if already initialized
-        const { count } = await supabase
-            .from('payment_fees')
-            .select('*', { count: 'exact', head: true });
-
-        if (count && count > 0) return; // Already initialized
-
-        const companyId = await getCompanyId();
-
-        // Default fees — presencial (up to 18x) and online (up to 12x)
-        const makeRows = (channel: PaymentChannel, maxCredit: number) => [
-            { company_id: companyId, payment_method: 'debit' as const, installments: 1, channel, operator_fee: 1, applied_fee: 1 },
-            { company_id: companyId, payment_method: 'pix' as const, installments: 1, channel, operator_fee: 0, applied_fee: 0 },
-            ...Array.from({ length: maxCredit }, (_, i) => ({
-                company_id: companyId,
-                payment_method: 'credit' as const,
-                installments: i + 1,
-                channel,
-                operator_fee: getDefaultOperatorFee(i + 1),
-                applied_fee: getDefaultAppliedFee(i + 1)
-            }))
-        ];
-        const defaults = [
-            ...makeRows('presencial', 18),
-            ...makeRows('online_mp', 12),
-            ...makeRows('online_ps', 12),
-        ];
-
-        const { error } = await supabase.from('payment_fees').insert(defaults);
-        if (error) throw error;
-    }
+    /** Legacy single-record update — patches one fee by id */
+    async update(id: string, updates: Partial<PaymentFee>): Promise<void> {
+        // Rebuild full list with this one row updated, then replace all
+        const all = await this.list();
+        const updated = all.map(f => f.id === id ? { ...f, ...updates } : f);
+        await this.replaceAll(updated);
+    },
 };
-
-function getDefaultOperatorFee(installments: number): number {
-    const fees = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
-    return fees[installments - 1] || 5;
-}
-
-function getDefaultAppliedFee(installments: number): number {
-    const fees = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
-    return fees[installments - 1] || 7;
-}
