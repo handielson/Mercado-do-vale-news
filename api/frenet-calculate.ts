@@ -18,14 +18,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = {
         SellerCEP: from_cep.replace(/\D/g, ''),
         RecipientCEP: to_cep.replace(/\D/g, ''),
-        ShipmentInvoiceValue: Math.max(order_value ?? 0, 50), // mínimo R$50 para seguro
-        ShipmentItemArray: [
+        RecipientCountry: 'BR',
+        ShipmentInvoiceValue: Math.max(order_value ?? 0, 50),
+        ShippingItemArray: [
             {
                 Height: height_cm ?? 10,
                 Length: length_cm ?? 20,
                 Quantity: 1,
-                SKU: 'pkg',
-                Weight: (weight_g ?? 300) / 1000, // kg
+                Weight: (weight_g ?? 300) / 1000,
                 Width: width_cm ?? 15,
             },
         ],
