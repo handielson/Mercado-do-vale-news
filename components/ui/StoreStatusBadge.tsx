@@ -1,12 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getStoreStatus, StoreStatus } from '../../utils/storeStatus';
 import { companySettingsService } from '../../services/companySettingsService';
 
+interface StoreLabels {
+    open: string;
+    closed: string;
+    closing_soon: string;
+    lunch: string;
+}
+
+const DEFAULT_LABELS: StoreLabels = {
+    open: 'Loja Aberta',
+    closed: 'Fechado',
+    closing_soon: 'Fechando em breve',
+    lunch: 'Retorna às',
+};
+
 export function StoreStatusBadge() {
     const [status, setStatus] = useState<StoreStatus | null>(null);
-    const [hoursText, setHoursText] = useState<string>('');
-    const [showPopover, setShowPopover] = useState(false);
-    const popoverRef = useRef<HTMLDivElement>(null);
+    const [labels, setLabels] = useState<StoreLabels>(DEFAULT_LABELS);
 
     useEffect(() => {
         let isMounted = true;
@@ -15,9 +27,15 @@ export function StoreStatusBadge() {
             try {
                 const settings = await companySettingsService.get();
                 const currentStatus = await getStoreStatus(settings?.business_hours, settings?.holiday_overrides, settings?.local_holidays);
+
                 if (isMounted) {
                     setStatus(currentStatus);
-                    setHoursText(settings?.business_hours_display_text || '');
+                    setLabels({
+                        open: settings?.store_label_open || DEFAULT_LABELS.open,
+                        closed: settings?.store_label_closed || DEFAULT_LABELS.closed,
+                        closing_soon: settings?.store_label_closing_soon || DEFAULT_LABELS.closing_soon,
+                        lunch: settings?.store_label_lunch || DEFAULT_LABELS.lunch,
+                    });
                 }
             } catch (error) {
                 try {
@@ -39,18 +57,6 @@ export function StoreStatusBadge() {
         };
     }, []);
 
-    // Fecha popover ao clicar fora
-    useEffect(() => {
-        if (!showPopover) return;
-        const handler = (e: MouseEvent) => {
-            if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-                setShowPopover(false);
-            }
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [showPopover]);
-
     if (!status) return null;
 
     const colors = {
@@ -67,38 +73,43 @@ export function StoreStatusBadge() {
         holiday: 'bg-orange-500'
     };
 
-    const defaultTooltips = {
+    const tooltips = {
         open: 'A loja está recebendo pedidos e fazendo entregas.',
         closing_soon: 'A loja fechará em breve! Finalize seu pedido agora.',
         closed: 'Neste momento a loja não está fazendo entregas.',
         holiday: 'Neste momento a loja não está fazendo entregas.'
     };
 
-    const hasHoursText = !!hoursText;
+    // Substitui o texto dinamicamente pelo label customizado, mantendo partes dinâmicas (ex: horários)
+    const getDisplayMessage = () => {
+        const s = status.status;
+        if (s === 'open') return labels.open;
+        if (s === 'closing_soon') return labels.closing_soon;
+        // Para closed e holiday: mantém mensagens dinâmicas (ex: "Abre às 08:00", "Retorna às 13:30", "Feriado")
+        // Substituindo só o texto base "Fechado" e "Fechado Hoje" pelo label customizado
+        if (s === 'closed' || s === 'holiday') {
+            const msg = status.message;
+            // Se for mensagem simples (só "Fechado" ou "Fechado Hoje"), substitui
+            if (msg === 'Fechado' || msg === 'Fechado Hoje') {
+                return labels.closed;
+            }
+            // Se começar com "Retorna às", substitui o prefixo
+            if (msg.startsWith('Retorna às')) {
+                return msg.replace('Retorna às', labels.lunch);
+            }
+            // Demais casos (Feriado, "Abre às X", etc.) mantém como está
+            return msg;
+        }
+        return status.message;
+    };
 
     return (
-        <div className="relative" ref={popoverRef}>
-            <div
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${colors[status.status]} transition-colors shadow-sm ${hasHoursText ? 'cursor-pointer hover:opacity-80' : 'cursor-help'}`}
-                title={hasHoursText ? undefined : defaultTooltips[status.status]}
-                onClick={() => hasHoursText && setShowPopover((v) => !v)}
-            >
-                <div className={`w-2 h-2 rounded-full ${dotColors[status.status]} ${(status.status === 'open' || status.status === 'closing_soon') ? 'animate-pulse' : ''}`}></div>
-                {status.message}
-                {hasHoursText && (
-                    <span className="ml-0.5 opacity-50 text-[10px]">▾</span>
-                )}
-            </div>
-
-            {/* Popover de horários */}
-            {showPopover && hasHoursText && (
-                <div className="absolute left-0 top-full mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-4 min-w-[220px] max-w-[320px]">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Horários de Atendimento</p>
-                    <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">
-                        {hoursText}
-                    </pre>
-                </div>
-            )}
+        <div
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium ${colors[status.status]} transition-colors shadow-sm cursor-help hover:opacity-80`}
+            title={tooltips[status.status]}
+        >
+            <div className={`w-2 h-2 rounded-full ${dotColors[status.status]} ${(status.status === 'open' || status.status === 'closing_soon') ? 'animate-pulse' : ''}`}></div>
+            {getDisplayMessage()}
         </div>
     );
 }

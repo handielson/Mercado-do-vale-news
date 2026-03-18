@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, RefreshCw, Check } from 'lucide-react';
+import { Clock, RefreshCw, Check, Tag } from 'lucide-react';
 import { companySettingsService } from '../../services/companySettingsService';
 import { BusinessHours } from '../../types/companySettings';
 import toast from 'react-hot-toast';
@@ -14,19 +14,14 @@ const DAY_LABELS: Record<keyof BusinessHours, string> = {
     sunday: 'Domingo',
 };
 
-/** Formata "08:00" → "8h" ou "08:30" → "8h30" */
 function fmtTime(t: string): string {
     const [h, m] = t.split(':');
     return m === '00' ? `${parseInt(h)}h` : `${parseInt(h)}h${m}`;
 }
 
-/** Gera texto a partir dos dados de BusinessHours */
 export function generateHoursText(hours: BusinessHours): string {
     const days = Object.keys(hours) as (keyof BusinessHours)[];
     const lines: string[] = [];
-
-    // Agrupa dias com mesmos horários para "Segunda a Sexta: 8h às 18h"
-    const grouped: { label: string; open: string; close: string; lunch?: string }[] = [];
 
     let i = 0;
     while (i < days.length) {
@@ -34,12 +29,11 @@ export function generateHoursText(hours: BusinessHours): string {
         const d = hours[day];
 
         if (!d.isOpen) {
-            grouped.push({ label: DAY_LABELS[day], open: '', close: '' });
+            lines.push(`${DAY_LABELS[day]}: Fechado`);
             i++;
             continue;
         }
 
-        // Tenta agrupar dias consecutivos com os mesmos horários
         let j = i + 1;
         while (j < days.length) {
             const next = hours[days[j]];
@@ -67,44 +61,55 @@ export function generateHoursText(hours: BusinessHours): string {
                 ? `almoço ${fmtTime(d.lunchStart)} às ${fmtTime(d.lunchEnd)}`
                 : undefined;
 
-        grouped.push({ label, open: d.openTime, close: d.closeTime, lunch });
+        const base = `${label}: ${fmtTime(d.openTime)} às ${fmtTime(d.closeTime)}`;
+        lines.push(lunch ? `${base} (${lunch})` : base);
         i = j;
-    }
-
-    for (const g of grouped) {
-        if (!g.open) {
-            lines.push(`${g.label}: Fechado`);
-        } else {
-            const base = `${g.label}: ${fmtTime(g.open)} às ${fmtTime(g.close)}`;
-            lines.push(g.lunch ? `${base} (${g.lunch})` : base);
-        }
     }
 
     return lines.join('\n');
 }
 
+interface Labels {
+    open: string;
+    closed: string;
+    closing_soon: string;
+    lunch: string;
+}
+
+const DEFAULTS: Labels = {
+    open: 'Loja Aberta',
+    closed: 'Fechado',
+    closing_soon: 'Fechando em breve',
+    lunch: 'Retorna às',
+};
+
 export function BusinessHoursTextPanel() {
     const [text, setText] = useState('');
+    const [labels, setLabels] = useState<Labels>(DEFAULTS);
     const [isSaving, setIsSaving] = useState(false);
     const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
 
     useEffect(() => {
         companySettingsService.get().then((s) => {
-            if (s?.business_hours_display_text) {
-                setText(s.business_hours_display_text);
-            }
+            if (s?.business_hours_display_text) setText(s.business_hours_display_text);
+            setLabels({
+                open: s?.store_label_open || DEFAULTS.open,
+                closed: s?.store_label_closed || DEFAULTS.closed,
+                closing_soon: s?.store_label_closing_soon || DEFAULTS.closing_soon,
+                lunch: s?.store_label_lunch || DEFAULTS.lunch,
+            });
         });
     }, []);
 
-    const save = (value: string) => {
+    const save = (patch: object) => {
         if (saveTimeout) clearTimeout(saveTimeout);
         const t = setTimeout(async () => {
             setIsSaving(true);
             try {
-                await companySettingsService.update({ business_hours_display_text: value });
+                await companySettingsService.update(patch);
             } catch {
-                toast.error('Erro ao salvar texto de horários.');
+                toast.error('Erro ao salvar.');
             } finally {
                 setIsSaving(false);
             }
@@ -112,9 +117,20 @@ export function BusinessHoursTextPanel() {
         setSaveTimeout(t);
     };
 
-    const handleChange = (value: string) => {
+    const handleTextChange = (value: string) => {
         setText(value);
-        save(value);
+        save({ business_hours_display_text: value });
+    };
+
+    const handleLabelChange = (key: keyof Labels, value: string) => {
+        const newLabels = { ...labels, [key]: value };
+        setLabels(newLabels);
+        save({
+            store_label_open: newLabels.open,
+            store_label_closed: newLabels.closed,
+            store_label_closing_soon: newLabels.closing_soon,
+            store_label_lunch: newLabels.lunch,
+        });
     };
 
     const handleGenerate = async () => {
@@ -122,61 +138,99 @@ export function BusinessHoursTextPanel() {
         try {
             const settings = await companySettingsService.get();
             if (!settings?.business_hours) {
-                toast.error('Nenhum horário configurado no painel de horários.');
+                toast.error('Nenhum horário configurado no painel acima.');
                 return;
             }
             const generated = generateHoursText(settings.business_hours);
             setText(generated);
-            save(generated);
+            save({ business_hours_display_text: generated });
         } catch {
-            toast.error('Erro ao gerar texto de horários.');
+            toast.error('Erro ao gerar texto.');
         } finally {
             setIsGenerating(false);
         }
     };
 
     return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                        <Clock size={20} />
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+            {/* Badge Labels */}
+            <div>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                        <Tag size={18} />
                     </div>
                     <div>
-                        <h2 className="text-base font-bold text-slate-800">Texto de Horários (Exibição Pública)</h2>
+                        <h2 className="text-base font-bold text-slate-800">Textos do Badge "Loja Aberta"</h2>
                         <p className="text-xs text-slate-500 mt-0.5">
-                            Texto exibido no cabeçalho da loja. Edite livremente ou gere automaticamente.
+                            Personalize os textos exibidos no badge do header da loja. A lógica de aberto/fechado permanece igual.
                         </p>
                     </div>
                 </div>
 
-                <button
-                    onClick={handleGenerate}
-                    disabled={isGenerating}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                    <RefreshCw size={14} className={isGenerating ? 'animate-spin' : ''} />
-                    Gerar automático
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {([
+                        ['open', '🟢 Quando aberta', 'Ex: Loja Aberta'],
+                        ['closed', '⚪ Quando fechada', 'Ex: Fechado'],
+                        ['closing_soon', '🟡 Fechando em breve', 'Ex: Encerando em breve'],
+                        ['lunch', '🍽️ No almoço (prefixo)', 'Ex: Voltamos às'],
+                    ] as [keyof Labels, string, string][]).map(([key, label, placeholder]) => (
+                        <div key={key}>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+                            <input
+                                type="text"
+                                value={labels[key]}
+                                onChange={(e) => handleLabelChange(key, e.target.value)}
+                                placeholder={placeholder}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50"
+                            />
+                        </div>
+                    ))}
+                </div>
             </div>
 
-            <textarea
-                value={text}
-                onChange={(e) => handleChange(e.target.value)}
-                rows={4}
-                placeholder={
-                    'Ex:\nSegunda a Sexta: 8h às 18h (almoço 12h às 13h30)\nSábado: 8h às 12h\nDomingo: Fechado'
-                }
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono bg-slate-50"
-            />
+            {/* Divider */}
+            <div className="border-t border-slate-100" />
 
-            <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
+            {/* Hours Text Area */}
+            <div>
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                            <Clock size={18} />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-slate-800">Texto de Horários (uso livre)</h2>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Texto extra que pode ser exibido em tooltips, rodapé ou WhatsApp.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleGenerate}
+                        disabled={isGenerating}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                        <RefreshCw size={14} className={isGenerating ? 'animate-spin' : ''} />
+                        Gerar automático
+                    </button>
+                </div>
+
+                <textarea
+                    value={text}
+                    onChange={(e) => handleTextChange(e.target.value)}
+                    rows={4}
+                    placeholder={'Segunda a Sexta: 8h às 18h (almoço 12h às 13h30)\nSábado: 8h às 12h\nDomingo: Fechado'}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono bg-slate-50"
+                />
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-slate-400">
                 {isSaving ? (
                     <span className="text-amber-500">Salvando...</span>
                 ) : (
                     <>
                         <Check size={12} className="text-green-500" />
-                        <span>Texto salvo automaticamente</span>
+                        <span>Salvo automaticamente</span>
                     </>
                 )}
             </div>

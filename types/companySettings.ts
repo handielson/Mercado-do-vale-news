@@ -74,6 +74,12 @@ export interface CompanySettings {
     local_holidays?: LocalHoliday[];
     business_hours_display_text?: string; // Texto editável exibido publicamente nos horários
 
+    // Labels customizáveis do badge de status da loja
+    store_label_open?: string;          // Default: "Loja Aberta"
+    store_label_closed?: string;        // Default: "Fechado"
+    store_label_closing_soon?: string;  // Default: "Fechando em breve"
+    store_label_lunch?: string;         // Default: "Retorna às {hora}"
+
     created_at: string;
     updated_at: string;
 }
@@ -119,5 +125,10 @@ export interface CompanySettingsInput {
     holiday_overrides?: string[];
     local_holidays?: LocalHoliday[];
     business_hours_display_text?: string;
+
+    store_label_open?: string;
+    store_label_closed?: string;
+    store_label_closing_soon?: string;
+    store_label_lunch?: string;
 
 }
