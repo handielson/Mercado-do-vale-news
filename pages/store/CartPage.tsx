@@ -177,8 +177,9 @@ function CartPageContent() {
 
     const warrantyPrice = selectedWarranty ? Math.round(eligibleTotal * selectedWarranty.percentage / 100) : 0;
     const couponDiscount = Math.round(coupon.discount * 100);
-    const grandTotal = subtotal + warrantyPrice - couponDiscount - cartCoinDiscount;
-    const hasModifiers = warrantyPrice > 0 || couponDiscount > 0 || cartCoinDiscount > 0;
+    const shippingCost = delivery.type === 'delivery' ? Math.round((delivery.shippingOption?.price ?? 0) * 100) : 0;
+    const grandTotal = subtotal + warrantyPrice + shippingCost - couponDiscount - cartCoinDiscount;
+    const hasModifiers = warrantyPrice > 0 || couponDiscount > 0 || cartCoinDiscount > 0 || shippingCost > 0;
 
     useEffect(() => {
         sessionStorage.setItem('mv_cart_paySheetOpen', String(paySheetOpen));
@@ -500,6 +501,12 @@ function CartPageContent() {
                             <span>Subtotal ({totalItems} {totalItems === 1 ? 'item' : 'itens'})</span>
                             <span>{formatCurrency(subtotal)}</span>
                         </div>
+                        {shippingCost > 0 && (
+                            <div className="flex justify-between text-sm text-blue-100">
+                                <span>Frete ({delivery.shippingOption?.name})</span>
+                                <span className="text-white">+ {formatCurrency(shippingCost)}</span>
+                            </div>
+                        )}
                         {warrantyPrice > 0 && (
                             <div className="flex justify-between text-sm text-blue-100">
                                 <span>Garantia (+{selectedWarranty?.months}m)</span>
