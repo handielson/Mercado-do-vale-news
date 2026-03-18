@@ -469,11 +469,17 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                         }),
                     });
                     const data = await res.json();
+                    // ── LOG COMPLETO DA RESPOSTA FRENET ──
+                    console.log('[FreightCalculator] Frenet HTTP status:', res.status);
+                    console.log('[FreightCalculator] Frenet response:', JSON.stringify(data).slice(0, 1000));
                     if (!res.ok) {
                         console.warn('[FreightCalculator] Frenet HTTP error:', res.status, data);
                         return;
                     }
-                    const services = (data.ShippingSevicesArray ?? [])
+                    const arr = data.ShippingSevicesArray ?? data.ShippingServicesArray ?? [];
+                    console.log('[FreightCalculator] Frenet services array length:', arr.length);
+                    if (arr.length > 0) console.log('[FreightCalculator] Frenet primeiro item:', JSON.stringify(arr[0]));
+                    const services = arr
                         .filter((s: any) => !s.Error && parseFloat(s.ShippingPrice) > 0)
                         .map((s: any) => ({
                             id: `frenet_${s.ServiceCode}`,
@@ -482,10 +488,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                             price: parseFloat(s.ShippingPrice),
                             daysLabel: `${s.DeliveryTime} dias úteis`,
                         }));
-                    if (services.length === 0 && (data.ShippingSevicesArray ?? []).length > 0) {
-                        const firstErr = data.ShippingSevicesArray[0]?.Error;
-                        console.warn('[FreightCalculator] Frenet retornou erros em todos os serviços. Primeiro erro:', firstErr);
-                    }
+                    console.log('[FreightCalculator] Frenet serviços válidos:', services.length);
                     allCarriers.push(...services);
                 } catch (e: any) {
                     console.warn('[FreightCalculator] Frenet fetch error:', e);
