@@ -111,6 +111,9 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
     // Carrinho
     const [cart, setCart] = useState<CartItem[]>([]);
 
+    // Embalagem Avulsa
+    const [avulso, setAvulso] = useState({ weight_g: '', height_cm: '', width_cm: '', length_cm: '' });
+
     // Cálculo
     const [calculating, setCalculating] = useState(false);
     const [results, setResults] = useState<CarrierResult[] | null>(null);
@@ -356,32 +359,45 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         return { weight_g, weight_kg: weight_g / 1000, height_cm, width_cm, length_cm };
     }, [cart]);
 
+    // ── Avulso totals ────────────────────────────────────────────────────────
+    const avulsoTotals = useMemo(() => {
+        const w = parseFloat(avulso.weight_g);
+        const h = parseFloat(avulso.height_cm);
+        const wi = parseFloat(avulso.width_cm);
+        const l = parseFloat(avulso.length_cm);
+        if (!w || !h || !wi || !l) return null;
+        return { weight_g: w, weight_kg: w / 1000, height_cm: h, width_cm: wi, length_cm: l };
+    }, [avulso]);
+
+    const effectiveTotals = totals ?? avulsoTotals;
+
     // ── Validação Correios ────────────────────────────────────────────────────
     const correiosViolations = useMemo(() => {
-        if (!totals) return [];
+        if (!effectiveTotals) return [];
         const v: string[] = [];
-        if (totals.weight_kg > CORREIOS_LIMITS.weight_kg_max) v.push(`Peso ${totals.weight_kg.toFixed(2)}kg > máx ${CORREIOS_LIMITS.weight_kg_max}kg`);
-        if (totals.height_cm > CORREIOS_LIMITS.dim_max_cm) v.push(`Altura ${totals.height_cm}cm > máx ${CORREIOS_LIMITS.dim_max_cm}cm`);
-        if (totals.width_cm > CORREIOS_LIMITS.dim_max_cm) v.push(`Largura ${totals.width_cm}cm > máx ${CORREIOS_LIMITS.dim_max_cm}cm`);
-        if (totals.length_cm > CORREIOS_LIMITS.dim_max_cm) v.push(`Comprimento ${totals.length_cm}cm > máx ${CORREIOS_LIMITS.dim_max_cm}cm`);
-        const sum = totals.height_cm + totals.width_cm + totals.length_cm;
+        if (effectiveTotals.weight_kg > CORREIOS_LIMITS.weight_kg_max) v.push(`Peso ${effectiveTotals.weight_kg.toFixed(2)}kg > máx ${CORREIOS_LIMITS.weight_kg_max}kg`);
+        if (effectiveTotals.height_cm > CORREIOS_LIMITS.dim_max_cm) v.push(`Altura ${effectiveTotals.height_cm}cm > máx ${CORREIOS_LIMITS.dim_max_cm}cm`);
+        if (effectiveTotals.width_cm > CORREIOS_LIMITS.dim_max_cm) v.push(`Largura ${effectiveTotals.width_cm}cm > máx ${CORREIOS_LIMITS.dim_max_cm}cm`);
+        if (effectiveTotals.length_cm > CORREIOS_LIMITS.dim_max_cm) v.push(`Comprimento ${effectiveTotals.length_cm}cm > máx ${CORREIOS_LIMITS.dim_max_cm}cm`);
+        const sum = effectiveTotals.height_cm + effectiveTotals.width_cm + effectiveTotals.length_cm;
         if (sum > CORREIOS_LIMITS.sum_max_cm) v.push(`Soma (A+L+C) ${sum}cm > máx ${CORREIOS_LIMITS.sum_max_cm}cm`);
         return v;
-    }, [totals]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [effectiveTotals]);
 
     const missingDimensions = useMemo(() =>
         cart.filter(i => !hasDimensions(i.product)).map(i => i.product.name),
         [cart]);
 
-    const canCalculate = cart.length > 0
-        && totals !== null
+    const canCalculate = (cart.length > 0 || avulsoTotals !== null)
+        && effectiveTotals !== null
         && correiosViolations.length === 0
         && destCep.replace(/\D/g, '').length === 8
         && settings?.melhor_envio_token;
 
     // ── Calcular ──────────────────────────────────────────────────────────────
     async function handleCalculate() {
-        if (!totals || !settings?.melhor_envio_token) return;
+        if (!effectiveTotals || !settings?.melhor_envio_token) return;
 
         setCalculating(true);
         setCalcError(null);
@@ -399,10 +415,10 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                 body: JSON.stringify({
                     from_cep: fromCep,
                     to_cep: destCep,
-                    weight_g: totals.weight_g,
-                    height_cm: totals.height_cm,
-                    width_cm: totals.width_cm,
-                    length_cm: totals.length_cm,
+                    weight_g: effectiveTotals!.weight_g,
+                    height_cm: effectiveTotals!.height_cm,
+                    width_cm: effectiveTotals!.width_cm,
+                    length_cm: effectiveTotals!.length_cm,
                     token: settings.melhor_envio_token,
                     sandbox: settings.melhor_envio_sandbox,
                 }),
@@ -656,6 +672,63 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                 </div>
             </div>
 
+            {/* Embalagem Avulsa */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-slate-500" />
+                    <h3 className="text-sm font-semibold text-slate-700">Embalagem Avulsa</h3>
+                    <span className="text-xs text-slate-400 ml-1">(sem produto cadastrado)</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Peso (g)</label>
+                        <input
+                            type="number" min="1" step="1"
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Ex: 300"
+                            value={avulso.weight_g}
+                            onChange={e => { setAvulso(p => ({ ...p, weight_g: e.target.value })); setResults(null); }}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Altura (cm)</label>
+                        <input
+                            type="number" min="1" step="0.1"
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Ex: 10"
+                            value={avulso.height_cm}
+                            onChange={e => { setAvulso(p => ({ ...p, height_cm: e.target.value })); setResults(null); }}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Largura (cm)</label>
+                        <input
+                            type="number" min="1" step="0.1"
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Ex: 15"
+                            value={avulso.width_cm}
+                            onChange={e => { setAvulso(p => ({ ...p, width_cm: e.target.value })); setResults(null); }}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">Comprimento (cm)</label>
+                        <input
+                            type="number" min="1" step="0.1"
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Ex: 20"
+                            value={avulso.length_cm}
+                            onChange={e => { setAvulso(p => ({ ...p, length_cm: e.target.value })); setResults(null); }}
+                        />
+                    </div>
+                </div>
+                {avulsoTotals && (
+                    <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+                        📦 Embalagem: {avulsoTotals.weight_kg.toFixed(3)}kg · {avulsoTotals.height_cm}×{avulsoTotals.width_cm}×{avulsoTotals.length_cm}cm
+                        {totals && <span className="text-amber-600 ml-2">⚠️ Produto(s) no orçamento têm prioridade sobre embalagem avulsa.</span>}
+                    </p>
+                )}
+            </div>
+
             {/* Busca de Produtos */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
                 <h3 className="text-sm font-semibold text-slate-700">🔍 Adicionar Produtos ao Orçamento</h3>
@@ -799,7 +872,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
             )}
 
             {/* Botão Calcular */}
-            {cart.length > 0 && (
+            {(cart.length > 0 || avulsoTotals !== null) && (
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleCalculate}
