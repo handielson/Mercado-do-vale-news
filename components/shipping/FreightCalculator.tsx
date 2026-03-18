@@ -1038,6 +1038,20 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                                 {row.winner === 'primary' ? primaryLabel : secondaryLabel}
                             </span>
                         </td>
+                        <td className="py-3 pr-4">
+                            {(row.winner === 'primary' ? row.primary : row.secondary) && (
+                                <button
+                                    onClick={() => {
+                                        setUseSecondary(row.winner === 'secondary');
+                                        openLabelModal((row.winner === 'primary' ? row.primary : row.secondary)!);
+                                    }}
+                                    title="Gerar etiqueta"
+                                    className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-blue-600 text-xs transition-colors"
+                                >
+                                    <Tag className="w-3 h-3" /> Etiqueta
+                                </button>
+                            )}
+                        </td>
                     </tr>
                 );
 
@@ -1056,13 +1070,14 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                                         <th className="py-3 pr-4 text-center font-semibold text-blue-700">📍 {primaryLabel}</th>
                                         <th className="py-3 pr-4 text-center font-semibold text-purple-700">📍 {secondaryLabel}</th>
                                         <th className="py-3 pr-4 text-center font-semibold text-green-700">🏆 Enviar de</th>
+                                        <th className="py-3 pr-4"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {rowGroups.map(group => (
                                         <React.Fragment key={group.id}>
                                             <tr className="bg-slate-50/80 border-y border-slate-100">
-                                                <td colSpan={4} className="pl-4 py-1.5 text-xs font-semibold text-slate-500 tracking-wide uppercase">
+                                                <td colSpan={5} className="pl-4 py-1.5 text-xs font-semibold text-slate-500 tracking-wide uppercase">
                                                     {group.icon} {group.label} <span className="font-normal text-slate-400 normal-case">({group.rows.length})</span>
                                                 </td>
                                             </tr>
