@@ -321,6 +321,11 @@ export default function OnlineOrdersPage() {
                                         <span className="text-xs text-gray-500">
                                             {DELIVERY_LABELS[order.delivery_type]}
                                         </span>
+                                        {(order as any).shipping_origin_label && order.delivery_type === 'delivery' && (
+                                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                                                📍 Enviar de: {(order as any).shipping_origin_label}
+                                            </span>
+                                        )}
                                         <span className="text-xs text-gray-500">
                                             {PAYMENT_LABELS[order.payment_method]}
                                         </span>

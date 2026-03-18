@@ -8,6 +8,9 @@ export type ShippingZoneType = 'local_free' | 'local_paid' | 'national';
 export interface ShippingSettings {
     id: string;
     origin_cep: string;
+    secondary_origin_cep?: string;
+    secondary_origin_label?: string;  // ex: 'Juazeiro'
+    origin_label?: string;            // ex: 'Petrolina'
     melhor_envio_token?: string;
     melhor_envio_sandbox: boolean;
     melhor_envio_enabled: boolean;
@@ -20,6 +23,9 @@ export interface ShippingSettings {
 
 export interface ShippingSettingsInput {
     origin_cep: string;
+    secondary_origin_cep?: string;
+    secondary_origin_label?: string;
+    origin_label?: string;
     melhor_envio_token?: string;
     melhor_envio_sandbox?: boolean;
     melhor_envio_enabled?: boolean;
@@ -94,6 +100,8 @@ export interface ShippingOption {
     estimatedDaysMax: number;
     daysLabel: string;              // "Hoje", "1 dia útil", "2-4 dias úteis"
     type: ShippingZoneType | 'carrier';
+    origin_cep?: string;            // CEP do depósito de origem
+    origin_label?: string;          // "Petrolina" | "Juazeiro"
 }
 
 export interface ShippingCalculationInput {

@@ -101,6 +101,8 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         delivery_type: input.delivery_type,
         shipping_address: input.shipping_address ?? null,
         shipping_cost: input.shipping_cost,
+        shipping_origin_cep: (input as any).shipping_origin_cep ?? null,
+        shipping_origin_label: (input as any).shipping_origin_label ?? null,
         subtotal,
         discount: totalDiscount,
         total,
@@ -112,6 +114,7 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         referral_name: input.referral_name ?? null,
         notes: input.notes ?? null,
     };
+
 
     const { data: order, error: orderError } = await supabase
         .from('orders')

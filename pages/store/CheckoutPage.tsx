@@ -269,12 +269,15 @@ export default function CheckoutPage() {
                 delivery_type: form.delivery_type,
                 shipping_address: shippingAddress,
                 shipping_cost: shippingCost,
+                shipping_origin_cep: selectedShipping?.origin_cep || undefined,
+                shipping_origin_label: selectedShipping?.origin_label || undefined,
                 referral_code: state.referralCode || undefined,
                 referral_name: state.referralName || undefined,
                 notes: form.complement || undefined,
                 // Token do Brick para checkout transparente (se cartão MP)
                 ...(cardFormData ? { card_form_data: cardFormData } : {}),
             } as any);
+
 
             // Se tem URL de checkout PRO (fallback redirect), redireciona
             if (order.gateway_payment_url) {

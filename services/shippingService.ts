@@ -85,7 +85,6 @@ export const shippingService = {
     },
 
     async saveSettings(input: ShippingSettingsInput): Promise<void> {
-        // Try update first, then insert if no row exists
         const existing = await shippingService.getSettings();
         if (existing?.id) {
             const { error } = await supabase
@@ -158,7 +157,6 @@ export const shippingService = {
 
     async calculate(input: ShippingCalculationInput): Promise<ShippingCalculationResult> {
         let options: ShippingOption[] = [];
-
         let missingForFree: number | undefined = undefined;
 
         const [settings, zones] = await Promise.all([
@@ -198,8 +196,6 @@ export const shippingService = {
             const isLocal = zone.type === 'local_free' || zone.type === 'local_paid';
             const withinRadius = isLocal ? (!zone.max_km_free || distanceKm === null || distanceKm <= zone.max_km_free) : false;
 
-            // Extrair a lógica do "Falta X para o frete grátis" para qualquer zona local
-            // que tenha a regra do min_order_free definida
             if (isLocal && withinRadius && zone.min_order_free && input.order_value !== undefined) {
                 if (input.order_value < zone.min_order_free) {
                     const diff = zone.min_order_free - input.order_value;
@@ -228,10 +224,9 @@ export const shippingService = {
 
             } else if (zone.type === 'local_paid') {
                 const meetsMinOrder = zone.min_order_free && input.order_value && input.order_value >= zone.min_order_free;
-                
-                // Se a zona paga bateu a meta do frete grátis (min_order), ela vira grátis
+
                 if (meetsMinOrder && withinRadius) {
-                     options.push({
+                    options.push({
                         id: zone.id,
                         name: zone.name,
                         price: 0,
@@ -239,7 +234,7 @@ export const shippingService = {
                         estimatedDaysMin: zone.estimated_days_min,
                         estimatedDaysMax: zone.estimated_days_max,
                         daysLabel: daysLabel(zone.estimated_days_min, zone.estimated_days_max),
-                        type: 'local_paid', // O painel a enxergaria como local_paid, mas a entregamos com price 0
+                        type: 'local_paid',
                     });
                     continue;
                 }
@@ -280,6 +275,7 @@ export const shippingService = {
                     daysLabel: daysLabel(zone.estimated_days_min, zone.estimated_days_max),
                     type: 'local_paid',
                 });
+
             } else if (zone.type === 'national') {
                 if (zone.fixed_price != null) {
                     options.push({
@@ -296,81 +292,112 @@ export const shippingService = {
             }
         }
 
-        // Carriers nacionais: Melhor Envio + Frenet (em paralelo quando ambos ativos)
-        if (options.length === 0) {
-            const tasks: Promise<void>[] = [];
-
-            if (settings?.melhor_envio_enabled && settings.melhor_envio_token) {
-                tasks.push(
-                    (async () => {
-                        try {
-                            const { melhorEnvioService } = await import('./melhorEnvio');
-                            const carriers = await melhorEnvioService.calculate({
-                                from_cep: settings.origin_cep,
-                                to_cep: input.to_cep,
-                                weight: input.weight ?? 300,
-                                height: input.height ?? 10,
-                                width: input.width ?? 15,
-                                length: input.length ?? 20,
-                                sandbox: settings.melhor_envio_sandbox,
-                                token: settings.melhor_envio_token ?? '',
-                                allowed_services: settings.melhor_envio_allowed_services,
-                            });
-                            options.push(...carriers);
-                        } catch (e: any) {
-                            console.warn('[shippingService] Melhor Envio error:', e);
-                        }
-                    })()
-                );
+        // Carriers nacionais: Melhor Envio + Frenet — dual-origin em paralelo
+        if (options.length === 0 && settings) {
+            // Origens: primária + secundária (se existir)
+            const origins: Array<{ cep: string; label: string }> = [
+                { cep: settings.origin_cep, label: settings.origin_label || 'Depósito 1' },
+            ];
+            if (settings.secondary_origin_cep) {
+                origins.push({
+                    cep: settings.secondary_origin_cep,
+                    label: settings.secondary_origin_label || 'Depósito 2',
+                });
             }
 
-            if (settings?.frenet_enabled && settings.frenet_token) {
-                tasks.push(
-                    (async () => {
-                        try {
-                            const res = await fetch('/api/frenet-calculate', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    from_cep: settings.origin_cep,
-                                    to_cep: input.to_cep,
-                                    weight_g: input.weight ?? 300,
-                                    height_cm: input.height ?? 10,
-                                    width_cm: input.width ?? 15,
-                                    length_cm: input.length ?? 20,
-                                    order_value: input.order_value ?? 0,
-                                    token: settings.frenet_token,
-                                }),
-                            });
-                            if (!res.ok) return;
-                            const data = await res.json();
-                            const services: ShippingOption[] = (data.ShippingSevicesArray ?? [])
-                                .filter((s: any) => !s.Error && s.ShippingPrice > 0)
-                                .map((s: any) => ({
-                                    id: `frenet_${s.ServiceCode}`,
-                                    name: s.ServiceDescription,
-                                    carrier: `${s.Carrier} (Frenet)`,
-                                    price: parseFloat(s.ShippingPrice),
-                                    isFree: false,
-                                    estimatedDaysMin: s.DeliveryTime,
-                                    estimatedDaysMax: s.DeliveryTime,
-                                    daysLabel: `${s.DeliveryTime} dias úteis`,
-                                    type: 'carrier' as const,
-                                }));
-                            options.push(...services);
-                        } catch (e: any) {
-                            console.warn('[shippingService] Frenet error:', e);
-                        }
-                    })()
-                );
+            // Para cada origem, calcula ME + Frenet em paralelo
+            const originResults = await Promise.allSettled(
+                origins.map(async (origin) => {
+                    const originOptions: ShippingOption[] = [];
+                    const tasks: Promise<void>[] = [];
+
+                    if (settings.melhor_envio_enabled && settings.melhor_envio_token) {
+                        tasks.push(
+                            (async () => {
+                                try {
+                                    const { melhorEnvioService } = await import('./melhorEnvio');
+                                    const carriers = await melhorEnvioService.calculate({
+                                        from_cep: origin.cep,
+                                        to_cep: input.to_cep,
+                                        weight: input.weight ?? 300,
+                                        height: input.height ?? 10,
+                                        width: input.width ?? 15,
+                                        length: input.length ?? 20,
+                                        sandbox: settings.melhor_envio_sandbox,
+                                        token: settings.melhor_envio_token ?? '',
+                                        allowed_services: settings.melhor_envio_allowed_services,
+                                    });
+                                    originOptions.push(...carriers.map(c => ({
+                                        ...c,
+                                        origin_cep: origin.cep,
+                                        origin_label: origin.label,
+                                    })));
+                                } catch (e: any) {
+                                    console.warn('[shippingService] ME error from', origin.label, e);
+                                }
+                            })()
+                        );
+                    }
+
+                    if (settings.frenet_enabled && settings.frenet_token) {
+                        tasks.push(
+                            (async () => {
+                                try {
+                                    const res = await fetch('/api/frenet-calculate', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            from_cep: origin.cep,
+                                            to_cep: input.to_cep,
+                                            weight_g: input.weight ?? 300,
+                                            height_cm: input.height ?? 10,
+                                            width_cm: input.width ?? 15,
+                                            length_cm: input.length ?? 20,
+                                            order_value: input.order_value ?? 0,
+                                            token: settings.frenet_token,
+                                        }),
+                                    });
+                                    if (!res.ok) return;
+                                    const data = await res.json();
+                                    const services: ShippingOption[] = (data.ShippingSevicesArray ?? [])
+                                        .filter((s: any) => !s.Error && parseFloat(s.ShippingPrice) > 0)
+                                        .map((s: any) => ({
+                                            id: `frenet_${s.ServiceCode}`,
+                                            name: s.ServiceDescription,
+                                            carrier: `${s.Carrier} (Frenet)`,
+                                            price: parseFloat(s.ShippingPrice),
+                                            isFree: false,
+                                            estimatedDaysMin: s.DeliveryTime,
+                                            estimatedDaysMax: s.DeliveryTime,
+                                            daysLabel: `${s.DeliveryTime} dias úteis`,
+                                            type: 'carrier' as const,
+                                            origin_cep: origin.cep,
+                                            origin_label: origin.label,
+                                        }));
+                                    originOptions.push(...services);
+                                } catch (e: any) {
+                                    console.warn('[shippingService] Frenet error from', origin.label, e);
+                                }
+                            })()
+                        );
+                    }
+
+                    await Promise.allSettled(tasks);
+                    return originOptions;
+                })
+            );
+
+            // Combinar todos os resultados das origens
+            for (const result of originResults) {
+                if (result.status === 'fulfilled') {
+                    options.push(...result.value);
+                }
             }
 
-            await Promise.allSettled(tasks);
-
-            // Deduplicar: para cada nome de serviço, manter apenas o mais barato
+            // Deduplicar: para cada nome, manter o mais barato (preserva origin do vencedor)
             const seen = new Map<string, ShippingOption>();
             for (const opt of options) {
-                const key = opt.name.trim().toUpperCase(); // ex: "PAC", "SEDEX"
+                const key = opt.name.trim().toUpperCase();
                 const existing = seen.get(key);
                 if (!existing || opt.price < existing.price) {
                     seen.set(key, opt);
