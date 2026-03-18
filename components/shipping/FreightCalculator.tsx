@@ -117,6 +117,10 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
     // Cálculo
     const [calculating, setCalculating] = useState(false);
     const [results, setResults] = useState<CarrierResult[] | null>(null);
+    const [comparisonResults, setComparisonResults] = useState<{
+        primary: CarrierResult[];
+        secondary: CarrierResult[];
+    } | null>(null);
     const [calcError, setCalcError] = useState<string | null>(null);
 
     // Shipping Settings (token)
@@ -395,25 +399,11 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         && destCep.replace(/\D/g, '').length === 8
         && settings?.melhor_envio_token;
 
-    // ── Calcular ──────────────────────────────────────────────────────────────
-    async function handleCalculate() {
-        if (!effectiveTotals) return;
-        if (!settings?.melhor_envio_token && !settings?.frenet_token) return;
-
-        setCalculating(true);
-        setCalcError(null);
-        setResults(null);
-
-        const fromCep = useSecondary && secondaryCep ? secondaryCep : originCep;
-        const allCarriers: CarrierResult[] = [];
-
-        // Debug: mostrar estado das configurações de transportadoras
-        console.log('[FreightCalculator] ME token:', settings?.melhor_envio_token ? '✅ presente' : '❌ ausente');
-        console.log('[FreightCalculator] Frenet token:', settings?.frenet_token ? '✅ presente' : '❌ ausente', '| frenet_enabled:', settings?.frenet_enabled);
-
+    // ── Helper: calcula frete de um CEP específico ────────────────────────────
+    async function calcFromCep(fromCep: string): Promise<CarrierResult[]> {
+        const carriers: CarrierResult[] = [];
         const tasks: Promise<void>[] = [];
 
-        // Melhor Envio
         if (settings?.melhor_envio_token) {
             tasks.push((async () => {
                 try {
@@ -427,15 +417,14 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                             height_cm: effectiveTotals!.height_cm,
                             width_cm: effectiveTotals!.width_cm,
                             length_cm: effectiveTotals!.length_cm,
-                            token: settings.melhor_envio_token,
-                            sandbox: settings.melhor_envio_sandbox,
+                            token: settings!.melhor_envio_token,
+                            sandbox: settings!.melhor_envio_sandbox,
                         }),
                     });
                     const text = await res.text();
-                    if (!text) return;
+                    if (!text || !res.ok) return;
                     const data = JSON.parse(text);
-                    if (!res.ok) return;
-                    const carriers: CarrierResult[] = (Array.isArray(data) ? data : [])
+                    const c: CarrierResult[] = (Array.isArray(data) ? data : [])
                         .filter((item: any) => !item.error && item.price)
                         .map((item: any) => ({
                             id: `me_${item.id}`,
@@ -444,14 +433,13 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                             price: parseFloat(item.price ?? '0'),
                             daysLabel: item.delivery_time ? `${item.delivery_time} dias úteis` : '?',
                         }));
-                    allCarriers.push(...carriers);
+                    carriers.push(...c);
                 } catch (e: any) {
                     console.warn('[FreightCalculator] ME error:', e);
                 }
             })());
         }
 
-        // Frenet
         if (settings?.frenet_token && settings?.frenet_enabled) {
             tasks.push((async () => {
                 try {
@@ -465,20 +453,12 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                             height_cm: effectiveTotals!.height_cm,
                             width_cm: effectiveTotals!.width_cm,
                             length_cm: effectiveTotals!.length_cm,
-                            token: settings.frenet_token,
+                            token: settings!.frenet_token,
                         }),
                     });
+                    if (!res.ok) return;
                     const data = await res.json();
-                    // ── LOG COMPLETO DA RESPOSTA FRENET ──
-                    console.log('[FreightCalculator] Frenet HTTP status:', res.status);
-                    console.log('[FreightCalculator] Frenet response:', JSON.stringify(data).slice(0, 1000));
-                    if (!res.ok) {
-                        console.warn('[FreightCalculator] Frenet HTTP error:', res.status, data);
-                        return;
-                    }
                     const arr = data.ShippingSevicesArray ?? data.ShippingServicesArray ?? [];
-                    console.log('[FreightCalculator] Frenet services array length:', arr.length);
-                    if (arr.length > 0) console.log('[FreightCalculator] Frenet primeiro item:', JSON.stringify(arr[0]));
                     const services = arr
                         .filter((s: any) => !s.Error && parseFloat(s.ShippingPrice) > 0)
                         .map((s: any) => ({
@@ -488,20 +468,57 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                             price: parseFloat(s.ShippingPrice),
                             daysLabel: `${s.DeliveryTime} dias úteis`,
                         }));
-                    console.log('[FreightCalculator] Frenet serviços válidos:', services.length);
-                    allCarriers.push(...services);
+                    carriers.push(...services);
                 } catch (e: any) {
                     console.warn('[FreightCalculator] Frenet fetch error:', e);
                 }
             })());
         }
 
+        await Promise.allSettled(tasks);
+
+        // Dedup por nome — mantém o mais barato
+        const seen = new Map<string, CarrierResult>();
+        for (const c of carriers) {
+            const key = c.name.trim().toUpperCase();
+            const existing = seen.get(key);
+            if (!existing || c.price < existing.price) seen.set(key, c);
+        }
+        return Array.from(seen.values()).sort((a, b) => a.price - b.price);
+    }
+
+    // ── Calcular ──────────────────────────────────────────────────────────────
+    async function handleCalculate() {
+        if (!effectiveTotals) return;
+        if (!settings?.melhor_envio_token && !settings?.frenet_token) return;
+
+        setCalculating(true);
+        setCalcError(null);
+        setResults(null);
+        setComparisonResults(null);
+
+        const hasSecondary = !!secondaryCep && secondaryCep.replace(/\D/g, '').length === 8;
+
         try {
-            await Promise.allSettled(tasks);
-            if (allCarriers.length === 0) {
-                setCalcError('Nenhuma transportadora retornou resultados. Verifique os tokens e tente novamente.');
+            if (hasSecondary) {
+                // Dual-origin: calcula de ambos os CEPs em paralelo
+                const [primaryCarriers, secondaryCarriers] = await Promise.all([
+                    calcFromCep(originCep),
+                    calcFromCep(secondaryCep!),
+                ]);
+                if (primaryCarriers.length === 0 && secondaryCarriers.length === 0) {
+                    setCalcError('Nenhuma transportadora retornou resultados.');
+                } else {
+                    setComparisonResults({ primary: primaryCarriers, secondary: secondaryCarriers });
+                }
             } else {
-                setResults(allCarriers.sort((a, b) => a.price - b.price));
+                // Origem única
+                const carriers = await calcFromCep(originCep);
+                if (carriers.length === 0) {
+                    setCalcError('Nenhuma transportadora retornou resultados. Verifique os tokens e tente novamente.');
+                } else {
+                    setResults(carriers);
+                }
             }
         } catch (err: any) {
             setCalcError(err.message ?? 'Erro ao calcular frete');
@@ -958,7 +975,85 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                 </div>
             )}
 
-            {/* Resultados em tabela agrupada */}
+            {/* Comparativo de 2 depósitos */}
+            {comparisonResults && (() => {
+                const primaryLabel = settings?.origin_label || originCep;
+                const secondaryLabel = settings?.secondary_origin_label || secondaryCep || 'Dep. 2';
+
+                const allNames = new Set([
+                    ...comparisonResults.primary.map(r => r.name.trim().toUpperCase()),
+                    ...comparisonResults.secondary.map(r => r.name.trim().toUpperCase()),
+                ]);
+
+                const rows = Array.from(allNames).map(key => {
+                    const p = comparisonResults.primary.find(r => r.name.trim().toUpperCase() === key);
+                    const s = comparisonResults.secondary.find(r => r.name.trim().toUpperCase() === key);
+                    const winner = p && s ? (p.price <= s.price ? 'primary' : 'secondary') : p ? 'primary' : 'secondary';
+                    return { key, displayName: p?.name ?? s?.name ?? key, primary: p, secondary: s, winner };
+                }).sort((a, b) => {
+                    const aPrice = Math.min(a.primary?.price ?? Infinity, a.secondary?.price ?? Infinity);
+                    const bPrice = Math.min(b.primary?.price ?? Infinity, b.secondary?.price ?? Infinity);
+                    return aPrice - bPrice;
+                });
+
+                return (
+                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="px-5 py-3 bg-gradient-to-r from-blue-50 to-purple-50 border-b border-slate-200">
+                            <h3 className="text-sm font-semibold text-slate-700">📊 Comparativo de Fretes — 2 Depósitos</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Calculado de ambas as origens · verde = vencedor</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="text-xs text-slate-500 border-b border-slate-100 bg-slate-50/50">
+                                        <th className="pl-4 py-3 pr-3 font-semibold">Serviço</th>
+                                        <th className="py-3 pr-4 text-center font-semibold text-blue-700">📍 {primaryLabel}</th>
+                                        <th className="py-3 pr-4 text-center font-semibold text-purple-700">📍 {secondaryLabel}</th>
+                                        <th className="py-3 pr-4 text-center font-semibold text-green-700">🏆 Enviar de</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows.map(row => (
+                                        <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                                            <td className="pl-4 py-3 pr-3">
+                                                <p className="text-sm font-medium text-slate-800">{row.displayName}</p>
+                                                <p className="text-xs text-slate-400">{row.primary?.carrier ?? row.secondary?.carrier ?? ''}</p>
+                                            </td>
+                                            <td className="py-3 pr-4 text-center">
+                                                {row.primary ? (
+                                                    <div className={cn('inline-flex flex-col items-center', row.winner === 'primary' ? 'text-green-600 font-semibold' : 'text-slate-400')}>
+                                                        <span className="text-sm">R$ {row.primary.price.toFixed(2)}</span>
+                                                        <span className="text-xs">{row.primary.daysLabel}</span>
+                                                        {row.winner === 'primary' && <span className="text-xs mt-0.5">✅ mais barato</span>}
+                                                    </div>
+                                                ) : <span className="text-xs text-slate-300">—</span>}
+                                            </td>
+                                            <td className="py-3 pr-4 text-center">
+                                                {row.secondary ? (
+                                                    <div className={cn('inline-flex flex-col items-center', row.winner === 'secondary' ? 'text-green-600 font-semibold' : 'text-slate-400')}>
+                                                        <span className="text-sm">R$ {row.secondary.price.toFixed(2)}</span>
+                                                        <span className="text-xs">{row.secondary.daysLabel}</span>
+                                                        {row.winner === 'secondary' && <span className="text-xs mt-0.5">✅ mais barato</span>}
+                                                    </div>
+                                                ) : <span className="text-xs text-slate-300">—</span>}
+                                            </td>
+                                            <td className="py-3 pr-4 text-center">
+                                                <span className={cn('text-xs font-semibold px-2 py-1 rounded-full',
+                                                    row.winner === 'primary' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                                                )}>
+                                                    {row.winner === 'primary' ? primaryLabel : secondaryLabel}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* Resultados em tabela agrupada (origem única) */}
             {results && results.length > 0 && (() => {
                 const valid = results.filter(r => !r.error);
                 const cheapestId = valid.length > 0 ? valid[0].id : null;
