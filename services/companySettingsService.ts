@@ -143,6 +143,11 @@ export const companySettingsService = {
         }
     },
 
+    /** Invalida o cache manualmente (útil após updates em outras abas) */
+    clearCache(): void {
+        _invalidateCache();
+    },
+
     /**
      * Get default settings (fallback)
      */

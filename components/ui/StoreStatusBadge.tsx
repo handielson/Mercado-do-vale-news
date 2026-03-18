@@ -25,6 +25,7 @@ export function StoreStatusBadge() {
 
         const checkStatus = async () => {
             try {
+                companySettingsService.clearCache(); // Garante dados frescos do banco
                 const settings = await companySettingsService.get();
                 const currentStatus = await getStoreStatus(settings?.business_hours, settings?.holiday_overrides, settings?.local_holidays);
 
