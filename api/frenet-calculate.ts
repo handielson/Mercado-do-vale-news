@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body = {
         SellerCEP: from_cep.replace(/\D/g, ''),
         RecipientCEP: to_cep.replace(/\D/g, ''),
-        ShipmentInvoiceValue: order_value ?? 0,
+        ShipmentInvoiceValue: Math.max(order_value ?? 0, 50), // mínimo R$50 para seguro
         ShipmentItemArray: [
             {
                 Height: height_cm ?? 10,
@@ -43,10 +43,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
         const data = await apiRes.json();
-        if (!apiRes.ok) return res.status(apiRes.status).json({ error: data });
+
+        if (!apiRes.ok) {
+            console.error('[Frenet] HTTP error:', apiRes.status, data);
+            return res.status(apiRes.status).json({ error: data });
+        }
+
+        // Log para debug no Vercel
+        console.log('[Frenet] response status:', apiRes.status,
+            'services:', (data.ShippingSevicesArray ?? []).length);
 
         return res.status(200).json(data);
     } catch (err: any) {
+        console.error('[Frenet] fetch error:', err.message);
         return res.status(500).json({ error: err.message ?? 'Erro ao chamar Frenet' });
     }
 }

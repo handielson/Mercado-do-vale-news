@@ -448,7 +448,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         }
 
         // Frenet
-        if (settings?.frenet_token && (settings as any).frenet_enabled) {
+        if (settings?.frenet_token && settings?.frenet_enabled) {
             tasks.push((async () => {
                 try {
                     const res = await fetch('/api/frenet-calculate', {
@@ -464,10 +464,13 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                             token: settings.frenet_token,
                         }),
                     });
-                    if (!res.ok) return;
                     const data = await res.json();
-                    const carriers: CarrierResult[] = (data.ShippingSevicesArray ?? [])
-                        .filter((s: any) => !s.Error && s.ShippingPrice > 0)
+                    if (!res.ok) {
+                        console.warn('[FreightCalculator] Frenet HTTP error:', res.status, data);
+                        return;
+                    }
+                    const services = (data.ShippingSevicesArray ?? [])
+                        .filter((s: any) => !s.Error && parseFloat(s.ShippingPrice) > 0)
                         .map((s: any) => ({
                             id: `frenet_${s.ServiceCode}`,
                             name: s.ServiceDescription,
@@ -475,9 +478,13 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                             price: parseFloat(s.ShippingPrice),
                             daysLabel: `${s.DeliveryTime} dias úteis`,
                         }));
-                    allCarriers.push(...carriers);
+                    if (services.length === 0 && (data.ShippingSevicesArray ?? []).length > 0) {
+                        const firstErr = data.ShippingSevicesArray[0]?.Error;
+                        console.warn('[FreightCalculator] Frenet retornou erros em todos os serviços. Primeiro erro:', firstErr);
+                    }
+                    allCarriers.push(...services);
                 } catch (e: any) {
-                    console.warn('[FreightCalculator] Frenet error:', e);
+                    console.warn('[FreightCalculator] Frenet fetch error:', e);
                 }
             })());
         }
