@@ -962,9 +962,15 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                                     className="w-4 h-4 accent-blue-600 flex-shrink-0"
                                 />
                                 <div className="flex-1">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                         <span className="font-semibold text-slate-800 text-sm">{r.name}</span>
                                         {i === 0 && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Mais barato</span>}
+                                        {r.id.startsWith('me_') && (
+                                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Melhor Envio</span>
+                                        )}
+                                        {r.id.startsWith('frenet_') && (
+                                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Frenet</span>
+                                        )}
                                     </div>
                                     {r.carrier && <p className="text-xs text-slate-500 mt-0.5">{r.carrier}</p>}
                                 </div>
