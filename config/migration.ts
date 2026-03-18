@@ -22,6 +22,7 @@ export const USE_VPS = {
     products:    true,
     categories:  true,
     brands:      true,
+    versions:    true,  // ✅ migrado de localStorage/Supabase para VPS MySQL em 2026-03-18
 
     // ✅ Endpoints implementados + dados migrados em 2026-03-18
     banners:     true,
