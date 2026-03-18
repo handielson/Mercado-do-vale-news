@@ -359,7 +359,13 @@ export const shippingService = {
                                     });
                                     if (!res.ok) return;
                                     const data = await res.json();
-                                    const services: ShippingOption[] = (data.ShippingSevicesArray ?? [])
+                                    const services: ShippingOption[] = (
+                                        data.ShippingSevicesArray ??
+                                        data.ShippingServicesArray ??
+                                        data.ShippingServiceArray ??
+                                        []
+                                    )
+
                                         .filter((s: any) => !s.Error && parseFloat(s.ShippingPrice) > 0)
                                         .map((s: any) => ({
                                             id: `frenet_${s.ServiceCode}`,
