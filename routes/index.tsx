@@ -89,6 +89,7 @@ import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
 import { ReviewsPage } from '../pages/admin/catalog/ReviewsPage';
 import { RoadmapPage } from '../pages/admin/settings/RoadmapPage';
 import { VpsStatusPage } from '../pages/admin/settings/VpsStatusPage';
+import { MySQLExplorerPage } from '../pages/admin/settings/MySQLExplorerPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -670,6 +671,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><VpsStatusPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/mysql",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><MySQLExplorerPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

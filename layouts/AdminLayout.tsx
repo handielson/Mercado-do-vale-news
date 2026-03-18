@@ -105,6 +105,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           {/* SISTEMA */}
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Sistema</div>
           <NavItem to="/admin/settings/vps-status" icon={<Activity size={18} />} label="Status VPS" active={location.pathname.startsWith('/admin/settings/vps-status')} />
+          <NavItem to="/admin/settings/mysql" icon={<Database size={18} />} label="MySQL Explorer" active={location.pathname.startsWith('/admin/settings/mysql')} />
           <NavItem to="/admin/settings/roadmap" icon={<Rocket size={18} />} label="Roadmap & Docs" active={location.pathname.startsWith('/admin/settings/roadmap')} />
           <NavItem to="/admin/migration" icon={<Database size={18} />} label="Migração" active={location.pathname.startsWith('/admin/migration')} />
           <NavItem to="/test-tabs" icon={<Tags size={18} />} label="🧪 Teste de Abas" active={location.pathname === '/test-tabs'} />
