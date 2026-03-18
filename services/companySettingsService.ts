@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 import { CompanySettings, CompanySettingsInput } from '../types/companySettings';
+import { USE_VPS } from '../config/migration';
+import { vpsClient } from './vpsClient';
 
 /**
  * Company Settings Service
@@ -40,13 +42,23 @@ function _invalidateCache(): void {
 export const companySettingsService = {
     /**
      * Get company settings
-     * Returns the first (and should be only) company settings record
+     * VPS: lê direto do MySQL sem cache local
+     * Supabase: usa cache duplo (memória + localStorage)
      */
     async get(): Promise<CompanySettings | null> {
-        // 1. In-memory cache
+        // ── VPS path ──────────────────────────────────────────────────────
+        if (USE_VPS.company) {
+            try {
+                return await vpsClient.get<CompanySettings>('/company-settings');
+            } catch (error) {
+                console.error('[companySettingsService] VPS get error:', error);
+                return null;
+            }
+        }
+
+        // ── Supabase path (com cache) ─────────────────────────────────────
         if (_memCache && Date.now() < _memCache.expiresAt) return _memCache.data;
 
-        // 2. localStorage cache
         const cached = _readLocalStorage();
         if (cached) {
             _memCache = { data: cached, expiresAt: Date.now() + MEM_TTL };
@@ -60,39 +72,29 @@ export const companySettingsService = {
                 .single();
 
             if (error) {
-                // If no settings exist yet, return null
-                if (error.code === 'PGRST116') {
-                    return null;
-                }
+                if (error.code === 'PGRST116') return null;
                 throw error;
             }
 
             if (data) {
-                // Synthesize address if it's missing but individual fields exist
                 if (!data.address && data.address_street) {
                     const parts = [];
                     parts.push(`${data.address_street}, ${data.address_number || 'S/N'}`);
                     if (data.address_complement) parts.push(data.address_complement);
                     if (data.address_neighborhood) parts.push(data.address_neighborhood);
-
                     const cityState = [];
                     if (data.address_city) cityState.push(data.address_city);
                     if (data.address_state) cityState.push(data.address_state);
                     if (cityState.length > 0) parts.push(cityState.join(' - '));
-
                     if (data.address_zip_code) parts.push(`CEP: ${data.address_zip_code}`);
-
                     data.address = parts.filter(Boolean).join(' - ');
                 }
-
-                // Fallback for empty templates
                 const defaults = this.getDefaults();
                 data.payment_receipt_template = data.payment_receipt_template || defaults.payment_receipt_template;
                 data.debt_clearance_template = data.debt_clearance_template || defaults.debt_clearance_template;
                 data.extended_warranty_template = data.extended_warranty_template || defaults.extended_warranty_template;
             }
 
-            // 3. Save to both caches
             if (data) {
                 _memCache = { data, expiresAt: Date.now() + MEM_TTL };
                 _writeLocalStorage(data);
@@ -107,33 +109,39 @@ export const companySettingsService = {
 
     /**
      * Update company settings
-     * If no settings exist, creates a new record
+     * VPS: PATCH direto no MySQL
+     * Supabase: upsert com invalidação de cache
      */
     async update(settings: CompanySettingsInput): Promise<CompanySettings> {
-        _invalidateCache(); // Limpa cache antes de atualizar
-        try {
-            // First, check if settings exist
-            const existing = await this.get();
+        // ── VPS path ──────────────────────────────────────────────────────
+        if (USE_VPS.company) {
+            try {
+                return await vpsClient.patch<CompanySettings>('/company-settings', settings);
+            } catch (error) {
+                console.error('[companySettingsService] VPS update error:', error);
+                throw error;
+            }
+        }
 
+        // ── Supabase path ─────────────────────────────────────────────────
+        _invalidateCache();
+        try {
+            const existing = await this.get();
             if (existing) {
-                // Update existing settings
                 const { data, error } = await supabase
                     .from('company_settings')
                     .update(settings)
                     .eq('id', existing.id)
                     .select()
                     .single();
-
                 if (error) throw error;
                 return data;
             } else {
-                // Create new settings
                 const { data, error } = await supabase
                     .from('company_settings')
                     .insert(settings)
                     .select()
                     .single();
-
                 if (error) throw error;
                 return data;
             }

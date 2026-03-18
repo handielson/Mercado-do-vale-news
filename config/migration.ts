@@ -28,7 +28,7 @@ export const USE_VPS = {
     shipping:    true,
     coupons:     true,
     paymentFees: true,
-    company:     false, // aguardando validação
+    company:     true,  // ✅ migrado para VPS MySQL em 2026-03-18
 
     // ⏳ Alto impacto — deixar para o final
     customers:   false,
