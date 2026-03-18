@@ -302,39 +302,49 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal }: D
                                 🚚 Opções de Frete
                             </label>
                             <div className="space-y-2">
-                                {shippingOptions.map((opt) => {
+                                {shippingOptions.map((opt, i) => {
                                     const isSelected = selected.shippingOption?.id === opt.id;
                                     return (
                                         <button
                                             key={opt.id}
                                             type="button"
                                             onClick={() => onSelect({ ...selected, shippingOption: opt })}
-                                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border-2 text-left transition-all ${isSelected
-                                                ? 'border-green-500 bg-green-50'
-                                                : 'border-slate-200 bg-white hover:border-slate-300'
-                                                }`}
+                                            style={{ animationDelay: `${i * 70}ms` }}
+                                            className={`
+                                                w-full flex items-center justify-between px-3 py-3 rounded-xl border-2 text-left
+                                                transition-all duration-200 animate-slide-up
+                                                ${isSelected
+                                                    ? 'border-green-500 bg-green-50 shadow-[0_0_0_3px_rgba(34,197,94,0.12)]'
+                                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5'
+                                                }
+                                            `}
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <Truck className={`w-4 h-4 ${isSelected ? 'text-green-600' : 'text-slate-400'}`} />
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-200 ${isSelected ? 'bg-green-100' : 'bg-slate-100'}`}>
+                                                    <Truck className={`w-4 h-4 transition-colors duration-200 ${isSelected ? 'text-green-600' : 'text-slate-400'}`} />
+                                                </div>
                                                 <div>
-                                                    <p className={`text-sm font-medium ${isSelected ? 'text-green-800' : 'text-slate-700'}`}>
+                                                    <p className={`text-sm font-semibold transition-colors duration-200 ${isSelected ? 'text-green-800' : 'text-slate-700'}`}>
                                                         {opt.name}
                                                     </p>
                                                     {storeStatus && storeStatus.status !== 'open' && opt.daysLabel === 'Hoje' ? null : (
-                                                        <p className="text-xs text-slate-500">{opt.daysLabel}</p>
+                                                        <p className="text-xs text-slate-400 mt-0.5">{opt.daysLabel}</p>
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`text-sm font-bold ${opt.isFree ? 'text-green-600' : 'text-slate-800'}`}>
+                                            <div className="flex items-center gap-2.5">
+                                                <span className={`text-sm font-bold transition-colors duration-200 ${opt.isFree ? 'text-green-600' : isSelected ? 'text-green-700' : 'text-slate-800'}`}>
                                                     {opt.isFree ? 'Grátis' : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
                                                 </span>
-                                                {isSelected && <Check className="w-4 h-4 text-green-600" />}
+                                                <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${isSelected ? 'bg-green-500 scale-100 opacity-100' : 'scale-50 opacity-0'}`}>
+                                                    <Check className="w-3 h-3 text-white" />
+                                                </div>
                                             </div>
                                         </button>
                                     );
                                 })}
                             </div>
+
                         </div>
                     )}
                     {!isLoadingShipping && selected.address && shippingOptions.length === 0 && (
