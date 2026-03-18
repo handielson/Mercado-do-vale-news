@@ -122,6 +122,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         secondary: CarrierResult[];
     } | null>(null);
     const [calcError, setCalcError] = useState<string | null>(null);
+    const [distances, setDistances] = useState<{ primary: number | null; secondary: number | null } | null>(null);
 
     // Shipping Settings (token)
     const [settings, setSettings] = useState<ShippingSettings | null>(null);
@@ -246,6 +247,51 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         } catch {
             return null;
         }
+    }
+
+    async function getCepLatLng(cep: string): Promise<{ lat: number; lon: number } | null> {
+        try {
+            const clean = cep.replace(/\D/g, '');
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/search?postalcode=${clean}&country=BR&format=json&limit=1`
+            );
+            const data = await res.json();
+            if (!data.length) return null;
+            return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        } catch {
+            return null;
+        }
+    }
+
+    function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        const R = 6371;
+        const toRad = (x: number) => x * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    }
+
+    async function calcDistances() {
+        if (destCep.replace(/\D/g, '').length !== 8) return;
+        try {
+            const [destCoord, primaryCoord, secondaryCoord] = await Promise.all([
+                getCepLatLng(destCep),
+                getCepLatLng(originCep),
+                secondaryCep ? getCepLatLng(secondaryCep) : Promise.resolve(null),
+            ]);
+            if (destCoord) {
+                setDistances({
+                    primary: primaryCoord
+                        ? haversineKm(primaryCoord.lat, primaryCoord.lon, destCoord.lat, destCoord.lon)
+                        : null,
+                    secondary: secondaryCoord
+                        ? haversineKm(secondaryCoord.lat, secondaryCoord.lon, destCoord.lat, destCoord.lon)
+                        : null,
+                });
+            }
+        } catch { /* ignora silenciosamente */ }
     }
 
     async function loadProducts() {
@@ -496,6 +542,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         setCalcError(null);
         setResults(null);
         setComparisonResults(null);
+        setDistances(null);
 
         const hasSecondary = !!secondaryCep && secondaryCep.replace(/\D/g, '').length === 8;
 
@@ -510,6 +557,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                     setCalcError('Nenhuma transportadora retornou resultados.');
                 } else {
                     setComparisonResults({ primary: primaryCarriers, secondary: secondaryCarriers });
+                    calcDistances();
                 }
             } else {
                 // Origem única
@@ -1067,8 +1115,14 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                                 <thead>
                                     <tr className="text-xs text-slate-500 border-b border-slate-100 bg-slate-50/50">
                                         <th className="pl-4 py-3 pr-3 font-semibold">Serviço</th>
-                                        <th className="py-3 pr-4 text-center font-semibold text-blue-700">📍 {primaryLabel}</th>
-                                        <th className="py-3 pr-4 text-center font-semibold text-purple-700">📍 {secondaryLabel}</th>
+                                        <th className="py-3 pr-4 text-center font-semibold text-blue-700">
+                                            <div>📍 {primaryLabel}</div>
+                                            {distances?.primary != null && <div className="text-xs font-normal text-blue-500 mt-0.5">{distances.primary} km</div>}
+                                        </th>
+                                        <th className="py-3 pr-4 text-center font-semibold text-purple-700">
+                                            <div>📍 {secondaryLabel}</div>
+                                            {distances?.secondary != null && <div className="text-xs font-normal text-purple-500 mt-0.5">{distances.secondary} km</div>}
+                                        </th>
                                         <th className="py-3 pr-4 text-center font-semibold text-green-700">🏆 Enviar de</th>
                                         <th className="py-3 pr-4"></th>
                                     </tr>
