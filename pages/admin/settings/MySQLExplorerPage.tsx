@@ -109,6 +109,52 @@ export function MySQLExplorerPage() {
                 </div>
             )}
 
+            {/* Legenda */}
+            {!loading && !error && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 space-y-3">
+                    <p className="font-semibold text-slate-700 text-sm">Legenda</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <p className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] mb-2">Tipos de chave</p>
+                            <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-mono shrink-0">PK</span>
+                                    <span><strong>Primary Key</strong> — identificador único da linha. Não pode repetir nem ser nulo.</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-mono shrink-0">FK</span>
+                                    <span><strong>Foreign Key (índice)</strong> — referência a outra tabela ou campo indexado para buscas rápidas.</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-mono shrink-0">UQ</span>
+                                    <span><strong>Unique</strong> — valor não pode repetir, mas pode ser nulo.</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <p className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] mb-2">Tipos de dados comuns</p>
+                            <div className="space-y-1.5">
+                                {[
+                                    ['varchar(N)', 'Texto curto de até N caracteres'],
+                                    ['text / longtext', 'Texto longo (ex: descrições, HTML, JSON)'],
+                                    ['int / tinyint', 'Número inteiro. tinyint(1) = booleano (0/1)'],
+                                    ['decimal(M,D)', 'Número com casas decimais (ex: preços)'],
+                                    ['char(36)', 'UUID — identificador único global'],
+                                    ['timestamp', 'Data e hora (ex: created_at, updated_at)'],
+                                    ['json', 'Objeto JSON armazenado como coluna'],
+                                ].map(([tipo, desc]) => (
+                                    <div key={tipo} className="flex gap-2">
+                                        <span className="font-mono text-indigo-600 shrink-0 whitespace-nowrap">{tipo}</span>
+                                        <span className="text-slate-500">{desc}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
             {/* Error */}
             {error && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
