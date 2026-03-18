@@ -48,6 +48,7 @@ import MessagesPage from '../pages/admin/settings/MessagesPage';
 import BannerManagementPage from '../pages/admin/settings/BannerManagementPage';
 import CatalogSettingsPage from '../pages/admin/settings/CatalogSettingsPage';
 import ShippingPage from '../pages/admin/settings/ShippingPage';
+import FreightCalculatorPage from '../pages/admin/FreightCalculatorPage';
 import CatalogConfigPage from '../pages/admin/CatalogConfigPage';
 import PermissionsManagementPage from '../pages/admin/settings/PermissionsManagementPage';
 import CatalogEditorPage from '../pages/admin/catalog-editor';
@@ -573,6 +574,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ShippingPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/calcular-frete",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><FreightCalculatorPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

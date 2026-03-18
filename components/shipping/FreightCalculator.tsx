@@ -996,6 +996,52 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                     return aPrice - bPrice;
                 });
 
+                type RowType = typeof rows[0];
+                const getCarrier = (row: RowType) => (row.primary?.carrier ?? row.secondary?.carrier ?? '').toLowerCase();
+                const isCorreiosRow = (row: RowType) => getCarrier(row).includes('correio');
+                const isAereoRow = (row: RowType) => !isCorreiosRow(row) && (getCarrier(row).includes('azul') || getCarrier(row).includes('latam') || getCarrier(row).includes('jet') || getCarrier(row).includes('tnt'));
+
+                const rowGroups = [
+                    { id: 'correios', label: 'Correios', icon: '✉️', rows: rows.filter(isCorreiosRow) },
+                    { id: 'aereo', label: 'Aéreo / Expresso', icon: '✈️', rows: rows.filter(isAereoRow) },
+                    { id: 'transp', label: 'Transportadoras', icon: '🚚', rows: rows.filter(r => !isCorreiosRow(r) && !isAereoRow(r)) },
+                ].filter(g => g.rows.length > 0);
+
+                const renderCompRow = (row: RowType) => (
+                    <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                        <td className="pl-4 py-3 pr-3">
+                            <p className="text-sm font-medium text-slate-800">{row.displayName}</p>
+                            <p className="text-xs text-slate-400">{row.primary?.carrier ?? row.secondary?.carrier ?? ''}</p>
+                        </td>
+                        <td className="py-3 pr-4 text-center">
+                            {row.primary ? (
+                                <div className={cn('inline-flex flex-col items-center', row.winner === 'primary' ? 'text-green-600 font-semibold' : 'text-slate-400')}>
+                                    <span className="text-sm">R$ {row.primary.price.toFixed(2)}</span>
+                                    <span className="text-xs">{row.primary.daysLabel}</span>
+                                    {row.winner === 'primary' && <span className="text-xs mt-0.5">✅ mais barato</span>}
+                                </div>
+                            ) : <span className="text-xs text-slate-300">—</span>}
+                        </td>
+                        <td className="py-3 pr-4 text-center">
+                            {row.secondary ? (
+                                <div className={cn('inline-flex flex-col items-center', row.winner === 'secondary' ? 'text-green-600 font-semibold' : 'text-slate-400')}>
+                                    <span className="text-sm">R$ {row.secondary.price.toFixed(2)}</span>
+                                    <span className="text-xs">{row.secondary.daysLabel}</span>
+                                    {row.winner === 'secondary' && <span className="text-xs mt-0.5">✅ mais barato</span>}
+                                </div>
+                            ) : <span className="text-xs text-slate-300">—</span>}
+                        </td>
+                        <td className="py-3 pr-4 text-center">
+                            <span className={cn('text-xs font-semibold px-2 py-1 rounded-full',
+                                row.winner === 'primary' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                            )}>
+                                {row.winner === 'primary' ? primaryLabel : secondaryLabel}
+                            </span>
+                        </td>
+                    </tr>
+                );
+
+
                 return (
                     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                         <div className="px-5 py-3 bg-gradient-to-r from-blue-50 to-purple-50 border-b border-slate-200">
@@ -1013,38 +1059,15 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {rows.map(row => (
-                                        <tr key={row.key} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
-                                            <td className="pl-4 py-3 pr-3">
-                                                <p className="text-sm font-medium text-slate-800">{row.displayName}</p>
-                                                <p className="text-xs text-slate-400">{row.primary?.carrier ?? row.secondary?.carrier ?? ''}</p>
-                                            </td>
-                                            <td className="py-3 pr-4 text-center">
-                                                {row.primary ? (
-                                                    <div className={cn('inline-flex flex-col items-center', row.winner === 'primary' ? 'text-green-600 font-semibold' : 'text-slate-400')}>
-                                                        <span className="text-sm">R$ {row.primary.price.toFixed(2)}</span>
-                                                        <span className="text-xs">{row.primary.daysLabel}</span>
-                                                        {row.winner === 'primary' && <span className="text-xs mt-0.5">✅ mais barato</span>}
-                                                    </div>
-                                                ) : <span className="text-xs text-slate-300">—</span>}
-                                            </td>
-                                            <td className="py-3 pr-4 text-center">
-                                                {row.secondary ? (
-                                                    <div className={cn('inline-flex flex-col items-center', row.winner === 'secondary' ? 'text-green-600 font-semibold' : 'text-slate-400')}>
-                                                        <span className="text-sm">R$ {row.secondary.price.toFixed(2)}</span>
-                                                        <span className="text-xs">{row.secondary.daysLabel}</span>
-                                                        {row.winner === 'secondary' && <span className="text-xs mt-0.5">✅ mais barato</span>}
-                                                    </div>
-                                                ) : <span className="text-xs text-slate-300">—</span>}
-                                            </td>
-                                            <td className="py-3 pr-4 text-center">
-                                                <span className={cn('text-xs font-semibold px-2 py-1 rounded-full',
-                                                    row.winner === 'primary' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                                                )}>
-                                                    {row.winner === 'primary' ? primaryLabel : secondaryLabel}
-                                                </span>
-                                            </td>
-                                        </tr>
+                                    {rowGroups.map(group => (
+                                        <React.Fragment key={group.id}>
+                                            <tr className="bg-slate-50/80 border-y border-slate-100">
+                                                <td colSpan={4} className="pl-4 py-1.5 text-xs font-semibold text-slate-500 tracking-wide uppercase">
+                                                    {group.icon} {group.label} <span className="font-normal text-slate-400 normal-case">({group.rows.length})</span>
+                                                </td>
+                                            </tr>
+                                            {group.rows.map(renderCompRow)}
+                                        </React.Fragment>
                                     ))}
                                 </tbody>
                             </table>
