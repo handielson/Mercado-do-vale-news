@@ -958,74 +958,99 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                 </div>
             )}
 
-            {/* Resultados */}
-            {results && results.length > 0 && (
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-slate-700">🚚 Opções de Frete</h3>
-                        <p className="text-xs text-slate-400">Selecione para compartilhar</p>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                        {results.filter(r => !r.error).map((r, i) => (
-                            <div key={r.id} className={cn('flex items-center px-4 py-3 gap-3', i === 0 ? 'bg-green-50' : '', selectedCarriers.has(r.id) ? 'ring-2 ring-inset ring-blue-400' : '')}>
-                                {/* Checkbox de seleção */}
-                                <input
-                                    type="checkbox"
-                                    checked={selectedCarriers.has(r.id)}
-                                    onChange={() => toggleCarrier(r.id)}
-                                    className="w-4 h-4 accent-blue-600 flex-shrink-0"
-                                />
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-semibold text-slate-800 text-sm">{r.name}</span>
-                                        {i === 0 && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Mais barato</span>}
-                                        {r.id.startsWith('me_') && (
-                                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Melhor Envio</span>
-                                        )}
-                                        {r.id.startsWith('frenet_') && (
-                                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Frenet</span>
-                                        )}
-                                    </div>
-                                    {r.carrier && <p className="text-xs text-slate-500 mt-0.5">{r.carrier}</p>}
-                                </div>
-                                <div className="text-right mr-2">
-                                    <p className="font-bold text-slate-900">{r.price === 0 ? 'Grátis' : `R$ ${r.price.toFixed(2)}`}</p>
-                                    <p className="text-xs text-slate-500">{r.daysLabel}</p>
-                                </div>
-                                {/* Botão Gerar Etiqueta */}
-                                <button
-                                    onClick={() => openLabelModal(r)}
-                                    title="Gerar etiqueta de envio"
-                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-blue-600 text-xs font-medium transition-colors flex-shrink-0"
-                                >
-                                    <Tag className="w-3.5 h-3.5" />
-                                    Etiqueta
+            {/* Resultados em tabela agrupada */}
+            {results && results.length > 0 && (() => {
+                const valid = results.filter(r => !r.error);
+                const cheapestId = valid.length > 0 ? valid[0].id : null;
+
+                // Categoriza por transportadora
+                const isCorreios = (r: CarrierResult) => (r.carrier ?? '').toLowerCase().includes('correio');
+                const isAereo = (r: CarrierResult) => {
+                    const c = (r.carrier ?? '').toLowerCase();
+                    return !isCorreios(r) && (c.includes('azul') || c.includes('latam') || c.includes('jet') || c.includes('tnt'));
+                };
+
+                const groups = [
+                    { id: 'correios', label: 'Correios', icon: '✉️', items: valid.filter(isCorreios) },
+                    { id: 'aereo', label: 'Aéreo / Expresso', icon: '✈️', items: valid.filter(isAereo) },
+                    { id: 'transp', label: 'Transportadoras', icon: '🚚', items: valid.filter(r => !isCorreios(r) && !isAereo(r)) },
+                ].filter(g => g.items.length > 0)
+                  .map(g => ({ ...g, items: [...g.items].sort((a, b) => a.price - b.price) }));
+
+                const renderRow = (r: CarrierResult) => (
+                    <tr key={r.id} className={cn('transition-colors', selectedCarriers.has(r.id) ? 'bg-blue-50' : 'hover:bg-slate-50/60')}>
+                        <td className="pl-4 pr-2 py-2.5 w-8">
+                            <input type="checkbox" checked={selectedCarriers.has(r.id)} onChange={() => toggleCarrier(r.id)} className="w-4 h-4 accent-blue-600" />
+                        </td>
+                        <td className="py-2.5 pr-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-sm font-medium text-slate-800">{r.name}</span>
+                                {r.id === cheapestId && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">Mais barato</span>}
+                                {r.id.startsWith('me_') && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">ME</span>}
+                                {r.id.startsWith('frenet_') && <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">Frenet</span>}
+                            </div>
+                        </td>
+                        <td className="py-2.5 pr-3 text-xs text-slate-500 whitespace-nowrap">{r.carrier?.replace(' · Frenet', '') ?? '—'}</td>
+                        <td className="py-2.5 pr-3 text-center text-xs text-slate-500 whitespace-nowrap">{r.daysLabel}</td>
+                        <td className="py-2.5 pr-3 text-right font-bold text-slate-900 whitespace-nowrap">{r.price === 0 ? 'Grátis' : `R$ ${r.price.toFixed(2)}`}</td>
+                        <td className="py-2.5 pr-4">
+                            <button onClick={() => openLabelModal(r)} title="Gerar etiqueta" className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-blue-600 text-xs transition-colors">
+                                <Tag className="w-3 h-3" /> Etiqueta
+                            </button>
+                        </td>
+                    </tr>
+                );
+
+                return (
+                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-slate-700">🚚 Opções de Frete</h3>
+                            <p className="text-xs text-slate-400">Selecione para compartilhar</p>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="text-xs text-slate-400 border-b border-slate-100">
+                                        <th className="pl-4 pr-2 py-2 w-8"></th>
+                                        <th className="py-2 pr-3">Serviço</th>
+                                        <th className="py-2 pr-3">Via</th>
+                                        <th className="py-2 pr-3 text-center">Prazo</th>
+                                        <th className="py-2 pr-3 text-right">Preço</th>
+                                        <th className="py-2 pr-4"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {groups.map(group => (
+                                        <>
+                                            <tr key={`hdr_${group.id}`} className="bg-slate-50/80 border-y border-slate-100">
+                                                <td colSpan={6} className="pl-4 py-1.5 text-xs font-semibold text-slate-500 tracking-wide uppercase">
+                                                    {group.icon} {group.label} <span className="font-normal text-slate-400 normal-case">({group.items.length})</span>
+                                                </td>
+                                            </tr>
+                                            {group.items.map(r => renderRow(r))}
+                                        </>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Barra de compartilhamento */}
+                        {selectedCarriers.size > 0 && (
+                            <div className="px-5 py-3 bg-blue-50 border-t border-blue-200 flex items-center gap-3">
+                                <Share2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                                <span className="text-xs text-blue-700 flex-1">{selectedCarriers.size} opção(ões) selecionada(s)</span>
+                                <button onClick={() => handleShare('whatsapp')} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium transition-colors">
+                                    <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                                </button>
+                                <button onClick={() => handleShare('copy')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors">
+                                    <Copy className="w-3.5 h-3.5" />{copied ? 'Copiado!' : 'Copiar'}
                                 </button>
                             </div>
-                        ))}
+                        )}
                     </div>
-
-                    {/* Barra de compartilhamento */}
-                    {selectedCarriers.size > 0 && (
-                        <div className="px-5 py-3 bg-blue-50 border-t border-blue-200 flex items-center gap-3">
-                            <Share2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                            <span className="text-xs text-blue-700 flex-1">{selectedCarriers.size} opção(ões) selecionada(s)</span>
-                            <button
-                                onClick={() => handleShare('whatsapp')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium transition-colors"
-                            >
-                                <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
-                            </button>
-                            <button
-                                onClick={() => handleShare('copy')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors"
-                            >
-                                <Copy className="w-3.5 h-3.5" />{copied ? 'Copiado!' : 'Copiar'}
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
+                );
+            })()}
 
             {results && results.filter(r => !r.error).length === 0 && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800">
