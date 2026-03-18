@@ -157,7 +157,8 @@ export const shippingService = {
     // ── Calculation ───────────────────────────────────────────────────────────
 
     async calculate(input: ShippingCalculationInput): Promise<ShippingCalculationResult> {
-        const options: ShippingOption[] = [];
+        let options: ShippingOption[] = [];
+
         let missingForFree: number | undefined = undefined;
 
         const [settings, zones] = await Promise.all([
@@ -365,6 +366,17 @@ export const shippingService = {
             }
 
             await Promise.allSettled(tasks);
+
+            // Deduplicar: para cada nome de serviço, manter apenas o mais barato
+            const seen = new Map<string, ShippingOption>();
+            for (const opt of options) {
+                const key = opt.name.trim().toUpperCase(); // ex: "PAC", "SEDEX"
+                const existing = seen.get(key);
+                if (!existing || opt.price < existing.price) {
+                    seen.set(key, opt);
+                }
+            }
+            options = Array.from(seen.values());
         }
 
         return {
