@@ -270,6 +270,8 @@ export default function ShippingPage() {
         melhor_envio_sandbox: true,
         melhor_envio_enabled: false,
         melhor_envio_allowed_services: '',
+        frenet_token: '',
+        frenet_enabled: false,
         local_delivery_enabled: true
     });
 
@@ -292,6 +294,8 @@ export default function ShippingPage() {
                 melhor_envio_sandbox: s.melhor_envio_sandbox,
                 melhor_envio_enabled: s.melhor_envio_enabled,
                 melhor_envio_allowed_services: s.melhor_envio_allowed_services ?? '',
+                frenet_token: s.frenet_token ?? '',
+                frenet_enabled: s.frenet_enabled ?? false,
                 local_delivery_enabled: s.local_delivery_enabled,
             });
         }
@@ -620,99 +624,118 @@ export default function ShippingPage() {
 
                     {/* Tab: Transportadoras */}
                     {activeTab === 'carriers' && (
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-                            <h2 className="text-base font-semibold text-slate-800">Correios e Transportadoras (Nacional)</h2>
-                            <p className="text-sm text-slate-500 mb-4">
-                                A integração oficial do sistema para cálculo de fretes nacionais (Correios PAC/SEDEX, Jadlog, etc) é via **Melhor Envio**.
-                                Ative-a abaixo para que clientes de fora das suas Zonas Locais recebam o cálculo em tempo real.
+                        <div className="space-y-4">
+                            <p className="text-sm text-slate-500">
+                                Configure as integrações com transportadoras para cálculo de frete nacional.
+                                Quando ativas, os fretes aparecem para clientes de fora das Zonas Locais.
                             </p>
 
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_enabled: !p.melhor_envio_enabled }))}>
-                                    {settingsForm.melhor_envio_enabled
-                                        ? <ToggleRight className="w-8 h-8 text-green-600" />
-                                        : <ToggleLeft className="w-8 h-8 text-slate-400" />}
-                                </button>
-                                <div>
-                                    <p className="text-sm font-medium text-slate-800">Ativar Cálculo Correios/Melhor Envio</p>
-                                    <p className="text-xs text-slate-500">Exibirá automaticamente PAC, SEDEX e Transportadoras para CEPs do Brasil inteiro.</p>
+                            {/* Melhor Envio */}
+                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                                <div className="flex items-center justify-between px-5 py-4 bg-slate-50 border-b border-slate-200">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">🚚</span>
+                                        <div>
+                                            <p className="font-semibold text-slate-800 text-sm">Melhor Envio</p>
+                                            <p className="text-xs text-slate-500">Correios, Jadlog, Loggi e mais</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_enabled: !p.melhor_envio_enabled }))}>
+                                        {settingsForm.melhor_envio_enabled
+                                            ? <ToggleRight className="w-8 h-8 text-green-600" />
+                                            : <ToggleLeft className="w-8 h-8 text-slate-400" />}
+                                    </button>
+                                </div>
+                                <div className="px-5 py-4 space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_sandbox: !p.melhor_envio_sandbox }))}>
+                                            {settingsForm.melhor_envio_sandbox
+                                                ? <ToggleRight className="w-7 h-7 text-amber-500" />
+                                                : <ToggleLeft className="w-7 h-7 text-slate-400" />}
+                                        </button>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-800">Modo Sandbox</p>
+                                            <p className="text-xs text-slate-500">Desative após validar para ir a produção</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Token de API</label>
+                                        <input type="password"
+                                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            value={settingsForm.melhor_envio_token}
+                                            onChange={e => setSettingsForm(p => ({ ...p, melhor_envio_token: e.target.value }))}
+                                            placeholder="eyJ0eXAiOiJKV1..." />
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            Gere em <a href="https://sandbox.melhorenvio.com.br/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">sandbox.melhorenvio.com.br/tokens</a>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-800 mb-2">Transportadoras Permitidas</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                            {COMMON_CARRIERS.map(carrier => {
+                                                const allowed_services_array = settingsForm.melhor_envio_allowed_services
+                                                    .split(',')
+                                                    .map(s => s.trim().toLowerCase())
+                                                    .filter(Boolean);
+                                                const isChecked = allowed_services_array.includes(carrier.id.toLowerCase());
+                                                return (
+                                                    <label key={carrier.id} className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${isChecked ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                                        <div className="flex items-center h-5">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                                                checked={isChecked}
+                                                                onChange={(e) => {
+                                                                    const checked = e.target.checked;
+                                                                    let newList = [...allowed_services_array];
+                                                                    if (checked && !newList.includes(carrier.id)) newList.push(carrier.id);
+                                                                    else if (!checked) newList = newList.filter(id => id !== carrier.id);
+                                                                    setSettingsForm(prev => ({ ...prev, melhor_envio_allowed_services: newList.join(',') }));
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-sm font-medium text-slate-800">{carrier.label}</span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => setSettingsForm(p => ({ ...p, melhor_envio_sandbox: !p.melhor_envio_sandbox }))}>
-                                    {settingsForm.melhor_envio_sandbox
-                                        ? <ToggleRight className="w-8 h-8 text-amber-500" />
-                                        : <ToggleLeft className="w-8 h-8 text-slate-400" />}
-                                </button>
-                                <div>
-                                    <p className="text-sm font-medium text-slate-800">Modo Sandbox (testes)</p>
-                                    <p className="text-xs text-slate-500">Desative após validar para ir a produção</p>
+                            {/* Frenet */}
+                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                                <div className="flex items-center justify-between px-5 py-4 bg-slate-50 border-b border-slate-200">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-2xl">📦</span>
+                                        <div>
+                                            <p className="font-semibold text-slate-800 text-sm">Frenet</p>
+                                            <p className="text-xs text-slate-500">Correios com taxas negociadas</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setSettingsForm(p => ({ ...p, frenet_enabled: !p.frenet_enabled }))}>
+                                        {settingsForm.frenet_enabled
+                                            ? <ToggleRight className="w-8 h-8 text-green-600" />
+                                            : <ToggleLeft className="w-8 h-8 text-slate-400" />}
+                                    </button>
                                 </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1">Token de API</label>
-                                <input type="password"
-                                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={settingsForm.melhor_envio_token}
-                                    onChange={e => setSettingsForm(p => ({ ...p, melhor_envio_token: e.target.value }))}
-                                    placeholder="eyJ0eXAiOiJKV1..." />
-                                <p className="text-xs text-slate-400 mt-1">
-                                    Gere em <a href="https://sandbox.melhorenvio.com.br/tokens" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">sandbox.melhorenvio.com.br/tokens</a>
-                                </p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-800 mb-2">Transportadoras Permitidas</label>
-                                <p className="text-xs text-slate-500 mb-3">
-                                    Selecione quais transportadoras calcular no checkout. Se deixar todas desmarcadas, o sistema aceitará todas as que você validou no painel do Melhor Envio.
-                                </p>
-
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {COMMON_CARRIERS.map(carrier => {
-                                        const allowed_services_array = settingsForm.melhor_envio_allowed_services
-                                            .split(',')
-                                            .map(s => s.trim().toLowerCase())
-                                            .filter(Boolean);
-
-                                        const isChecked = allowed_services_array.includes(carrier.id.toLowerCase());
-
-                                        return (
-                                            <label key={carrier.id} className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${isChecked ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                                                <div className="flex items-center h-5">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                                                        checked={isChecked}
-                                                        onChange={(e) => {
-                                                            const checked = e.target.checked;
-                                                            let newList = [...allowed_services_array];
-
-                                                            if (checked && !newList.includes(carrier.id)) {
-                                                                newList.push(carrier.id);
-                                                            } else if (!checked) {
-                                                                newList = newList.filter(id => id !== carrier.id);
-                                                            }
-
-                                                            setSettingsForm(prev => ({
-                                                                ...prev,
-                                                                melhor_envio_allowed_services: newList.join(',')
-                                                            }));
-                                                        }}
-                                                    />
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-medium text-slate-800">{carrier.label}</span>
-                                                </div>
-                                            </label>
-                                        );
-                                    })}
+                                <div className="px-5 py-4 space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Token de API</label>
+                                        <input type="password"
+                                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            value={settingsForm.frenet_token}
+                                            onChange={e => setSettingsForm(p => ({ ...p, frenet_token: e.target.value }))}
+                                            placeholder="Seu token da Frenet" />
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            Acesse em <a href="https://painel.frenet.com.br" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">painel.frenet.com.br</a> → Dados Cadastrais → Chaves de Acesso
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 
                             <button onClick={handleSaveSettings} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
-                                <Check size={16} /> Salvar
+                                <Check size={16} /> Salvar Transportadoras
                             </button>
                         </div>
                     )}

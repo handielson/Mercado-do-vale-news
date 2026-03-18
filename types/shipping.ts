@@ -12,6 +12,8 @@ export interface ShippingSettings {
     melhor_envio_sandbox: boolean;
     melhor_envio_enabled: boolean;
     melhor_envio_allowed_services?: string;
+    frenet_token?: string;
+    frenet_enabled: boolean;
     local_delivery_enabled: boolean;
     updated_at: string;
 }
@@ -22,6 +24,8 @@ export interface ShippingSettingsInput {
     melhor_envio_sandbox?: boolean;
     melhor_envio_enabled?: boolean;
     melhor_envio_allowed_services?: string;
+    frenet_token?: string;
+    frenet_enabled?: boolean;
     local_delivery_enabled?: boolean;
 }
 

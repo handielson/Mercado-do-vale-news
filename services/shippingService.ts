@@ -295,59 +295,76 @@ export const shippingService = {
             }
         }
 
-        // Melhor Envio fallback
-        if (settings?.melhor_envio_enabled && options.length === 0) {
-            try {
-                const { melhorEnvioService } = await import('./melhorEnvio');
-                const carriers = await melhorEnvioService.calculate({
-                    from_cep: settings.origin_cep,
-                    to_cep: input.to_cep,
-                    weight: input.weight ?? 300,
-                    height: input.height ?? 10,
-                    width: input.width ?? 15,
-                    length: input.length ?? 20,
-                    sandbox: settings.melhor_envio_sandbox,
-                    token: settings.melhor_envio_token ?? '',
-                    allowed_services: settings.melhor_envio_allowed_services,
-                });
-                if (carriers.length === 0) {
-                    options.push({
-                        id: 'dev_dbg_2',
-                        name: 'DEBUG: Melhor Envio recused / filtered all options - Allowed: ' + (settings.melhor_envio_allowed_services || 'none'),
-                        price: 0,
-                        isFree: true,
-                        estimatedDaysMin: 0,
-                        estimatedDaysMax: 0,
-                        daysLabel: 'Debug',
-                        type: 'carrier'
-                    });
-                } else {
-                    options.push(...carriers);
-                }
-            } catch (e: any) {
-                console.warn('[shippingService] Melhor Envio error:', e);
-                options.push({
-                    id: 'dev_dbg_1',
-                    name: 'DEBUG: Melhor Envio Error: ' + e.message,
-                    price: 0,
-                    isFree: true,
-                    estimatedDaysMin: 0,
-                    estimatedDaysMax: 0,
-                    daysLabel: 'Debug',
-                    type: 'carrier'
-                });
+        // Carriers nacionais: Melhor Envio + Frenet (em paralelo quando ambos ativos)
+        if (options.length === 0) {
+            const tasks: Promise<void>[] = [];
+
+            if (settings?.melhor_envio_enabled && settings.melhor_envio_token) {
+                tasks.push(
+                    (async () => {
+                        try {
+                            const { melhorEnvioService } = await import('./melhorEnvio');
+                            const carriers = await melhorEnvioService.calculate({
+                                from_cep: settings.origin_cep,
+                                to_cep: input.to_cep,
+                                weight: input.weight ?? 300,
+                                height: input.height ?? 10,
+                                width: input.width ?? 15,
+                                length: input.length ?? 20,
+                                sandbox: settings.melhor_envio_sandbox,
+                                token: settings.melhor_envio_token ?? '',
+                                allowed_services: settings.melhor_envio_allowed_services,
+                            });
+                            options.push(...carriers);
+                        } catch (e: any) {
+                            console.warn('[shippingService] Melhor Envio error:', e);
+                        }
+                    })()
+                );
             }
-        } else if (!settings?.melhor_envio_enabled && options.length === 0) {
-            options.push({
-                id: 'dev_dbg_3',
-                name: 'DEBUG: Melhor Envio is DISABLED in settings',
-                price: 0,
-                isFree: true,
-                estimatedDaysMin: 0,
-                estimatedDaysMax: 0,
-                daysLabel: 'Debug',
-                type: 'carrier'
-            });
+
+            if (settings?.frenet_enabled && settings.frenet_token) {
+                tasks.push(
+                    (async () => {
+                        try {
+                            const res = await fetch('/api/frenet-calculate', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    from_cep: settings.origin_cep,
+                                    to_cep: input.to_cep,
+                                    weight_g: input.weight ?? 300,
+                                    height_cm: input.height ?? 10,
+                                    width_cm: input.width ?? 15,
+                                    length_cm: input.length ?? 20,
+                                    order_value: input.order_value ?? 0,
+                                    token: settings.frenet_token,
+                                }),
+                            });
+                            if (!res.ok) return;
+                            const data = await res.json();
+                            const services: ShippingOption[] = (data.ShippingSevicesArray ?? [])
+                                .filter((s: any) => !s.Error && s.ShippingPrice > 0)
+                                .map((s: any) => ({
+                                    id: `frenet_${s.ServiceCode}`,
+                                    name: s.ServiceDescription,
+                                    carrier: `${s.Carrier} (Frenet)`,
+                                    price: parseFloat(s.ShippingPrice),
+                                    isFree: false,
+                                    estimatedDaysMin: s.DeliveryTime,
+                                    estimatedDaysMax: s.DeliveryTime,
+                                    daysLabel: `${s.DeliveryTime} dias úteis`,
+                                    type: 'carrier' as const,
+                                }));
+                            options.push(...services);
+                        } catch (e: any) {
+                            console.warn('[shippingService] Frenet error:', e);
+                        }
+                    })()
+                );
+            }
+
+            await Promise.allSettled(tasks);
         }
 
         return {

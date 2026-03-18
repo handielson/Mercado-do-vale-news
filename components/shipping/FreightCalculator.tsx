@@ -397,59 +397,100 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
 
     // ── Calcular ──────────────────────────────────────────────────────────────
     async function handleCalculate() {
-        if (!effectiveTotals || !settings?.melhor_envio_token) return;
+        if (!effectiveTotals) return;
+        if (!settings?.melhor_envio_token && !settings?.frenet_token) return;
 
         setCalculating(true);
         setCalcError(null);
         setResults(null);
 
         const fromCep = useSecondary && secondaryCep ? secondaryCep : originCep;
+        const allCarriers: CarrierResult[] = [];
+
+        const tasks: Promise<void>[] = [];
+
+        // Melhor Envio
+        if (settings?.melhor_envio_token) {
+            tasks.push((async () => {
+                try {
+                    const res = await fetch('/api/melhor-envio-calculate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            from_cep: fromCep,
+                            to_cep: destCep,
+                            weight_g: effectiveTotals!.weight_g,
+                            height_cm: effectiveTotals!.height_cm,
+                            width_cm: effectiveTotals!.width_cm,
+                            length_cm: effectiveTotals!.length_cm,
+                            token: settings.melhor_envio_token,
+                            sandbox: settings.melhor_envio_sandbox,
+                        }),
+                    });
+                    const text = await res.text();
+                    if (!text) return;
+                    const data = JSON.parse(text);
+                    if (!res.ok) return;
+                    const carriers: CarrierResult[] = (Array.isArray(data) ? data : [])
+                        .filter((item: any) => !item.error && item.price)
+                        .map((item: any) => ({
+                            id: `me_${item.id}`,
+                            name: item.name,
+                            carrier: item.company?.name,
+                            price: parseFloat(item.price ?? '0'),
+                            daysLabel: item.delivery_time ? `${item.delivery_time} dias úteis` : '?',
+                        }));
+                    allCarriers.push(...carriers);
+                } catch (e: any) {
+                    console.warn('[FreightCalculator] ME error:', e);
+                }
+            })());
+        }
+
+        // Frenet
+        if (settings?.frenet_token && (settings as any).frenet_enabled) {
+            tasks.push((async () => {
+                try {
+                    const res = await fetch('/api/frenet-calculate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            from_cep: fromCep,
+                            to_cep: destCep,
+                            weight_g: effectiveTotals!.weight_g,
+                            height_cm: effectiveTotals!.height_cm,
+                            width_cm: effectiveTotals!.width_cm,
+                            length_cm: effectiveTotals!.length_cm,
+                            token: settings.frenet_token,
+                        }),
+                    });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const carriers: CarrierResult[] = (data.ShippingSevicesArray ?? [])
+                        .filter((s: any) => !s.Error && s.ShippingPrice > 0)
+                        .map((s: any) => ({
+                            id: `frenet_${s.ServiceCode}`,
+                            name: s.ServiceDescription,
+                            carrier: `${s.Carrier} · Frenet`,
+                            price: parseFloat(s.ShippingPrice),
+                            daysLabel: `${s.DeliveryTime} dias úteis`,
+                        }));
+                    allCarriers.push(...carriers);
+                } catch (e: any) {
+                    console.warn('[FreightCalculator] Frenet error:', e);
+                }
+            })());
+        }
 
         try {
-            // Usa proxy /api/melhor-envio-calculate
-            // Em dev: Vite redireciona para mercado-do-vale-news.vercel.app (vite.config.ts)
-            // Em prod: endpoint Vercel serverless, sem CORS
-            const res = await fetch('/api/melhor-envio-calculate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    from_cep: fromCep,
-                    to_cep: destCep,
-                    weight_g: effectiveTotals!.weight_g,
-                    height_cm: effectiveTotals!.height_cm,
-                    width_cm: effectiveTotals!.width_cm,
-                    length_cm: effectiveTotals!.length_cm,
-                    token: settings.melhor_envio_token,
-                    sandbox: settings.melhor_envio_sandbox,
-                }),
-            });
-
-            const text = await res.text();
-            if (!text) throw new Error('Resposta vazia do servidor de frete');
-
-            const data = JSON.parse(text);
-            if (!res.ok) throw new Error(data?.error ?? `Erro ${res.status}`);
-
-            const carriers: CarrierResult[] = (Array.isArray(data) ? data : [])
-                .filter((item: any) => !item.error && item.price)
-                .map((item: any) => ({
-                    id: `me_${item.id}`,
-                    name: item.name,
-                    carrier: item.company?.name,
-                    price: parseFloat(item.price ?? '0'),
-                    daysLabel: item.delivery_time ? `${item.delivery_time} dias úteis` : '?',
-                }))
-                .sort((a: CarrierResult, b: CarrierResult) => a.price - b.price);
-
-            setResults(carriers);
-        } catch (err: any) {
-            const msg = err.message ?? 'Erro ao calcular frete';
-            // CORS em dev: orientar o usuário
-            if (msg.includes('fetch') || msg.includes('Failed')) {
-                setCalcError('Erro de conexão com o Melhor Envio. Em desenvolvimento, o proxy Vite redireciona para o Vercel de produção — verifique se o endpoint foi deployado ou ative o modo Sandbox nas configurações.');
+            await Promise.allSettled(tasks);
+            if (allCarriers.length === 0) {
+                setCalcError('Nenhuma transportadora retornou resultados. Verifique os tokens e tente novamente.');
             } else {
-                setCalcError(msg);
+                setResults(allCarriers.sort((a, b) => a.price - b.price));
             }
+        } catch (err: any) {
+            setCalcError(err.message ?? 'Erro ao calcular frete');
         } finally {
             setCalculating(false);
         }
