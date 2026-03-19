@@ -1,26 +1,46 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Database, Table, ChevronDown, ChevronRight, RefreshCw, Search, Rows, LayoutList } from 'lucide-react';
+import {
+    Database, Table, ChevronDown, ChevronRight, RefreshCw, Search,
+    Rows, LayoutList, Plus, Trash2, Pencil, Upload, Download, X, Save, AlertTriangle
+} from 'lucide-react';
 
 const VPS_API = 'https://api.xiaomipetrolina.com.br';
 const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
 const PAGE_SIZE = 50;
+
+// Tabelas somente-leitura (sistema interno — sem CRUD)
+const READONLY_TABLES = new Set([
+    'migrations', 'schema_migrations', 'sessions', 'knex_migrations', 'knex_migrations_lock'
+]);
 
 interface Column { field: string; type: string; null: string; key: string; default: string | null; }
 interface TableData { total: number; limit: number; offset: number; rows: Record<string, any>[]; }
 type Schema = Record<string, Column[]>;
 type Tab = 'schema' | 'data';
 
-function apiFetch(path: string) {
-    return fetch(`${VPS_API}${path}`, { headers: { 'x-sync-key': SYNC_KEY } }).then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
+// ─── API helpers ──────────────────────────────────────────────────────────────
+async function apiFetch(path: string, options?: RequestInit) {
+    const r = await fetch(`${VPS_API}${path}`, {
+        ...options,
+        headers: { 'x-sync-key': SYNC_KEY, 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
     });
+    if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: r.statusText }));
+        throw new Error(err.error || `HTTP ${r.status}`);
+    }
+    return r.json();
 }
 
+function getPkCol(cols: Column[]): string {
+    return cols.find(c => c.key === 'PRI')?.field || 'id';
+}
+
+// ─── Components ───────────────────────────────────────────────────────────────
+
 function KeyBadge({ k }: { k: string }) {
-    if (k === 'PRI') return <span className="px-1.5 py-0.5 text-[10px] bg-amber-100 text-amber-700 rounded font-mono font-bold" title="Primary Key — identificador único">PK</span>;
-    if (k === 'MUL') return <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded font-mono font-bold" title="Foreign Key / índice — referência ou campo indexado">FK</span>;
-    if (k === 'UNI') return <span className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded font-mono font-bold" title="Unique — valor não pode repetir">UQ</span>;
+    if (k === 'PRI') return <span title="Primary Key — identificador único" className="px-1.5 py-0.5 text-[10px] bg-amber-100 text-amber-700 rounded font-mono font-bold">PK</span>;
+    if (k === 'MUL') return <span title="Foreign Key / índice" className="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded font-mono font-bold">FK</span>;
+    if (k === 'UNI') return <span title="Unique — valor único" className="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded font-mono font-bold">UQ</span>;
     return null;
 }
 
@@ -55,41 +75,255 @@ function SchemaView({ cols }: { cols: Column[] }) {
     );
 }
 
-function DataView({ tableName }: { tableName: string }) {
+// ─── Row Form Modal (insert & edit) ──────────────────────────────────────────
+function RowModal({ cols, initial, onSave, onClose, mode }: {
+    cols: Column[];
+    initial?: Record<string, any>;
+    onSave: (data: Record<string, any>) => Promise<void>;
+    onClose: () => void;
+    mode: 'insert' | 'edit';
+}) {
+    const [form, setForm] = useState<Record<string, string>>(() => {
+        const f: Record<string, string> = {};
+        cols.forEach(c => { f[c.field] = initial ? String(initial[c.field] ?? '') : ''; });
+        return f;
+    });
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const pkCol = getPkCol(cols);
+
+    const handleSave = async () => {
+        setSaving(true); setError(null);
+        try {
+            const payload: Record<string, any> = {};
+            cols.forEach(c => {
+                if (mode === 'edit' && c.field === pkCol) return; // não mudar PK
+                const v = form[c.field];
+                payload[c.field] = v === '' ? null : v;
+            });
+            await onSave(payload);
+            onClose();
+        } catch (e: any) { setError(e.message); }
+        finally { setSaving(false); }
+    };
+
+    // Detectar colunas editáveis (edit: skip PK)
+    const editableCols = mode === 'edit' ? cols.filter(c => c.field !== pkCol) : cols;
+
+    return (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between px-6 py-4 border-b">
+                    <h3 className="font-bold text-slate-800">
+                        {mode === 'insert' ? '+ Nova linha' : '✏️ Editar linha'}
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                </div>
+                <div className="overflow-y-auto px-6 py-4 space-y-3 flex-1">
+                    {mode === 'edit' && (
+                        <div className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+                            <span className="font-mono font-semibold">{pkCol}</span>: {initial?.[pkCol]} (PK — não editável)
+                        </div>
+                    )}
+                    {editableCols.map(col => (
+                        <div key={col.field}>
+                            <label className="block text-xs font-semibold text-slate-600 mb-1">
+                                {col.field} <span className="font-normal text-slate-400 font-mono">({col.type})</span>
+                                {col.null === 'NO' && <span className="text-red-400 ml-1">*</span>}
+                            </label>
+                            <input
+                                value={form[col.field] ?? ''}
+                                onChange={e => setForm(f => ({ ...f, [col.field]: e.target.value }))}
+                                placeholder={col.default ? `default: ${col.default}` : col.null === 'YES' ? 'null' : ''}
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                            />
+                        </div>
+                    ))}
+                    {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+                </div>
+                <div className="flex justify-end gap-2 px-6 py-4 border-t">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    >
+                        {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+                        {saving ? 'Salvando...' : 'Salvar'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Bulk Insert Modal ────────────────────────────────────────────────────────
+function BulkModal({ tableName, cols, onClose, onSuccess }: {
+    tableName: string; cols: Column[];
+    onClose: () => void; onSuccess: () => void;
+}) {
+    const [json, setJson] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [result, setResult] = useState<string | null>(null);
+
+    const example = JSON.stringify(
+        [Object.fromEntries(cols.slice(0, 4).map(c => [c.field, c.type.startsWith('int') ? 0 : 'valor']))],
+        null, 2
+    );
+
+    const handleImport = async () => {
+        setSaving(true); setError(null); setResult(null);
+        try {
+            const data = JSON.parse(json);
+            if (!Array.isArray(data)) throw new Error('JSON deve ser um array de objetos');
+            const res = await apiFetch(`/table-data/${tableName}/bulk`, {
+                method: 'POST', body: JSON.stringify(data),
+            });
+            setResult(`✅ ${res.inserted} registros inseridos com sucesso!`);
+            onSuccess();
+        } catch (e: any) { setError(e.message); }
+        finally { setSaving(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between px-6 py-4 border-b">
+                    <h3 className="font-bold text-slate-800">📥 Importar em massa — <span className="font-mono text-indigo-600">{tableName}</span></h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                </div>
+                <div className="overflow-y-auto px-6 py-4 space-y-3 flex-1">
+                    <p className="text-xs text-slate-500">Cole um array JSON de objetos. Cada objeto representa uma linha a inserir.</p>
+                    <details className="text-xs">
+                        <summary className="cursor-pointer text-indigo-600 hover:underline">Ver exemplo de formato</summary>
+                        <pre className="mt-2 bg-slate-50 rounded-lg p-3 text-slate-600 overflow-x-auto">{example}</pre>
+                    </details>
+                    <textarea
+                        value={json}
+                        onChange={e => setJson(e.target.value)}
+                        placeholder={`[\n  { "campo1": "valor1", "campo2": "valor2" },\n  ...\n]`}
+                        rows={12}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+                    />
+                    {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+                    {result && <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{result}</p>}
+                </div>
+                <div className="flex justify-end gap-2 px-6 py-4 border-t">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Fechar</button>
+                    <button
+                        onClick={handleImport}
+                        disabled={saving || !json.trim()}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    >
+                        {saving ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
+                        {saving ? 'Importando...' : 'Importar'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Delete Confirm ────────────────────────────────────────────────────────────
+function DeleteConfirm({ onConfirm, onCancel, busy }: { onConfirm: () => void; onCancel: () => void; busy: boolean }) {
+    return (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4">
+                <div className="flex items-center gap-3 text-red-600">
+                    <AlertTriangle size={20} />
+                    <h3 className="font-bold">Excluir linha?</h3>
+                </div>
+                <p className="text-sm text-slate-500">Esta ação é irreversível. O registro será removido permanentemente do banco.</p>
+                <div className="flex justify-end gap-2">
+                    <button onClick={onCancel} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={busy}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                    >
+                        {busy ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        {busy ? 'Excluindo...' : 'Excluir'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── DataView ─────────────────────────────────────────────────────────────────
+function DataView({ tableName, cols }: { tableName: string; cols: Column[] }) {
     const [data, setData] = useState<TableData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [offset, setOffset] = useState(0);
+    const [editRow, setEditRow] = useState<Record<string, any> | null>(null);
+    const [deleteRow, setDeleteRow] = useState<Record<string, any> | null>(null);
+    const [showInsert, setShowInsert] = useState(false);
+    const [showBulk, setShowBulk] = useState(false);
+    const [deleteBusy, setDeleteBusy] = useState(false);
+    const [toast, setToast] = useState<string | null>(null);
 
-    const load = useCallback(async (off = offset) => {
-        setLoading(true);
-        setError(null);
+    const readonly = READONLY_TABLES.has(tableName);
+    const pkCol = getPkCol(cols);
+
+    const showToast = (msg: string) => {
+        setToast(msg);
+        setTimeout(() => setToast(null), 3000);
+    };
+
+    const load = useCallback(async (off: number) => {
+        setLoading(true); setError(null);
         try {
             const result = await apiFetch(`/table-data/${tableName}?limit=${PAGE_SIZE}&offset=${off}`);
             setData(result);
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setLoading(false);
-        }
-    }, [tableName, offset]);
+        } catch (e: any) { setError(e.message); }
+        finally { setLoading(false); }
+    }, [tableName]);
 
     useEffect(() => { load(0); setOffset(0); }, [tableName]);
-
-    // Auto-refresh a cada 30s
     useEffect(() => {
-        const timer = setInterval(() => load(offset), 30000);
-        return () => clearInterval(timer);
+        const t = setInterval(() => load(offset), 30000);
+        return () => clearInterval(t);
     }, [load, offset]);
 
-    const goTo = (newOffset: number) => {
-        setOffset(newOffset);
-        load(newOffset);
+    const goTo = (o: number) => { setOffset(o); load(o); };
+
+    const handleInsert = async (payload: Record<string, any>) => {
+        await apiFetch(`/table-data/${tableName}`, { method: 'POST', body: JSON.stringify(payload) });
+        showToast('✅ Linha inserida com sucesso!');
+        load(offset);
     };
 
-    if (error) return (
-        <div className="p-4 text-sm text-red-600 bg-red-50">Erro: {error}</div>
-    );
+    const handleEdit = async (payload: Record<string, any>) => {
+        const pkVal = editRow![pkCol];
+        await apiFetch(`/table-data/${tableName}/${pkVal}?pk=${pkCol}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        showToast('✅ Linha atualizada com sucesso!');
+        load(offset);
+    };
+
+    const handleDelete = async () => {
+        setDeleteBusy(true);
+        try {
+            await apiFetch(`/table-data/${tableName}/${deleteRow![pkCol]}?pk=${pkCol}`, { method: 'DELETE' });
+            showToast('✅ Linha excluída!');
+            setDeleteRow(null);
+            load(offset);
+        } catch (e: any) { showToast(`❌ ${e.message}`); }
+        finally { setDeleteBusy(false); }
+    };
+
+    const handleExport = async () => {
+        try {
+            const rows = await apiFetch(`/table-data/${tableName}/export`);
+            const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `${tableName}_backup.json`; a.click();
+            URL.revokeObjectURL(url);
+            showToast(`✅ Exportado: ${tableName}_backup.json`);
+        } catch (e: any) { showToast(`❌ ${e.message}`); }
+    };
 
     if (!data && loading) return (
         <div className="p-6 flex items-center justify-center gap-2 text-slate-400 text-sm">
@@ -97,103 +331,159 @@ function DataView({ tableName }: { tableName: string }) {
         </div>
     );
 
+    if (error) return <div className="p-4 text-sm text-red-600 bg-red-50">Erro: {error}</div>;
     if (!data) return null;
 
-    const cols = data.rows.length > 0 ? Object.keys(data.rows[0]) : [];
-    const pages = Math.ceil(data.total / PAGE_SIZE);
+    const dataCols = data.rows.length > 0 ? Object.keys(data.rows[0]) : cols.map(c => c.field);
+    const pages = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
     const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
-    const totalPages = pages || 1;
 
     return (
-        <div>
+        <div className="relative">
+            {/* Toast */}
+            {toast && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 bg-slate-800 text-white text-xs px-4 py-2 rounded-full shadow-lg animate-in fade-in">
+                    {toast}
+                </div>
+            )}
+
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs text-slate-500">
-                <span>
-                    <strong>{data.total.toLocaleString()}</strong> registros
-                    {loading && <RefreshCw size={10} className="inline ml-2 animate-spin text-indigo-400" />}
-                </span>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => goTo(0)}
-                        disabled={offset === 0 || loading}
-                        className="px-2 py-1 rounded hover:bg-slate-200 disabled:opacity-30 transition-colors"
-                    >«</button>
-                    <button
-                        onClick={() => goTo(Math.max(0, offset - PAGE_SIZE))}
-                        disabled={offset === 0 || loading}
-                        className="px-2 py-1 rounded hover:bg-slate-200 disabled:opacity-30 transition-colors"
-                    >‹</button>
-                    <span className="px-2">
-                        Página <strong>{currentPage}</strong> de <strong>{totalPages}</strong>
-                    </span>
-                    <button
-                        onClick={() => goTo(offset + PAGE_SIZE)}
-                        disabled={offset + PAGE_SIZE >= data.total || loading}
-                        className="px-2 py-1 rounded hover:bg-slate-200 disabled:opacity-30 transition-colors"
-                    >›</button>
-                    <button
-                        onClick={() => goTo((totalPages - 1) * PAGE_SIZE)}
-                        disabled={offset + PAGE_SIZE >= data.total || loading}
-                        className="px-2 py-1 rounded hover:bg-slate-200 disabled:opacity-30 transition-colors"
-                    >»</button>
-                    <button
-                        onClick={() => load(offset)}
-                        disabled={loading}
-                        className="ml-2 px-2 py-1 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 disabled:opacity-30 transition-colors flex items-center gap-1"
-                    >
-                        <RefreshCw size={10} />
-                        Atualizar
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                <div className="flex items-center gap-3 text-xs text-slate-500">
+                    <span><strong>{data.total.toLocaleString()}</strong> registros</span>
+                    {loading && <RefreshCw size={10} className="animate-spin text-indigo-400" />}
+                    {readonly && (
+                        <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-semibold">só-leitura</span>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                    {/* Paginação */}
+                    {(['«', '‹', null, '›', '»'] as const).map((btn, i) => (
+                        btn === null ? (
+                            <span key="page" className="text-xs px-2 text-slate-500">
+                                {currentPage} / {pages}
+                            </span>
+                        ) : (
+                            <button
+                                key={btn}
+                                onClick={() => {
+                                    if (btn === '«') goTo(0);
+                                    else if (btn === '‹') goTo(Math.max(0, offset - PAGE_SIZE));
+                                    else if (btn === '›') goTo(offset + PAGE_SIZE);
+                                    else goTo((pages - 1) * PAGE_SIZE);
+                                }}
+                                disabled={loading || (btn === '«' || btn === '‹' ? offset === 0 : offset + PAGE_SIZE >= data.total)}
+                                className="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-200 disabled:opacity-30 text-sm transition-colors"
+                            >{btn}</button>
+                        )
+                    ))}
+
+                    <div className="w-px h-5 bg-slate-200 mx-0.5" />
+
+                    {/* Ações */}
+                    <button onClick={() => load(offset)} disabled={loading} title="Atualizar"
+                        className="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 transition-colors">
+                        <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
                     </button>
+                    <button onClick={handleExport} title="Exportar JSON (backup)"
+                        className="flex items-center gap-1 px-2 h-7 text-xs rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
+                        <Download size={11} /> Backup
+                    </button>
+                    {!readonly && (
+                        <>
+                            <button onClick={() => setShowBulk(true)} title="Importar em massa"
+                                className="flex items-center gap-1 px-2 h-7 text-xs rounded bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
+                                <Upload size={11} /> Importar
+                            </button>
+                            <button onClick={() => setShowInsert(true)} title="Nova linha"
+                                className="flex items-center gap-1 px-2 h-7 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
+                                <Plus size={11} /> Nova linha
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {/* Data table */}
+            {/* Table */}
             {data.rows.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-sm italic">Tabela vazia</div>
+                <div className="p-8 text-center text-slate-400 text-sm italic">Tabela vazia</div>
             ) : (
-                <div className="overflow-x-auto max-h-96">
+                <div className="overflow-x-auto max-h-[28rem]">
                     <table className="w-full text-xs">
-                        <thead className="bg-slate-800 text-slate-200 text-[10px] uppercase tracking-wider sticky top-0">
+                        <thead className="bg-slate-800 text-slate-200 text-[10px] uppercase tracking-wider sticky top-0 z-10">
                             <tr>
-                                {cols.map(c => (
+                                {dataCols.map(c => (
                                     <th key={c} className="px-3 py-2 text-left whitespace-nowrap font-mono">{c}</th>
                                 ))}
+                                {!readonly && <th className="px-3 py-2 text-center w-16">Ações</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {data.rows.map((row, i) => (
-                                <tr key={i} className="hover:bg-indigo-50 transition-colors">
-                                    {cols.map(c => {
+                                <tr key={i} className="hover:bg-indigo-50/50 transition-colors group">
+                                    {dataCols.map(c => {
                                         const val = row[c];
-                                        const display = val === null
-                                            ? <span className="italic text-slate-300">null</span>
-                                            : typeof val === 'object'
-                                                ? <span className="text-slate-400 font-mono">{JSON.stringify(val).slice(0, 80)}</span>
-                                                : String(val).length > 60
-                                                    ? <span title={String(val)}>{String(val).slice(0, 60)}…</span>
-                                                    : String(val);
+                                        const str = val === null ? null : typeof val === 'object' ? JSON.stringify(val) : String(val);
                                         return (
-                                            <td key={c} className="px-3 py-2 text-slate-700 font-mono max-w-xs overflow-hidden whitespace-nowrap">
-                                                {display}
+                                            <td key={c} className="px-3 py-1.5 text-slate-700 font-mono max-w-[200px] overflow-hidden whitespace-nowrap">
+                                                {str === null
+                                                    ? <span className="italic text-slate-300">null</span>
+                                                    : str.length > 55
+                                                        ? <span title={str}>{str.slice(0, 55)}…</span>
+                                                        : str}
                                             </td>
                                         );
                                     })}
+                                    {!readonly && (
+                                        <td className="px-2 py-1.5 text-center">
+                                            <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={() => setEditRow(row)}
+                                                    title="Editar"
+                                                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-indigo-100 text-indigo-500 transition-colors"
+                                                ><Pencil size={11} /></button>
+                                                <button
+                                                    onClick={() => setDeleteRow(row)}
+                                                    title="Excluir"
+                                                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-red-500 transition-colors"
+                                                ><Trash2 size={11} /></button>
+                                            </div>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
             )}
+
             <div className="px-4 py-1.5 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400">
-                Auto-atualiza a cada 30s · Exibindo {offset + 1}–{Math.min(offset + PAGE_SIZE, data.total)} de {data.total}
+                Auto-atualiza a cada 30s · {offset + 1}–{Math.min(offset + PAGE_SIZE, data.total)} de {data.total}
             </div>
+
+            {/* Modais */}
+            {showInsert && (
+                <RowModal cols={cols} mode="insert" onSave={handleInsert} onClose={() => setShowInsert(false)} />
+            )}
+            {editRow && (
+                <RowModal cols={cols} initial={editRow} mode="edit" onSave={handleEdit} onClose={() => setEditRow(null)} />
+            )}
+            {deleteRow && (
+                <DeleteConfirm onConfirm={handleDelete} onCancel={() => setDeleteRow(null)} busy={deleteBusy} />
+            )}
+            {showBulk && (
+                <BulkModal tableName={tableName} cols={cols} onClose={() => setShowBulk(false)} onSuccess={() => load(offset)} />
+            )}
         </div>
     );
 }
 
+// ─── Table Card ───────────────────────────────────────────────────────────────
 function TableCard({ table, cols }: { table: string; cols: Column[] }) {
     const [open, setOpen] = useState(false);
     const [tab, setTab] = useState<Tab>('schema');
+    const readonly = READONLY_TABLES.has(table);
 
     return (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -205,36 +495,33 @@ function TableCard({ table, cols }: { table: string; cols: Column[] }) {
                     <Table size={16} className="text-indigo-400 shrink-0" />
                     <span className="font-mono font-semibold text-slate-800 text-sm">{table}</span>
                     <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{cols.length} cols</span>
+                    {readonly && <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-semibold">só-leitura</span>}
                 </div>
                 {open ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
             </button>
 
             {open && (
                 <div className="border-t border-slate-100">
-                    {/* Tabs */}
                     <div className="flex border-b border-slate-100 bg-slate-50">
-                        <button
-                            onClick={() => setTab('schema')}
-                            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-colors border-b-2 ${tab === 'schema' ? 'border-indigo-500 text-indigo-600 bg-white' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                        >
-                            <LayoutList size={12} /> Schema
-                        </button>
-                        <button
-                            onClick={() => setTab('data')}
-                            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-colors border-b-2 ${tab === 'data' ? 'border-indigo-500 text-indigo-600 bg-white' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                        >
-                            <Rows size={12} /> Dados
-                        </button>
+                        {(['schema', 'data'] as Tab[]).map(t => (
+                            <button
+                                key={t}
+                                onClick={() => setTab(t)}
+                                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold transition-colors border-b-2 ${tab === t ? 'border-indigo-500 text-indigo-600 bg-white' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                            >
+                                {t === 'schema' ? <><LayoutList size={12} /> Schema</> : <><Rows size={12} /> Dados</>}
+                            </button>
+                        ))}
                     </div>
-
                     {tab === 'schema' && <SchemaView cols={cols} />}
-                    {tab === 'data' && <DataView tableName={table} />}
+                    {tab === 'data' && <DataView tableName={table} cols={cols} />}
                 </div>
             )}
         </div>
     );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export function MySQLExplorerPage() {
     const [schema, setSchema] = useState<Schema>({});
     const [loading, setLoading] = useState(true);
@@ -242,15 +529,10 @@ export function MySQLExplorerPage() {
     const [search, setSearch] = useState('');
 
     const load = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            setSchema(await apiFetch('/schema/tables'));
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setLoading(false);
-        }
+        setLoading(true); setError(null);
+        try { setSchema(await apiFetch('/schema/tables')); }
+        catch (e: any) { setError(e.message); }
+        finally { setLoading(false); }
     };
 
     useEffect(() => { load(); }, []);
@@ -269,14 +551,11 @@ export function MySQLExplorerPage() {
                         <Database size={22} className="text-indigo-500" /> MySQL Explorer
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        Schema + dados em tempo real · banco <span className="font-mono bg-slate-100 px-1 rounded">mercadodovale</span> · VPS Hostinger
+                        Schema + dados em tempo real · <span className="font-mono bg-slate-100 px-1 rounded">mercadodovale</span> · VPS Hostinger
                     </p>
                 </div>
-                <button
-                    onClick={load}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                >
+                <button onClick={load} disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                     <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
                 </button>
             </div>
@@ -284,13 +563,9 @@ export function MySQLExplorerPage() {
             {/* Search */}
             <div className="relative">
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                    type="text"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
+                <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Buscar tabela ou coluna..."
-                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
-                />
+                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white" />
             </div>
 
             {/* Stats */}
@@ -300,7 +575,7 @@ export function MySQLExplorerPage() {
                         { label: 'Tabelas', value: Object.keys(schema).length, color: 'bg-indigo-50 text-indigo-700' },
                         { label: 'Colunas totais', value: Object.values(schema).reduce((s, c) => s + c.length, 0), color: 'bg-blue-50 text-blue-700' },
                         { label: 'Exibidas', value: tables.length, color: 'bg-emerald-50 text-emerald-700' },
-                        { label: 'API', value: 'Online', color: 'bg-green-50 text-green-700' },
+                        { label: 'Só-leitura', value: [...Object.keys(schema)].filter(t => READONLY_TABLES.has(t)).length, color: 'bg-orange-50 text-orange-700' },
                     ].map(s => (
                         <div key={s.label} className={`${s.color} rounded-xl px-4 py-3`}>
                             <p className="text-xs font-medium opacity-70">{s.label}</p>
@@ -312,39 +587,48 @@ export function MySQLExplorerPage() {
 
             {/* Legenda */}
             {!loading && !error && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 space-y-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-3">
                     <p className="font-semibold text-slate-700 text-sm">Legenda</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
-                            <p className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] mb-2">Tipos de chave</p>
-                            <div className="space-y-1.5">
-                                {[
-                                    ['PK', 'amber', 'Primary Key — identificador único da linha. Não pode repetir nem ser nulo.'],
-                                    ['FK', 'blue', 'Foreign Key (índice) — referência a outra tabela ou campo indexado para buscas rápidas.'],
-                                    ['UQ', 'green', 'Unique — valor não pode repetir, mas pode ser nulo.'],
-                                ].map(([badge, color, desc]) => (
-                                    <div key={badge} className="flex items-start gap-2">
-                                        <span className={`px-1.5 py-0.5 bg-${color}-100 text-${color}-700 rounded font-mono shrink-0 font-bold`}>{badge}</span>
-                                        <span><strong>{badge === 'PK' ? 'Primary Key' : badge === 'FK' ? 'Foreign Key' : 'Unique'}</strong> — {desc.split('—')[1]?.trim()}</span>
+                            <p className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] mb-2">Chaves</p>
+                            <div className="space-y-1.5 text-slate-600">
+                                {([['PK', 'amber', 'Primary Key — ID único da linha'],
+                                   ['FK', 'blue', 'Foreign Key / campo indexado'],
+                                   ['UQ', 'green', 'Unique — valor não pode repetir']] as const).map(([b, c, d]) => (
+                                    <div key={b} className="flex items-center gap-2">
+                                        <span className={`px-1.5 py-0.5 bg-${c}-100 text-${c}-700 rounded font-mono font-bold shrink-0`}>{b}</span>
+                                        <span>{d}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
                         <div>
-                            <p className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] mb-2">Tipos de dados comuns</p>
-                            <div className="space-y-1.5">
+                            <p className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] mb-2">Tipos comuns</p>
+                            <div className="space-y-1.5 text-slate-600">
+                                {[['varchar(N)', 'Texto curto'], ['tinyint(1)', 'Booleano (0/1)'],
+                                  ['decimal(M,D)', 'Preços'], ['char(36)', 'UUID'],
+                                  ['timestamp', 'Data e hora'], ['json', 'Objeto JSON']].map(([t, d]) => (
+                                    <div key={t} className="flex gap-2">
+                                        <span className="font-mono text-indigo-600 shrink-0">{t}</span>
+                                        <span className="text-slate-500">{d}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <p className="font-semibold text-slate-500 uppercase tracking-wider text-[10px] mb-2">Ações disponíveis</p>
+                            <div className="space-y-1.5 text-slate-600">
                                 {[
-                                    ['varchar(N)', 'Texto curto de até N caracteres'],
-                                    ['text / longtext', 'Texto longo (descrições, HTML, JSON)'],
-                                    ['int / tinyint(1)', 'Número inteiro. tinyint(1) = booleano (0/1)'],
-                                    ['decimal(M,D)', 'Número com casas decimais (preços)'],
-                                    ['char(36)', 'UUID — identificador único global'],
-                                    ['timestamp', 'Data e hora (created_at, updated_at)'],
-                                    ['json', 'Objeto JSON armazenado como coluna'],
-                                ].map(([tipo, desc]) => (
-                                    <div key={tipo} className="flex gap-2">
-                                        <span className="font-mono text-indigo-600 shrink-0 whitespace-nowrap">{tipo}</span>
-                                        <span className="text-slate-500">{desc}</span>
+                                    [<Plus size={11} />, 'Nova linha — inserir registro'],
+                                    [<Upload size={11} />, 'Importar — bulk insert via JSON'],
+                                    [<Download size={11} />, 'Backup — exportar tabela como .json'],
+                                    [<Pencil size={11} />, 'Editar linha (hover na linha)'],
+                                    [<Trash2 size={11} />, 'Excluir linha (hover na linha)'],
+                                ].map(([icon, desc], i) => (
+                                    <div key={i} className="flex items-center gap-2">
+                                        <span className="text-indigo-500 shrink-0">{icon as React.ReactNode}</span>
+                                        <span>{desc as string}</span>
                                     </div>
                                 ))}
                             </div>
@@ -353,26 +637,12 @@ export function MySQLExplorerPage() {
                 </div>
             )}
 
-            {/* Error */}
-            {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
-                    Erro ao carregar schema: <span className="font-mono">{error}</span>
-                </div>
-            )}
+            {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">Erro: <span className="font-mono">{error}</span></div>}
+            {loading && <div className="space-y-2">{[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />)}</div>}
 
-            {/* Skeleton */}
-            {loading && (
-                <div className="space-y-2">
-                    {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />)}
-                </div>
-            )}
-
-            {/* Tables */}
             {!loading && !error && (
                 <div className="space-y-2">
-                    {tables.map(table => (
-                        <TableCard key={table} table={table} cols={schema[table]} />
-                    ))}
+                    {tables.map(t => <TableCard key={t} table={t} cols={schema[t]} />)}
                 </div>
             )}
         </div>
