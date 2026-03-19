@@ -80,22 +80,25 @@ export function PaymentFeesPage() {
             }
 
             const currentFees: PaymentFee[] = await paymentFeesService.list();
-            let updated = 0;
-
-            for (const option of installmentOptions) {
-                const match = currentFees.find(
-                    f => (f.method === 'credit' || f.method === null) && f.installments === option.installments && f.channel === 'online_mp'
-                );
-                if (match) {
-                    await paymentFeesService.update(match.id, {
-                        operator_fee_pct: option.installment_rate,
-                        applied_fee_pct: option.installment_rate,
-                    });
-                    updated++;
+            let updatedCount = 0;
+            const updatedFees = currentFees.map(f => {
+                if ((f.method === 'credit' || f.method === null) && f.channel === 'online_mp') {
+                    const match = installmentOptions.find(opt => opt.installments === f.installments);
+                    if (match) {
+                        updatedCount++;
+                        return { ...f, operator_fee_pct: match.installment_rate, applied_fee_pct: match.installment_rate };
+                    }
                 }
-            }
+                return f;
+            });
 
-            toast.success(`${updated} taxas MP sincronizadas!`);
+            if (updatedCount > 0) {
+                await paymentFeesService.replaceAll(updatedFees);
+                toast.success(`${updatedCount} taxas MP sincronizadas com sucesso!`);
+            } else {
+                toast.info('As taxas já estão atualizadas ou não há canal "online_mp" configurado para sincronizar.');
+            }
+            
             await loadFees();
         } catch (error: any) {
             toast.error('Erro ao sincronizar: ' + (error.message || 'Tente novamente'));
@@ -118,13 +121,23 @@ export function PaymentFeesPage() {
     async function handleSave() {
         setSaving(true);
         try {
-            for (const [id, fee] of editedFees) {
-                await paymentFeesService.update(id, {
-                    operator_fee_pct: fee.operator_fee_pct,
-                    applied_fee_pct: fee.applied_fee_pct,
-                });
+            const allFees = await paymentFeesService.list();
+            let changedCount = 0;
+            
+            const updatedFees = allFees.map(f => {
+                const updated = editedFees.get(f.id);
+                if (updated) {
+                    changedCount++;
+                    return { ...f, operator_fee_pct: updated.operator_fee_pct, applied_fee_pct: updated.applied_fee_pct };
+                }
+                return f;
+            });
+            
+            if (changedCount > 0) {
+                await paymentFeesService.replaceAll(updatedFees);
             }
-            toast.success('Taxas atualizadas com sucesso!');
+            
+            toast.success('Taxas atualizadas com sucesso e salvas no sistema!');
             setEditedFees(new Map());
             await loadFees();
         } catch (error) {
@@ -135,11 +148,15 @@ export function PaymentFeesPage() {
     }
 
     function updateFee(fee: PaymentFee, field: 'operator_fee_pct' | 'applied_fee_pct', value: number) {
-        const updated = { ...fee, [field]: value };
+        // Pega a taxa atual já editada (ou a original se ainda não mexeu)
+        const currentFee = editedFees.get(fee.id) || fee;
+        const updated = { ...currentFee, [field]: value };
+        
         if (field === 'applied_fee_pct' && updated.applied_fee_pct < (updated.operator_fee_pct ?? 0)) {
             toast.error('Taxa aplicada deve ser maior ou igual à taxa operadora');
             return;
         }
+        
         const newEdited = new Map(editedFees);
         newEdited.set(fee.id, updated);
         setEditedFees(newEdited);
