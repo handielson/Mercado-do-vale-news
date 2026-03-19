@@ -485,16 +485,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             // 0. Buscar modelo selecionado para pegar template_values
             let mergedData = { ...data };
 
-            // CRITICAL FIX: Manually add warranty fields from watch() since they're not in data
+            // CRITICAL FIX: Manually add un-registered fields from watch() since they're not in data
             const currentWarrantyType = watch('warranty_type');
             const currentWarrantyTemplateId = watch('warranty_template_id');
+            const currentVideoUrl = watch('video_url');
 
-            console.log('🔧 [ProductForm] MANUAL WARRANTY INJECTION:');
+            console.log('🔧 [ProductForm] MANUAL INJECTIONS:');
             console.log('  - watch(warranty_type):', currentWarrantyType);
             console.log('  - watch(warranty_template_id):', currentWarrantyTemplateId);
+            console.log('  - watch(video_url):', currentVideoUrl);
 
             mergedData.warranty_type = currentWarrantyType || 'brand';
             mergedData.warranty_template_id = currentWarrantyTemplateId || null;
+            mergedData.video_url = currentVideoUrl || null;
 
             if (data.model) {
                 try {
