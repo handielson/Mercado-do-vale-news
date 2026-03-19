@@ -16,6 +16,7 @@ import { ModernProductCard } from '@/components/catalog/ModernProductCard';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { getCashbackSettings } from '@/services/cashbackService';
 import type { CashbackSettings } from '@/types/cashback';
+import { paymentFeesService, PaymentFee } from '@/services/payment-fees';
 import { companySettingsService } from '@/services/companySettingsService';
 import type { CompanySettings } from '@/types/companySettings';
 import { toTitleCase } from '@/utils/stringFormatters';
@@ -42,6 +43,7 @@ export const PublicProductPage: React.FC = () => {
     const [shippingResult, setShippingResult] = useState<{ name: string, price: string, days: string }[] | null>(null);
     const [cashbackSettings, setCashbackSettings] = useState<CashbackSettings | null>(null);
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+    const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
     const [autoVideoUrl, setAutoVideoUrl] = useState<string | null>(null);
     // Config da categoria: define quais campos existem no template
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
@@ -69,6 +71,7 @@ export const PublicProductPage: React.FC = () => {
         window.scrollTo(0, 0);
         getCashbackSettings().then(setCashbackSettings).catch(console.error);
         companySettingsService.get().then(setCompanySettings).catch(console.error);
+        paymentFeesService.list().then(setPaymentFees).catch(console.error);
         if (!slug) {
             navigate('/');
             return;
@@ -393,6 +396,10 @@ export const PublicProductPage: React.FC = () => {
         ? Math.floor(discountedPrice * (cashbackSettings.coins_per_real || 0))
         : 0;
 
+    const presencial12x = paymentFees.find(f => f.channel === 'presencial' && f.installments === 12);
+    const taxaAplicada12x = presencial12x?.applied_fee_pct || 0;
+    const value12x = (discountedPrice * (1 + taxaAplicada12x / 100)) / 12;
+
     const title = product.meta_title || `${toTitleCase(product.name)} | Mercado do Vale`;
     const description = product.meta_description || product.description || `Compre ${product.name} no Mercado do Vale.`;
 
@@ -461,17 +468,19 @@ export const PublicProductPage: React.FC = () => {
     const getShareText = () => {
         const variantNames = uniqueVariants.map(v => (v as any)._displayLabel).join(', ');
         
-        let text = `*${toTitleCase(product.name)}*\n\n`;
+        let text = `*${toTitleCase(product.name)}*\n`;
         if (variantNames) {
-            text += `✨ *Variações Disponíveis:* ${variantNames}\n`;
+            text += `Disponível: ${variantNames}\n`;
         }
+        text += `R$ ${discountedPrice.toFixed(2).replace('.', ',')}, em até 12x de: R$ ${value12x.toFixed(2).replace('.', ',')}\n\n`;
+
         if (estimatedCoins > 0) {
-            text += `🪙 *Ganhe ${estimatedCoins} Moedas do Vale nessa compra!*\n`;
+            text += `Ganhe ${estimatedCoins} Moedas do Vale nessa compra!\n\n`;
         }
-        text += `\n💰 *Valor à vista:* R$ ${discountedPrice.toFixed(2).replace('.', ',')}\n`;
-        text += `💳 *Ou no cartão em até 12x de:* R$ ${(discountedPrice / 12).toFixed(2).replace('.', ',')} sem juros\n\n`;
-        text += `🔗 *Link do Produto:* ${window.location.href}\n\n`;
-        text += `Visite o nosso site para ver essa e muitas outras opções de produtos!`;
+
+        text += `${window.location.href}\n\n`;
+        text += `Visite o nosso site para ver essa e muitas outras opções de produtos!\n`;
+        text += `_www.mercadodovale.com.br_`;
         return text;
     };
 
@@ -744,7 +753,7 @@ export const PublicProductPage: React.FC = () => {
                                         </div>
                                         {customerType !== 'wholesale' && (
                                             <p className="text-sm font-medium text-green-600 mt-1">
-                                                ou em até <span className="font-bold">12x de R$ {(discountedPrice / 12).toFixed(2).replace('.', ',')}</span> sem juros
+                                                ou em até <span className="font-bold">12x de R$ {value12x.toFixed(2).replace('.', ',')}</span> sem juros
                                             </p>
                                         )}
                                         {customerType !== 'wholesale' && (companySettings?.pix_discount_percentage || 0) > 0 && (
@@ -766,7 +775,7 @@ export const PublicProductPage: React.FC = () => {
                                         </div>
                                         {customerType !== 'wholesale' && (
                                             <p className="text-sm font-medium text-green-600 mt-1">
-                                                ou em até <span className="font-bold">12x de R$ {(discountedPrice / 12).toFixed(2).replace('.', ',')}</span> sem juros
+                                                ou em até <span className="font-bold">12x de R$ {value12x.toFixed(2).replace('.', ',')}</span> sem juros
                                             </p>
                                         )}
                                         {customerType !== 'wholesale' && (companySettings?.pix_discount_percentage || 0) > 0 && (
