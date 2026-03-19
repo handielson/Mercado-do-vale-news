@@ -631,7 +631,11 @@ export const PublicProductPage: React.FC = () => {
                                         // 2. Juntamos o produto atual com os irmãos para iterar de uma só vez
                                         const allVariants = [product as CatalogProduct, ...siblings];
 
-                                        allVariants.forEach(item => {
+                                        const availableVariants = allVariants.filter(
+                                            item => !item.track_inventory || (item.stock_quantity && item.stock_quantity > 0)
+                                        );
+
+                                        availableVariants.forEach(item => {
                                             const labelPieces = [];
                                             if (item.specs?.color) labelPieces.push(item.specs.color);
                                             if (item.specs?.storage) labelPieces.push(item.specs.storage);
