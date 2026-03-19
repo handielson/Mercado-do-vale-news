@@ -157,13 +157,17 @@ export const useProducts = () => {
     const applyFilters = useCallback(() => {
         let filtered = [...products];
 
-        // Search filter (name or SKU)
+        // Search filter (name, SKU, EAN, Bling ID)
         if (filters.search.trim() !== '') {
             const searchLower = filters.search.toLowerCase();
-            filtered = filtered.filter(product =>
-                product.name.toLowerCase().includes(searchLower) ||
-                product.sku.toLowerCase().includes(searchLower)
-            );
+            filtered = filtered.filter(product => {
+                const nameMatch = (product.name || '').toLowerCase().includes(searchLower);
+                const skuMatch = (product.sku || '').toLowerCase().includes(searchLower);
+                const eanMatch = (product.eans || []).some(ean => ean?.toLowerCase().includes(searchLower));
+                const blingMatch = product.bling_id?.toString().includes(searchLower);
+                
+                return nameMatch || skuMatch || eanMatch || blingMatch;
+            });
         }
 
         // Status filter
