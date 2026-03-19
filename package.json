@@ -37,6 +37,7 @@
     "react-router-dom": "^6.22.0",
     "react-to-print": "^3.3.0",
     "sonner": "^2.0.7",
+    "ssh2": "^1.17.0",
     "tailwind-merge": "^2.2.1",
     "xlsx": "^0.18.5",
     "zod": "^3.25.76",

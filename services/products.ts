@@ -481,6 +481,7 @@ function transformFromDB(row: any): Product {
         promo_start: row.promo_start || undefined,
         promo_end: row.promo_end || undefined,
         slug: row.slug || undefined,
+        exclude_from_seo: Boolean(row.exclude_from_seo),
         meta_title: row.meta_title || undefined,
         meta_description: row.meta_description || undefined,
         created: row.created_at,

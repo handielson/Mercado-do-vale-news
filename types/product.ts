@@ -92,6 +92,7 @@ export interface Product {
     warranty_template_id?: string; // Warranty template ID (only used when warranty_type = 'custom')
 
     // SEO Fields (AI-Generated)
+    exclude_from_seo?: boolean;    // Se true, renderiza a meta tag noindex
     description?: string;          // Detailed product description (HTML/Rich Text) for SEO
     slug?: string;                 // URL-friendly slug (e.g., iphone-15-pro-max-256gb-preto)
     meta_title?: string;           // SEO meta title (max 60 characters)
@@ -155,6 +156,7 @@ export interface ProductInput {
     warranty_type?: WarrantyType;
     warranty_template_id?: string;
     // SEO Fields (AI-Generated)
+    exclude_from_seo?: boolean;
     description?: string;
     slug?: string;
     meta_title?: string;

@@ -64,6 +64,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           {/* MARKETING & LOJA */}
           <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-transparent">Marketing & Loja</div>
           <NavItem to="/admin/settings/seo-analyzer" icon={<Search size={18} />} label="Análise de SEO" active={location.pathname.startsWith('/admin/settings/seo-analyzer')} />
+          <NavItem to="/admin/settings/seo-blacklist" icon={<Globe size={18} />} label="Lista Negra SEO" active={location.pathname.startsWith('/admin/settings/seo-blacklist')} />
           <NavItem to="/admin/promotions" icon={<Ticket size={18} />} label="Promoções" active={location.pathname.startsWith('/admin/promotions')} />
           <NavItem to="/admin/catalog-config" icon={<Settings size={18} />} label="Config. Catálogo" active={location.pathname.startsWith('/admin/catalog-config')} />
           <NavItem to="/admin/settings/banners" icon={<Image size={18} />} label="Banners" active={location.pathname.startsWith('/admin/settings/banners')} />

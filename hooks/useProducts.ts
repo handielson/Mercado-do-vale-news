@@ -42,6 +42,7 @@ function mapVpsProduct(row: any): Product {
         promo_end: row.promo_end || undefined,
         slug: row.slug || undefined,
         origin: row.origin || undefined,
+        exclude_from_seo: Boolean(row.exclude_from_seo),
         created: row.created_at,
         updated: row.updated_at,
     };

@@ -111,6 +111,17 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
+                // Check VPS for SEO Blacklist strictly (avoids needing Supabase column)
+                try {
+                    const { vpsApiService } = await import('@/services/vpsApiService');
+                    const vpsData = await vpsApiService.getProductById(data.id);
+                    if (vpsData) {
+                        data.exclude_from_seo = Boolean(vpsData.exclude_from_seo);
+                    }
+                } catch (v_err) {
+                    console.warn("Failed to check VPS SEO flag:", v_err);
+                }
+
                 let modelData: Record<string, any> = {};
                 let modelRootDescription = '';
                 let modelBrandName = '';
@@ -534,6 +545,9 @@ export const PublicProductPage: React.FC = () => {
             <Helmet>
                 <title>{title}</title>
                 <meta name="description" content={description} />
+                {product.exclude_from_seo && (
+                    <meta name="robots" content="noindex, nofollow" />
+                )}
                 <script type="application/ld+json">
                     {JSON.stringify({
                         "@context": "https://schema.org/",

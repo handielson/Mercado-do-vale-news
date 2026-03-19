@@ -84,6 +84,7 @@ import FinancialPage from '../pages/admin/financial/FinancialPage';
 import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
+import SEOBlacklistPage from '../pages/admin/settings/SEOBlacklistPage';
 import { feedbackService } from '../services/feedbackService';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
 import { ReviewsPage } from '../pages/admin/catalog/ReviewsPage';
@@ -800,6 +801,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><SEODashboardPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/seo-blacklist",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SEOBlacklistPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
