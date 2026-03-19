@@ -34,7 +34,7 @@ fastify.register(require('@fastify/cors'), {
     if (!origin || CORS_ORIGINS.some(o => origin.startsWith(o))) return cb(null, true);
     cb(new Error('Not allowed'), false);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 });
 
 // Serve static images from /var/www/mdv-api/uploads/
