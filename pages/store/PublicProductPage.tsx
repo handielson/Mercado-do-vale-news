@@ -628,52 +628,49 @@ export const PublicProductPage: React.FC = () => {
                                         const uniqueLabels = new Set<string>();
                                         const uniqueSiblings: CatalogProduct[] = [];
 
-                                        // 2. Primeiro garantimos que o produto atual entre na lista
-                                        const currentLabelPieces = [];
-                                        if (product.specs?.color) currentLabelPieces.push(product.specs.color);
-                                        if (product.specs?.storage) currentLabelPieces.push(product.specs.storage);
-                                        if (product.specs?.ram) currentLabelPieces.push(`RAM ${product.specs.ram}`);
-                                        let currentLbl = currentLabelPieces.join(' - ');
-                                        if (!currentLbl) currentLbl = product.name.replace(product.model || '', '').trim() || 'Padrão';
-                                        if (currentLbl.startsWith('-')) currentLbl = currentLbl.substring(1).trim();
+                                        // 2. Juntamos o produto atual com os irmãos para iterar de uma só vez
+                                        const allVariants = [product as CatalogProduct, ...siblings];
 
-                                        uniqueLabels.add(currentLbl);
-                                        uniqueSiblings.push(product as CatalogProduct);
-
-                                        // 3. Adicionamos os irmãos apenas se a label for "virgem" (não vista ainda)
-                                        siblings.forEach(sib => {
-                                            if (sib.id === product.id) return; // já adicionado
-
+                                        allVariants.forEach(item => {
                                             const labelPieces = [];
-                                            if (sib.specs?.color) labelPieces.push(sib.specs.color);
-                                            if (sib.specs?.storage) labelPieces.push(sib.specs.storage);
-                                            if (sib.specs?.ram) labelPieces.push(`RAM ${sib.specs.ram}`);
+                                            if (item.specs?.color) labelPieces.push(item.specs.color);
+                                            if (item.specs?.storage) labelPieces.push(item.specs.storage);
+                                            if (item.specs?.ram) labelPieces.push(`RAM ${item.specs.ram}`);
 
-                                            let sibLbl = labelPieces.join(' - ');
-                                            if (!sibLbl) sibLbl = sib.name.replace(product.model || '', '').trim() || 'Padrão';
-                                            if (sibLbl.startsWith('-')) sibLbl = sibLbl.substring(1).trim();
+                                            let itemLbl = labelPieces.join(' - ');
+                                            if (!itemLbl) {
+                                                // Se não tiver specs extrai o final do nome se separado por hífen, senão "Padrão"
+                                                if (item.name.includes(' - ')) {
+                                                    itemLbl = item.name.split(' - ').pop()?.trim() || 'Padrão';
+                                                } else {
+                                                    itemLbl = 'Padrão';
+                                                }
+                                            }
+                                            if (itemLbl.startsWith('-')) itemLbl = itemLbl.substring(1).trim();
 
-                                            if (!uniqueLabels.has(sibLbl)) {
-                                                uniqueLabels.add(sibLbl);
-                                                // Salva label calculada num field transiente pra reusar no render
-                                                (sib as any)._displayLabel = sibLbl;
-                                                uniqueSiblings.push(sib);
+                                            if (!uniqueLabels.has(itemLbl)) {
+                                                uniqueLabels.add(itemLbl);
+                                                (item as any)._displayLabel = itemLbl;
+                                                uniqueSiblings.push(item);
                                             }
                                         });
 
-                                        // Se depois de limpar as duplicatas sobrar só 1 (são todos clones pro Bling) não renderiza grupo
+                                        // 3. Organizar as variações em ordem alfabética
+                                        uniqueSiblings.sort((a, b) => ((a as any)._displayLabel || '').localeCompare((b as any)._displayLabel || ''));
+
+                                        // Se depois de limpar as duplicatas sobrar só 1, não renderiza grupo
                                         if (uniqueSiblings.length <= 1) return null;
 
                                         return uniqueSiblings.map((sib) => {
                                             const isCurrent = sib.id === product.id;
-                                            const variantLabel = (sib as any)._displayLabel || currentLbl;
+                                            const variantLabel = (sib as any)._displayLabel;
 
                                             return (
                                                 <button
                                                     key={sib.id}
                                                     onClick={() => handleVariantChange(sib)}
-                                                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${isCurrent
-                                                        ? 'border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-600'
+                                                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-300 ${isCurrent
+                                                        ? 'border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-600 scale-[1.03] shadow-sm transform'
                                                         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                                                         }`}
                                                 >
