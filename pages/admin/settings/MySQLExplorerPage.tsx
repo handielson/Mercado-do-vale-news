@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import {
     Database, Table, ChevronDown, ChevronRight, RefreshCw, Search,
     Rows, LayoutList, Plus, Trash2, Pencil, Upload, Download, X, Save, AlertTriangle
@@ -107,8 +108,8 @@ function RowModal({ cols, initial, onSave, onClose, mode }: {
         finally { setSaving(false); }
     };
 
-    // Detectar colunas editáveis (edit: skip PK)
-    const editableCols = mode === 'edit' ? cols.filter(c => c.field !== pkCol) : cols;
+    // Ocultar PK em insert (auto-gerado) e edit (não editável)
+    const editableCols = cols.filter(c => c.field !== pkCol);
 
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -120,9 +121,15 @@ function RowModal({ cols, initial, onSave, onClose, mode }: {
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
                 </div>
                 <div className="overflow-y-auto px-6 py-4 space-y-3 flex-1">
-                    {mode === 'edit' && (
+                    {mode === 'edit' && initial?.[pkCol] !== undefined && (
                         <div className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
-                            <span className="font-mono font-semibold">{pkCol}</span>: {initial?.[pkCol]} (PK — não editável)
+                            <span className="font-mono font-semibold">{pkCol}</span>: {initial[pkCol]}
+                            <span className="ml-2 text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-semibold">PK — gerado automaticamente</span>
+                        </div>
+                    )}
+                    {mode === 'insert' && (
+                        <div className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+                            <span className="font-mono font-semibold">{pkCol}</span>: <span className="italic">gerado automaticamente pelo servidor</span>
                         </div>
                     )}
                     {editableCols.map(col => (
@@ -157,28 +164,53 @@ function RowModal({ cols, initial, onSave, onClose, mode }: {
     );
 }
 
-// ─── Bulk Insert Modal ────────────────────────────────────────────────────────
+// ─── Bulk Insert Modal (XLS) ──────────────────────────────────────────────────
 function BulkModal({ tableName, cols, onClose, onSuccess }: {
     tableName: string; cols: Column[];
     onClose: () => void; onSuccess: () => void;
 }) {
-    const [json, setJson] = useState('');
+    const [rows, setRows] = useState<Record<string, any>[] | null>(null);
+    const [fileName, setFileName] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<string | null>(null);
+    const fileRef = useRef<HTMLInputElement>(null);
+    const pkCol = getPkCol(cols);
 
-    const example = JSON.stringify(
-        [Object.fromEntries(cols.slice(0, 4).map(c => [c.field, c.type.startsWith('int') ? 0 : 'valor']))],
-        null, 2
-    );
+    // Colunas do template = todas exceto PK (auto-gerado)
+    const templateCols = cols.filter(c => c.field !== pkCol);
+
+    const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setFileName(file.name);
+        setError(null); setResult(null);
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try {
+                const wb = XLSX.read(ev.target!.result, { type: 'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const data = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: null });
+                if (!data.length) throw new Error('Planilha vazia ou sem dados');
+                setRows(data);
+            } catch (err: any) { setError(err.message); }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    const downloadTemplate = () => {
+        const ws = XLSX.utils.aoa_to_sheet([templateCols.map(c => c.field)]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, tableName);
+        XLSX.writeFile(wb, `template_${tableName}.xlsx`);
+    };
 
     const handleImport = async () => {
+        if (!rows) return;
         setSaving(true); setError(null); setResult(null);
         try {
-            const data = JSON.parse(json);
-            if (!Array.isArray(data)) throw new Error('JSON deve ser um array de objetos');
             const res = await apiFetch(`/table-data/${tableName}/bulk`, {
-                method: 'POST', body: JSON.stringify(data),
+                method: 'POST', body: JSON.stringify(rows),
             });
             setResult(`✅ ${res.inserted} registros inseridos com sucesso!`);
             onSuccess();
@@ -188,24 +220,36 @@ function BulkModal({ tableName, cols, onClose, onSuccess }: {
 
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
                 <div className="flex items-center justify-between px-6 py-4 border-b">
-                    <h3 className="font-bold text-slate-800">📥 Importar em massa — <span className="font-mono text-indigo-600">{tableName}</span></h3>
+                    <h3 className="font-bold text-slate-800">📥 Importar planilha — <span className="font-mono text-indigo-600">{tableName}</span></h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
                 </div>
-                <div className="overflow-y-auto px-6 py-4 space-y-3 flex-1">
-                    <p className="text-xs text-slate-500">Cole um array JSON de objetos. Cada objeto representa uma linha a inserir.</p>
-                    <details className="text-xs">
-                        <summary className="cursor-pointer text-indigo-600 hover:underline">Ver exemplo de formato</summary>
-                        <pre className="mt-2 bg-slate-50 rounded-lg p-3 text-slate-600 overflow-x-auto">{example}</pre>
-                    </details>
-                    <textarea
-                        value={json}
-                        onChange={e => setJson(e.target.value)}
-                        placeholder={`[\n  { "campo1": "valor1", "campo2": "valor2" },\n  ...\n]`}
-                        rows={12}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
-                    />
+                <div className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
+                    <div className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3 space-y-1">
+                        <p>• O arquivo deve ser <strong>.xlsx</strong> ou <strong>.xls</strong></p>
+                        <p>• A primeira linha deve conter os nomes das colunas</p>
+                        <p>• O campo <span className="font-mono text-amber-600">{pkCol}</span> (ID) não precisa constar — será gerado automaticamente</p>
+                    </div>
+
+                    <button onClick={downloadTemplate}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-indigo-300 text-indigo-600 rounded-xl text-sm hover:bg-indigo-50 transition-colors">
+                        <Download size={14} /> Baixar template vazio (.xlsx)
+                    </button>
+
+                    <div>
+                        <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
+                        <button onClick={() => fileRef.current?.click()}
+                            className="w-full flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm text-slate-700 transition-colors">
+                            <Upload size={14} /> {fileName || 'Selecionar arquivo .xlsx'}
+                        </button>
+                    </div>
+
+                    {rows && (
+                        <div className="text-xs bg-green-50 text-green-700 rounded-lg px-3 py-2">
+                            ✅ <strong>{rows.length}</strong> linhas lidas. Colunas: {Object.keys(rows[0]).join(', ')}
+                        </div>
+                    )}
                     {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
                     {result && <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{result}</p>}
                 </div>
@@ -213,11 +257,11 @@ function BulkModal({ tableName, cols, onClose, onSuccess }: {
                     <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Fechar</button>
                     <button
                         onClick={handleImport}
-                        disabled={saving || !json.trim()}
+                        disabled={saving || !rows}
                         className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                     >
                         {saving ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
-                        {saving ? 'Importando...' : 'Importar'}
+                        {saving ? 'Importando...' : `Importar ${rows ? rows.length + ' linhas' : ''}`}
                     </button>
                 </div>
             </div>
@@ -315,13 +359,12 @@ function DataView({ tableName, cols }: { tableName: string; cols: Column[] }) {
 
     const handleExport = async () => {
         try {
-            const rows = await apiFetch(`/table-data/${tableName}/export`);
-            const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `${tableName}_backup.json`; a.click();
-            URL.revokeObjectURL(url);
-            showToast(`✅ Exportado: ${tableName}_backup.json`);
+            const exportedRows = await apiFetch(`/table-data/${tableName}/export`);
+            const ws = XLSX.utils.json_to_sheet(exportedRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, tableName);
+            XLSX.writeFile(wb, `${tableName}_backup.xlsx`);
+            showToast(`✅ Exportado: ${tableName}_backup.xlsx (${exportedRows.length} linhas)`);
         } catch (e: any) { showToast(`❌ ${e.message}`); }
     };
 
