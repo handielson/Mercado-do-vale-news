@@ -26,8 +26,10 @@ export const SEOBlacklistPage: React.FC = () => {
             setLoading(true);
             
             // Busca os dados exclusivamente pela VPS, sem tocar no Supabase
+            // Usa noCache: true para furar o cache da API (Cache-Control: max-age)
             const vpsData = await vpsApiService.getProducts({ 
-                search: debouncedSearch.trim() || undefined
+                search: debouncedSearch.trim() || undefined,
+                noCache: true
             });
 
             if (vpsData) {

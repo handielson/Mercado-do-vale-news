@@ -32,27 +32,32 @@ class VpsApiService {
     this.cache.set(key, { data, timestamp: Date.now() });
   }
 
-  private async fetchSafe<T>(path: string): Promise<T | null> {
-    const cached = this.isCached<T>(path);
-    if (cached !== null) return cached;
+  private async fetchSafe<T>(path: string, noCache = false): Promise<T | null> {
+    if (!noCache) {
+      const cached = this.isCached<T>(path);
+      if (cached !== null) return cached;
+    }
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
       const res = await fetch(`${VPS_BASE_URL}${path}`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
+        cache: noCache ? 'no-store' : 'default',
       });
       clearTimeout(timer);
       if (!res.ok) return null;
       const data = (await res.json()) as T;
-      this.setCache<T>(path, data);
+      if (!noCache) {
+        this.setCache<T>(path, data);
+      }
       return data;
     } catch {
       return null;
     }
   }
 
-  private async writeSafe(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<boolean> {
+  private async writeSafe(method: 'POST' | 'PUT' | 'DELETE' | 'PATCH', path: string, body?: unknown): Promise<boolean> {
     if (!SYNC_KEY) {
       console.warn('[vpsApiService] VITE_VPS_SYNC_KEY não configurado');
       return false;
@@ -83,7 +88,7 @@ class VpsApiService {
     return this.fetchSafe<any[]>('/categories');
   }
 
-  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean }): Promise<any[] | null> {
+  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean }): Promise<any[] | null> {
     const qs = new URLSearchParams();
     if (params?.category) qs.set('category', params.category);
     if (params?.status)   qs.set('status', params.status);
@@ -91,8 +96,9 @@ class VpsApiService {
     if (params?.offset)   qs.set('offset', String(params.offset));
     if (params?.search)   qs.set('search', params.search);
     if (params?.compact)  qs.set('compact', 'true');
+    if (params?.noCache)  qs.set('_t', String(Date.now())); // Also append to URL to bust HTTP caches
     const query = qs.toString() ? `?${qs.toString()}` : '';
-    return this.fetchSafe<any[]>(`/products${query}`);
+    return this.fetchSafe<any[]>(`/products${query}`, params?.noCache);
   }
 
   /** Atualiza o array de imagens de um produto pelo SKU (image bank sync) */
