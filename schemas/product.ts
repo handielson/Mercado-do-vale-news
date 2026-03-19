@@ -61,7 +61,7 @@ export const productSchema = z.object({
 
     // Logistics Fields - Truly optional, allow empty values, with postal limits
     weight_kg: z.union([
-        z.number()
+        z.coerce.number()
             .min(0, 'Peso deve ser maior ou igual a zero')
             .max(30, 'Peso máximo permitido pelos Correios: 30kg'),
         z.nan(),
@@ -74,7 +74,7 @@ export const productSchema = z.object({
 
     dimensions: z.object({
         width_cm: z.union([
-            z.number()
+            z.coerce.number()
                 .min(0, 'Largura deve ser maior ou igual a zero')
                 .max(105, 'Largura máxima permitida pelos Correios: 105cm'),
             z.nan(),
@@ -85,7 +85,7 @@ export const productSchema = z.object({
             return val;
         }),
         height_cm: z.union([
-            z.number()
+            z.coerce.number()
                 .min(0, 'Altura deve ser maior ou igual a zero')
                 .max(105, 'Altura máxima permitida pelos Correios: 105cm'),
             z.nan(),
@@ -96,7 +96,7 @@ export const productSchema = z.object({
             return val;
         }),
         depth_cm: z.union([
-            z.number()
+            z.coerce.number()
                 .min(0, 'Profundidade deve ser maior ou igual a zero')
                 .max(105, 'Profundidade máxima permitida pelos Correios: 105cm'),
             z.nan(),
