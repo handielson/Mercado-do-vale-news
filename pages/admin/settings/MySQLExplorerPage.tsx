@@ -36,6 +36,16 @@ function getPkCol(cols: Column[]): string {
     return cols.find(c => c.key === 'PRI')?.field || 'id';
 }
 
+// Converte snake_case em Nome Legível
+function humanField(field: string): string {
+    return field
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase())
+        .replace(/\bId\b/g, 'ID')
+        .replace(/\bSeo\b/g, 'SEO')
+        .replace(/\bUrl\b/g, 'URL');
+}
+
 // ─── Components ───────────────────────────────────────────────────────────────
 
 function KeyBadge({ k }: { k: string }) {
@@ -98,7 +108,7 @@ function RowModal({ cols, initial, onSave, onClose, mode }: {
         try {
             const payload: Record<string, any> = {};
             cols.forEach(c => {
-                if (mode === 'edit' && c.field === pkCol) return; // não mudar PK
+                if (mode === 'edit' && c.field === pkCol) return;
                 const v = form[c.field];
                 payload[c.field] = v === '' ? null : v;
             });
@@ -135,13 +145,13 @@ function RowModal({ cols, initial, onSave, onClose, mode }: {
                     {editableCols.map(col => (
                         <div key={col.field}>
                             <label className="block text-xs font-semibold text-slate-600 mb-1">
-                                {col.field} <span className="font-normal text-slate-400 font-mono">({col.type})</span>
+                                {humanField(col.field)} <span className="font-normal text-slate-400 font-mono">({col.type})</span>
                                 {col.null === 'NO' && <span className="text-red-400 ml-1">*</span>}
                             </label>
                             <input
                                 value={form[col.field] ?? ''}
                                 onChange={e => setForm(f => ({ ...f, [col.field]: e.target.value }))}
-                                placeholder={col.default ? `default: ${col.default}` : col.null === 'YES' ? 'null' : ''}
+                                placeholder={col.default ? `padrão: ${col.default}` : col.null === 'YES' ? 'opcional' : ''}
                                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300"
                             />
                         </div>
@@ -164,36 +174,96 @@ function RowModal({ cols, initial, onSave, onClose, mode }: {
     );
 }
 
-// ─── Bulk Insert Modal (XLS) ──────────────────────────────────────────────────
+// ─── Bulk Import types ────────────────────────────────────────────────────────
+type RowStatus = 'new' | 'update' | 'error';
+interface RowResult {
+    index: number;
+    row: Record<string, any>;
+    status: RowStatus;
+    errors: string[];
+    pkValue?: string;
+}
+
+// ─── Bulk Insert Modal (XLS) com Preview Inteligente ─────────────────────────
 function BulkModal({ tableName, cols, onClose, onSuccess }: {
     tableName: string; cols: Column[];
     onClose: () => void; onSuccess: () => void;
 }) {
-    const [rows, setRows] = useState<Record<string, any>[] | null>(null);
+    const [preview, setPreview] = useState<RowResult[] | null>(null);
     const [fileName, setFileName] = useState('');
+    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [result, setResult] = useState<string | null>(null);
+    const [globalError, setGlobalError] = useState<string | null>(null);
+    const [result, setResult] = useState<{ inserted: number; errors: number } | null>(null);
+    const [activeFilter, setActiveFilter] = useState<RowStatus | 'all'>('all');
     const fileRef = useRef<HTMLInputElement>(null);
     const pkCol = getPkCol(cols);
-
-    // Colunas do template = todas exceto PK (auto-gerado)
+    const requiredCols = cols.filter(c => c.null === 'NO' && c.field !== pkCol && !c.default);
     const templateCols = cols.filter(c => c.field !== pkCol);
+    const knownFields = new Set(cols.map(c => c.field));
+
+    const analyzeRows = async (fileRows: Record<string, any>[]) => {
+        setLoading(true); setGlobalError(null);
+        try {
+            // Busca todos os registros existentes para comparação por PK
+            const existing = await apiFetch(`/table-data/${tableName}?limit=5000&offset=0`);
+            const existingMap = new Map<string, boolean>();
+            (existing.rows || []).forEach((r: Record<string, any>) => {
+                if (r[pkCol] !== undefined) existingMap.set(String(r[pkCol]), true);
+            });
+
+            const results: RowResult[] = fileRows.map((row, index) => {
+                const errors: string[] = [];
+
+                // Validar campos obrigatórios
+                requiredCols.forEach(c => {
+                    const v = row[c.field];
+                    if (v === null || v === undefined || v === '') {
+                        errors.push(`"${humanField(c.field)}" é obrigatório e está vazio`);
+                    }
+                });
+
+                // Detectar colunas desconhecidas (ignorando PK)
+                Object.keys(row).forEach(k => {
+                    if (k !== pkCol && !knownFields.has(k)) {
+                        errors.push(`Coluna "${k}" não existe na tabela`);
+                    }
+                });
+
+                const pkValue = row[pkCol] != null ? String(row[pkCol]) : undefined;
+                const isUpdate = pkValue ? existingMap.has(pkValue) : false;
+
+                return {
+                    index,
+                    row,
+                    status: errors.length > 0 ? 'error' : isUpdate ? 'update' : 'new',
+                    errors,
+                    pkValue,
+                };
+            });
+
+            setPreview(results);
+        } catch (e: any) {
+            setGlobalError(`Erro ao comparar com banco de dados: ${e.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         setFileName(file.name);
-        setError(null); setResult(null);
+        setGlobalError(null); setResult(null); setPreview(null);
         const reader = new FileReader();
         reader.onload = ev => {
             try {
                 const wb = XLSX.read(ev.target!.result, { type: 'array' });
                 const ws = wb.Sheets[wb.SheetNames[0]];
                 const data = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: null });
-                if (!data.length) throw new Error('Planilha vazia ou sem dados');
-                setRows(data);
-            } catch (err: any) { setError(err.message); }
+                if (!data.length) throw new Error('Planilha vazia ou sem dados na primeira aba');
+                analyzeRows(data);
+            } catch (err: any) { setGlobalError(err.message); }
         };
         reader.readAsArrayBuffer(file);
     };
@@ -206,63 +276,229 @@ function BulkModal({ tableName, cols, onClose, onSuccess }: {
     };
 
     const handleImport = async () => {
-        if (!rows) return;
-        setSaving(true); setError(null); setResult(null);
+        if (!preview) return;
+        const validRows = preview
+            .filter(r => r.status !== 'error')
+            .map(r => {
+                const row = { ...r.row };
+                if (r.status === 'new') delete row[pkCol]; // deixar VPS gerar o ID
+                return row;
+            });
+        if (!validRows.length) return;
+        setSaving(true); setGlobalError(null);
         try {
             const res = await apiFetch(`/table-data/${tableName}/bulk`, {
-                method: 'POST', body: JSON.stringify(rows),
+                method: 'POST', body: JSON.stringify(validRows),
             });
-            setResult(`✅ ${res.inserted} registros inseridos com sucesso!`);
+            setResult({ inserted: res.inserted, errors: preview.filter(r => r.status === 'error').length });
             onSuccess();
-        } catch (e: any) { setError(e.message); }
+        } catch (e: any) { setGlobalError(e.message); }
         finally { setSaving(false); }
     };
 
+    const counts = preview ? {
+        all: preview.length,
+        new: preview.filter(r => r.status === 'new').length,
+        update: preview.filter(r => r.status === 'update').length,
+        error: preview.filter(r => r.status === 'error').length,
+    } : null;
+
+    const visibleRows = preview?.filter(r => activeFilter === 'all' || r.status === activeFilter) ?? [];
+    const previewCols = templateCols.slice(0, 3).map(c => c.field);
+    const validCount = counts ? counts.new + counts.update : 0;
+
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-                <div className="flex items-center justify-between px-6 py-4 border-b">
-                    <h3 className="font-bold text-slate-800">📥 Importar planilha — <span className="font-mono text-indigo-600">{tableName}</span></h3>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+                    <h3 className="font-bold text-slate-800">
+                        📥 Importar planilha —{' '}
+                        <span className="font-mono text-indigo-600">{tableName}</span>
+                    </h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
                 </div>
-                <div className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
-                    <div className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3 space-y-1">
-                        <p>• O arquivo deve ser <strong>.xlsx</strong> ou <strong>.xls</strong></p>
-                        <p>• A primeira linha deve conter os nomes das colunas</p>
-                        <p>• O campo <span className="font-mono text-amber-600">{pkCol}</span> (ID) não precisa constar — será gerado automaticamente</p>
-                    </div>
 
-                    <button onClick={downloadTemplate}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-indigo-300 text-indigo-600 rounded-xl text-sm hover:bg-indigo-50 transition-colors">
-                        <Download size={14} /> Baixar template vazio (.xlsx)
-                    </button>
+                <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
 
-                    <div>
-                        <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
-                        <button onClick={() => fileRef.current?.click()}
-                            className="w-full flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm text-slate-700 transition-colors">
-                            <Upload size={14} /> {fileName || 'Selecionar arquivo .xlsx'}
-                        </button>
-                    </div>
-
-                    {rows && (
-                        <div className="text-xs bg-green-50 text-green-700 rounded-lg px-3 py-2">
-                            ✅ <strong>{rows.length}</strong> linhas lidas. Colunas: {Object.keys(rows[0]).join(', ')}
+                    {/* Botões de ação inicial */}
+                    {!result && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <button onClick={downloadTemplate}
+                                className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-indigo-300 text-indigo-600 rounded-xl text-sm hover:bg-indigo-50 transition-colors">
+                                <Download size={14} /> Baixar template vazio (.xlsx)
+                            </button>
+                            <div>
+                                <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
+                                <button onClick={() => fileRef.current?.click()}
+                                    className="w-full flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm text-slate-700 transition-colors h-full">
+                                    <Upload size={14} />
+                                    <span className="truncate">{fileName || 'Selecionar arquivo (.xlsx)'}</span>
+                                </button>
+                            </div>
                         </div>
                     )}
-                    {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-                    {result && <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{result}</p>}
+
+                    {/* Loading análise */}
+                    {loading && (
+                        <div className="flex items-center gap-2 text-sm text-slate-500 justify-center py-6">
+                            <RefreshCw size={14} className="animate-spin text-indigo-400" />
+                            Comparando com os dados atuais do banco...
+                        </div>
+                    )}
+
+                    {/* Erro global */}
+                    {globalError && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 flex items-start gap-2">
+                            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                            {globalError}
+                        </div>
+                    )}
+
+                    {/* Preview com filtros por status */}
+                    {preview && !result && (
+                        <>
+                            {/* Cards de resumo */}
+                            <div className="grid grid-cols-4 gap-2">
+                                {([
+                                    ['all', counts!.all, 'Total', 'bg-slate-100 text-slate-700'],
+                                    ['new', counts!.new, 'Novos', 'bg-green-100 text-green-700'],
+                                    ['update', counts!.update, 'Atualizações', 'bg-blue-100 text-blue-700'],
+                                    ['error', counts!.error, 'Com erro', 'bg-red-100 text-red-700'],
+                                ] as const).map(([status, count, label, color]) => (
+                                    <button
+                                        key={status}
+                                        onClick={() => setActiveFilter(status)}
+                                        className={`rounded-xl px-3 py-2 text-left transition-all border-2 text-xs ${activeFilter === status ? 'border-current shadow-sm' : 'border-transparent'} ${color}`}
+                                    >
+                                        <p className="text-2xl font-bold leading-none">{count}</p>
+                                        <p className="opacity-70 mt-1">{label}</p>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Tabela de preview */}
+                            {visibleRows.length > 0 ? (
+                                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                    <div className="overflow-x-auto max-h-64">
+                                        <table className="w-full text-xs">
+                                            <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider sticky top-0">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-left w-8">#</th>
+                                                    <th className="px-3 py-2 text-left">Situação</th>
+                                                    {previewCols.map(c => (
+                                                        <th key={c} className="px-3 py-2 text-left whitespace-nowrap">{humanField(c)}</th>
+                                                    ))}
+                                                    <th className="px-3 py-2 text-left">Problema encontrado</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {visibleRows.map(r => (
+                                                    <tr key={r.index} className={
+                                                        r.status === 'error' ? 'bg-red-50' :
+                                                        r.status === 'update' ? 'bg-blue-50/40' : ''
+                                                    }>
+                                                        <td className="px-3 py-2 text-slate-400 font-mono">{r.index + 1}</td>
+                                                        <td className="px-3 py-2">
+                                                            {r.status === 'new' && (
+                                                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold whitespace-nowrap">
+                                                                    NOVO
+                                                                </span>
+                                                            )}
+                                                            {r.status === 'update' && (
+                                                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold whitespace-nowrap">
+                                                                    ATUALIZAR
+                                                                </span>
+                                                            )}
+                                                            {r.status === 'error' && (
+                                                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-[10px] font-bold whitespace-nowrap">
+                                                                    ERRO
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        {previewCols.map(c => (
+                                                            <td key={c} className="px-3 py-2 font-mono text-slate-700 max-w-[140px] overflow-hidden whitespace-nowrap">
+                                                                {r.row[c] === null
+                                                                    ? <span className="italic text-slate-300">vazio</span>
+                                                                    : String(r.row[c]).slice(0, 30)}
+                                                            </td>
+                                                        ))}
+                                                        <td className="px-3 py-2 min-w-[200px]">
+                                                            {r.errors.length > 0 ? (
+                                                                <ul className="space-y-0.5">
+                                                                    {r.errors.map((err, i) => (
+                                                                        <li key={i} className="text-red-600 flex items-start gap-1">
+                                                                            <span className="shrink-0">⚠</span>
+                                                                            <span>{err}</span>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            ) : (
+                                                                <span className="text-slate-300 italic">sem problemas</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-center text-slate-400 py-4 italic">Nenhuma linha neste filtro</p>
+                            )}
+
+                            {/* Aviso sobre linhas com erro */}
+                            {counts!.error > 0 && (
+                                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                                    <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                                    <span>
+                                        As <strong>{counts!.error} linha(s) com erro</strong> serão ignoradas.
+                                        Apenas as <strong>{validCount} válidas</strong> serão enviadas para o banco.
+                                    </span>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {/* Resultado final */}
+                    {result && (
+                        <div className="space-y-4 py-4">
+                            <div className="grid grid-cols-2 gap-3 text-center">
+                                <div className="bg-green-50 text-green-700 rounded-2xl py-4">
+                                    <p className="text-3xl font-bold">{result.inserted}</p>
+                                    <p className="text-xs opacity-70 mt-1">Registros importados</p>
+                                </div>
+                                <div className="bg-red-50 text-red-700 rounded-2xl py-4">
+                                    <p className="text-3xl font-bold">{result.errors}</p>
+                                    <p className="text-xs opacity-70 mt-1">Ignorados (com erro)</p>
+                                </div>
+                            </div>
+                            <p className="text-center text-sm text-slate-500">Importação concluída com sucesso.</p>
+                        </div>
+                    )}
                 </div>
-                <div className="flex justify-end gap-2 px-6 py-4 border-t">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Fechar</button>
-                    <button
-                        onClick={handleImport}
-                        disabled={saving || !rows}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                    >
-                        {saving ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
-                        {saving ? 'Importando...' : `Importar ${rows ? rows.length + ' linhas' : ''}`}
-                    </button>
+
+                {/* Footer */}
+                <div className="flex justify-between items-center px-6 py-4 border-t shrink-0">
+                    <p className="text-xs text-slate-400">
+                        {!result && preview && `${validCount} linha(s) válidas · ${counts!.error} com erro`}
+                    </p>
+                    <div className="flex gap-2">
+                        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                            {result ? 'Fechar' : 'Cancelar'}
+                        </button>
+                        {!result && preview && validCount > 0 && (
+                            <button
+                                onClick={handleImport}
+                                disabled={saving}
+                                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                            >
+                                {saving ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
+                                {saving ? 'Importando...' : `Importar ${validCount} linha${validCount !== 1 ? 's' : ''}`}
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
@@ -429,7 +665,7 @@ function DataView({ tableName, cols }: { tableName: string; cols: Column[] }) {
                         className="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-200 text-slate-500 transition-colors">
                         <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
                     </button>
-                    <button onClick={handleExport} title="Exportar JSON (backup)"
+                    <button onClick={handleExport} title="Exportar XLSX (backup)"
                         className="flex items-center gap-1 px-2 h-7 text-xs rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
                         <Download size={11} /> Backup
                     </button>
@@ -664,8 +900,8 @@ export function MySQLExplorerPage() {
                             <div className="space-y-1.5 text-slate-600">
                                 {[
                                     [<Plus size={11} />, 'Nova linha — inserir registro'],
-                                    [<Upload size={11} />, 'Importar — bulk insert via JSON'],
-                                    [<Download size={11} />, 'Backup — exportar tabela como .json'],
+                                    [<Upload size={11} />, 'Importar — planilha .xlsx com preview'],
+                                    [<Download size={11} />, 'Backup — exportar tabela como .xlsx'],
                                     [<Pencil size={11} />, 'Editar linha (hover na linha)'],
                                     [<Trash2 size={11} />, 'Excluir linha (hover na linha)'],
                                 ].map(([icon, desc], i) => (
