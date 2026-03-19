@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link2, Link2Off, Loader2, ExternalLink, Search } from 'lucide-react';
+import { toast } from 'sonner';
 import { searchBlingProducts, BlingProduct } from '../../../services/blingService';
 
 interface BlingLinkSectionProps {
@@ -62,9 +63,19 @@ export function BlingLinkSection({ blingId, blingParentId, onLink, onUnlink }: B
     const handleSelect = (product: BlingProduct) => {
         const parentId = product.variacao?.produtoPai?.id;
         onLink(product.id, parentId);
+        toast.success(`✅ Vinculado com sucesso: ${product.nome}`);
         setQuery('');
         setResults([]);
         setShowResults(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Impede que o form salve o produto inteiro acidentalmente
+            if (results.length > 0) {
+                handleSelect(results[0]); // Seleciona o primeiro da lista se der enter
+            }
+        }
     };
 
     // Produto já vinculado
@@ -131,7 +142,8 @@ export function BlingLinkSection({ blingId, blingParentId, onLink, onUnlink }: B
                         type="text"
                         value={query}
                         onChange={(e) => handleSearch(e.target.value)}
-                        placeholder="Buscar no Bling por nome ou SKU..."
+                        onKeyDown={handleKeyDown}
+                        placeholder="Buscar no Bling por nome ou SKU... (Digite e aguarde a lista)"
                         className="w-full pl-9 pr-10 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                     {isSearching && (
