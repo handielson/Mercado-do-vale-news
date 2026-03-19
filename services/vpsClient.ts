@@ -10,7 +10,7 @@ const VPS_KEY = import.meta.env.VITE_VPS_SYNC_KEY;
 function buildHeaders(extra?: Record<string, string>): HeadersInit {
     return {
         'Content-Type': 'application/json',
-        'X-API-Key': VPS_KEY ?? '',
+        'x-sync-key': VPS_KEY ?? '', // servidor VPS verifica este header em requireSyncKey
         ...extra,
     };
 }
@@ -91,7 +91,7 @@ export const vpsClient = {
     upload: async <T>(path: string, formData: FormData): Promise<T> => {
         const res = await fetch(`${VPS_BASE}${path}`, {
             method: 'POST',
-            headers: { 'X-API-Key': VPS_KEY ?? '' }, // sem Content-Type, browser define o boundary
+            headers: { 'x-sync-key': VPS_KEY ?? '' }, // sem Content-Type, browser define o boundary
             body: formData,
         });
         return handleResponse<T>(res);
