@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
@@ -423,22 +423,74 @@ export const PublicProductPage: React.FC = () => {
         }
     };
 
-    const handleShare = async () => {
-        const url = window.location.href;
-        if (navigator.share) {
-            try {
-                await navigator.share({
-                    title: product.name,
-                    text: `Olha esse produto no Mercado do Vale: ${product.name}`,
-                    url
-                });
-            } catch (err) {
-                console.warn('Share rejected:', err);
+    // Generate available variants (hoisted so we can use it in share text)
+    const allVariants = [product as CatalogProduct, ...siblings];
+    const availableVariants = allVariants.filter(
+        item => !item.track_inventory || (item.stock_quantity && item.stock_quantity > 0)
+    );
+
+    availableVariants.forEach(item => {
+        const labelPieces = [];
+        if (item.specs?.color) labelPieces.push(item.specs.color);
+        if (item.specs?.storage) labelPieces.push(item.specs.storage);
+        if (item.specs?.ram) labelPieces.push(`RAM ${item.specs.ram}`);
+
+        let itemLbl = labelPieces.join(' - ');
+        if (!itemLbl) {
+            if (item.name.includes(' - ')) {
+                itemLbl = item.name.split(' - ').pop()?.trim() || 'Padrão';
+            } else {
+                itemLbl = 'Padrão';
             }
-        } else {
-            await navigator.clipboard.writeText(url);
-            toast.success('Link copiado para a área de transferência!');
         }
+        if (itemLbl.startsWith('-')) itemLbl = itemLbl.substring(1).trim();
+        (item as any)._displayLabel = itemLbl;
+    });
+
+    const uniqueVariants: CatalogProduct[] = [];
+    const _seenLabels = new Set<string>();
+    availableVariants.forEach(item => {
+        const lbl = (item as any)._displayLabel;
+        if (!_seenLabels.has(lbl)) {
+            _seenLabels.add(lbl);
+            uniqueVariants.push(item);
+        }
+    });
+    uniqueVariants.sort((a, b) => ((a as any)._displayLabel || '').localeCompare((b as any)._displayLabel || ''));
+
+    const getShareText = () => {
+        const variantNames = uniqueVariants.map(v => (v as any)._displayLabel).join(', ');
+        
+        let text = `*${toTitleCase(product.name)}*\n\n`;
+        if (variantNames) {
+            text += `✨ *Variações Disponíveis:* ${variantNames}\n`;
+        }
+        if (estimatedCoins > 0) {
+            text += `🪙 *Ganhe ${estimatedCoins} Moedas do Vale nessa compra!*\n`;
+        }
+        text += `\n💰 *Valor à vista:* R$ ${discountedPrice.toFixed(2).replace('.', ',')}\n`;
+        text += `💳 *Ou no cartão em até 12x de:* R$ ${(discountedPrice / 12).toFixed(2).replace('.', ',')} sem juros\n\n`;
+        text += `🔗 *Link do Produto:* ${window.location.href}\n\n`;
+        text += `Visite o nosso site para ver essa e muitas outras opções de produtos!`;
+        return text;
+    };
+
+    const handleShareWhatsapp = () => {
+        const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(getShareText())}`;
+        window.open(url, '_blank');
+    };
+
+    const handleShareFacebook = () => {
+        const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}&quote=${encodeURIComponent(getShareText())}`;
+        window.open(url, '_blank');
+    };
+
+    const handleShareInstagram = async () => {
+        await navigator.clipboard.writeText(getShareText());
+        toast.success('Texto copiado! Pronto para colar no seu Instagram.', { duration: 4000 });
+        setTimeout(() => {
+            window.open('https://www.instagram.com', '_blank');
+        }, 1500);
     };
 
     const handleVariantChange = (sib: CatalogProduct) => {
@@ -598,12 +650,30 @@ export const PublicProductPage: React.FC = () => {
                                     </span>
                                 </span>
                                 <span className="text-slate-300">|</span>
-                                <button
-                                    onClick={handleShare}
-                                    className="flex items-center gap-1.5 text-slate-500 hover:text-blue-600 transition-colors"
-                                >
-                                    <Share2 size={16} /> Compartilhar
-                                </button>
+                                <div className="flex items-center gap-1.5 border-r border-slate-300 pr-4 mr-0" title="Compartilhar">
+                                    <span className="text-sm font-medium">Compartilhar:</span>
+                                    <button
+                                        onClick={handleShareInstagram}
+                                        className="text-slate-500 hover:text-pink-600 transition-colors p-1"
+                                        title="Copiar texto para o Instagram"
+                                    >
+                                        <Instagram size={18} />
+                                    </button>
+                                    <button
+                                        onClick={handleShareFacebook}
+                                        className="text-slate-500 hover:text-blue-600 transition-colors p-1"
+                                        title="Compartilhar no Facebook"
+                                    >
+                                        <Facebook size={18} />
+                                    </button>
+                                    <button
+                                        onClick={handleShareWhatsapp}
+                                        className="text-slate-500 hover:text-green-600 transition-colors p-1"
+                                        title="Compartilhar no WhatsApp"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                    </button>
+                                </div>
                                 <button
                                     onClick={handleCompare}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-sm shadow-sm ${
@@ -624,48 +694,10 @@ export const PublicProductPage: React.FC = () => {
                                 <h3 className="text-sm font-bold text-slate-900 mb-3">Opções Disponíveis:</h3>
                                 <div className="flex flex-wrap gap-2">
                                     {(() => {
-                                        // 1. Array temporário para deduplicação visual
-                                        const uniqueLabels = new Set<string>();
-                                        const uniqueSiblings: CatalogProduct[] = [];
+                                        // Usa as variações já preparadas e alinhadas lá em cima (uniqueVariants)
+                                        if (uniqueVariants.length <= 1) return null;
 
-                                        // 2. Juntamos o produto atual com os irmãos para iterar de uma só vez
-                                        const allVariants = [product as CatalogProduct, ...siblings];
-
-                                        const availableVariants = allVariants.filter(
-                                            item => !item.track_inventory || (item.stock_quantity && item.stock_quantity > 0)
-                                        );
-
-                                        availableVariants.forEach(item => {
-                                            const labelPieces = [];
-                                            if (item.specs?.color) labelPieces.push(item.specs.color);
-                                            if (item.specs?.storage) labelPieces.push(item.specs.storage);
-                                            if (item.specs?.ram) labelPieces.push(`RAM ${item.specs.ram}`);
-
-                                            let itemLbl = labelPieces.join(' - ');
-                                            if (!itemLbl) {
-                                                // Se não tiver specs extrai o final do nome se separado por hífen, senão "Padrão"
-                                                if (item.name.includes(' - ')) {
-                                                    itemLbl = item.name.split(' - ').pop()?.trim() || 'Padrão';
-                                                } else {
-                                                    itemLbl = 'Padrão';
-                                                }
-                                            }
-                                            if (itemLbl.startsWith('-')) itemLbl = itemLbl.substring(1).trim();
-
-                                            if (!uniqueLabels.has(itemLbl)) {
-                                                uniqueLabels.add(itemLbl);
-                                                (item as any)._displayLabel = itemLbl;
-                                                uniqueSiblings.push(item);
-                                            }
-                                        });
-
-                                        // 3. Organizar as variações em ordem alfabética
-                                        uniqueSiblings.sort((a, b) => ((a as any)._displayLabel || '').localeCompare((b as any)._displayLabel || ''));
-
-                                        // Se depois de limpar as duplicatas sobrar só 1, não renderiza grupo
-                                        if (uniqueSiblings.length <= 1) return null;
-
-                                        return uniqueSiblings.map((sib) => {
+                                        return uniqueVariants.map((sib) => {
                                             const isCurrent = sib.id === product.id;
                                             const variantLabel = (sib as any)._displayLabel;
 
