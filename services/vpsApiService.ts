@@ -143,6 +143,12 @@ class VpsApiService {
     return this.writeSafe('PUT', `/products/${id}`, data);
   }
 
+  async updateProductSeo(id: string, exclude_from_seo: boolean): Promise<boolean> {
+    this.cache.delete(`/products/${id}`);
+    this.invalidateProductCache();
+    return this.writeSafe('PATCH', `/products/${id}/seo`, { exclude_from_seo });
+  }
+
   async deleteProduct(id: string): Promise<boolean> {
     this.invalidateProductCache();
     return this.writeSafe('DELETE', `/products/${id}`);

@@ -64,7 +64,7 @@ export const SEOBlacklistPage: React.FC = () => {
             
             // Envia a chamada APENAS para a VPS (MySQL), garantindo que
             // nenhuma tabela/coluna desconhecida seja cobrada do Supabase.
-            const ok = await vpsApiService.updateProduct(product.id, { exclude_from_seo: newValue });
+            const ok = await vpsApiService.updateProductSeo(product.id, newValue);
 
             if (!ok) throw new Error("A VPS rejeitou a atualização.");
 
