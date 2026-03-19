@@ -68,6 +68,7 @@ export const SEODashboardPage: React.FC = () => {
     }, []);
 
     const handleGenerateMissingSlugs = async () => {
+        // Obter fonte de dados fresquinha dos faltando, ignorando estado antigo se necessário
         const missing = products.filter(p => !p.slug);
         if (missing.length === 0) {
             toast.info('Nenhum slug faltando no catálogo.');
@@ -83,19 +84,35 @@ export const SEODashboardPage: React.FC = () => {
         try {
             for (const p of missing) {
                 let defaultSlug = generateSlug(p.name);
+                if (!defaultSlug) {
+                    defaultSlug = 'produto-' + Math.random().toString(36).substring(2, 8);
+                }
+                
                 let slugToUse = defaultSlug;
-                let counter = 1;
                 let isUnique = false;
+                let attempts = 0;
 
-                // Evitar duplicações
-                while (!isUnique && counter < 10) {
-                    const { data: existing } = await supabase.from('products').select('id').eq('slug', slugToUse).maybeSingle();
-                    if (!existing || existing.id === p.id) {
+                // Evitar duplicações rigorosamente
+                while (!isUnique && attempts < 20) {
+                    // Usar limit(1) em vez de maybeSingle() para evitar erro de múltiplas linhas
+                    const { data: existing } = await supabase
+                        .from('products')
+                        .select('id')
+                        .eq('slug', slugToUse)
+                        .limit(1);
+
+                    if (!existing || existing.length === 0 || existing[0].id === p.id) {
                         isUnique = true;
                     } else {
-                        slugToUse = `${defaultSlug}-${counter}`;
-                        counter++;
+                        // Quando já existe, usa um hash aleatório curto para garantir unicidade em variantes
+                        const shortHash = Math.random().toString(36).substring(2, 6);
+                        slugToUse = `${defaultSlug}-${shortHash}`;
+                        attempts++;
                     }
+                }
+
+                if (!isUnique) {
+                    slugToUse = `${defaultSlug}-${Date.now()}`;
                 }
 
                 const { error } = await supabase.from('products').update({ slug: slugToUse }).eq('id', p.id);
@@ -114,7 +131,7 @@ export const SEODashboardPage: React.FC = () => {
                 toast.error(`Falha ao gerar ${failCount} links.`);
             }
 
-            fetchSEOData();
+            await fetchSEOData();
         } catch (err) {
             toast.error('Ocorreu um erro ao gerar os slugs.');
             console.error(err);
