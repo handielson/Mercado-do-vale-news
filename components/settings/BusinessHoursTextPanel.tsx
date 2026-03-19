@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Clock, RefreshCw, Check, Tag } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Check, Tag } from 'lucide-react';
 import { companySettingsService } from '../../services/companySettingsService';
 import { BusinessHours } from '../../types/companySettings';
 import toast from 'react-hot-toast';
@@ -84,15 +84,13 @@ const DEFAULTS: Labels = {
 };
 
 export function BusinessHoursTextPanel() {
-    const [text, setText] = useState('');
     const [labels, setLabels] = useState<Labels>(DEFAULTS);
     const [isSaving, setIsSaving] = useState(false);
-    const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
-    const [isGenerating, setIsGenerating] = useState(false);
+    // useRef evita stale closure no debounce: sempre acessa o timeout mais recente
+    const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         companySettingsService.get().then((s) => {
-            if (s?.business_hours_display_text) setText(s.business_hours_display_text);
             setLabels({
                 open: s?.store_label_open || DEFAULTS.open,
                 closed: s?.store_label_closed || DEFAULTS.closed,
@@ -103,8 +101,8 @@ export function BusinessHoursTextPanel() {
     }, []);
 
     const save = (patch: object) => {
-        if (saveTimeout) clearTimeout(saveTimeout);
-        const t = setTimeout(async () => {
+        if (saveTimeout.current) clearTimeout(saveTimeout.current);
+        saveTimeout.current = setTimeout(async () => {
             setIsSaving(true);
             try {
                 await companySettingsService.update(patch);
@@ -114,12 +112,6 @@ export function BusinessHoursTextPanel() {
                 setIsSaving(false);
             }
         }, 800);
-        setSaveTimeout(t);
-    };
-
-    const handleTextChange = (value: string) => {
-        setText(value);
-        save({ business_hours_display_text: value });
     };
 
     const handleLabelChange = (key: keyof Labels, value: string) => {
@@ -133,95 +125,39 @@ export function BusinessHoursTextPanel() {
         });
     };
 
-    const handleGenerate = async () => {
-        setIsGenerating(true);
-        try {
-            const settings = await companySettingsService.get();
-            if (!settings?.business_hours) {
-                toast.error('Nenhum horário configurado no painel acima.');
-                return;
-            }
-            const generated = generateHoursText(settings.business_hours);
-            setText(generated);
-            save({ business_hours_display_text: generated });
-        } catch {
-            toast.error('Erro ao gerar texto.');
-        } finally {
-            setIsGenerating(false);
-        }
-    };
-
     return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
             {/* Badge Labels */}
-            <div>
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-green-100 text-green-600 rounded-lg">
-                        <Tag size={18} />
-                    </div>
-                    <div>
-                        <h2 className="text-base font-bold text-slate-800">Textos do Badge "Loja Aberta"</h2>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                            Personalize os textos exibidos no badge do header da loja. A lógica de aberto/fechado permanece igual.
-                        </p>
-                    </div>
+            <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                    <Tag size={18} />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {([
-                        ['open', '🟢 Quando aberta', 'Ex: Loja Aberta'],
-                        ['closed', '⚪ Quando fechada', 'Ex: Fechado'],
-                        ['closing_soon', '🟡 Fechando em breve', 'Ex: Encerando em breve'],
-                        ['lunch', '🍽️ No almoço (prefixo)', 'Ex: Voltamos às'],
-                    ] as [keyof Labels, string, string][]).map(([key, label, placeholder]) => (
-                        <div key={key}>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-                            <input
-                                type="text"
-                                value={labels[key]}
-                                onChange={(e) => handleLabelChange(key, e.target.value)}
-                                placeholder={placeholder}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50"
-                            />
-                        </div>
-                    ))}
+                <div>
+                    <h2 className="text-base font-bold text-slate-800">Textos do Badge "Loja Aberta"</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                        Personalize os textos exibidos no badge do header da loja. A lógica de aberto/fechado permanece igual.
+                    </p>
                 </div>
             </div>
 
-            {/* Divider */}
-            <div className="border-t border-slate-100" />
-
-            {/* Hours Text Area */}
-            <div>
-                <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                            <Clock size={18} />
-                        </div>
-                        <div>
-                            <h2 className="text-base font-bold text-slate-800">Texto de Horários (uso livre)</h2>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                                Texto extra que pode ser exibido em tooltips, rodapé ou WhatsApp.
-                            </p>
-                        </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {([
+                    ['open', '🟢 Quando aberta', 'Ex: Loja Aberta'],
+                    ['closed', '⚪ Quando fechada', 'Ex: Fechado'],
+                    ['closing_soon', '🟡 Fechando em breve', 'Ex: Encerrando em breve'],
+                    ['lunch', '🍽️ No almoço (prefixo)', 'Ex: Voltamos às'],
+                ] as [keyof Labels, string, string][]).map(([key, label, placeholder]) => (
+                    <div key={key}>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+                        <input
+                            type="text"
+                            value={labels[key]}
+                            onChange={(e) => handleLabelChange(key, e.target.value)}
+                            placeholder={placeholder}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50"
+                        />
                     </div>
-                    <button
-                        onClick={handleGenerate}
-                        disabled={isGenerating}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium transition-colors disabled:opacity-50"
-                    >
-                        <RefreshCw size={14} className={isGenerating ? 'animate-spin' : ''} />
-                        Gerar automático
-                    </button>
-                </div>
-
-                <textarea
-                    value={text}
-                    onChange={(e) => handleTextChange(e.target.value)}
-                    rows={4}
-                    placeholder={'Segunda a Sexta: 8h às 18h (almoço 12h às 13h30)\nSábado: 8h às 12h\nDomingo: Fechado'}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y font-mono bg-slate-50"
-                />
+                ))}
             </div>
 
             <div className="flex items-center gap-2 text-xs text-slate-400">
