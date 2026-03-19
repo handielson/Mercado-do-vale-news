@@ -8,6 +8,7 @@ import { supabase } from '../../../services/supabase';
 interface ProductPricingProps {
     watch: UseFormWatch<ProductInput>;
     setValue: UseFormSetValue<ProductInput>;
+    errors?: any;
     modelId?: string;  // Para buscar médias do estoque atual
 }
 
@@ -43,7 +44,7 @@ function calcMargin(cost: number, price: number) {
     return { marginCents, marginPct, markup };
 }
 
-export function ProductPricing({ watch, setValue, modelId }: ProductPricingProps) {
+export function ProductPricing({ watch, setValue, errors, modelId }: ProductPricingProps) {
     const cost = watch('price_cost') || 0;
     const priceRetail = watch('price_retail') || 0;
     const priceReseller = watch('price_reseller') || 0;
@@ -267,6 +268,9 @@ export function ProductPricing({ watch, setValue, modelId }: ProductPricingProps
                                         value={price}
                                         onChange={(val) => setValue(row.key, val)}
                                     />
+                                    {errors?.[row.key] && (
+                                        <p className="text-xs text-red-600 mt-1">{errors[row.key]?.message}</p>
+                                    )}
                                 </div>
 
                                 {/* Indicadores de margem */}
@@ -326,13 +330,13 @@ export function ProductPricing({ watch, setValue, modelId }: ProductPricingProps
             </div>
 
             {/* ── Promoção por Tempo Limitado ── */}
-            <PromoSection watch={watch} setValue={setValue} />
+            <PromoSection watch={watch} setValue={setValue} errors={errors} />
         </div>
     );
 }
 
 // ── Componente interno de promoção ──
-function PromoSection({ watch, setValue }: { watch: UseFormWatch<ProductInput>; setValue: UseFormSetValue<ProductInput> }) {
+function PromoSection({ watch, setValue, errors }: { watch: UseFormWatch<ProductInput>; setValue: UseFormSetValue<ProductInput>; errors?: any; }) {
     const pricePromo = watch('price_promo') || 0;
     const promoStart = watch('promo_start') || '';
     const promoEnd = watch('promo_end') || '';
@@ -388,6 +392,9 @@ function PromoSection({ watch, setValue }: { watch: UseFormWatch<ProductInput>; 
                         value={pricePromo}
                         onChange={(val) => setValue('price_promo', val || undefined)}
                     />
+                    {errors?.price_promo && (
+                         <p className="text-xs text-red-600 mt-1">{errors.price_promo.message}</p>
+                    )}
                     {discountPct > 0 && (
                         <p className="text-xs text-red-600 mt-1 font-semibold">
                             -{discountPct}% de desconto sobre o varejo

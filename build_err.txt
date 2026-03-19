@@ -1,0 +1,29 @@
+
+> mercado-do-vale@0.0.0 build
+> vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 3365 modules transformed.
+[31mx[39m Build failed in 3.89s
+[31merror during build:
+[31mroutes/index.tsx (87:7): "default" is not exported by "pages/admin/settings/SEOBlacklistPage.tsx", imported by "routes/index.tsx".[31m
+file: [36mC:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/mercado-do-vale/routes/index.tsx:87:7[31m
+[33m
+85: import { QuoteCartProvider } from '../contexts/QuoteCartContext';
+86: import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
+87: import SEOBlacklistPage from '../pages/admin/settings/SEOBlacklistPage';
+           ^
+88: import { feedbackService } from '../services/feedbackService';
+89: import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
+[31m
+    at getRollupError (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/parseAst.js:402:41)
+    at error (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/parseAst.js:398:42)
+    at Module.error (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/node-entry.js:17040:16)
+    at Module.traceVariable (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/node-entry.js:17452:29)
+    at ModuleScope.findVariable (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/node-entry.js:15070:39)
+    at Identifier.bind (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/node-entry.js:5447:40)
+    at CallExpression.bind (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/node-entry.js:2825:28)
+    at CallExpression.bind (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/node-entry.js:12179:15)
+    at Property.bind (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/node-entry.js:2829:23)
+    at ObjectExpression.bind (file:///C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado%20do%20Vale%20New/mercado-do-vale/node_modules/rollup/dist/es/shared/node-entry.js:2825:28)[39m

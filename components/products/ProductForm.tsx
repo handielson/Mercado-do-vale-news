@@ -689,14 +689,17 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
             // Conta quantos campos têm erro
             const errorCount = Object.keys(errors).length;
+            const errorMessages = Object.entries(errors)
+                .map(([field, err]) => `- ${field}: ${err?.message || 'Erro'}`)
+                .join('\n');
 
             // Mostra toast com mensagem específica
             if (errorCount > 0) {
                 toast.error(
-                    `Preencha todos os campos obrigatórios (${errorCount} ${errorCount === 1 ? 'campo' : 'campos'} com erro)`,
+                    `Falha de Validação (${errorCount} campo${errorCount === 1 ? '' : 's'})`,
                     {
-                        duration: 5000,
-                        description: 'Verifique os campos destacados em vermelho'
+                        duration: 8000,
+                        description: `Verifique os seguintes campos:\n${errorMessages}`
                     }
                 );
             }
@@ -945,7 +948,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             </div>
 
             {/* 6. PRECIFICAÇÃO */}
-            <ProductPricing watch={watch} setValue={setValue} modelId={watch('model_id') || undefined} />
+            <ProductPricing watch={watch} setValue={setValue} errors={errors} modelId={watch('model_id') || undefined} />
 
             {/* 6. FISCAL & AUTOMAÇÃO */}
             < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
