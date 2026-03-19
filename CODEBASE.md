@@ -1,4 +1,4 @@
-﻿# CODEBASE.md — Planta Completa: Mercado do Vale
+# CODEBASE.md — Planta Completa: Mercado do Vale
 
 > **LEITURA OBRIGATÓRIA antes de qualquer modificação.**
 > Fonte de verdade sobre dependências, funções e zonas de risco.
@@ -7541,4 +7541,208 @@ upgradeRequest?.status === 'pending' && customer?.customer_type !== upgradeReque
 ```
 
 Isso garante que o banner desaparece quando o admin aprova o upgrade (mesmo que o registro de solicitação ainda mostre `status: 'pending'`).
+
+---
+
+## 🛠️ SESSÃO 2026-03-19 — Importação XLS Inteligente + Correções VPS
+
+---
+
+### `pages/admin/settings/MySQLExplorerPage.tsx` — MySQL Explorer
+
+**Rota:** `/admin/settings/mysql`  
+**Sidebar:** Admin → Sistema → MySQL Explorer
+
+Interface visual completa para explorar e gerenciar o banco de dados MySQL da VPS em tempo real.
+
+#### Funcionalidades
+
+| Feature | Descrição |
+|---|---|
+| **Schema Explorer** | Lista todas as tabelas com colunas, tipos, PK/FK/UQ |
+| **Dados ao vivo** | Exibe conteúdo de cada tabela com paginação |
+| **CRUD individual** | Inserir, editar e excluir registros por linha |
+| **Exportação XLS** | Gera `.xlsx` com dados da tabela selecionada |
+| **Importação XLS inteligente** | Upload de `.xlsx` com preview antes de confirmar |
+| **Tabelas protegidas** | Tabelas de sistema são bloqueadas para edição |
+
+#### Import XLS Inteligente (`BulkModal`)
+
+Fluxo completo de importação com classificação automática por linha:
+
+1. **Upload do arquivo `.xlsx`** → lê todas as linhas via `SheetJS`
+2. **Busca dados existentes** → GET `/table-data/:tableName`
+3. **Classifica cada linha:**
+   - `NOVO` — ID não existe no banco (será INSERT)
+   - `ATUALIZAR` — ID já existe (será UPDATE)
+   - `ERRO` — campo obrigatório vazio, coluna inexistente, etc.
+4. **Preview com cards filtráveis** (Total / Novos / Atualizações / Erros)
+5. **Tabela de preview** com coluna "Problema encontrado" em linguagem natural
+6. **Aviso** de quantas linhas serão ignoradas vs importadas
+7. **Importação** envia apenas linhas válidas, mostra resultado
+
+**Campos humanizados:** `snake_case` → `Nome Legível` via `humanField()`.
+
+**ID automático:** PK (ID) oculto no insert, read-only no edit, não obrigatório no import.
+
+**Dependência:** `xlsx` (SheetJS) — `npm install xlsx`
+
+---
+
+### `services/vpsClient.ts` — Cliente HTTP da VPS
+
+**Base URL:** `https://api.xiaomipetrolina.com.br`
+
+#### ⚠️ REGRA CRÍTICA: Header de Autenticação
+
+```ts
+// ✅ CORRETO
+'x-sync-key': VPS_KEY ?? ''
+
+// ❌ ERRADO — middleware rejeita com 401
+'X-API-Key': VPS_KEY ?? ''
+```
+
+O `requireSyncKey` no servidor verifica `x-sync-key` (aceita também `x-api-key` como fallback).
+
+**Variável de ambiente:** `VITE_VPS_SYNC_KEY` (obrigatória no Vercel)
+
+#### Métodos
+
+| Método | Rota |
+|---|---|
+| `vpsClient.get<T>(path)` | GET |
+| `vpsClient.post<T>(path, body)` | POST JSON |
+| `vpsClient.patch<T>(path, body)` | PATCH JSON |
+| `vpsClient.put<T>(path, body)` | PUT JSON |
+| `vpsClient.delete(path)` | DELETE |
+| `vpsClient.upload<T>(path, formData)` | POST multipart |
+
+---
+
+### `services/companySettingsService.ts` vs `services/companyService.ts`
+
+> ⚠️ São serviços **diferentes** para dados **diferentes**:
+
+| Dado | Serviço | Backend |
+|---|---|---|
+| Nome, CNPJ, endereço, redes sociais | `companyService.ts` | Supabase |
+| Horários, badge labels, templates de recibo | `companySettingsService.ts` | VPS MySQL (`USE_VPS.company = true`) |
+
+`companySettingsService` usa cache em memória (5 min) e localStorage (30 min) na rota Supabase. Na rota VPS, **sem cache** (dados frescos a cada chamada).
+
+---
+
+### `server.js` (VPS `/var/www/mdv-api/`) — API Backend
+
+Servidor Fastify + MySQL2. PM2: `pm2 restart mdv-api`.
+
+#### CORS — ⚠️ Sempre incluir PATCH
+
+```js
+methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+```
+
+Se `PATCH` estiver faltando, o browser bloqueia o preflight sem mensagem de erro clara (erro de rede silencioso no console).
+
+#### Autenticação (`requireSyncKey`)
+
+```js
+const key = request.headers['x-sync-key'] || request.headers['x-api-key'];
+```
+
+#### Rota `PATCH /company-settings` (adicionada em 2026-03-19)
+
+Aceita campos via whitelist. Campos JSON (object/array) são serializados com `JSON.stringify` antes do UPDATE.
+
+#### Cache — regra para endpoints mutáveis
+
+```js
+// ✅ Para dados que o usuário edita frequentemente:
+reply.header('Cache-Control', 'no-store');
+
+// ❌ Não usar em endpoints que têm PATCH correspondente:
+reply.header('Cache-Control', 'public, max-age=1800, s-maxage=3600');
+// s-maxage=3600 faz CDN cachear 1h → dados salvos somem no F5
+```
+
+#### Colunas `company_settings` (VPS MySQL)
+
+| Coluna | Tipo | Uso |
+|---|---|---|
+| `business_hours` | JSON | Horários por dia |
+| `holiday_overrides` | JSON | Feriados com abertura |
+| `local_holidays` | JSON | Feriados locais |
+| `store_label_open` | VARCHAR(100) | Badge "Loja Aberta" |
+| `store_label_closed` | VARCHAR(100) | Badge "Fechado" |
+| `store_label_closing_soon` | VARCHAR(100) | Badge "Fechando em breve" |
+| `store_label_lunch` | VARCHAR(100) | Prefixo "Retorna às" |
+
+#### Checklist — novo endpoint VPS
+
+1. Adicionar rota com `{ preHandler: requireSyncKey }`
+2. Verificar que o método HTTP está no CORS `methods`
+3. `GET` mutável → `Cache-Control: no-store`
+4. Copiar `server.js` para o repo local → commit → push
+5. `pm2 restart mdv-api`
+
+---
+
+### `components/settings/BusinessHoursPanel.tsx`
+
+Horários de funcionamento por dia da semana. Auto-save (debounce 1s) via `companySettingsService` → VPS. `saveTimeout` usa `useRef` (nunca `useState` para timers).
+
+---
+
+### `components/settings/BusinessHoursTextPanel.tsx`
+
+Personalização dos textos do badge de status da loja.
+
+| Campo interno | Label | Default |
+|---|---|---|
+| `store_label_open` | 🟢 Quando aberta | "Loja Aberta" |
+| `store_label_closed` | ⚪ Quando fechada | "Fechado" |
+| `store_label_closing_soon` | 🟡 Fechando em breve | "Fechando em breve" |
+| `store_label_lunch` | 🍽️ No almoço (prefixo) | "Retorna às" |
+
+Auto-save debounce 800ms com `useRef<NodeJS.Timeout>`.
+
+> Campo "Texto de Horários (uso livre)" foi **removido** — não era consumido em nenhum componente público.
+
+---
+
+### `components/ui/StoreStatusBadge.tsx` — Badge de Status
+
+Badge no header público. Status calculado por `getStoreStatus()` + labels da VPS.
+
+| Status | Mensagem | Label customizável? |
+|---|---|---|
+| `open` | — | ✅ `store_label_open` |
+| `closing_soon` | — | ✅ `store_label_closing_soon` |
+| `closed` genérico | "Fechado" | ✅ `store_label_closed` |
+| `closed` feriado | "Fechado Hoje" | ✅ `store_label_closed` |
+| `closed` almoço | "Retorna às HH:MM" | ✅ prefixo `store_label_lunch` |
+| `closed` com horário | "Abre às HH:MM" | ❌ dinâmico (by design) |
+
+> "Abre às HH:MM" não usa label customizado — informar o horário de abertura é mais útil do que texto genérico.
+
+---
+
+### `config/migration.ts` — Flags VPS (`USE_VPS`)
+
+| Flag | Ativo | Tabela MySQL |
+|---|---|---|
+| `products` | ✅ | `products` |
+| `categories` | ✅ | `categories` |
+| `brands` | ✅ | `brands` |
+| `versions` | ✅ | `versions` |
+| `banners` | ✅ | `banners` |
+| `shipping` | ✅ | `shipping_settings` |
+| `coupons` | ✅ | `coupons` |
+| `paymentFees` | ✅ | `payment_fees` |
+| `company` | ✅ | `company_settings` |
+| `customers` | ⏳ | `customers` |
+| `orders` | ⏳ | `orders` |
+| `pdv` | ⏳ | `sales` |
+| `sales` | ⏳ | `sales` |
 
