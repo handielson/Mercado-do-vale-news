@@ -572,8 +572,10 @@ export default async function handler(req: any, res: any) {
             const slug = brand_name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
             
             // Find or create brand
-            const { data: existingBrands } = await supabase.from('brands').select('id, name').eq('company_id', companyId).ilike('name', brand_name);
+            const { data: existingBrands } = await supabase.from('brands').select('id, name, slug, active, warranty_days').eq('company_id', companyId).ilike('name', brand_name);
             let brandId = existingBrands?.[0]?.id;
+            let brandRow = existingBrands?.[0];
+            let wasCreated = false;
             
             if (!brandId) {
                 const { data: newBrand, error: createError } = await supabase.from('brands').insert({
@@ -582,16 +584,38 @@ export default async function handler(req: any, res: any) {
                     slug,
                     warranty_days: 90,
                     active: true
-                }).select('id').single();
+                }).select('id, name, slug, active, warranty_days').single();
                 if (createError) return res.status(500).json({ error: 'Failed to create brand', detail: createError.message });
                 brandId = newBrand.id;
+                brandRow = newBrand;
+                wasCreated = true;
             }
             
             // Update the model's brand_id
             const { error: updateError } = await supabase.from('models').update({ brand_id: brandId }).eq('id', model_id);
             if (updateError) return res.status(500).json({ error: 'Failed to update model brand', detail: updateError.message });
+
+            // Sync brand to VPS (fire-and-forget)
+            const vpsBase = 'https://api.xiaomipetrolina.com.br';
+            const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || '';
+            if (syncKey && brandRow) {
+                const vpsBrandPayload = { ...brandRow, company_id: companyId };
+                if (wasCreated) {
+                    fetch(`${vpsBase}/brands`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+                        body: JSON.stringify(vpsBrandPayload)
+                    }).catch(() => {});
+                } else {
+                    fetch(`${vpsBase}/brands/${brandId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+                        body: JSON.stringify(vpsBrandPayload)
+                    }).catch(() => {});
+                }
+            }
             
-            return res.status(200).json({ ok: true, brand_id: brandId, brand_name, model_id });
+            return res.status(200).json({ ok: true, brand_id: brandId, brand_name, model_id, was_created: wasCreated });
         } catch (err: any) {
             return res.status(500).json({ error: err.message });
         }
