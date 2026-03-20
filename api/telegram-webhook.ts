@@ -446,19 +446,36 @@ export default async function handler(req: any, res: any) {
             const cat = categories[0];
             await sendTelegram(token, chatId, `⏳ Carregando estoque de *${cat.name}*...`);
 
-            // 2. Buscar todos os produtos em estoque dessa categoria
-            const { data: products } = await supabase
+            // 2a. IDs dos modelos que pertencem a essa categoria
+            const { data: models } = await supabase
+                .from('models')
+                .select('id')
+                .eq('category_id', cat.id);
+            const modelIds = (models || []).map((m: any) => m.id);
+
+            // 2b. Buscar produtos: por category_id direto OU via model_id da categoria
+            let productQuery = supabase
                 .from('products')
                 .select('name, stock_quantity, specs, price_cost, brand')
                 .eq('status', 'active')
-                .eq('category_id', cat.id)
                 .gt('stock_quantity', 0)
                 .order('name');
+
+            if (modelIds.length > 0) {
+                productQuery = productQuery.or(
+                    `category_id.eq.${cat.id},model_id.in.(${modelIds.join(',')})`
+                );
+            } else {
+                productQuery = productQuery.eq('category_id', cat.id);
+            }
+
+            const { data: products } = await productQuery;
 
             if (!products || products.length === 0) {
                 await sendTelegram(token, chatId, `📦 Nenhum produto em estoque na categoria *${cat.name}*.`);
                 return res.status(200).json({ ok: true });
             }
+
 
             // 3. Agrupa por nome de produto
             const grouped = new Map<string, { qty: number; costs: number[]; specs: any }>();
