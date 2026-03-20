@@ -970,7 +970,18 @@ export async function importBlingProducts(
             } : item;
 
             const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId, marginWholesale, marginReseller);
-            let finalModelId = modelId;
+            
+            operation = 'verificação de duplicata';
+            const { data: existing, error: checkError } = await supabase
+                .from('products')
+                .select('id, model_id')
+                .eq('company_id', companyId)
+                .eq('bling_id', item.id)
+                .maybeSingle();
+
+            if (checkError) throw new Error(checkError.message);
+
+            let finalModelId = (existing && existing.model_id) ? existing.model_id : modelId;
 
             // --- AUTO-CREATE/RESOLVE BRAND LOGIC (Always runs) ---
             // Extrai a marca do Bling ou assume "Diversos" caso falhe e precisemos gerar um modelo
@@ -998,6 +1009,18 @@ export async function importBlingProducts(
             
             // Grava a marca real, formatada, no produto inserido. Se não existia no Bling, mantemos null no produto de Varejo (Products Table).
             row.brand = (extractedMarca && typeof extractedMarca === 'string' && extractedMarca.trim()) ? brandName : null;
+
+            // Se o produto já existe e tem um modelo, sincronizamos a marca real do Bling com o banco de dados
+            if (existing && finalModelId && resolvedBrandId) {
+                try {
+                    await supabase
+                        .from('models')
+                        .update({ brand_id: resolvedBrandId })
+                        .eq('id', finalModelId);
+                } catch (e) {
+                    console.warn('Failed to sync existing model brand:', e);
+                }
+            }
 
             // --- AUTO-CREATE MODEL LOGIC ---
             if (autoCreateModel && !finalModelId) {
@@ -1074,15 +1097,6 @@ export async function importBlingProducts(
 
             row.model_id = finalModelId || null;
 
-            operation = 'verificação de duplicata';
-            const { data: existing, error: checkError } = await supabase
-                .from('products')
-                .select('id')
-                .eq('company_id', companyId)
-                .eq('bling_id', item.id)
-                .maybeSingle();
-
-            if (checkError) throw new Error(checkError.message);
 
             // Fetch e Compress da imagem principal antes do Upsert
             if (row.images && row.images.length > 0) {
