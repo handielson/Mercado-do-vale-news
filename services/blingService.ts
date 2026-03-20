@@ -945,6 +945,7 @@ export async function importBlingProducts(
             const detail = await fetchBlingProductDetail(item.id);
             const enriched = detail ? {
                 ...item,
+                ...detail,
                 codigo: detail.codigo ?? item.codigo,
                 gtin: detail.gtin ?? item.gtin,            // EAN do filho ou pai
                 categoria: detail.categoria ?? item.categoria,
