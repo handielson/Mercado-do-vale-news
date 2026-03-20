@@ -217,6 +217,52 @@ export default function TelegramPage() {
         }
     };
 
+    const handleRegisterWebhook = async () => {
+        if (!settings?.bot_token) {
+            toast.error('Salve o Token do Bot antes de registrar o webhook.');
+            return;
+        }
+        try {
+            const webhookUrl = `${window.location.origin}/api/telegram-webhook`;
+            const res = await fetch(`https://api.telegram.org/bot${settings.bot_token}/setWebhook`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: webhookUrl, drop_pending_updates: true }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                toast.success(`Webhook registrado! → ${webhookUrl}`);
+            } else {
+                toast.error(`Erro: ${data.description}`);
+            }
+        } catch (err: any) {
+            toast.error('Falha ao registrar webhook: ' + err.message);
+        }
+    };
+
+    const handleCheckWebhook = async () => {
+        if (!settings?.bot_token) {
+            toast.error('Token do Bot não configurado.');
+            return;
+        }
+        try {
+            const res = await fetch(`https://api.telegram.org/bot${settings.bot_token}/getWebhookInfo`);
+            const data = await res.json();
+            if (data.ok) {
+                const info = data.result;
+                const url = info.url || '(nenhum)';
+                const pending = info.pending_update_count ?? 0;
+                const lastError = info.last_error_message ? `\nÚltimo erro: ${info.last_error_message}` : '';
+                toast.info(`Webhook atual:\n${url}\nPendentes: ${pending}${lastError}`, { duration: 8000 });
+            } else {
+                toast.error(`Erro: ${data.description}`);
+            }
+        } catch (err: any) {
+            toast.error('Falha ao consultar webhook: ' + err.message);
+        }
+    };
+
+
     const handleAddTemplate = () => {
         if (!settings) return;
         if (settings.templates.length >= 10) {
@@ -383,6 +429,18 @@ export default function TelegramPage() {
                                     >
                                         {testing ? <div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" /> : <Send className="w-3 h-3" />}
                                         Testar Conexão
+                                    </button>
+                                    <button
+                                        onClick={handleCheckWebhook}
+                                        className="flex items-center justify-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 text-xs font-semibold transition-colors"
+                                    >
+                                        Ver Webhook
+                                    </button>
+                                    <button
+                                        onClick={handleRegisterWebhook}
+                                        className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 text-xs font-semibold transition-colors"
+                                    >
+                                        Registrar Webhook
                                     </button>
                                 </div>
                             </div>
