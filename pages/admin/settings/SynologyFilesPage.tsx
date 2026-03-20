@@ -168,24 +168,6 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
     const [pct, setPct] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    const VPS_BASE = 'https://api.xiaomipetrolina.com.br';
-    const VPS_KEY = import.meta.env.VITE_VPS_SYNC_KEY as string;
-
-    function uploadWithProgress(fd: FormData, url: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', url);
-            xhr.setRequestHeader('x-sync-key', VPS_KEY ?? '');
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) setPct(Math.round((e.loaded / e.total) * 100));
-            };
-            xhr.upload.onloadend = () => setProcessing(true); // bytes enviados, aguardando servidor
-            xhr.onload = () => { setProcessing(false); xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)); };
-            xhr.onerror = () => { setProcessing(false); reject(new Error('Erro de rede')); };
-            xhr.send(fd);
-        });
-    }
-
     async function uploadFiles(files: FileList) {
         setUploading(true);
         let success = 0;
@@ -197,7 +179,11 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
             try {
                 const fd = new FormData();
                 fd.append('file', file);
-                await uploadWithProgress(fd, `${VPS_BASE}/synology/upload?folder=${folder}`);
+                await vpsClient.uploadWithProgress(
+                    `/synology/upload?folder=${folder}`,
+                    fd,
+                    (p, phase) => { setPct(p); setProcessing(phase === 'processing'); }
+                );
                 success++;
             } catch (e: unknown) {
                 toast.error(`Erro ao enviar "${file.name}": ${e instanceof Error ? e.message : 'Erro desconhecido'}`);

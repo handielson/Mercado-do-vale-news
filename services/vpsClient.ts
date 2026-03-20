@@ -96,4 +96,30 @@ export const vpsClient = {
         });
         return handleResponse<T>(res);
     },
+
+    /**
+     * POST multipart/form-data com rastreamento de progresso via XHR.
+     * onProgress: (pct: 0-100, phase: 'sending'|'processing') => void
+     */
+    uploadWithProgress: <T>(path: string, formData: FormData, onProgress: (pct: number, phase: 'sending' | 'processing') => void): Promise<T> => {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${VPS_BASE}${path}`);
+            xhr.setRequestHeader('x-sync-key', VPS_KEY ?? '');
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100), 'sending');
+            };
+            xhr.upload.onloadend = () => onProgress(100, 'processing');
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try { resolve(JSON.parse(xhr.responseText)); } catch { resolve(undefined as T); }
+                } else {
+                    reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+                }
+            };
+            xhr.onerror = () => reject(new Error('Erro de rede'));
+            xhr.send(formData);
+        });
+    },
 };
+
