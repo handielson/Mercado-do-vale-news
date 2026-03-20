@@ -1158,6 +1158,10 @@ export async function importBlingProducts(
             });
         }
 
+        // Respeitar limite de requisições do Bling (3req/segundo). 
+        // Como o product-detail já faz 2 requests (produtos + estoques), aguardamos ~700ms para estabilidade total.
+        await new Promise(resolve => setTimeout(resolve, 700));
+
         onProgress(i + 1, total, result);
     }
 
