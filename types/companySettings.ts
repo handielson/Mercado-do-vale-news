@@ -80,6 +80,10 @@ export interface CompanySettings {
     store_label_closing_soon?: string;  // Default: "Fechando em breve"
     store_label_lunch?: string;         // Default: "Retorna às {hora}"
 
+    // Vídeos Synology por SKU
+    synology_video_base_url?: string;   // URL base (ex: https://mdvvideos.i234.me/videos/)
+    synology_video_extension?: string;  // Extensão (ex: .mp4, .webm) — padrão: .mp4
+
     created_at: string;
     updated_at: string;
 }
@@ -130,5 +134,9 @@ export interface CompanySettingsInput {
     store_label_closed?: string;
     store_label_closing_soon?: string;
     store_label_lunch?: string;
+
+    // Vídeos Synology por SKU
+    synology_video_base_url?: string;
+    synology_video_extension?: string;
 
 }

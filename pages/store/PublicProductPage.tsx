@@ -44,28 +44,54 @@ export const PublicProductPage: React.FC = () => {
     const [cashbackSettings, setCashbackSettings] = useState<CashbackSettings | null>(null);
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
     const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
-    const [autoVideoUrl, setAutoVideoUrl] = useState<string | null>(null);
+
     // Config da categoria: define quais campos existem no template
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
     // Dicionário de chaves para nomes amigáveis baseados nos campos customizados do BD
     const [customFieldNames, setCustomFieldNames] = useState<Record<string, string>>({});
 
-    // Computed Video URL baseada na flag do modelo (has_video) e no SKU
-    const effectiveVideoUrl = React.useMemo(() => {
-        if (product?.video_url) return product.video_url; // Prioridade para video setado diretamente no produto
-        
-        const hasVideo = product?.specs?.has_video === true;
-        const videoBaseUrl = (companySettings as any)?.synology_video_base_url || (companySettings as any)?.synologyVideoBaseUrl;
-        
-        if (hasVideo && product?.sku && videoBaseUrl) {
-            const baseUrl = videoBaseUrl.endsWith('/') 
-                ? videoBaseUrl 
-                : `${videoBaseUrl}/`;
-            return `${baseUrl}${product.sku.replace(/\s+/g, '')}.mp4`;
-        }
-        
-        return null;
-    }, [product?.video_url, product?.specs?.has_video, product?.sku, companySettings]);
+    // Resolved video URL: prioridade video_url → HEAD check automático por SKU
+    const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const resolveVideoUrl = async () => {
+            // 1. Se o produto tem video_url explícita, usa direto
+            if (product?.video_url) {
+                setEffectiveVideoUrl(product.video_url);
+                return;
+            }
+
+            // 2. Se não há SKU ou URL base configurada, sem vídeo
+            const videoBaseUrl = (companySettings as any)?.synologyVideoBaseUrl ||
+                (companySettings as any)?.synology_video_base_url;
+            if (!product?.sku || !videoBaseUrl) {
+                setEffectiveVideoUrl(null);
+                return;
+            }
+
+            // 3. Monta URL e faz HEAD request para verificar se o arquivo existe
+            const ext = (companySettings as any)?.synologyVideoExtension ||
+                (companySettings as any)?.synology_video_extension || '.mp4';
+            const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
+            const candidateUrl = `${baseUrl}${product.sku.replace(/\s+/g, '')}${ext}`;
+
+            try {
+                const response = await fetch(candidateUrl, { method: 'HEAD', cache: 'no-store' });
+                if (!cancelled) {
+                    setEffectiveVideoUrl(response.ok ? candidateUrl : null);
+                }
+            } catch {
+                if (!cancelled) setEffectiveVideoUrl(null);
+            }
+        };
+
+        if (product) resolveVideoUrl();
+        else setEffectiveVideoUrl(null);
+
+        return () => { cancelled = true; };
+    }, [product?.video_url, product?.sku, companySettings]);
 
     useEffect(() => {
         window.scrollTo(0, 0);

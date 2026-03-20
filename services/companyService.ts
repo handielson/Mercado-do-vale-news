@@ -50,6 +50,7 @@ interface CompanySettingsRow {
     internal_notes: string | null;
     google_analytics_id: string | null;
     synology_video_base_url: string | null;
+    synology_video_extension: string | null;
     catalog_footer_text: string | null;
     maintenance_mode: boolean | null;
     maintenance_message: string | null;
@@ -108,6 +109,7 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     internalNotes: row.internal_notes || '',
     googleAnalyticsId: row.google_analytics_id || '',
     synologyVideoBaseUrl: row.synology_video_base_url || '',
+    synologyVideoExtension: row.synology_video_extension || '.mp4',
     catalogFooterText: row.catalog_footer_text || '',
     maintenanceMode: row.maintenance_mode ?? false,
     maintenanceMessage: row.maintenance_message || '',
@@ -159,6 +161,7 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     internal_notes: company.internalNotes || null,
     google_analytics_id: company.googleAnalyticsId || null,
     synology_video_base_url: company.synologyVideoBaseUrl || null,
+    synology_video_extension: company.synologyVideoExtension || null,
     catalog_footer_text: company.catalogFooterText || null,
     maintenance_mode: company.maintenanceMode ?? null,
     maintenance_message: company.maintenanceMessage || null,

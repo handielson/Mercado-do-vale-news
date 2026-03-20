@@ -458,8 +458,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 return;
             }
 
+            const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
             const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
-            const videoUrl = `${baseUrl}${sku.replace(/\s+/g, '')}.mp4`;
+            const videoUrl = `${baseUrl}${sku.replace(/\s+/g, '')}${ext}`;
             
             setValue('video_url', videoUrl, { shouldDirty: true, shouldValidate: true });
             toast.success('Link do vídeo gerado com sucesso!');
@@ -468,6 +469,38 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             toast.error('Erro ao buscar definições da Empresa.');
         }
     };
+
+    // Auto-preenche o video_url ao abrir o form de edição se o produto tem SKU mas não tem URL de vídeo
+    useEffect(() => {
+        if (!initialData) return; // só no modo edição
+        if (initialData.video_url) return; // já tem URL, não sobrescreve
+        const sku = initialData.sku;
+        if (!sku) return;
+
+        const autoFillVideoUrl = async () => {
+            try {
+                const { companySettingsService } = await import('../../services/companySettingsService');
+                const settings = await companySettingsService.get() as any;
+                const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
+                if (!videoBaseUrl) return;
+
+                const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
+                const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
+                const candidateUrl = `${baseUrl}${sku.replace(/\s+/g, '')}${ext}`;
+
+                // Verifica se o arquivo realmente existe antes de preencher
+                const response = await fetch(candidateUrl, { method: 'HEAD', cache: 'no-store' });
+                if (response.ok) {
+                    setValue('video_url', candidateUrl, { shouldDirty: false });
+                    toast.info('🎥 Vídeo encontrado no Synology e vinculado automaticamente.');
+                }
+            } catch {
+                // Silencioso: sem vídeo não exibe erro
+            }
+        };
+
+        autoFillVideoUrl();
+    }, [initialData?.id]); // Roda apenas uma vez ao montar com um produto específico
 
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(

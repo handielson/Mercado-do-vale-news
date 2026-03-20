@@ -169,8 +169,9 @@ async function create(input: ProductInput): Promise<Product> {
             const settings = await companySettingsService.get() as any;
             const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
             if (videoBaseUrl) {
+                const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
                 const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
-                finalVideoUrl = `${baseUrl}${input.sku.replace(/\s+/g, '')}.mp4`;
+                finalVideoUrl = `${baseUrl}${input.sku.replace(/\s+/g, '')}${ext}`;
             }
         } catch (e) {
             console.error('Failed to auto-generate video URL:', e);
@@ -285,8 +286,9 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             const settings = await companySettingsService.get() as any;
             const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
             if (videoBaseUrl) {
+                const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
                 const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
-                finalVideoUrl = `${baseUrl}${input.sku.replace(/\s+/g, '')}.mp4`;
+                finalVideoUrl = `${baseUrl}${input.sku.replace(/\s+/g, '')}${ext}`;
             }
         } catch (e) {
             console.error('Failed to auto-generate video URL:', e);

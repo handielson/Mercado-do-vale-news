@@ -88,18 +88,33 @@ export const CompanyAdditionalInfoSection: React.FC<CompanyAdditionalInfoSection
             <div className="mt-6 pt-6 border-t border-slate-100">
                 <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                    URL Base de Vídeos (Servidor Próprio / NAS)
+                    Automação de Vídeos por SKU (Synology / NAS)
                 </label>
-                <p className="text-xs text-slate-500 mb-2">
-                    Se preenchido, o site tentará carregar automaticamente os vídeos dos produtos procurando pelo arquivo <strong>SKU.mp4</strong> neste endereço. (Ex: <em>http://192.168.1.X/videos/</em>)
+                <p className="text-xs text-slate-500 mb-3">
+                    Faça upload de um vídeo nomeado com o SKU do produto (ex: <strong>SKU123.mp4</strong>) no servidor e ele aparecerá automaticamente na página do produto — sem precisar editar cada produto individualmente.
                 </p>
-                <input
-                    type="url"
-                    value={form.synologyVideoBaseUrl || ''}
-                    onChange={(e) => onChange({ synologyVideoBaseUrl: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono"
-                    placeholder="Ex: http://seu-ddns.synology.me/videos/"
-                />
+                <div className="flex gap-3">
+                    <input
+                        type="url"
+                        value={form.synologyVideoBaseUrl || ''}
+                        onChange={(e) => onChange({ synologyVideoBaseUrl: e.target.value })}
+                        className="flex-1 border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono"
+                        placeholder="Ex: https://mdvvideos.i234.me/videos/"
+                    />
+                    <div className="shrink-0">
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Extensão</label>
+                        <input
+                            type="text"
+                            value={form.synologyVideoExtension || '.mp4'}
+                            onChange={(e) => onChange({ synologyVideoExtension: e.target.value })}
+                            className="w-24 border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono text-center"
+                            placeholder=".mp4"
+                        />
+                    </div>
+                </div>
+                <p className="text-xs text-slate-400 mt-1.5">
+                    Extensões suportadas: <code>.mp4</code>, <code>.webm</code>, <code>.mov</code>
+                </p>
             </div>
 
             {/* SEÇÃO DE MANUTENÇÃO */}

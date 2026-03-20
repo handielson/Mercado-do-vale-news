@@ -66,6 +66,7 @@ export interface Company {
     // Integrations
     googleAnalyticsId?: string; // Google Analytics Measurement ID (ex: G-XXXXXXXXXX)
     synologyVideoBaseUrl?: string; // URL base para vídeos no Synology (ex: http://192.168.1.2/videos/)
+    synologyVideoExtension?: string; // Extensão dos vídeos (ex: .mp4, .webm) — padrão: .mp4
 
     // Maintenance Mode
     maintenanceMode?: boolean;
@@ -117,6 +118,7 @@ export const defaultCompany: Company = {
     aboutUsImageUrl: '',
     googleAnalyticsId: '',
     synologyVideoBaseUrl: '',
+    synologyVideoExtension: '.mp4',
     maintenanceMode: false,
     maintenanceMessage: 'Voltamos logo! Estamos realizando manutenções no servidor para melhorar sua experiência.',
     maintenanceBypassKey: 'liberado'

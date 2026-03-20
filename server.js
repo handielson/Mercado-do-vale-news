@@ -422,6 +422,7 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
     'ai_prompts', 'business_hours', 'holiday_overrides', 'local_holidays',
     'business_hours_display_text',
     'store_label_open', 'store_label_closed', 'store_label_closing_soon', 'store_label_lunch',
+    'synology_video_base_url', 'synology_video_extension',
   ];
   const body = req.body;
   const updates = [];
@@ -1228,8 +1229,31 @@ fastify.delete('/synology/file', { preHandler: requireSyncKey }, async (req, rep
   return { ok: true };
 });
 
+// ─── Auto-migrations ────────────────────────────────────────────────────────
+async function addColumnIfMissing(table, column, definition) {
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, column]
+  );
+  if (Number(row.cnt) === 0) {
+    await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+    console.log(`[migration] Added ${table}.${column}`);
+  } else {
+    console.log(`[migration] ${table}.${column} already exists — skip`);
+  }
+}
+
+async function runMigrations() {
+  await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
+  console.log('[migration] company_settings synology columns: OK');
+}
+
 // ─── Start ─────────────────────────────────────────────────────────────────
-fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
-  if (err) { console.error(err); process.exit(1); }
-  console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);
+runMigrations().then(() => {
+  fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
+    if (err) { console.error(err); process.exit(1); }
+    console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);
+  });
 });
