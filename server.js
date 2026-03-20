@@ -1095,36 +1095,33 @@ const SYNO_CDN = {
   arquivos: 'https://arquivos.xiaomipetrolina.com.br',
 };
 
-async function synoLogin() {
+function synoHttpGet(urlObj, path) {
   const https = require('https');
-  const qs = `api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(SYNO_USER)}&passwd=${encodeURIComponent(SYNO_PASS)}&session=FileStation&format=sid`;
-  const urlObj = new URL(SYNO_URL);
+  const port = urlObj.port ? parseInt(urlObj.port) : (urlObj.protocol === 'https:' ? 443 : 80);
   return new Promise((resolve, reject) => {
-    https.get({ hostname: urlObj.hostname, port: urlObj.port || 5001, path: `/webapi/auth.cgi?${qs}`, rejectUnauthorized: false }, (res) => {
-      let d = '';
-      res.on('data', c => d += c);
-      res.on('end', () => {
-        try {
-          const j = JSON.parse(d);
-          if (j.success) resolve(j.data.sid);
-          else reject(new Error('Synology login failed: ' + JSON.stringify(j.error)));
-        } catch (e) { reject(e); }
-      });
-    }).on('error', reject);
-  });
-}
-
-async function synoApiGet(apiPath) {
-  const https = require('https');
-  const urlObj = new URL(SYNO_URL);
-  return new Promise((resolve, reject) => {
-    https.get({ hostname: urlObj.hostname, port: urlObj.port || 5001, path: apiPath, rejectUnauthorized: false }, (res) => {
+    const req = https.get({ hostname: urlObj.hostname, port, path, rejectUnauthorized: false }, (res) => {
       let d = '';
       res.on('data', c => d += c);
       res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
-    }).on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(new Error('Synology request timeout (15s)')); });
   });
 }
+
+async function synoLogin() {
+  const qs = `api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(SYNO_USER)}&passwd=${encodeURIComponent(SYNO_PASS)}&session=FileStation&format=sid`;
+  const urlObj = new URL(SYNO_URL);
+  const j = await synoHttpGet(urlObj, `/webapi/auth.cgi?${qs}`);
+  if (j.success) return j.data.sid;
+  throw new Error('Synology login failed: ' + JSON.stringify(j.error));
+}
+
+async function synoApiGet(apiPath) {
+  const urlObj = new URL(SYNO_URL);
+  return synoHttpGet(urlObj, apiPath);
+}
+
 
 // GET /synology/files?folder=imagens|videos|arquivos
 fastify.get('/synology/files', { preHandler: requireSyncKey }, async (req, reply) => {
