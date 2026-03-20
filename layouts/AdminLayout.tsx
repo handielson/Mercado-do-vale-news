@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server } from 'lucide-react';
 
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -83,6 +83,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       items: [
         { to: '/admin/settings/vps-status', icon: <Activity size={18} />, label: 'Status VPS', keywords: 'servidor hostinger uptime' },
         { to: '/admin/settings/mysql', icon: <Database size={18} />, label: 'MySQL Explorer', keywords: 'banco dados query sql tables' },
+        { to: '/admin/settings/synology-cdn', icon: <Server size={18} />, label: 'CDN Synology', keywords: 'arquivos imagens videos upload nas' },
         { to: '/admin/settings/roadmap', icon: <Rocket size={18} />, label: 'Roadmap & Docs', keywords: 'futuro documentacao novidades' },
         { to: '/admin/migration', icon: <Database size={18} />, label: 'Migração', keywords: 'supabase vps transferir' },
         { to: '/test-tabs', icon: <Tags size={18} />, label: '🧪 Teste de Abas', keywords: 'dev teste' },
