@@ -76,7 +76,7 @@ export const vpsClient = {
     delete: async (path: string): Promise<void> => {
         const res = await fetch(`${VPS_BASE}${path}`, {
             method: 'DELETE',
-            headers: buildHeaders(),
+            headers: { 'x-sync-key': VPS_KEY ?? '' }, // sem Content-Type para evitar FST_ERR_CTP_EMPTY_JSON_BODY
         });
         if (!res.ok) {
             const text = await res.text().catch(() => res.statusText);
