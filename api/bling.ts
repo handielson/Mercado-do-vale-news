@@ -555,6 +555,48 @@ export default async function handler(req: any, res: any) {
         }
     }
 
+    // ─── SYNC-MODEL-BRAND: atualiza brand_id de um modelo (requer service-role) ─
+    if (resource === 'sync-model-brand') {
+        if (req.method !== 'POST') return res.status(405).end();
+        try {
+            const { model_id, brand_name } = req.body;
+            if (!model_id || !brand_name) return res.status(400).json({ error: 'model_id and brand_name are required' });
+            const srKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
+            const supabase = createClient(supabaseUrl, srKey);
+            
+            // Get company_id for this model
+            const { data: model } = await supabase.from('models').select('id, brand_id, company_id').eq('id', model_id).single();
+            if (!model) return res.status(404).json({ error: 'Model not found' });
+            
+            const companyId = model.company_id;
+            const slug = brand_name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            
+            // Find or create brand
+            const { data: existingBrands } = await supabase.from('brands').select('id, name').eq('company_id', companyId).ilike('name', brand_name);
+            let brandId = existingBrands?.[0]?.id;
+            
+            if (!brandId) {
+                const { data: newBrand, error: createError } = await supabase.from('brands').insert({
+                    company_id: companyId,
+                    name: brand_name,
+                    slug,
+                    warranty_days: 90,
+                    active: true
+                }).select('id').single();
+                if (createError) return res.status(500).json({ error: 'Failed to create brand', detail: createError.message });
+                brandId = newBrand.id;
+            }
+            
+            // Update the model's brand_id
+            const { error: updateError } = await supabase.from('models').update({ brand_id: brandId }).eq('id', model_id);
+            if (updateError) return res.status(500).json({ error: 'Failed to update model brand', detail: updateError.message });
+            
+            return res.status(200).json({ ok: true, brand_id: brandId, brand_name, model_id });
+        } catch (err: any) {
+            return res.status(500).json({ error: err.message });
+        }
+    }
+
     // ─── FIX-BLING-ID: corrige o bling_id de um produto por SKU ─────────────
     if (resource === 'fix-bling-id') {
         if (req.method !== 'POST') return res.status(405).end();

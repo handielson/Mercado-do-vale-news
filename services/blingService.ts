@@ -1011,16 +1011,13 @@ export async function importBlingProducts(
             // Grava a marca real, formatada, no produto inserido. Se não existia no Bling, mantemos null no produto de Varejo (Products Table).
             row.brand = (extractedMarca && typeof extractedMarca === 'string' && extractedMarca.trim()) ? brandName : null;
 
-            // Se o produto já existe e tem um modelo, sincronizamos a marca real do Bling com o banco de dados
-            if (existing && finalModelId && resolvedBrandId) {
-                try {
-                    await supabase
-                        .from('models')
-                        .update({ brand_id: resolvedBrandId })
-                        .eq('id', finalModelId);
-                } catch (e) {
-                    console.warn('Failed to sync existing model brand:', e);
-                }
+            // Se o produto já existe e tem um modelo, sincronizamos a marca real do Bling via server-side (bypassa RLS)
+            if (existing && finalModelId && brandName && brandName !== 'Diversos') {
+                fetch('/api/bling?resource=sync-model-brand', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_id: finalModelId, brand_name: brandName })
+                }).catch(e => console.warn('Failed to sync model brand:', e));
             }
 
             // --- AUTO-CREATE MODEL LOGIC ---
@@ -1047,17 +1044,13 @@ export async function importBlingProducts(
                     
                     if (existingModel) {
                         resolvedModelId = existingModel.id;
-                        // If the model was previously under "Diversos" (or another brand), update it to the true brand
-                        if (existingModel.brand_id !== resolvedBrandId) {
-                            try {
-                                await supabase
-                                    .from('models')
-                                    .update({ brand_id: resolvedBrandId })
-                                    .eq('id', existingModel.id);
-                                existingModel.brand_id = resolvedBrandId;
-                            } catch (e) {
-                                console.warn('Failed to update existing model brand:', e);
-                            }
+                        // If the model was previously under "Diversos" (or another brand), update it to the true brand via server-side endpoint
+                        if (existingModel.brand_id !== resolvedBrandId && brandName !== 'Diversos') {
+                            fetch('/api/bling?resource=sync-model-brand', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ model_id: existingModel.id, brand_name: brandName })
+                            }).catch(e => console.warn('Failed to update model brand:', e));
                         }
                     } else {
                         // Create Cross-Sell Tag usando apenas o nome limpo
