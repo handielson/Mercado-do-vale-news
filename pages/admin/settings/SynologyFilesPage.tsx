@@ -164,18 +164,37 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
     const [dragging, setDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState<string | null>(null);
+    const [pct, setPct] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const VPS_BASE = 'https://api.xiaomipetrolina.com.br';
+    const VPS_KEY = import.meta.env.VITE_VPS_SYNC_KEY as string;
+
+    function uploadWithProgress(fd: FormData, url: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', url);
+            xhr.setRequestHeader('x-sync-key', VPS_KEY ?? '');
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) setPct(Math.round((e.loaded / e.total) * 100));
+            };
+            xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`));
+            xhr.onerror = () => reject(new Error('Erro de rede'));
+            xhr.send(fd);
+        });
+    }
 
     async function uploadFiles(files: FileList) {
         setUploading(true);
         let success = 0;
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
+            setPct(0);
             setProgress(`Enviando ${i + 1}/${files.length}: ${file.name}`);
             try {
                 const fd = new FormData();
                 fd.append('file', file);
-                await vpsClient.upload(`/synology/upload?folder=${folder}`, fd);
+                await uploadWithProgress(fd, `${VPS_BASE}/synology/upload?folder=${folder}`);
                 success++;
             } catch (e: unknown) {
                 toast.error(`Erro ao enviar "${file.name}": ${e instanceof Error ? e.message : 'Erro desconhecido'}`);
@@ -183,6 +202,7 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
         }
         setUploading(false);
         setProgress(null);
+        setPct(0);
         if (success > 0) {
             toast.success(`${success} arquivo(s) enviado(s) com sucesso!`);
             onUploadDone();
@@ -226,12 +246,17 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
                     <Upload size={24} />
                 </div>
                 {uploading ? (
-                    <div>
+                    <div className="w-full max-w-xs">
                         <p className="text-sm font-medium text-slate-700">Enviando para Synology...</p>
-                        <p className="text-xs text-slate-500 mt-1">{progress}</p>
-                        <div className="mt-3 h-1.5 bg-slate-200 rounded-full overflow-hidden w-48">
-                            <div className="h-full bg-blue-500 rounded-full animate-pulse w-full" />
+                        <p className="text-xs text-slate-500 mt-1 truncate">{progress}</p>
+                        {/* Barra de progresso real */}
+                        <div className="mt-3 h-2 bg-slate-200 rounded-full overflow-hidden w-full">
+                            <div
+                                className="h-full bg-blue-500 rounded-full transition-all duration-200"
+                                style={{ width: `${pct}%` }}
+                            />
                         </div>
+                        <p className="text-xs text-blue-600 font-semibold mt-1">{pct}%</p>
                     </div>
                 ) : (
                     <div>
