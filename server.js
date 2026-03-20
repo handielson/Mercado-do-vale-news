@@ -1172,44 +1172,58 @@ fastify.post('/synology/upload', { preHandler: requireSyncKey }, async (req, rep
 
   if (!fileBuf || !fileName) return reply.code(400).send({ error: 'file field required' });
 
-  const sid = await synoLogin();
   const folderPath = SYNO_FOLDERS[folder];
-  const boundary = `MDVBoundary${Date.now()}`;
+  const cdnUrl = `${SYNO_CDN[folder]}/${fileName}`;
 
-  const textFields = [
-    ['api', 'SYNO.FileStation.Upload'],
-    ['version', '2'],
-    ['method', 'upload'],
-    ['path', folderPath],
-    ['create_parents', 'true'],
-    ['overwrite', 'true'],
-    ['_sid', sid],
-  ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
+  // ── Responde 200 IMEDIATAMENTE (evita timeout 524 do Cloudflare) ──────────
+  reply.code(200).send({ ok: true, name: fileName, url: cdnUrl });
 
-  const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
-  const body = Buffer.concat([Buffer.from(textFields), Buffer.from(fileHeader), fileBuf, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+  // ── Upload ao Synology em background (sem bloquear o cliente) ─────────────
+  setImmediate(async () => {
+    try {
+      const sid = await synoLogin();
+      const boundary = `MDVBoundary${Date.now()}`;
 
-  const https = require('https');
-  const urlObj = new URL(SYNO_URL);
-  const result = await new Promise((resolve, reject) => {
-    const options = {
-      hostname: urlObj.hostname, port: parseInt(urlObj.port) || 5001,
-      path: '/webapi/entry.cgi', method: 'POST', rejectUnauthorized: false,
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
-    };
-    const r = https.request(options, (res) => {
-      let d = '';
-      res.on('data', c => d += c);
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
-    });
-    r.on('error', reject);
-    r.write(body);
-    r.end();
+      const textFields = [
+        ['api', 'SYNO.FileStation.Upload'],
+        ['version', '2'],
+        ['method', 'upload'],
+        ['path', folderPath],
+        ['create_parents', 'true'],
+        ['overwrite', 'true'],
+        ['_sid', sid],
+      ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
+
+      const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+      const body = Buffer.concat([Buffer.from(textFields), Buffer.from(fileHeader), fileBuf, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+
+      const https = require('https');
+      const urlObj = new URL(SYNO_URL);
+      const result = await new Promise((resolve, reject) => {
+        const options = {
+          hostname: urlObj.hostname, port: parseInt(urlObj.port) || 5001,
+          path: '/webapi/entry.cgi', method: 'POST', rejectUnauthorized: false,
+          headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
+        };
+        const r = https.request(options, (res) => {
+          let d = '';
+          res.on('data', c => d += c);
+          res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+        });
+        r.on('error', reject);
+        r.write(body);
+        r.end();
+      });
+
+      if (result.success) {
+        console.log(`[synology] Upload OK: ${folderPath}/${fileName}`);
+      } else {
+        console.error(`[synology] Upload FAILED: ${fileName}`, result.error);
+      }
+    } catch (err) {
+      console.error(`[synology] Background upload error: ${fileName}`, err.message);
+    }
   });
-
-  if (!result.success) return reply.code(500).send({ error: 'Upload to Synology failed', detail: result.error });
-
-  return { ok: true, name: fileName, url: `${SYNO_CDN[folder]}/${fileName}` };
 });
 
 // DELETE /synology/file?folder=imagens&name=arquivo.jpg
