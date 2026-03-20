@@ -71,6 +71,7 @@ import { FreeScreenProtectorRulesPage } from '../pages/customer/FreeScreenProtec
 import { FeedbackListPage } from '../pages/admin/feedbacks/FeedbackListPage';
 import { PromotionsPage as AdminPromotionsPage } from '../pages/admin/promotions/PromotionsPage';
 import { AboutUsPage } from '../pages/catalog/AboutUsPage';
+import { FAQPage } from '../pages/catalog/FAQPage';
 import BlingPage from '../pages/admin/settings/BlingPage';
 import BlingCallbackPage from '../pages/admin/settings/BlingCallbackPage';
 import { ProductImageBankPage } from '../pages/admin/products/ProductImageBankPage';
@@ -91,6 +92,7 @@ import { ReviewsPage } from '../pages/admin/catalog/ReviewsPage';
 import { RoadmapPage } from '../pages/admin/settings/RoadmapPage';
 import { VpsStatusPage } from '../pages/admin/settings/VpsStatusPage';
 import { MySQLExplorerPage } from '../pages/admin/settings/MySQLExplorerPage';
+import { SynologyFilesPage } from '../pages/admin/settings/SynologyFilesPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -683,6 +685,14 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     )
   },
+  {
+    path: "/admin/settings/synology-cdn",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SynologyFilesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
   // Customer Routes
   {
     path: "/admin/customers",
@@ -908,6 +918,14 @@ export const router = createBrowserRouter([
     element: (
       <MaintenanceGuard>
         <AboutUsPage />
+      </MaintenanceGuard>
+    )
+  },
+  {
+    path: "/faq",
+    element: (
+      <MaintenanceGuard>
+        <FAQPage />
       </MaintenanceGuard>
     )
   },

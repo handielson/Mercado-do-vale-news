@@ -1076,6 +1076,161 @@ fastify.delete('/team/:id', { preHandler: requireSyncKey }, async (req, reply) =
   return { ok: true };
 });
 
+// ─── Synology CDN Manager ──────────────────────────────────────────────────
+// Rotas para gerenciar arquivos nos CDNs do Synology NAS
+// Funciona de qualquer rede via QuickConnect (sem CORS: chamadas server-side)
+
+const SYNO_URL  = process.env.SYNOLOGY_URL  || 'https://192-168-1-2.handielson.direct.quickconnect.to:5001';
+const SYNO_USER = process.env.SYNOLOGY_USER || '';
+const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
+
+const SYNO_FOLDERS = {
+  imagens:  '/web/imagens',
+  videos:   '/web/videos',
+  arquivos: '/web/arquivos',
+};
+const SYNO_CDN = {
+  imagens:  'https://imagens.xiaomipetrolina.com.br',
+  videos:   'https://videos.mercadodovale.com.br',
+  arquivos: 'https://arquivos.xiaomipetrolina.com.br',
+};
+
+async function synoLogin() {
+  const https = require('https');
+  const qs = `api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(SYNO_USER)}&passwd=${encodeURIComponent(SYNO_PASS)}&session=FileStation&format=sid`;
+  const urlObj = new URL(SYNO_URL);
+  return new Promise((resolve, reject) => {
+    https.get({ hostname: urlObj.hostname, port: urlObj.port || 5001, path: `/webapi/auth.cgi?${qs}`, rejectUnauthorized: false }, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          if (j.success) resolve(j.data.sid);
+          else reject(new Error('Synology login failed: ' + JSON.stringify(j.error)));
+        } catch (e) { reject(e); }
+      });
+    }).on('error', reject);
+  });
+}
+
+async function synoApiGet(apiPath) {
+  const https = require('https');
+  const urlObj = new URL(SYNO_URL);
+  return new Promise((resolve, reject) => {
+    https.get({ hostname: urlObj.hostname, port: urlObj.port || 5001, path: apiPath, rejectUnauthorized: false }, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+    }).on('error', reject);
+  });
+}
+
+// GET /synology/files?folder=imagens|videos|arquivos
+fastify.get('/synology/files', { preHandler: requireSyncKey }, async (req, reply) => {
+  const folder = req.query.folder;
+  if (!SYNO_FOLDERS[folder]) return reply.code(400).send({ error: 'Invalid folder' });
+  if (!SYNO_USER || !SYNO_PASS) return reply.code(500).send({ error: 'Synology credentials not configured in .env' });
+
+  const sid = await synoLogin();
+  const data = await synoApiGet(
+    `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list&folder_path=${encodeURIComponent(SYNO_FOLDERS[folder])}&additional=%5B%22size%22%2C%22time%22%5D&_sid=${sid}`
+  );
+
+  if (!data.success) return reply.code(500).send({ error: 'Failed to list files', detail: data.error });
+
+  const cdn = SYNO_CDN[folder];
+  const files = (data.data?.files || [])
+    .filter(f => !f.isdir)
+    .map(f => ({
+      name: f.name,
+      size: f.additional?.size || 0,
+      modified: f.additional?.time?.mtime ? new Date(f.additional.time.mtime * 1000).toISOString() : null,
+      url: `${cdn}/${f.name}`,
+    }));
+
+  reply.header('Cache-Control', 'no-store');
+  return files;
+});
+
+// POST /synology/upload?folder=imagens|videos|arquivos
+fastify.post('/synology/upload', { preHandler: requireSyncKey }, async (req, reply) => {
+  const folder = req.query.folder;
+  if (!SYNO_FOLDERS[folder]) return reply.code(400).send({ error: 'Invalid folder' });
+  if (!SYNO_USER || !SYNO_PASS) return reply.code(500).send({ error: 'Synology credentials not configured' });
+
+  const parts = req.parts({ limits: { fileSize: 500 * 1024 * 1024 } }); // 500MB para vídeos
+  let fileBuf = null;
+  let fileName = null;
+
+  for await (const part of parts) {
+    if (part.type === 'file' && part.fieldname === 'file') {
+      fileName = part.filename;
+      const chunks = [];
+      for await (const chunk of part.file) chunks.push(chunk);
+      fileBuf = Buffer.concat(chunks);
+    }
+  }
+
+  if (!fileBuf || !fileName) return reply.code(400).send({ error: 'file field required' });
+
+  const sid = await synoLogin();
+  const folderPath = SYNO_FOLDERS[folder];
+  const boundary = `MDVBoundary${Date.now()}`;
+
+  const textFields = [
+    ['api', 'SYNO.FileStation.Upload'],
+    ['version', '2'],
+    ['method', 'upload'],
+    ['path', folderPath],
+    ['create_parents', 'true'],
+    ['overwrite', 'true'],
+    ['_sid', sid],
+  ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
+
+  const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+  const body = Buffer.concat([Buffer.from(textFields), Buffer.from(fileHeader), fileBuf, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+
+  const https = require('https');
+  const urlObj = new URL(SYNO_URL);
+  const result = await new Promise((resolve, reject) => {
+    const options = {
+      hostname: urlObj.hostname, port: parseInt(urlObj.port) || 5001,
+      path: '/webapi/entry.cgi', method: 'POST', rejectUnauthorized: false,
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
+    };
+    const r = https.request(options, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+    });
+    r.on('error', reject);
+    r.write(body);
+    r.end();
+  });
+
+  if (!result.success) return reply.code(500).send({ error: 'Upload to Synology failed', detail: result.error });
+
+  return { ok: true, name: fileName, url: `${SYNO_CDN[folder]}/${fileName}` };
+});
+
+// DELETE /synology/file?folder=imagens&name=arquivo.jpg
+fastify.delete('/synology/file', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { folder, name } = req.query;
+  if (!SYNO_FOLDERS[folder]) return reply.code(400).send({ error: 'Invalid folder' });
+  if (!name) return reply.code(400).send({ error: 'name required' });
+  if (!SYNO_USER || !SYNO_PASS) return reply.code(500).send({ error: 'Synology credentials not configured' });
+
+  const sid = await synoLogin();
+  const filePath = `${SYNO_FOLDERS[folder]}/${name}`;
+  const data = await synoApiGet(
+    `/webapi/entry.cgi?api=SYNO.FileStation.Delete&version=2&method=start&path=${encodeURIComponent(filePath)}&accurate_progress=true&_sid=${sid}`
+  );
+
+  if (!data.success) return reply.code(500).send({ error: 'Delete failed', detail: data.error });
+  return { ok: true };
+});
+
 // ─── Start ─────────────────────────────────────────────────────────────────
 fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
   if (err) { console.error(err); process.exit(1); }
