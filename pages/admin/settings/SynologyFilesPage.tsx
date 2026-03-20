@@ -163,6 +163,7 @@ function FileCard({ file, onDelete, onCopy }: { file: CDNFile; onDelete: () => v
 function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: string; onUploadDone: () => void }) {
     const [dragging, setDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [processing, setProcessing] = useState(false); // aguardando resposta do Synology
     const [progress, setProgress] = useState<string | null>(null);
     const [pct, setPct] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -178,8 +179,9 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable) setPct(Math.round((e.loaded / e.total) * 100));
             };
-            xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`));
-            xhr.onerror = () => reject(new Error('Erro de rede'));
+            xhr.upload.onloadend = () => setProcessing(true); // bytes enviados, aguardando servidor
+            xhr.onload = () => { setProcessing(false); xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)); };
+            xhr.onerror = () => { setProcessing(false); reject(new Error('Erro de rede')); };
             xhr.send(fd);
         });
     }
@@ -190,6 +192,7 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             setPct(0);
+            setProcessing(false);
             setProgress(`Enviando ${i + 1}/${files.length}: ${file.name}`);
             try {
                 const fd = new FormData();
@@ -201,6 +204,7 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
             }
         }
         setUploading(false);
+        setProcessing(false);
         setProgress(null);
         setPct(0);
         if (success > 0) {
@@ -247,16 +251,25 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
                 </div>
                 {uploading ? (
                     <div className="w-full max-w-xs">
-                        <p className="text-sm font-medium text-slate-700">Enviando para Synology...</p>
+                        <p className="text-sm font-medium text-slate-700">
+                            {processing ? 'Salvando no Synology...' : 'Enviando para o servidor...'}
+                        </p>
                         <p className="text-xs text-slate-500 mt-1 truncate">{progress}</p>
-                        {/* Barra de progresso real */}
+                        {/* Barra de progresso */}
                         <div className="mt-3 h-2 bg-slate-200 rounded-full overflow-hidden w-full">
-                            <div
-                                className="h-full bg-blue-500 rounded-full transition-all duration-200"
-                                style={{ width: `${pct}%` }}
-                            />
+                            {processing ? (
+                                // Indeterminate quando servidor está processando
+                                <div className="h-full bg-blue-500 rounded-full animate-pulse w-full" />
+                            ) : (
+                                <div
+                                    className="h-full bg-blue-500 rounded-full transition-all duration-200"
+                                    style={{ width: `${pct}%` }}
+                                />
+                            )}
                         </div>
-                        <p className="text-xs text-blue-600 font-semibold mt-1">{pct}%</p>
+                        <p className="text-xs text-blue-600 font-semibold mt-1">
+                            {processing ? 'Aguardando Synology...' : `${pct}%`}
+                        </p>
                     </div>
                 ) : (
                     <div>
