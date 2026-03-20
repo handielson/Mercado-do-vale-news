@@ -194,8 +194,9 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
         setProgress(null);
         setPct(0);
         if (success > 0) {
-            toast.success(`${success} arquivo(s) enviado(s) com sucesso!`);
-            onUploadDone();
+            toast.success(`${success} arquivo(s) enviado(s)! Atualizando lista em alguns segundos...`);
+            // Aguarda o Synology processar o upload em background antes de recarregar a lista
+            setTimeout(() => onUploadDone(), 6000);
         }
     }
 
