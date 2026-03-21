@@ -1124,6 +1124,39 @@ async function synoApiGet(apiPath) {
 }
 
 
+// GET /public/check-video?sku=SKU — verifica vídeo no Synology sem autenticação (resolve CORS do browser)
+fastify.get('/public/check-video', async (req, reply) => {
+  const sku = req.query.sku;
+  if (!sku) return reply.code(400).send({ error: 'sku required' });
+
+  const settings = await db.query('SELECT synology_video_base_url, synology_video_extension FROM company_settings LIMIT 1').then(r => r[0]).catch(() => null);
+  const baseUrl = settings?.synology_video_base_url;
+  const ext = settings?.synology_video_extension || '.mp4';
+
+  if (!baseUrl) return reply.send({ exists: false });
+
+  const cleanSku = sku.trim().replace(/\s+/g, '');
+  const videoUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}${cleanSku}${ext}`;
+
+  try {
+    const https = require('https');
+    const http = require('http');
+    const urlObj = new URL(videoUrl);
+    const lib = urlObj.protocol === 'https:' ? https : http;
+    const exists = await new Promise((resolve) => {
+      const r = lib.request({ hostname: urlObj.hostname, path: urlObj.pathname, method: 'HEAD', rejectUnauthorized: false }, (res) => {
+        resolve(res.statusCode >= 200 && res.statusCode < 400);
+      });
+      r.on('error', () => resolve(false));
+      r.setTimeout(8000, () => { r.destroy(); resolve(false); });
+      r.end();
+    });
+    return reply.send({ exists, url: exists ? videoUrl : null });
+  } catch {
+    return reply.send({ exists: false });
+  }
+});
+
 // GET /synology/files?folder=imagens|videos|arquivos
 fastify.get('/synology/files', { preHandler: requireSyncKey }, async (req, reply) => {
   const folder = req.query.folder;

@@ -63,24 +63,19 @@ export const PublicProductPage: React.FC = () => {
                 return;
             }
 
-            // 2. Se não há SKU ou URL base configurada, sem vídeo
-            const videoBaseUrl = (companySettings as any)?.synologyVideoBaseUrl ||
-                (companySettings as any)?.synology_video_base_url;
-            if (!product?.sku || !videoBaseUrl) {
+            // 2. Se não há SKU, sem vídeo
+            if (!product?.sku) {
                 setEffectiveVideoUrl(null);
                 return;
             }
 
-            // 3. Monta URL e faz HEAD request para verificar se o arquivo existe
-            const ext = (companySettings as any)?.synologyVideoExtension ||
-                (companySettings as any)?.synology_video_extension || '.mp4';
-            const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
-            const candidateUrl = `${baseUrl}${product.sku.replace(/\s+/g, '')}${ext}`;
-
+            // 3. Verifica via VPS (evita bloqueio CORS do HEAD direto ao Synology)
             try {
-                const response = await fetch(candidateUrl, { method: 'HEAD', cache: 'no-store' });
-                if (!cancelled) {
-                    setEffectiveVideoUrl(response.ok ? candidateUrl : null);
+                const VPS_BASE = import.meta.env.VITE_VPS_API_URL || 'https://api.xiaomipetrolina.com.br';
+                const resp = await fetch(`${VPS_BASE}/public/check-video?sku=${encodeURIComponent(product.sku.trim())}`, { cache: 'no-store' });
+                if (!cancelled && resp.ok) {
+                    const json = await resp.json();
+                    setEffectiveVideoUrl(json.exists ? json.url : null);
                 }
             } catch {
                 if (!cancelled) setEffectiveVideoUrl(null);
@@ -91,7 +86,7 @@ export const PublicProductPage: React.FC = () => {
         else setEffectiveVideoUrl(null);
 
         return () => { cancelled = true; };
-    }, [product?.video_url, product?.sku, companySettings]);
+    }, [product?.video_url, product?.sku]);
 
     useEffect(() => {
         window.scrollTo(0, 0);

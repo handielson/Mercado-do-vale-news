@@ -160,7 +160,7 @@ export const catalogService = {
 
         // Aplicar filtros
         if (filters?.search) {
-            query = query.or(`name.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`);
+            query = query.or(`name.ilike.%${filters.search}%,brand.ilike.%${filters.search}%,sku.ilike.%${filters.search}%`);
         }
 
         // IMPORTANTE: Só aplicar filtro de categoria se houver categorias selecionadas
@@ -337,11 +337,7 @@ export const catalogService = {
         const { data, error } = await supabase
             .from('products')
             .select('*')
-            .or(`
-        name.ilike.%${query}%,
-        brand.ilike.%${query}%,
-        model.ilike.%${query}%
-      `)
+            .or(`name.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%,sku.ilike.%${query}%`)
             .order('featured', { ascending: false })
             .order('created_at', { ascending: false })
             .limit(50);
