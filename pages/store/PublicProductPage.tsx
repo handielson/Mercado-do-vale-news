@@ -624,7 +624,7 @@ export const PublicProductPage: React.FC = () => {
                         <div className="aspect-square bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-4">
                             {selectedImage === 'VIDEO' && effectiveVideoUrl ? (
                                 effectiveVideoUrl.toLowerCase().endsWith('.mp4') ? (
-                                    <video src={effectiveVideoUrl} controls autoPlay className="w-full h-full object-contain shadow-lg rounded-lg bg-black" />
+                                    <video src={effectiveVideoUrl} controls autoPlay className="w-full h-full object-contain shadow-lg rounded-lg bg-black" onError={() => { setEffectiveVideoUrl(null); setSelectedImage(product?.images?.[0] || ''); }} />
                                 ) : (
                                     <div className="w-full h-full flex flex-col">
                                         <iframe 

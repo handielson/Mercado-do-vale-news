@@ -1124,7 +1124,7 @@ async function synoApiGet(apiPath) {
 }
 
 
-// GET /public/check-video?sku=SKU — verifica vídeo via FileStation API (sem CORS, sem depender do CDN)
+// GET /public/check-video?sku=SKU — retorna URL do proxy de vídeo (sem verificar existência para evitar throttling no Synology)
 fastify.get('/public/check-video', async (req, reply) => {
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required' });
@@ -1132,22 +1132,14 @@ fastify.get('/public/check-video', async (req, reply) => {
 
   const cleanSku = sku.trim().replace(/\s+/g, '');
   const [rows] = await pool.query('SELECT synology_video_extension FROM company_settings LIMIT 1').catch(() => [[]]);
-  const ext = rows[0]?.synology_video_extension || '.mp4';
+  const ext = rows?.[0]?.synology_video_extension || '.mp4';
   const fileName = `${cleanSku}${ext}`;
-  const folderPath = SYNO_FOLDERS['videos'];
+  const VPS_PUBLIC = process.env.VPS_PUBLIC_URL || 'https://api.xiaomipetrolina.com.br';
 
-  try {
-    const sid = await synoLogin();
-    const data = await synoApiGet(
-      `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list&folder_path=${encodeURIComponent(folderPath)}&pattern=${encodeURIComponent(fileName)}&_sid=${sid}`
-    );
-    const exists = data?.success && (data?.data?.files || []).some(f => f.name === fileName && !f.isdir);
-    const VPS_PUBLIC = process.env.VPS_PUBLIC_URL || 'https://api.xiaomipetrolina.com.br';
-    return reply.send({ exists, url: exists ? `${VPS_PUBLIC}/video/${encodeURIComponent(fileName)}` : null });
-  } catch {
-    return reply.send({ exists: false });
-  }
+  // Retorna URL otimisticamente — o browser trata onError se o arquivo não existir
+  return reply.send({ exists: true, url: `${VPS_PUBLIC}/video/${encodeURIComponent(fileName)}` });
 });
+
 
 // GET /video/:filename — streaming proxy de vídeo do Synology (sem depender do CDN quebrado)
 fastify.get('/video/:filename', async (req, reply) => {
