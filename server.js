@@ -1124,37 +1124,69 @@ async function synoApiGet(apiPath) {
 }
 
 
-// GET /public/check-video?sku=SKU — verifica vídeo no Synology sem autenticação (resolve CORS do browser)
+// GET /public/check-video?sku=SKU — verifica vídeo via FileStation API (sem CORS, sem depender do CDN)
 fastify.get('/public/check-video', async (req, reply) => {
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required' });
-
-  const [rows] = await pool.query('SELECT synology_video_base_url, synology_video_extension FROM company_settings LIMIT 1');
-  const settings = rows[0];
-  const baseUrl = settings?.synology_video_base_url;
-  const ext = settings?.synology_video_extension || '.mp4';
-
-  if (!baseUrl) return reply.send({ exists: false });
+  if (!SYNO_USER || !SYNO_PASS) return reply.send({ exists: false });
 
   const cleanSku = sku.trim().replace(/\s+/g, '');
-  const videoUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}${cleanSku}${ext}`;
+  const [rows] = await pool.query('SELECT synology_video_extension FROM company_settings LIMIT 1').catch(() => [[]]);
+  const ext = rows[0]?.synology_video_extension || '.mp4';
+  const fileName = `${cleanSku}${ext}`;
+  const folderPath = SYNO_FOLDERS['videos'];
 
   try {
-    const https = require('https');
-    const http = require('http');
-    const urlObj = new URL(videoUrl);
-    const lib = urlObj.protocol === 'https:' ? https : http;
-    const exists = await new Promise((resolve) => {
-      const r = lib.request({ hostname: urlObj.hostname, path: urlObj.pathname, method: 'HEAD', rejectUnauthorized: false }, (res) => {
-        resolve(res.statusCode >= 200 && res.statusCode < 400);
-      });
-      r.on('error', () => resolve(false));
-      r.setTimeout(8000, () => { r.destroy(); resolve(false); });
-      r.end();
-    });
-    return reply.send({ exists, url: exists ? videoUrl : null });
+    const sid = await synoLogin();
+    const data = await synoApiGet(
+      `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list&folder_path=${encodeURIComponent(folderPath)}&pattern=${encodeURIComponent(fileName)}&_sid=${sid}`
+    );
+    const exists = data?.success && (data?.data?.files || []).some(f => f.name === fileName && !f.isdir);
+    const VPS_PUBLIC = process.env.VPS_PUBLIC_URL || 'https://api.xiaomipetrolina.com.br';
+    return reply.send({ exists, url: exists ? `${VPS_PUBLIC}/video/${encodeURIComponent(fileName)}` : null });
   } catch {
     return reply.send({ exists: false });
+  }
+});
+
+// GET /video/:filename — streaming proxy de vídeo do Synology (sem depender do CDN quebrado)
+fastify.get('/video/:filename', async (req, reply) => {
+  const { filename } = req.params;
+  if (!filename || !filename.match(/^[\w\-. ]+\.(mp4|webm|mov|avi|mkv)$/i)) {
+    return reply.code(400).send({ error: 'Invalid filename' });
+  }
+  if (!SYNO_USER || !SYNO_PASS) return reply.code(503).send({ error: 'Synology not configured' });
+
+  try {
+    const sid = await synoLogin();
+    const filePath = encodeURIComponent(`${SYNO_FOLDERS['videos']}/${filename}`);
+    const urlObj = new URL(SYNO_URL);
+    const https = require('https');
+    const downloadPath = `/webapi/entry.cgi?api=SYNO.FileStation.Download&version=2&method=download&path=${filePath}&mode=stream&_sid=${sid}`;
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'video/mp4',
+      'Cache-Control': 'public, max-age=3600',
+      'Accept-Ranges': 'bytes',
+    });
+
+    const r = https.request({
+      hostname: urlObj.hostname,
+      port: parseInt(urlObj.port) || 5001,
+      path: downloadPath,
+      method: 'GET',
+      rejectUnauthorized: false,
+    }, (res) => {
+      res.pipe(reply.raw);
+    });
+    r.on('error', (err) => { console.error('[video proxy] error:', err.message); });
+    r.end();
+
+    // Retorna sem value — o stream está sendo gerenciado manualmente
+    await new Promise((resolve) => reply.raw.on('finish', resolve));
+    return;
+  } catch (err) {
+    return reply.code(500).send({ error: 'Video unavailable' });
   }
 });
 
