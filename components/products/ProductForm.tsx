@@ -470,12 +470,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }
     };
 
-    // Auto-preenche o video_url ao abrir o form de edição se o produto tem SKU mas não tem URL de vídeo
+    // Auto-preenche o video_url sempre que o SKU mudar (se estiver vazio ou se for no mesmo domínio do Synology)
+    const currentSkuForVideo = watch('sku');
     useEffect(() => {
-        if (!initialData) return; // só no modo edição
-        if (initialData.video_url) return; // já tem URL, não sobrescreve
-        const sku = initialData.sku;
-        if (!sku) return;
+        if (!currentSkuForVideo) return;
 
         const autoFillVideoUrl = async () => {
             try {
@@ -486,21 +484,33 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
                 const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
                 const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
-                const candidateUrl = `${baseUrl}${sku.replace(/\s+/g, '')}${ext}`;
+                const candidateUrl = `${baseUrl}${currentSkuForVideo.replace(/\s+/g, '')}${ext}`;
 
-                // Verifica se o arquivo realmente existe antes de preencher
+                const currentVideoUrl = getValues('video_url');
+                
+                // Se for idêntico, não faz nada
+                if (currentVideoUrl === candidateUrl) return;
+
+                // Se não estiver vazio e também não for do Synology (ex: link do YouTube), preserva
+                if (currentVideoUrl && !currentVideoUrl.startsWith(videoBaseUrl)) return;
+
+                // Verifica se o arquivo realmente existe (opcional no form pra não travar)
                 const response = await fetch(candidateUrl, { method: 'HEAD', cache: 'no-store' });
                 if (response.ok) {
-                    setValue('video_url', candidateUrl, { shouldDirty: false });
-                    toast.info('🎥 Vídeo encontrado no Synology e vinculado automaticamente.');
+                    setValue('video_url', candidateUrl, { shouldDirty: true });
+                    toast.info(`🎥 Vídeo vinculado automaticamente pelo SKU.`, { id: 'video-auto-fill' });
+                } else if (!currentVideoUrl) {
+                    // preenche mesmo se não der HTTP 200, pois pode existir na rede interna e a gente assume o formato
+                    setValue('video_url', candidateUrl, { shouldDirty: true });
                 }
             } catch {
-                // Silencioso: sem vídeo não exibe erro
+                // Silencioso
             }
         };
 
-        autoFillVideoUrl();
-    }, [initialData?.id]); // Roda apenas uma vez ao montar com um produto específico
+        const timer = setTimeout(autoFillVideoUrl, 800);
+        return () => clearTimeout(timer);
+    }, [currentSkuForVideo, setValue, getValues]);
 
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(

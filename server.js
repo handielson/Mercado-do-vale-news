@@ -1156,19 +1156,37 @@ fastify.get('/video/:filename', async (req, reply) => {
     const https = require('https');
     const downloadPath = `/webapi/entry.cgi?api=SYNO.FileStation.Download&version=2&method=download&path=${filePath}&mode=stream&_sid=${sid}`;
 
-    reply.raw.writeHead(200, {
-      'Content-Type': 'video/mp4',
-      'Cache-Control': 'public, max-age=3600',
-      'Accept-Ranges': 'bytes',
-    });
+    const headers = {};
+    if (req.headers.range) {
+      headers['Range'] = req.headers.range;
+    }
 
     const r = https.request({
       hostname: urlObj.hostname,
       port: parseInt(urlObj.port) || 5001,
       path: downloadPath,
       method: 'GET',
+      headers: headers,
       rejectUnauthorized: false,
     }, (res) => {
+      // Check if Synology returned a JSON API error instead of a file
+      if (res.headers['content-type'] && res.headers['content-type'].includes('application/json')) {
+        reply.raw.writeHead(404, { 'Content-Type': 'application/json' });
+        res.pipe(reply.raw);
+        return;
+      }
+
+      // Forward headers from Synology (important for 206 Partial Content and Content-Length)
+      const replyHeaders = {
+        'Cache-Control': 'public, max-age=3600',
+        'Accept-Ranges': 'bytes',
+      };
+      
+      if (res.headers['content-type']) replyHeaders['Content-Type'] = res.headers['content-type'];
+      if (res.headers['content-length']) replyHeaders['Content-Length'] = res.headers['content-length'];
+      if (res.headers['content-range']) replyHeaders['Content-Range'] = res.headers['content-range'];
+
+      reply.raw.writeHead(res.statusCode || 200, replyHeaders);
       res.pipe(reply.raw);
     });
     r.on('error', (err) => { console.error('[video proxy] error:', err.message); });

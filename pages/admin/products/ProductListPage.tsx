@@ -1,12 +1,13 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
 import { Product } from '../../../types/product';
 import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal';
+import { supabase } from '../../../services/supabase';
+import { toast } from 'sonner';
 
 /**
  * ProductListPage
@@ -17,6 +18,7 @@ import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal
 export const ProductListPage: React.FC = () => {
     const navigate = useNavigate();
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [isGeneratingVideos, setIsGeneratingVideos] = useState(false);
 
     const {
         products,
@@ -54,6 +56,68 @@ export const ProductListPage: React.FC = () => {
 
         if (confirmed) {
             await deleteProduct(product.id);
+        }
+    };
+
+    const handleAutoGenerateVideos = async () => {
+        const confirmed = window.confirm(
+            `Deseja tentar gerar automaticamente o link de vídeo para TODOS os produtos que ainda não possuem um?\n\nEle buscará pelas Definições da Empresa para montar a URL baseada no SKU de cada produto.`
+        );
+        if (!confirmed) return;
+
+        setIsGeneratingVideos(true);
+        toast.loading('Buscando produtos...', { id: 'auto-video' });
+
+        try {
+            const { companySettingsService } = await import('../../../services/companySettingsService');
+            const settings = await companySettingsService.get() as any;
+            const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
+            if (!videoBaseUrl) {
+                toast.error('URL base do Synology não configurada nas Definições da Empresa.', { id: 'auto-video' });
+                return;
+            }
+
+            const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
+            const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
+
+            const { data: eligibleProducts, error: fetchError } = await supabase
+                .from('products')
+                .select('id, sku')
+                .is('video_url', null)
+                .not('sku', 'is', null)
+                .neq('sku', '');
+
+            if (fetchError) throw new Error(fetchError.message);
+
+            if (!eligibleProducts || eligibleProducts.length === 0) {
+                toast.success('Nenhum produto precisava de link de vídeo ou com SKU vazio.', { id: 'auto-video' });
+                return;
+            }
+
+            toast.loading(`Atualizando ${eligibleProducts.length} produto(s)...`, { id: 'auto-video' });
+
+            let updatedCount = 0;
+            for (const prod of eligibleProducts) {
+                if (!prod.sku) continue;
+                
+                const candidateUrl = `${baseUrl}${prod.sku.replace(/\s+/g, '')}${ext}`;
+                const { error: updateError } = await supabase
+                    .from('products')
+                    .update({ video_url: candidateUrl })
+                    .eq('id', prod.id);
+                
+                if (!updateError) {
+                    updatedCount++;
+                }
+            }
+
+            toast.success(`Pronto! ${updatedCount} links de vídeo foram gerados.`, { id: 'auto-video' });
+            refresh();
+        } catch (error) {
+            console.error('Error generating videos:', error);
+            toast.error('Ocorreu um erro ao gerar links de vídeo em massa.', { id: 'auto-video' });
+        } finally {
+            setIsGeneratingVideos(false);
         }
     };
 
@@ -99,6 +163,15 @@ export const ProductListPage: React.FC = () => {
                     >
                         <Images className="w-5 h-5" />
                         <span className="font-medium">Banco de Imagens</span>
+                    </button>
+                    <button
+                        onClick={handleAutoGenerateVideos}
+                        disabled={isGeneratingVideos}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-60"
+                        title="Gerar e vincular vídeos automaticamente para todos os produtos com SKU que ainda não tenham um vídeo associado"
+                    >
+                        <Video className={`w-5 h-5 ${isGeneratingVideos ? 'animate-pulse' : ''}`} />
+                        <span className="font-medium">Gerar Links de Vídeo</span>
                     </button>
                     <button
                         onClick={handleBulkRegistration}
