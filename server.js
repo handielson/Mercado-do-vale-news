@@ -1129,7 +1129,8 @@ fastify.get('/public/check-video', async (req, reply) => {
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required' });
 
-  const settings = await db.query('SELECT synology_video_base_url, synology_video_extension FROM company_settings LIMIT 1').then(r => r[0]).catch(() => null);
+  const [rows] = await pool.query('SELECT synology_video_base_url, synology_video_extension FROM company_settings LIMIT 1');
+  const settings = rows[0];
   const baseUrl = settings?.synology_video_base_url;
   const ext = settings?.synology_video_extension || '.mp4';
 
