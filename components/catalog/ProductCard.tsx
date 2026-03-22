@@ -110,6 +110,11 @@ export function ProductCard({
                                     🆕 Novo
                                 </span>
                             )}
+                            {product.is_combo && (
+                                <span className="text-xs bg-teal-500 text-white px-2 py-1 rounded-full font-semibold shadow-sm">
+                                    📦 Kit
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -201,6 +206,11 @@ export function ProductCard({
                     {product.is_new && (
                         <span className="text-xs bg-green-400 text-green-900 px-3 py-1.5 rounded-full font-semibold shadow-md backdrop-blur-sm">
                             🆕 Novo
+                        </span>
+                    )}
+                    {product.is_combo && (
+                        <span className="text-xs bg-teal-500 text-white px-3 py-1.5 rounded-full font-semibold shadow-md backdrop-blur-sm">
+                            📦 Kit
                         </span>
                     )}
                 </div>

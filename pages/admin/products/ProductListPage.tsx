@@ -181,6 +181,13 @@ export const ProductListPage: React.FC = () => {
                         <span className="font-medium">Cadastro em Massa</span>
                     </button>
                     <button
+                        onClick={() => navigate('/admin/products/combos')}
+                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
+                    >
+                        <Package className="w-5 h-5" />
+                        <span className="font-medium">Combos</span>
+                    </button>
+                    <button
                         onClick={handleNewProduct}
                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
                     >

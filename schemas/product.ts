@@ -51,6 +51,15 @@ export const productSchema = z.object({
     // Gift Product Flag
     is_gift: z.boolean().optional().default(false),
 
+    // Combo Product Fields
+    is_combo: z.boolean().optional().default(false),
+    combo_discount_type: z.enum(['percentage', 'fixed']).nullable().optional(),
+    combo_discount_value: z.coerce.number().min(0, 'Desconto não pode ser negativo').nullable().optional(),
+    combo_children: z.array(z.object({
+        id: z.string(),
+        quantity: z.number().int().min(1)
+    })).nullable().optional(),
+
     // Fiscal Fields - Accept null, empty strings, and undefined
     ncm: z.string().nullable().optional()
         .transform(val => !val ? undefined : val.replace(/\D/g, '').slice(0, 8) || undefined),
@@ -134,8 +143,9 @@ export const productSchema = z.object({
     }
 ).refine(
     (data) => {
-        // If tracking inventory, stock_quantity is required
-        if (data.track_inventory === true && (data.stock_quantity === undefined || data.stock_quantity === null)) {
+        // If tracking inventory and NOT a combo, stock_quantity is required.
+        // Combos calculate their stock dynamically on the backend based on child stocks.
+        if (data.track_inventory === true && !data.is_combo && (data.stock_quantity === undefined || data.stock_quantity === null)) {
             return false;
         }
         return true;

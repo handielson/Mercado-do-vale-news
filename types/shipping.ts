@@ -18,6 +18,13 @@ export interface ShippingSettings {
     frenet_token?: string;
     frenet_enabled: boolean;
     local_delivery_enabled: boolean;
+    
+    // Subsídio Progressivo de Frete
+    enable_progressive_shipping_subsidy: boolean;
+    min_order_value_for_subsidy: number;
+    default_subsidy_discount_percent: number;
+    profit_margin_percentage_cap: number;
+    
     updated_at: string;
 }
 
@@ -33,6 +40,12 @@ export interface ShippingSettingsInput {
     frenet_token?: string;
     frenet_enabled?: boolean;
     local_delivery_enabled?: boolean;
+    
+    // Subsídio Progressivo de Frete
+    enable_progressive_shipping_subsidy?: boolean;
+    min_order_value_for_subsidy?: number;
+    default_subsidy_discount_percent?: number;
+    profit_margin_percentage_cap?: number;
 }
 
 export interface ShippingZone {

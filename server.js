@@ -148,7 +148,9 @@ fastify.get('/products', async (req, reply) => {
     ? `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
-       stock_quantity, track_inventory, is_gift,
+       is_combo, combo_discount_type, combo_discount_value,
+       (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
+       track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, bling_id, bling_parent_id, video_url,
@@ -156,7 +158,9 @@ fastify.get('/products', async (req, reply) => {
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
-       stock_quantity, track_inventory, is_gift,
+       is_combo, combo_discount_type, combo_discount_value,
+       (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
+       track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, created_at, updated_at`;
@@ -190,7 +194,12 @@ fastify.get('/products', async (req, reply) => {
 });
 
 fastify.get('/products/:id', async (req, reply) => {
-  const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [req.params.id]);
+  const [rows] = await pool.query(
+    `SELECT *,
+      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+     FROM products WHERE id = ?`, 
+    [req.params.id]
+  );
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
   return {
@@ -200,6 +209,21 @@ fastify.get('/products/:id', async (req, reply) => {
     custom_fields: typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields) : r.custom_fields,
   };
 });
+
+fastify.get('/products/:id/combo', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT pc.child_product_id as id, pc.quantity, p.name, p.sku, p.price_retail, p.price_cost, p.images, p.stock_quantity
+     FROM product_combos pc
+     JOIN products p ON p.id = pc.child_product_id
+     WHERE pc.combo_product_id = ?`,
+    [req.params.id]
+  );
+  return rows.map(r => ({
+    ...r,
+    images: typeof r.images === 'string' ? JSON.parse(r.images) : r.images
+  }));
+});
+
 
 // ─── Products (write) ──────────────────────────────────────────────────────
 
@@ -324,6 +348,91 @@ fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, re
   );
   return { ok: true };
 });
+
+// ─── Combos (write) ─────────────────────────────────────────────────────────
+
+fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
+  // expects body to be a Product payload + `combo_children` (array of { id, quantity })
+  const p = req.body;
+  const id = p.id || require('crypto').randomUUID();
+  const children = p.combo_children || [];
+  
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      `INSERT INTO products (
+        id, name, slug, sku, is_combo, combo_discount_type, combo_discount_value,
+        price_retail, price_wholesale, price_cost, price_reseller,
+        status, track_inventory, images, category_id, brand
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, p.name, p.slug || null, p.sku || null, 1, p.combo_discount_type || null, p.combo_discount_value || 0,
+        p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
+        p.status || 'active', p.track_inventory ? 1 : 0, jsonStr(p.images), p.category_id || null, p.brand || null
+      ]
+    );
+
+    for (const child of children) {
+      const pcId = require('crypto').randomUUID();
+      await connection.query(
+        `INSERT INTO product_combos (id, combo_product_id, child_product_id, quantity) VALUES (?, ?, ?, ?)`,
+        [pcId, id, child.id, child.quantity || 1]
+      );
+    }
+    
+    await connection.commit();
+    reply.code(201).send({ ok: true, id });
+  } catch (err) {
+    await connection.rollback();
+    reply.code(500).send({ error: err.message });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const p = req.body;
+  const comboId = req.params.id;
+  const children = p.combo_children || [];
+  
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      `UPDATE products SET 
+        name=?, sku=?, is_combo=1, combo_discount_type=?, combo_discount_value=?,
+        price_retail=?, price_wholesale=?, price_cost=?, price_reseller=?,
+        status=?, images=?, category_id=?, brand=?, updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`,
+      [
+        p.name, p.sku || null, p.combo_discount_type || null, p.combo_discount_value || 0,
+        p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
+        p.status || 'active', jsonStr(p.images), p.category_id || null, p.brand || null,
+        comboId
+      ]
+    );
+
+    await connection.query(`DELETE FROM product_combos WHERE combo_product_id = ?`, [comboId]);
+
+    for (const child of children) {
+      const pcId = require('crypto').randomUUID();
+      await connection.query(
+        `INSERT INTO product_combos (id, combo_product_id, child_product_id, quantity) VALUES (?, ?, ?, ?)`,
+        [pcId, comboId, child.id, child.quantity || 1]
+      );
+    }
+    
+    await connection.commit();
+    reply.send({ ok: true, id: comboId });
+  } catch (err) {
+    await connection.rollback();
+    reply.code(500).send({ error: err.message });
+  } finally {
+    connection.release();
+  }
+});
+
 
 // ─── Image Bank ────────────────────────────────────────────────────────────
 
@@ -717,11 +826,17 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
     await pool.query(
       `INSERT INTO shipping_settings (id,origin_cep,origin_label,secondary_origin_cep,secondary_origin_label,
        melhor_envio_token,melhor_envio_sandbox,melhor_envio_enabled,melhor_envio_allowed_services,
-       frenet_token,frenet_enabled,local_delivery_enabled)
-       VALUES (UUID(),?,?,?,?,?,?,?,?,?,?,?)`,
+       frenet_token,frenet_enabled,local_delivery_enabled,
+       enable_progressive_shipping_subsidy,min_order_value_for_subsidy,
+       default_subsidy_discount_percent,profit_margin_percentage_cap)
+       VALUES (UUID(),?,?,?,?,?,?,?,?,?,?,?,
+       ?,?,?,?)`,
       [s.origin_cep,s.origin_label,s.secondary_origin_cep,s.secondary_origin_label,
        s.melhor_envio_token,s.melhor_envio_sandbox?1:0,s.melhor_envio_enabled?1:0,
-       s.melhor_envio_allowed_services,s.frenet_token,s.frenet_enabled?1:0,s.local_delivery_enabled?1:0]
+       s.melhor_envio_allowed_services,s.frenet_token,s.frenet_enabled?1:0,s.local_delivery_enabled?1:0,
+       s.enable_progressive_shipping_subsidy?1:0, s.min_order_value_for_subsidy||0,
+       s.default_subsidy_discount_percent!=null?s.default_subsidy_discount_percent:100,
+       s.profit_margin_percentage_cap!=null?s.profit_margin_percentage_cap:20]
     );
   } else {
     await pool.query(
@@ -731,13 +846,23 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
        melhor_envio_token=COALESCE(?,melhor_envio_token), melhor_envio_sandbox=COALESCE(?,melhor_envio_sandbox),
        melhor_envio_enabled=COALESCE(?,melhor_envio_enabled), melhor_envio_allowed_services=COALESCE(?,melhor_envio_allowed_services),
        frenet_token=COALESCE(?,frenet_token), frenet_enabled=COALESCE(?,frenet_enabled),
-       local_delivery_enabled=COALESCE(?,local_delivery_enabled), updated_at=CURRENT_TIMESTAMP
+       local_delivery_enabled=COALESCE(?,local_delivery_enabled),
+       enable_progressive_shipping_subsidy=COALESCE(?,enable_progressive_shipping_subsidy),
+       min_order_value_for_subsidy=COALESCE(?,min_order_value_for_subsidy),
+       default_subsidy_discount_percent=COALESCE(?,default_subsidy_discount_percent),
+       profit_margin_percentage_cap=COALESCE(?,profit_margin_percentage_cap),
+       updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
       [s.origin_cep,s.origin_label,s.secondary_origin_cep,s.secondary_origin_label,
        s.melhor_envio_token,s.melhor_envio_sandbox!=null?s.melhor_envio_sandbox?1:0:null,
        s.melhor_envio_enabled!=null?s.melhor_envio_enabled?1:0:null,s.melhor_envio_allowed_services,
        s.frenet_token,s.frenet_enabled!=null?s.frenet_enabled?1:0:null,
-       s.local_delivery_enabled!=null?s.local_delivery_enabled?1:0:null,rows[0].id]
+       s.local_delivery_enabled!=null?s.local_delivery_enabled?1:0:null,
+       s.enable_progressive_shipping_subsidy!=null?s.enable_progressive_shipping_subsidy?1:0:null,
+       s.min_order_value_for_subsidy,
+       s.default_subsidy_discount_percent,
+       s.profit_margin_percentage_cap,
+       rows[0].id]
     );
   }
   return { ok: true };

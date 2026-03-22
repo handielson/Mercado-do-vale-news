@@ -13,6 +13,7 @@ import type {
     ShippingCalculationInput,
     ShippingCalculationResult,
 } from '../types/shipping';
+import { vpsApiService } from './vpsApiService';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -76,28 +77,47 @@ export const shippingService = {
     // ── Settings ──────────────────────────────────────────────────────────────
 
     async getSettings(): Promise<ShippingSettings | null> {
+        try {
+            const data = await vpsApiService.getShippingSettings();
+            if (data) return data as ShippingSettings;
+        } catch (e) {
+            console.error('[shippingService] getSettings fallback to supabase:', e);
+        }
+        // Fallback or old data
         const { data } = await supabase
             .from('shipping_settings')
             .select('*')
             .limit(1)
             .maybeSingle();
-        return data;
+        return data as ShippingSettings | null;
     },
 
     async saveSettings(input: ShippingSettingsInput): Promise<void> {
+        // Salva simultaneamente no banco local/Supabase e no VPS (Master)
         const existing = await shippingService.getSettings();
+        
+        let localError;
         if (existing?.id) {
             const { error } = await supabase
                 .from('shipping_settings')
                 .update({ ...input, updated_at: new Date().toISOString() })
                 .eq('id', existing.id);
-            if (error) throw error;
+            localError = error;
         } else {
             const { error } = await supabase
                 .from('shipping_settings')
                 .insert({ ...input, updated_at: new Date().toISOString() });
-            if (error) throw error;
+            localError = error;
         }
+
+        // Tenta jogar na VPS como Source of Truth principal (Single-tenant view)
+        try {
+            await vpsApiService.syncShippingSettings(input);
+        } catch (e) {
+            console.warn('[shippingService] Failed to sync shipping_settings with VPS', e);
+        }
+
+        if (localError) throw localError;
     },
 
     // ── Zones ────────────────────────────────────────────────────────────────

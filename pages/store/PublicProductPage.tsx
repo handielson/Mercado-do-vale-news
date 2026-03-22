@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
@@ -44,6 +44,7 @@ export const PublicProductPage: React.FC = () => {
     const [cashbackSettings, setCashbackSettings] = useState<CashbackSettings | null>(null);
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
     const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
+    const [comboChildren, setComboChildren] = useState<any[]>([]);
 
     // Config da categoria: define quais campos existem no template
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
@@ -138,9 +139,14 @@ export const PublicProductPage: React.FC = () => {
                     const vpsData = await vpsApiService.getProductById(data.id);
                     if (vpsData) {
                         data.exclude_from_seo = Boolean(vpsData.exclude_from_seo);
+                        if (vpsData.is_combo) {
+                            data.is_combo = true;
+                            const children = await vpsApiService.getComboChildren(data.id);
+                            setComboChildren(children || []);
+                        }
                     }
                 } catch (v_err) {
-                    console.warn("Failed to check VPS SEO flag:", v_err);
+                    console.warn("Failed to check VPS SEO flag or Combo state:", v_err);
                 }
 
                 let modelData: Record<string, any> = {};
@@ -827,6 +833,25 @@ export const PublicProductPage: React.FC = () => {
                                     </div>
                                 )}
 
+                                {(product as unknown as any)?.is_combo && comboChildren && comboChildren.length > 0 && (
+                                    <div className="mt-4 pt-4 border-t border-slate-100">
+                                        <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                                            <Package size={16} className="text-teal-600" />
+                                            O que vem neste Kit:
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {comboChildren.map((item, idx) => (
+                                                <div key={idx} className="flex items-center justify-between text-sm bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-teal-700 w-6 text-center">{item.quantity}x</span>
+                                                        <span className="text-slate-700 font-medium">{item.name}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="mt-6">
                                     <button
                                         onClick={handleAddToCart}
@@ -929,7 +954,8 @@ export const PublicProductPage: React.FC = () => {
                                         const HIDDEN_KEYS = new Set([
                                             'imei1', 'imei2', 'imei', 'serial', 'serial_number',
                                             'weight_kg', 'width_cm', 'height_cm', 'depth_cm', 'peso_kg', 'largura_cm', 'altura_cm', 'profundidade_cm',
-                                            'tags_venda', 'cross_sell_tags', 'tags'
+                                            'tags_venda', 'cross_sell_tags', 'tags',
+                                            'slug', 'meta_title', 'meta_description', 'keywords', 'exclude_from_seo'
                                         ]);
 
                                         // UUID regex — oculta valores que são IDs internos
@@ -942,6 +968,11 @@ export const PublicProductPage: React.FC = () => {
                                             battery_health: 'Saúde da Bateria', battery_mah: 'Bateria (mAh)',
                                             display: 'Display (pol)',
                                             peso_g: 'Peso (g)',
+                                            // Dimensões na exibição pública
+                                            'dimensions.width_cm': 'Largura (cm)',
+                                            'dimensions.height_cm': 'Altura (cm)',
+                                            'dimensions.depth_cm': 'Profundidade (cm)',
+                                            'dimensions.weight_kg': 'Peso (kg)',
                                             // Fallbacks explícitos para campos comuns que podem falhar no fetch de custom_fields público por RLS
                                             celular_slot_para_cartao: 'Slot para cartão',
                                             celular_biometria: 'Biometria',

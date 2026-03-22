@@ -274,7 +274,11 @@ export default function ShippingPage() {
         melhor_envio_allowed_services: '',
         frenet_token: '',
         frenet_enabled: false,
-        local_delivery_enabled: true
+        local_delivery_enabled: true,
+        enable_progressive_shipping_subsidy: false,
+        min_order_value_for_subsidy: 0,
+        default_subsidy_discount_percent: 100,
+        profit_margin_percentage_cap: 20
     });
 
     useEffect(() => { loadAll(); }, []);
@@ -301,6 +305,10 @@ export default function ShippingPage() {
                 frenet_token: s.frenet_token ?? '',
                 frenet_enabled: s.frenet_enabled ?? false,
                 local_delivery_enabled: s.local_delivery_enabled,
+                enable_progressive_shipping_subsidy: s.enable_progressive_shipping_subsidy ?? false,
+                min_order_value_for_subsidy: s.min_order_value_for_subsidy ?? 0,
+                default_subsidy_discount_percent: s.default_subsidy_discount_percent ?? 100,
+                profit_margin_percentage_cap: s.profit_margin_percentage_cap ?? 20,
             });
         }
         setZones(z);
@@ -479,6 +487,53 @@ export default function ShippingPage() {
                                     <p className="text-sm font-medium text-slate-800">Entrega Local Ativa</p>
                                     <p className="text-xs text-slate-500">Usar as zonas configuradas para calcular frete local</p>
                                 </div>
+                            </div>
+
+                            <hr className="my-6 border-slate-100" />
+                            <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                                <Package size={18} className="text-blue-500" /> Subsídio de Frete Inteligente
+                            </h2>
+                            <p className="text-xs text-slate-500 mb-4">
+                                Oferece desconto progressivo no frete usando margem de lucro como teto de segurança.
+                            </p>
+
+                            <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => setSettingsForm(p => ({ ...p, enable_progressive_shipping_subsidy: !p.enable_progressive_shipping_subsidy }))}>
+                                        {settingsForm.enable_progressive_shipping_subsidy
+                                            ? <ToggleRight className="w-8 h-8 text-green-600" />
+                                            : <ToggleLeft className="w-8 h-8 text-slate-400" />}
+                                    </button>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-800">Ativar Subsídio Progressivo</p>
+                                    </div>
+                                </div>
+
+                                {settingsForm.enable_progressive_shipping_subsidy && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-200">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1">Pedido Mínimo p/ Subsídio (R$)</label>
+                                            <input type="number" step="0.01" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                                value={settingsForm.min_order_value_for_subsidy ?? 0}
+                                                onChange={e => setSettingsForm(p => ({ ...p, min_order_value_for_subsidy: Number(e.target.value) }))}
+                                                placeholder="Ex: 200.00" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1">Desconto Inicial (%)</label>
+                                            <input type="number" step="1" max="100" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                                value={settingsForm.default_subsidy_discount_percent ?? 100}
+                                                onChange={e => setSettingsForm(p => ({ ...p, default_subsidy_discount_percent: Number(e.target.value) }))}
+                                                placeholder="Ex: 100 (Grátis)" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1">Teto Segurança (Lucro Líq. %) *</label>
+                                            <input type="number" step="1" max="100" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                                value={settingsForm.profit_margin_percentage_cap ?? 20}
+                                                onChange={e => setSettingsForm(p => ({ ...p, profit_margin_percentage_cap: Number(e.target.value) }))}
+                                                placeholder="Ex: 20" />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <button onClick={handleSaveSettings} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">

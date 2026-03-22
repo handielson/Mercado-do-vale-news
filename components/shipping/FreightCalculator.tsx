@@ -27,6 +27,8 @@ interface ProductDimension {
     height_cm: number | null;  // cm
     width_cm: number | null;   // cm
     length_cm: number | null;  // cm
+    price: number | null;
+    price_cost: number | null;
 }
 
 interface CartItem {
@@ -39,6 +41,8 @@ interface CarrierResult {
     name: string;
     carrier?: string;
     price: number;
+    originalPrice?: number;
+    subsidy?: number;
     daysLabel: string;
     error?: string;
 }
@@ -254,7 +258,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         // Busca produtos ativos com model_id
         const { data: products } = await supabase
             .from('products')
-            .select('id, name, sku, model_id')
+            .select('id, name, sku, model_id, price, price_cost')
             .eq('status', 'active')
             .not('model_id', 'is', null)
             .order('name');
@@ -291,6 +295,8 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                 height_cm: typeof height_cm === 'number' ? height_cm : null,
                 width_cm: typeof width_cm === 'number' ? width_cm : null,
                 length_cm: typeof length_cm === 'number' ? length_cm : null,
+                price: typeof p.price === 'number' ? p.price : 0,
+                price_cost: typeof p.price_cost === 'number' ? p.price_cost : 0,
             };
         }));
 
@@ -484,7 +490,42 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
             const existing = seen.get(key);
             if (!existing || c.price < existing.price) seen.set(key, c);
         }
-        return Array.from(seen.values()).sort((a, b) => a.price - b.price);
+        
+        let finalCarriers = Array.from(seen.values()).sort((a, b) => a.price - b.price);
+
+        // ── Aplica Subsídio Progressivo Inteligente ──
+        if (settings?.enable_progressive_shipping_subsidy && cart.length > 0) {
+            const minOrder = settings.min_order_value_for_subsidy ?? 0;
+            const discountPercent = settings.default_subsidy_discount_percent ?? 100;
+            const profitCapPercent = settings.profit_margin_percentage_cap ?? 20;
+
+            const orderTotal = cart.reduce((acc, item) => acc + (item.product.price ?? 0) * item.qty, 0);
+            const orderCost = cart.reduce((acc, item) => acc + (item.product.price_cost ?? 0) * item.qty, 0);
+            const orderProfit = Math.max(0, orderTotal - orderCost);
+
+            if (orderTotal >= minOrder && minOrder > 0) {
+                const maxSubsidyFromProfit = orderProfit * (profitCapPercent / 100);
+
+                finalCarriers = finalCarriers.map(c => {
+                    const originalPrice = c.price;
+                    const commercialDiscount = originalPrice * (discountPercent / 100);
+                    // O subsídio real é o menor entre: o prêço do frete, o desconto comercial configurado, e o teto de segurança (lucro reservado)
+                    const appliedSubsidy = Math.min(originalPrice, commercialDiscount, maxSubsidyFromProfit);
+                    
+                    if (appliedSubsidy > 0) {
+                        return {
+                            ...c,
+                            originalPrice,
+                            price: originalPrice - appliedSubsidy,
+                            subsidy: appliedSubsidy
+                        };
+                    }
+                    return c;
+                });
+            }
+        }
+
+        return finalCarriers;
     }
 
     // ── Calcular ──────────────────────────────────────────────────────────────
@@ -561,7 +602,12 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         if (selected.length > 0) {
             lines.push('', '🚚 *Opções de Frete:*');
             selected.forEach(r => {
-                lines.push(`• ${r.name}${r.carrier ? ` (${r.carrier})` : ''} — R$ ${r.price.toFixed(2)} · ${r.daysLabel}`);
+                const priceText = r.price <= 0 ? 'Grátis' : `R$ ${r.price.toFixed(2)}`;
+                if (r.subsidy && r.originalPrice) {
+                    lines.push(`• ${r.name}${r.carrier ? ` (${r.carrier})` : ''} — 🎁 Subsídio Aplicado: ~R$ ${r.originalPrice.toFixed(2)}~ por *${priceText}* · ${r.daysLabel}`);
+                } else {
+                    lines.push(`• ${r.name}${r.carrier ? ` (${r.carrier})` : ''} — *${priceText}* · ${r.daysLabel}`);
+                }
             });
         }
 
@@ -1016,8 +1062,16 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                         <td className="py-3 pr-4 text-center">
                             {row.primary ? (
                                 <div className={cn('inline-flex flex-col items-center', row.winner === 'primary' ? 'text-green-600 font-semibold' : 'text-slate-400')}>
-                                    <span className="text-sm">R$ {row.primary.price.toFixed(2)}</span>
-                                    <span className="text-xs">{row.primary.daysLabel}</span>
+                                    {row.primary.subsidy && row.primary.originalPrice ? (
+                                        <>
+                                            <span className="text-[10px] text-slate-400 line-through">R$ {row.primary.originalPrice.toFixed(2)}</span>
+                                            <span className="text-sm font-bold text-green-600">{row.primary.price <= 0 ? 'Grátis' : `R$ ${row.primary.price.toFixed(2)}`}</span>
+                                            <span className="text-[10px] bg-green-100 text-green-700 px-1 py-0.5 rounded mt-0.5">🎁 Subsídio</span>
+                                        </>
+                                    ) : (
+                                        <span className="text-sm">{row.primary.price <= 0 ? 'Grátis' : `R$ ${row.primary.price.toFixed(2)}`}</span>
+                                    )}
+                                    <span className="text-xs mt-0.5">{row.primary.daysLabel}</span>
                                     {row.winner === 'primary' && <span className="text-xs mt-0.5">✅ mais barato</span>}
                                 </div>
                             ) : <span className="text-xs text-slate-300">—</span>}
@@ -1025,8 +1079,16 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                         <td className="py-3 pr-4 text-center">
                             {row.secondary ? (
                                 <div className={cn('inline-flex flex-col items-center', row.winner === 'secondary' ? 'text-green-600 font-semibold' : 'text-slate-400')}>
-                                    <span className="text-sm">R$ {row.secondary.price.toFixed(2)}</span>
-                                    <span className="text-xs">{row.secondary.daysLabel}</span>
+                                    {row.secondary.subsidy && row.secondary.originalPrice ? (
+                                        <>
+                                            <span className="text-[10px] text-slate-400 line-through">R$ {row.secondary.originalPrice.toFixed(2)}</span>
+                                            <span className="text-sm font-bold text-green-600">{row.secondary.price <= 0 ? 'Grátis' : `R$ ${row.secondary.price.toFixed(2)}`}</span>
+                                            <span className="text-[10px] bg-green-100 text-green-700 px-1 py-0.5 rounded mt-0.5">🎁 Subsídio</span>
+                                        </>
+                                    ) : (
+                                        <span className="text-sm">{row.secondary.price <= 0 ? 'Grátis' : `R$ ${row.secondary.price.toFixed(2)}`}</span>
+                                    )}
+                                    <span className="text-xs mt-0.5">{row.secondary.daysLabel}</span>
                                     {row.winner === 'secondary' && <span className="text-xs mt-0.5">✅ mais barato</span>}
                                 </div>
                             ) : <span className="text-xs text-slate-300">—</span>}
@@ -1125,7 +1187,19 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                         </td>
                         <td className="py-2.5 pr-3 text-xs text-slate-500 whitespace-nowrap">{r.carrier?.replace(' · Frenet', '') ?? '—'}</td>
                         <td className="py-2.5 pr-3 text-center text-xs text-slate-500 whitespace-nowrap">{r.daysLabel}</td>
-                        <td className="py-2.5 pr-3 text-right font-bold text-slate-900 whitespace-nowrap">{r.price === 0 ? 'Grátis' : `R$ ${r.price.toFixed(2)}`}</td>
+                        <td className="py-2.5 pr-3 text-right font-bold text-slate-900 whitespace-nowrap">
+                            {r.subsidy && r.originalPrice ? (
+                                <div className="flex flex-col items-end">
+                                    <span className="text-[10px] text-slate-400 line-through font-normal">R$ {r.originalPrice.toFixed(2)}</span>
+                                    <div className="flex items-center gap-1.5 flex-wrap justify-end mt-0.5">
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold">🎁 Subsídio (-R$ {r.subsidy.toFixed(2)})</span>
+                                        <span className="font-bold text-green-700">{r.price <= 0 ? 'Grátis' : `R$ ${r.price.toFixed(2)}`}</span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <span>{r.price <= 0 ? 'Grátis' : `R$ ${r.price.toFixed(2)}`}</span>
+                            )}
+                        </td>
                         <td className="py-2.5 pr-4">
                             <button onClick={() => openLabelModal(r)} title="Gerar etiqueta" className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-blue-600 text-xs transition-colors">
                                 <Tag className="w-3 h-3" /> Etiqueta

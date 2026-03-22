@@ -638,9 +638,25 @@ export async function syncStockToBling(productId: string, quantity: number, note
         const { supabase } = await import('./supabase');
         const { data: product } = await supabase
             .from('products')
-            .select('bling_id')
+            .select('bling_id, is_combo')
             .eq('id', productId)
             .maybeSingle();
+
+        if (product?.is_combo) {
+            const { vpsApiService } = await import('./vpsApiService');
+            try {
+                const children = await vpsApiService.getComboChildren(productId);
+                if (children && children.length > 0) {
+                    for (const child of children) {
+                        // Deduz o estoque proporcionalmente para cada item (recursivo)
+                        await syncStockToBling(child.child_id, quantity * child.quantity, `${notes || ''} (Combo)`.trim());
+                    }
+                }
+            } catch (comboErr) {
+                console.warn(`[syncStockToBling] Falha ao buscar filhos do combo ${productId}:`, comboErr);
+            }
+            return; // Combos não possuem estoque direto no Bling
+        }
 
         const blingId = product?.bling_id;
         if (!blingId) return; // Produto não veio do Bling — ignora

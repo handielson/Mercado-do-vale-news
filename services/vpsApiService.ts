@@ -133,7 +133,43 @@ class VpsApiService {
     return this.fetchSafe<any>('/company-settings');
   }
 
+  async getShippingSettings(): Promise<any | null> {
+    return this.fetchSafe<any>('/shipping/settings');
+  }
+
   // ── WRITE (fire-and-forget após Supabase) ─────────────────────────────
+
+  async createCombo(payload: unknown): Promise<{ok: boolean, id?: string}> {
+    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return {ok:false}; }
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(`${VPS_BASE_URL}/combos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Sync-Key': SYNC_KEY },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) return { ok: false };
+      return await res.json();
+    } catch { return {ok:false}; }
+  }
+
+  async updateCombo(id: string, payload: unknown): Promise<{ok: boolean}> {
+    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return {ok:false}; }
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(`${VPS_BASE_URL}/combos/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Sync-Key': SYNC_KEY },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) return { ok: false };
+      return await res.json();
+    } catch { return {ok:false}; }
+  }
+
+  async getComboChildren(id: string): Promise<any[] | null> {
+    return this.fetchSafe<any[]>(`/products/${id}/combo`, true);
+  }
 
   async syncProducts(products: any[]): Promise<boolean> {
     if (!products?.length) return true;
@@ -173,6 +209,11 @@ class VpsApiService {
   async deleteBrand(id: string): Promise<boolean> {
     this.cache.delete('/brands');
     return this.writeSafe('DELETE', `/brands/${id}`);
+  }
+
+  async syncShippingSettings(settings: any): Promise<boolean> {
+    this.cache.delete('/shipping/settings');
+    return this.writeSafe('PATCH', '/shipping/settings', settings);
   }
 
   clearCache(): void {

@@ -113,6 +113,21 @@ export interface Product {
     // Variações Pai-Filho (sistema nativo)
     parent_id?: string;        // UUID do produto pai (null = produto pai ou independente)
 
+    // Product Combos (Bundles)
+    is_combo?: boolean;        // Se true, é um pacote agrupador de SKUs filhos
+    combo_discount_type?: 'percentage' | 'fixed' | null;
+    combo_discount_value?: number;
+    combo_children?: Array<{
+        id: string;
+        quantity: number;
+        name?: string;
+        sku?: string;
+        price_retail?: number;
+        price_cost?: number;
+        images?: string[];
+        stock_quantity?: number;
+    }>;
+
     // Bling ERP Integration
     bling_id?: number;         // ID do produto no Bling
     bling_parent_id?: number;  // ID do produto pai no Bling (para variações)
@@ -176,4 +191,13 @@ export interface ProductInput {
     bling_parent_id?: number;
     // Media Add-ons
     video_url?: string;
+
+    // Product Combos (Bundles)
+    is_combo?: boolean;
+    combo_discount_type?: 'percentage' | 'fixed' | null;
+    combo_discount_value?: number;
+    combo_children?: Array<{
+        id: string;
+        quantity: number;
+    }>;
 }

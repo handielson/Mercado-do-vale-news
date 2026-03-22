@@ -20,6 +20,7 @@ import { ProductListPage } from '../pages/admin/products/ProductListPage';
 import { ProductFormPage } from '../pages/admin/products/ProductFormPage';
 import { ProductDetailPage } from '../pages/admin/products/ProductDetailPage';
 import { BulkRegistrationPage } from '../pages/admin/products/BulkRegistrationPage';
+import { ProductCombosPage } from '../pages/admin/products/ProductCombosPage';
 import { InventoryPage } from '../pages/admin/inventory/InventoryPage';
 import CategorySettingsPage from '../pages/admin/settings/categories/index';
 import NewCategoryPage from '../pages/admin/settings/categories/new';
@@ -426,6 +427,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductDetailPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/products/combos",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ProductCombosPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
