@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         SellerCEP: from_cep.replace(/\D/g, ''),
         RecipientCEP: to_cep.replace(/\D/g, ''),
         RecipientCountry: 'BR',
-        ShipmentInvoiceValue: Math.max(order_value ?? 0, 50),
+        ShipmentInvoiceValue: Math.max((order_value ?? 0) / 100, 10),
         ShippingItemArray: [
             {
                 Height: height_cm ?? 10,
