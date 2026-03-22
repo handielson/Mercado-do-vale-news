@@ -39,6 +39,7 @@ export const PublicProductPage: React.FC = () => {
     const [selectedImage, setSelectedImage] = useState<string>('');
     const [siblings, setSiblings] = useState<CatalogProduct[]>([]);
     const [relatedProducts, setRelatedProducts] = useState<CatalogProduct[]>([]);
+    const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
     const [crossSellProducts, setCrossSellProducts] = useState<CatalogProduct[]>([]);
     const [cep, setCep] = useState('');
     const [shippingResult, setShippingResult] = useState<{ name: string, price: string, days: string }[] | null>(null);
@@ -555,9 +556,6 @@ export const PublicProductPage: React.FC = () => {
         // Scroll suave para o topo
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
-
-    const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
-
     const handleCalculateShipping = async () => {
         const cleanCep = cep.replace(/\D/g, '');
         if (cleanCep.length < 8) return toast.error("CEP inválido");
