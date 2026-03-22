@@ -3,7 +3,7 @@ import { Package, Plus, Search, Trash2, Edit2, ChevronLeft, Save, X, Calculator 
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { vpsApiService } from '../../../services/vpsApiService';
-import { formatCurrency } from '../../../utils/formatters';
+import { formatCurrency } from '../../../utils/saleCalculations';
 
 interface ProductComboFormData {
   id?: string;
