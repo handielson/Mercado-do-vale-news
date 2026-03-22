@@ -11,7 +11,6 @@ import { ProductDetailsModal } from './ProductDetailsModal';
 import { QuoteModal } from './QuoteModal';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
-import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { useCompare } from '@/contexts/CompareContext';
 import { useCart } from '@/contexts/CartContext';
 import toast from 'react-hot-toast';
@@ -143,8 +142,7 @@ export function ModernProductCard({
     }, [selectedVariant, currentColorIndex, product]);
 
     const { customer } = useSupabaseAuth();
-    const { items, addItem: addToQuoteCart } = useQuoteCart();
-    const { addItem: addToCartContext } = useCart();
+    const { items: cartItems, addItem: addToCartContext } = useCart();
     const isAdmin = customer?.customer_type === 'ADMIN';
     const [addedToCart, setAddedToCart] = useState(false);
 
@@ -171,22 +169,9 @@ export function ModernProductCard({
             return false;
         }
 
-        // Get current product's RAM and Storage
-        const currentRam = currentProduct.specs?.ram;
-        const currentStorage = currentProduct.specs?.storage;
-        const currentColor = currentProduct.specs?.color;
-
-        // Check if any cart item matches this product's variant AND color
-        return items.some(item => {
-            const ramMatch = item.variant.ram === currentRam;
-            const storageMatch = item.variant.storage === currentStorage;
-            const modelMatch = item.product.model === currentProduct.model ||
-                item.product.name === currentProduct.name;
-            const colorMatch = item.product.specs?.color === currentColor;
-
-            return ramMatch && storageMatch && modelMatch && colorMatch;
-        });
-    }, [items, currentProduct, isAdmin, currentColorIndex]);
+        // Check if the current product variant is in the retail cart
+        return cartItems.some(item => item.product.id === currentProduct.id);
+    }, [cartItems, currentProduct, isAdmin, currentColorIndex, productGroup]);
 
     const effectiveCustomerType = useEffectiveCustomerType();
 
@@ -284,38 +269,11 @@ export function ModernProductCard({
             return;
         }
 
-        const variantToAdd = {
-            ram: selectedVariant?.ram || currentProduct.specs?.ram || '',
-            storage: selectedVariant?.storage || currentProduct.specs?.storage || '',
-            color: currentColorIndex !== -1 ? selectedVariant?.colors[currentColorIndex]?.name : (currentProduct.specs?.color || '')
-        };
-
-        const effectivePrice = getEffectivePrice(currentProduct, customer);
-        if (!effectivePrice) return;
-
-        const plans = await calculateInstallments(effectivePrice, 12);
-        const selectedPlan = plans.find(p => p.highlighted) || plans[0];
-
-        // Ensure available colors are passed if there are multiple colors in the group
-        let availColors: string[] = [];
-        if (selectedVariant && selectedVariant.colors.length > 0) {
-            availColors = selectedVariant.colors.map(c => c.name);
-        } else if (currentProduct.specs?.color) {
-            availColors = [currentProduct.specs.color];
-        }
-
-        // Add proper item to quote cart
-        addToQuoteCart({
-            product: currentProduct,
-            variant: variantToAdd,
-            availableColors: availColors,
-            price: effectivePrice,
-            installmentPlan: selectedPlan,
-            paymentOptions: { showCash: true, showInstallment: true }
-        });
+        // Add proper item to retail cart
+        addToCartContext(currentProduct);
         
         // Visual feedback
-        toast.success('Adicionado ao orçamento!');
+        toast.success('Adicionado ao carrinho!');
         setAddedToCart(true);
         setTimeout(() => setAddedToCart(false), 2000);
     };
