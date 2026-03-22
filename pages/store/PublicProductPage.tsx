@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
@@ -20,6 +20,7 @@ import { paymentFeesService, PaymentFee } from '@/services/payment-fees';
 import { companySettingsService } from '@/services/companySettingsService';
 import type { CompanySettings } from '@/types/companySettings';
 import { toTitleCase } from '@/utils/stringFormatters';
+import { shippingService } from '@/services/shippingService';
 
 /**
  * PublicProductPage
@@ -555,15 +556,43 @@ export const PublicProductPage: React.FC = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const handleCalculateShipping = () => {
+    const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
+
+    const handleCalculateShipping = async () => {
         const cleanCep = cep.replace(/\D/g, '');
         if (cleanCep.length < 8) return toast.error("CEP inválido");
-        setShippingResult([
-            { name: "Sedex", price: "24,90", days: "2 a 3 dias úteis" },
-            { name: "PAC", price: "15,90", days: "5 a 8 dias úteis" },
-            { name: "Express (Local)", price: "9,90", days: "Chega Hoje!" }
-        ]);
-        toast.success("Estimativa calculada com sucesso!");
+
+        setIsCalculatingShipping(true);
+        try {
+            const res = await shippingService.calculate({
+                to_cep: cleanCep,
+                order_value: discountedPrice * 100, // needs to be in centavos
+                weight: Math.max(300, product.weight_kg ? (product.weight_kg * 1000) : 300),
+                height: Math.max(10, product.dimensions?.height_cm || 10),
+                width: Math.max(15, product.dimensions?.width_cm || 15),
+                length: Math.max(20, product.dimensions?.depth_cm || 20),
+            });
+            
+            if (res.options.length === 0) {
+                toast.error("Nenhuma opção de entrega encontrada para este CEP.");
+                setShippingResult([]);
+                return;
+            }
+
+            const formatted = res.options.map(opt => ({
+                name: opt.name,
+                price: opt.price === 0 ? "Grátis" : opt.price.toFixed(2).replace('.', ','),
+                days: opt.daysLabel
+            }));
+            
+            setShippingResult(formatted);
+            toast.success("Estimativa calculada com sucesso!");
+        } catch (error) {
+            console.error("Erro ao calcular frete:", error);
+            toast.error("Erro ao calcular frete. Tente novamente.");
+        } finally {
+            setIsCalculatingShipping(false);
+        }
     };
 
     return (
@@ -880,9 +909,10 @@ export const PublicProductPage: React.FC = () => {
                                     />
                                     <button
                                         onClick={handleCalculateShipping}
-                                        className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition-colors"
+                                        disabled={isCalculatingShipping || cep.length < 8}
+                                        className="px-5 py-3 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-colors min-w-[110px] flex justify-center items-center"
                                     >
-                                        Calcular
+                                        {isCalculatingShipping ? <Loader2 size={18} className="animate-spin" /> : 'Calcular'}
                                     </button>
                                 </div>
 
@@ -895,7 +925,7 @@ export const PublicProductPage: React.FC = () => {
                                                     <p className="text-xs text-slate-500">{res.days}</p>
                                                 </div>
                                                 <div className="font-bold text-blue-600">
-                                                    R$ {res.price}
+                                                    {res.price === 'Grátis' ? 'Grátis' : `R$ ${res.price}`}
                                                 </div>
                                             </div>
                                         ))}
