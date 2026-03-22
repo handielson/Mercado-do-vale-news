@@ -20,9 +20,10 @@ interface DeliveryOptionsProps {
     storeStatus?: StoreStatus | null;
     subtotal?: number;
     cartVolume?: { weight: number; height: number; width: number; length: number };
+    orderCost?: number;
 }
 
-export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, cartVolume }: DeliveryOptionsProps) {
+export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, cartVolume, orderCost }: DeliveryOptionsProps) {
     const [cep, setCep] = useState(selected.address?.cep || '');
     const [isLoadingCEP, setIsLoadingCEP] = useState(false);
     const [cepError, setCepError] = useState('');
@@ -45,7 +46,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
         // Se o usuário já buscou um cep válido (selected.address.cep existe), 
         // sempre reculculamos o frete reagindo às mudanças de subtotal.
         if (selected.address?.cep && !cepError) {
-            shippingService.calculate({ to_cep: selected.address.cep, order_value: subtotal, ...cartVolume })
+            shippingService.calculate({ to_cep: selected.address.cep, order_value: subtotal, order_cost: orderCost, ...cartVolume })
                 .then(res => {
                     setShippingOptions(res.options);
                     setMissingForFree(res.missingForFree);
@@ -56,7 +57,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
                 })
                 .catch(() => { });
         }
-    }, [selected.address?.cep, subtotal, cepError, cartVolume]);
+    }, [selected.address?.cep, subtotal, orderCost, cepError, cartVolume]);
 
     const handleTypeChange = (type: 'pickup' | 'delivery') => {
         onSelect({ ...selected, type, address: type === 'pickup' ? undefined : selected.address });
@@ -79,7 +80,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
             onSelect(baseOption);
 
             setIsLoadingShipping(true);
-            const res = await shippingService.calculate({ to_cep: cep, order_value: subtotal, ...cartVolume });
+            const res = await shippingService.calculate({ to_cep: cep, order_value: subtotal, order_cost: orderCost, ...cartVolume });
             setShippingOptions(res.options);
             setMissingForFree(res.missingForFree);
             
@@ -334,9 +335,27 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2.5">
-                                                <span className={`text-sm font-bold transition-colors duration-200 ${opt.isFree ? 'text-green-600' : isSelected ? 'text-green-700' : 'text-slate-800'}`}>
-                                                    {opt.isFree ? 'Grátis' : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
-                                                </span>
+                                                <div className="flex flex-col items-end">
+                                                    {opt.subsidy && opt.originalPrice ? (
+                                                        <>
+                                                            <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100 mb-0.5 whitespace-nowrap">
+                                                                🎁 Subsídio Loja
+                                                            </span>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[11px] text-slate-400 line-through">
+                                                                    R$ {opt.originalPrice.toFixed(2).replace('.', ',')}
+                                                                </span>
+                                                                <span className={`text-sm font-bold transition-colors duration-200 ${opt.isFree ? 'text-green-600' : isSelected ? 'text-green-700' : 'text-slate-800'}`}>
+                                                                    {opt.isFree ? 'Grátis' : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
+                                                                </span>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <span className={`text-sm font-bold transition-colors duration-200 ${opt.isFree ? 'text-green-600' : isSelected ? 'text-green-700' : 'text-slate-800'}`}>
+                                                            {opt.isFree ? 'Grátis' : `R$ ${opt.price.toFixed(2).replace('.', ',')}`}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${isSelected ? 'bg-green-500 scale-100 opacity-100' : 'scale-50 opacity-0'}`}>
                                                     <Check className="w-3 h-3 text-white" />
                                                 </div>

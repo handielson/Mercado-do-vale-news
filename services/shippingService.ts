@@ -442,6 +442,39 @@ export const shippingService = {
             options = Array.from(seen.values());
         }
 
+        // ── Aplica Subsídio Progressivo Inteligente ──
+        if (settings?.enable_progressive_shipping_subsidy && input.order_value !== undefined && input.order_cost !== undefined) {
+            const orderTotal = input.order_value / 100;
+            const orderCost = input.order_cost / 100;
+            const orderProfit = Math.max(0, orderTotal - orderCost);
+            
+            const minOrder = settings.min_order_value_for_subsidy ?? 0;
+            const discountPercent = settings.default_subsidy_discount_percent ?? 100;
+            const profitCapPercent = settings.profit_margin_percentage_cap ?? 20;
+
+            if (orderTotal >= minOrder && minOrder > 0) {
+                const maxSubsidyFromProfit = orderProfit * (profitCapPercent / 100);
+
+                options = options.map(c => {
+                    const originalPrice = c.price;
+                    const commercialDiscount = originalPrice * (discountPercent / 100);
+                    // O subsídio real é o menor entre: o prêço do frete, o desconto comercial configurado, e o teto de segurança (lucro reservado)
+                    const appliedSubsidy = Math.min(originalPrice, commercialDiscount, maxSubsidyFromProfit);
+                    
+                    if (appliedSubsidy > 0) {
+                        return {
+                            ...c,
+                            originalPrice,
+                            price: originalPrice - appliedSubsidy,
+                            subsidy: appliedSubsidy,
+                            isFree: (originalPrice - appliedSubsidy) <= 0
+                        };
+                    }
+                    return c;
+                });
+            }
+        }
+
         return {
             options: options.sort((a, b) => {
                 if (a.isFree && !b.isFree) return -1;

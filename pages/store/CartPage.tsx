@@ -30,6 +30,7 @@ export default function CartPage() {
 function CartPageContent() {
     const { items, removeItem, updateQuantity, subtotal, totalItems, clear } = useCart();
     const cartVolume = useMemo(() => calculateCartVolume(items), [items]);
+    const orderCost = useMemo(() => items.reduce((acc, item) => acc + (item.product.price_cost || 0) * item.quantity, 0), [items]);
     const { customer } = useSupabaseAuth();
     const device = useDeviceType();
     const navigate = useNavigate();
@@ -485,6 +486,7 @@ function CartPageContent() {
                             storeStatus={storeStatus}
                             subtotal={subtotal}
                             cartVolume={cartVolume}
+                            orderCost={orderCost}
                         />
                     </div>
                 )}

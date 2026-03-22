@@ -115,6 +115,8 @@ export interface ShippingOption {
     type: ShippingZoneType | 'carrier';
     origin_cep?: string;            // CEP do depósito de origem
     origin_label?: string;          // "Petrolina" | "Juazeiro"
+    subsidy?: number;               // Subsídio aplicado (se houver)
+    originalPrice?: number;         // Preço original (se houver subsídio)
 }
 
 export interface ShippingCalculationInput {
@@ -123,7 +125,8 @@ export interface ShippingCalculationInput {
     height?: number;                // cm
     width?: number;                 // cm
     length?: number;                // cm
-    order_value?: number;           // para verificar min_order_free
+    order_value?: number;           // para verificar min_order_free (em centavos)
+    order_cost?: number;            // custo total dos produtos para cálculo de margem do subsídio (em centavos)
 }
 
 export interface ShippingCalculationResult {
