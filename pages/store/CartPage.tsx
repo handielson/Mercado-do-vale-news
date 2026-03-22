@@ -29,6 +29,7 @@ export default function CartPage() {
 
 function CartPageContent() {
     const { items, removeItem, updateQuantity, subtotal, totalItems, clear } = useCart();
+    const cartVolume = useMemo(() => calculateCartVolume(items), [items]);
     const { customer } = useSupabaseAuth();
     const device = useDeviceType();
     const navigate = useNavigate();
