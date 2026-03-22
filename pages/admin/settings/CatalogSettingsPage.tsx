@@ -1,53 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Save, Link as LinkIcon, QrCode, Eye, EyeOff, Palette, Settings as SettingsIcon, Edit } from 'lucide-react';
-
-interface CatalogSettings {
-    catalog_name: string;
-    catalog_description: string;
-    products_per_page: number;
-    default_sort: 'recent' | 'price_asc' | 'price_desc' | 'name';
-    show_filters: boolean;
-    show_prices: boolean;
-    show_stock: boolean;
-    theme_primary_color: string;
-    theme_secondary_color: string;
-    meta_title: string;
-    meta_description: string;
-    meta_keywords: string;
-}
+import { catalogConfigService } from '@/services/catalogConfigService';
+import type { CatalogSettings } from '@/types/catalogSettings';
+import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
+import toast from 'react-hot-toast';
 
 export const CatalogSettingsPage: React.FC = () => {
     const navigate = useNavigate();
     const [settings, setSettings] = useState<CatalogSettings>({
-        catalog_name: 'Catálogo de Produtos',
-        catalog_description: 'Confira nossos produtos disponíveis',
-        products_per_page: 12,
-        default_sort: 'recent',
-        show_filters: true,
-        show_prices: true,
-        show_stock: true,
-        theme_primary_color: '#3B82F6',
-        theme_secondary_color: '#1E40AF',
-        meta_title: 'Catálogo de Produtos - Mercado do Vale',
-        meta_description: 'Confira nosso catálogo completo de produtos',
-        meta_keywords: 'produtos, catálogo, loja'
-    });
+        ...DEFAULT_CATALOG_SETTINGS
+    } as CatalogSettings);
 
+    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [showQR, setShowQR] = useState(false);
 
     const catalogUrl = `${window.location.origin}/catalog`;
 
+    // Carregar configurações reais do banco de dados na montagem
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const data = await catalogConfigService.getSettings();
+                if (data) {
+                    setSettings({ ...DEFAULT_CATALOG_SETTINGS, ...data });
+                }
+            } catch (err) {
+                console.error(err);
+                toast.error('Erro ao carregar configurações');
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadSettings();
+    }, []);
+
     const handleSave = async () => {
         setSaving(true);
         try {
-            // TODO: Salvar no Supabase
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            alert('Configurações salvas com sucesso!');
+            await catalogConfigService.saveSettings(settings);
+            toast.success('Configurações salvas com sucesso!');
         } catch (error) {
             console.error('Erro ao salvar:', error);
-            alert('Erro ao salvar configurações');
+            toast.error('Erro ao salvar configurações');
         } finally {
             setSaving(false);
         }
@@ -55,8 +51,12 @@ export const CatalogSettingsPage: React.FC = () => {
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
-        alert('Link copiado para a área de transferência!');
+        toast.success('Link copiado para a área de transferência!');
     };
+
+    if (loading) {
+        return <div className="p-8 text-center text-gray-500">Carregando configurações...</div>;
+    }
 
     return (
         <div className="max-w-5xl mx-auto space-y-6">

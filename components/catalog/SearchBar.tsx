@@ -34,15 +34,15 @@ export function SearchBar({
     return (
         <div className="relative">
             <div
-                className={`relative flex items-center transition-all ${isFocused
-                    ? 'ring-2 ring-blue-500 shadow-lg'
-                    : 'ring-1 ring-slate-300 shadow-sm'
-                    } rounded-lg bg-white`}
+                className={`relative flex items-center transition-all duration-300 border ${isFocused
+                    ? 'ring-4 ring-blue-500/10 border-blue-400 bg-white shadow-md'
+                    : 'border-slate-200 bg-slate-50 shadow-sm hover:border-slate-300 hover:bg-white'
+                    } rounded-2xl`}
             >
                 {/* Ícone de busca */}
-                <div className="absolute left-4 pointer-events-none">
+                <div className="absolute left-3.5 sm:left-4 pointer-events-none">
                     <Search
-                        className={`w-5 h-5 transition-colors ${isFocused ? 'text-blue-600' : 'text-slate-400'
+                        className={`w-4 h-4 sm:w-5 sm:h-5 transition-colors ${isFocused ? 'text-blue-500' : 'text-slate-400'
                             }`}
                     />
                 </div>
@@ -55,22 +55,20 @@ export function SearchBar({
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                     placeholder={placeholder}
-                    className="w-full pl-12 pr-12 py-3 text-slate-900 placeholder-slate-400 bg-transparent focus:outline-none"
+                    className="w-full pl-10 pr-10 sm:pl-12 sm:pr-12 py-2.5 sm:py-3 text-sm sm:text-base text-slate-800 placeholder-slate-400 bg-transparent focus:outline-none rounded-2xl"
                 />
 
                 {/* Botão de limpar */}
                 {value && (
                     <button
                         onClick={handleClear}
-                        className="absolute right-4 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                        className="absolute right-3 p-1.5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
                         aria-label="Limpar busca"
                     >
-                        <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+                        <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </button>
                 )}
             </div>
-
-
         </div>
     );
 }

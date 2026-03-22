@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { X } from 'lucide-react';
 import {
     BannerCarousel,
     ProductFilters,
@@ -69,13 +70,22 @@ function CatalogContent() {
         toggleFavorite,
         loadMore,
         hasMore,
-        filterStats
+        filterStats,
+        catalogSettings
     } = useCatalog({
         pageSize: 150, // Alto, pois ao agrupar os cards, 150 produtos brutos podem virar apenas 10 ou 15 cards únicos
         initialSearchQuery,
         initialCategory,
         bypassCache: customer?.customer_type === 'ADMIN'
     });
+
+    const productsPerPage = catalogSettings?.products_per_page || 12;
+    const [visibleCount, setVisibleCount] = useState(productsPerPage);
+
+    // Quando o catalogSettings carrega ou muda, ajusta o count inicial
+    useEffect(() => {
+        setVisibleCount(productsPerPage);
+    }, [productsPerPage]);
 
     // Carregar seções ativas
     useEffect(() => {
@@ -172,6 +182,23 @@ function CatalogContent() {
     const productGroups = useMemo(() => {
         return groupProductsByVariants(products, isAdmin);
     }, [products, isAdmin]);
+
+    const visibleGroups = useMemo(() => {
+        return productGroups.slice(0, visibleCount);
+    }, [productGroups, visibleCount]);
+
+    const actualHasMore = hasMore || visibleCount < productGroups.length;
+
+    const handleLoadMore = useCallback(() => {
+        if (visibleCount < productGroups.length) {
+            // Mostrar mais do que já foi carregado
+            setVisibleCount(prev => prev + productsPerPage);
+        } else {
+            // Se já mostramos todos os grupos da memória, buscar mais
+            loadMore();
+            setVisibleCount(prev => prev + productsPerPage);
+        }
+    }, [visibleCount, productGroups.length, productsPerPage, loadMore]);
 
 
     if (error) {
@@ -312,6 +339,47 @@ function CatalogContent() {
                             filterStats={filterStats || { brands: [] }}
                         />
                     </div>
+
+                    {/* Chips de Filtros Ativos Renderizados na Raiz */}
+                    {(filters.brands.length > 0 || (filters.sortBy && filters.sortBy !== 'recent') || filters.priceRange) && (
+                        <div className="flex flex-wrap gap-2 mt-4 items-center animate-in fade-in slide-in-from-top-2 duration-300">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mr-1">Filtros Ativos:</span>
+                            
+                            {/* Chip de Ordem */}
+                            {filters.sortBy && filters.sortBy !== 'recent' && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-blue-200 shadow-sm text-blue-700 rounded-full text-xs font-medium">
+                                    {{
+                                        'price_asc': '💰 Menor preço',
+                                        'price_desc': '💎 Maior preço',
+                                        'featured': '⭐ Destaques'
+                                    }[filters.sortBy] || filters.sortBy}
+                                    <button onClick={() => setFilters({ ...filters, sortBy: 'recent' })} className="hover:text-red-500 transition-colors focus:outline-none">
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </span>
+                            )}
+
+                            {/* Chips de Marcas */}
+                            {filters.brands.map(b => (
+                                <span key={b} className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 shadow-sm text-slate-700 rounded-full text-xs font-medium hover:border-slate-300 transition-colors">
+                                    {b}
+                                    <button onClick={() => setFilters({ ...filters, brands: filters.brands.filter(brand => brand !== b) })} className="hover:text-red-500 transition-colors focus:outline-none">
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </span>
+                            ))}
+
+                            {/* Botão de limpar tudo caso haja muitos filtros */}
+                            {filters.brands.length > 1 && (
+                                <button 
+                                    onClick={() => setFilters({ ...filters, brands: [], sortBy: 'recent' })}
+                                    className="text-[11px] font-semibold text-slate-400 hover:text-red-500 ml-1 transition-colors uppercase tracking-widest"
+                                >
+                                    Limpar Tudo
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Seções do Catálogo - ocultar quando há filtro de categoria ativo ou busca */}
@@ -337,19 +405,19 @@ function CatalogContent() {
 
                 {/* Grid de produtos - Largura total */}
                 <ProductGroupGrid
-                    groups={productGroups}
-                    loading={loading}
-                    hasMore={hasMore}
-                    onLoadMore={loadMore}
+                    groups={visibleGroups}
+                    loading={loading && productGroups.length === 0}
+                    hasMore={actualHasMore}
+                    onLoadMore={handleLoadMore}
                     onFavorite={toggleFavorite}
                     onShare={handleShare}
                     favorites={favorites}
                     variant="grid"
                     columns={{
-                        mobile: 1,
-                        tablet: 2,
-                        desktop: 3,
-                        wide: 4
+                        mobile: 2,
+                        tablet: 3,
+                        desktop: 4,
+                        wide: 5
                     }}
                 />
             </div>

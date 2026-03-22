@@ -3,6 +3,45 @@ import { vpsClient } from './vpsClient';
 import { USE_VPS } from '@/config/migration';
 import type { Banner } from '@/types/catalog';
 
+// ─── Adapters VPS <-> Supabase ────────────────────────────────────────────────
+
+function mapFromVPS(vpsBanner: any): Banner {
+    let link_type: Banner['link_type'] = 'none';
+    if (vpsBanner.link_url) {
+        if (vpsBanner.link_url.includes('http')) link_type = 'external';
+        else if (vpsBanner.link_url.length === 36 && vpsBanner.link_url.includes('-')) link_type = 'product';
+        else link_type = 'category';
+    }
+
+    return {
+        ...vpsBanner,
+        is_active: vpsBanner.active ?? false,
+        link_target: vpsBanner.link_url,
+        link_type,
+        clicks_count: vpsBanner.clicks_count ?? 0,
+        views_count: vpsBanner.views_count ?? 0,
+        target_audience: vpsBanner.target_audience ?? [],
+        updated_at: vpsBanner.updated_at ?? vpsBanner.created_at,
+    };
+}
+
+function mapToVPS(banner: any): any {
+    const payload = { ...banner };
+    if ('is_active' in banner) {
+        payload.active = banner.is_active;
+        delete payload.is_active;
+    }
+    if ('link_target' in banner) {
+        payload.link_url = banner.link_target || null;
+        delete payload.link_target;
+    }
+    delete payload.link_type;
+    delete payload.clicks_count;
+    delete payload.views_count;
+    delete payload.target_audience;
+    return payload;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type CustomerType = 'varejo' | 'revenda' | 'atacado';
@@ -27,23 +66,16 @@ export const bannerService = {
      * Filtra por is_active + datas de agendamento + tipo de cliente.
      */
     getActiveBanners: async (customerType?: CustomerType): Promise<Banner[]> => {
-        if (USE_VPS.banners) {
-            const params = customerType ? `?customerType=${customerType}` : '';
-            return vpsClient.get<Banner[]>(`/banners/active${params}`);
-        }
+        const now = new Date();
+        const allBanners = await bannerService.getAllBanners();
 
-        const now = new Date().toISOString();
-        const { data, error } = await supabase
-            .from('catalog_banners')
-            .select('*')
-            .eq('is_active', true)
-            .or(`start_date.is.null,start_date.lte.${now}`)
-            .or(`end_date.is.null,end_date.gte.${now}`)
-            .order('display_order', { ascending: true });
+        let banners = allBanners.filter(b => {
+            if (!b.is_active) return false;
+            if (b.start_date && new Date(b.start_date) > now) return false;
+            if (b.end_date && new Date(b.end_date) < now) return false;
+            return true;
+        });
 
-        if (error) throw error;
-
-        let banners = (data || []) as Banner[];
         if (customerType) {
             banners = banners.filter(b =>
                 !b.target_audience ||
@@ -58,7 +90,10 @@ export const bannerService = {
      * Buscar todos os banners (uso admin — sem filtro de ativo/data)
      */
     getAllBanners: async (): Promise<Banner[]> => {
-        if (USE_VPS.banners) return vpsClient.get<Banner[]>('/banners');
+        if (USE_VPS.banners) {
+            const data = await vpsClient.get<any[]>('/banners');
+            return data.map(mapFromVPS);
+        }
 
         const { data, error } = await supabase
             .from('catalog_banners')
@@ -74,7 +109,8 @@ export const bannerService = {
      */
     getBannerById: async (id: string): Promise<Banner | null> => {
         if (USE_VPS.banners) {
-            return vpsClient.get<Banner | null>(`/banners/${id}`);
+            const data = await vpsClient.get<any>(`/banners/${id}`);
+            return data ? mapFromVPS(data) : null;
         }
 
         const { data, error } = await supabase
@@ -96,7 +132,10 @@ export const bannerService = {
     createBanner: async (
         banner: Omit<Banner, 'id' | 'created_at' | 'updated_at' | 'clicks_count' | 'views_count'>
     ): Promise<Banner> => {
-        if (USE_VPS.banners) return vpsClient.post<Banner>('/banners', banner);
+        if (USE_VPS.banners) {
+            const data = await vpsClient.post<any>('/banners', mapToVPS(banner));
+            return mapFromVPS(data);
+        }
 
         const { data, error } = await supabase
             .from('catalog_banners')
@@ -112,7 +151,10 @@ export const bannerService = {
      * Atualizar banner
      */
     updateBanner: async (id: string, updates: Partial<Banner>): Promise<Banner> => {
-        if (USE_VPS.banners) return vpsClient.patch<Banner>(`/banners/${id}`, updates);
+        if (USE_VPS.banners) {
+            const data = await vpsClient.patch<any>(`/banners/${id}`, mapToVPS(updates));
+            return mapFromVPS(data);
+        }
 
         const { data, error } = await supabase
             .from('catalog_banners')
@@ -149,13 +191,20 @@ export const bannerService = {
 
         const { id: _id, created_at, updated_at, clicks_count, views_count, ...rest } = original;
 
+        const payload = {
+            ...rest,
+            title: `${rest.title} (cópia)`,
+            is_active: false,
+        };
+
+        if (USE_VPS.banners) {
+            const data = await vpsClient.post<any>('/banners', mapToVPS(payload));
+            return mapFromVPS(data);
+        }
+
         const { data, error } = await supabase
             .from('catalog_banners')
-            .insert({
-                ...rest,
-                title: `${rest.title} (cópia)`,
-                is_active: false,
-            })
+            .insert(payload)
             .select()
             .single();
 
@@ -167,13 +216,8 @@ export const bannerService = {
      * Estatísticas consolidadas de banners (uso admin)
      */
     getBannerStats: async (): Promise<BannerStats> => {
-        const { data, error } = await supabase
-            .from('catalog_banners')
-            .select('id, title, clicks_count, views_count, is_active, end_date');
-
-        if (error) throw error;
-
-        const banners = data || [];
+        // Usa a source of truth correta (VPS ou Supabase)
+        const banners = await bannerService.getAllBanners();
         const now = new Date();
 
         const sorted_clicks = [...banners].sort(

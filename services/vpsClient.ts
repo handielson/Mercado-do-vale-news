@@ -30,6 +30,7 @@ export const vpsClient = {
     get: async <T>(path: string): Promise<T> => {
         const res = await fetch(`${VPS_BASE}${path}`, {
             headers: buildHeaders(),
+            cache: 'no-store',
         });
         return handleResponse<T>(res);
     },

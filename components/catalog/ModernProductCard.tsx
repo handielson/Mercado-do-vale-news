@@ -365,7 +365,7 @@ export function ModernProductCard({
     return (
         <>
             <div
-                className="group bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col h-full"
+                className="group bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col h-full"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 onClick={handleTitleClick}
@@ -415,29 +415,29 @@ export function ModernProductCard({
                     </div>
 
                     {/* Badges (top left) */}
-                    <div className="absolute top-3 left-3 flex flex-col gap-2">
+                    <div className="absolute top-2 left-2 flex flex-col gap-1.5 items-start">
                         {/* Cart Badge (Admin only) */}
                         {isAdmin && isInCart && (
-                            <span className="text-xs bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-full font-semibold shadow-lg flex items-center gap-1 animate-pulse">
+                            <span className="text-[10px] sm:text-xs bg-blue-600/90 backdrop-blur-sm text-white px-2 py-1 rounded-full font-medium shadow-sm flex items-center gap-1 animate-pulse">
                                 <ShoppingCart className="w-3 h-3" />
-                                No Orçamento
+                                <span className="hidden sm:inline">No Orçamento</span>
                             </span>
                         )}
 
                         {product.featured && (
-                            <span className="text-xs bg-yellow-400 text-yellow-900 px-3 py-1.5 rounded-full font-semibold shadow-md">
+                            <span className="text-[10px] sm:text-xs bg-white/90 backdrop-blur-sm border border-slate-200 text-slate-700 px-2 py-1 rounded-full font-medium shadow-sm">
                                 ⭐ Destaque
                             </span>
                         )}
                         {product.is_new && (
-                            <span className="text-xs bg-green-400 text-green-900 px-3 py-1.5 rounded-full font-semibold shadow-md">
+                            <span className="text-[10px] sm:text-xs bg-white/90 backdrop-blur-sm border border-slate-200 text-slate-700 px-2 py-1 rounded-full font-medium shadow-sm">
                                 🆕 Novo
                             </span>
                         )}
                         {/* Badge de Promoção Ativa */}
                         {getActivePromoPrice(productForDisplay) !== null && (
-                            <span className="text-xs bg-red-500 text-white px-3 py-1.5 rounded-full font-semibold shadow-md animate-pulse">
-                                🏷️ PROMO
+                            <span className="text-[10px] sm:text-xs bg-red-500/90 backdrop-blur-sm text-white px-2 py-1 rounded-full font-medium shadow-sm animate-pulse">
+                                Promo
                             </span>
                         )}
 
@@ -450,7 +450,7 @@ export function ModernProductCard({
                             .map(badge => (
                                 <span
                                     key={badge.spec}
-                                    className={`text-xs bg-gradient-to-r ${badge.color} text-white px-3 py-1.5 rounded-full font-semibold shadow-md`}
+                                    className={`text-[10px] sm:text-xs bg-white/80 backdrop-blur-sm border border-slate-100 text-slate-700 px-2 py-1 rounded-full font-medium shadow-sm flex items-center gap-1`}
                                 >
                                     {badge.icon} {badge.label}
                                 </span>
@@ -461,8 +461,8 @@ export function ModernProductCard({
                         {totalGroupStock !== undefined && 
                          totalGroupStock > 0 && 
                          totalGroupStock <= 2 && (
-                            <span className="text-xs bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-1.5 rounded-full font-bold shadow-md animate-pulse">
-                                🔥 Últimas Unidades
+                            <span className="text-[10px] sm:text-xs bg-orange-500/90 backdrop-blur-sm text-white px-2 py-1 rounded-full font-medium shadow-sm">
+                                🔥 Acabando
                             </span>
                         )}
                     </div>
@@ -500,21 +500,21 @@ export function ModernProductCard({
                 </div>
 
                 {/* Content */}
-                <div className="p-4 space-y-3">
+                <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">
                     {/* Title & Brand */}
                     <div>
-                        <ProductRatingBadge productId={product.id} className="mb-1" />
+                        <ProductRatingBadge productId={product.id} className="mb-0.5" />
                         <h3
                             onClick={handleTitleClick}
-                            className="font-semibold text-slate-900 line-clamp-3 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
+                            className="font-medium text-xs sm:text-sm text-slate-900 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer"
                         >
                             {toTitleCase(productForDisplay.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim())}
                         </h3>
                         {productForDisplay.brand && (
-                            <p className="text-sm text-slate-600 mt-1">{productForDisplay.brand}</p>
+                            <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">{productForDisplay.brand}</p>
                         )}
                         {(currentProduct.sku || product.sku) && (
-                            <p className="font-mono text-[10px] text-slate-400 mt-0.5">
+                            <p className="font-mono text-[9px] sm:text-[10px] text-slate-400 mt-0.5">
                                 SKU: {currentProduct.sku || product.sku}
                             </p>
                         )}
@@ -557,26 +557,26 @@ export function ModernProductCard({
                                                     setCurrentColorIndex(newVariant && newVariant.colors.length === 1 ? 0 : -1);
                                                 }
                                             }}
-                                            className={`w-full p-2.5 rounded-lg border-2 transition-all text-left relative cursor-pointer
+                                            className={`w-full p-2 sm:p-2.5 rounded-xl border transition-all text-left relative cursor-pointer
                                                 ${isSelectedVariant
                                                     ? variantInCart
-                                                        ? 'border-green-600 bg-green-50 shadow-sm'
-                                                        : 'border-blue-600 bg-blue-50 shadow-sm ring-1 ring-blue-600 ring-offset-1'
+                                                        ? 'border-green-300 bg-green-50/30'
+                                                        : 'border-blue-300 bg-blue-50/20 shadow-sm ring-1 ring-blue-300/50'
                                                     : variantInCart
-                                                        ? 'border-green-300 bg-green-50/50 hover:border-green-400'
-                                                        : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                                                        ? 'border-green-200 bg-green-50/20'
+                                                        : 'border-slate-100 bg-slate-50/50 hover:border-slate-300'
                                                 }`}
                                         >
                                             {/* Cart indicator badge */}
                                             {variantInCart && (
-                                                <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-600 rounded-full flex items-center justify-center shadow-md">
-                                                    <Check className="w-3 h-3 text-white" />
+                                                <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                                                    <Check className="w-2.5 h-2.5 text-white" />
                                                 </div>
                                             )}
 
-                                            <div className="flex justify-between items-start mb-1">
+                                            <div className="flex justify-between items-start mb-0.5">
                                                 <div className="flex flex-col">
-                                                    <span className={`font-semibold text-sm ${variantInCart ? 'text-green-700' : 'text-slate-800'}`}>
+                                                    <span className={`font-medium text-[10px] sm:text-xs ${variantInCart ? 'text-green-700' : 'text-slate-700'}`}>
                                                         {variant.ram !== 'no-ram' || variant.storage !== 'no-storage'
                                                             ? `${variant.ram}/${variant.storage}`
                                                             : variant.colors.length > 1
@@ -586,31 +586,31 @@ export function ModernProductCard({
                                                     </span>
                                                     {/* Mostrar a cor selecionada em texto se for a variante ativa */}
                                                     {isSelectedVariant && variant.colors.length > 0 && (
-                                                        <span className={`text-xs font-medium mt-0.5 ${currentColorIndex !== -1 ? 'text-blue-600' : 'text-orange-500 animate-pulse'}`}>
-                                                            {currentColorIndex !== -1 ? `Cor: ${variant.colors[currentColorIndex]?.name}` : '⚠️ Escolha uma cor abaixo'}
+                                                        <span className={`text-[9px] sm:text-[10px] mt-0.5 ${currentColorIndex !== -1 ? 'text-blue-500' : 'text-slate-400 animate-pulse'}`}>
+                                                            {currentColorIndex !== -1 ? variant.colors[currentColorIndex]?.name : 'Escolha a cor'}
                                                         </span>
                                                     )}
                                                 </div>
                                                 <div className="text-right">
                                                     {/* Preço riscado se houver promo ativa */}
                                                     {variant.products[0] && getActivePromoPrice(variant.products[0]) !== null && (
-                                                        <div className="text-xs text-slate-400 line-through">
+                                                        <div className="text-[9px] sm:text-[10px] text-slate-400 line-through">
                                                             {formatPrice(variant.products[0].price_retail)}
                                                         </div>
                                                     )}
-                                                    <div className={`text-base font-bold ${variantInCart ? 'text-green-600' : getActivePromoPrice(variant.products[0] ?? product) !== null ? 'text-red-600' : 'text-blue-600'}`}>
+                                                    <div className={`text-xs sm:text-sm font-semibold tracking-tight ${variantInCart ? 'text-green-600' : getActivePromoPrice(variant.products[0] ?? product) !== null ? 'text-red-500' : 'text-slate-900'}`}>
                                                         {formatPrice(variant.products[0] ? getEffectivePrice(variant.products[0], customer) : variant.priceRange.min)}
                                                     </div>
                                                     {installment && effectiveCustomerType !== 'wholesale' && (
-                                                        <div className="text-xs text-slate-500">
+                                                        <div className="text-[9px] sm:text-[10px] text-slate-500">
                                                             12x de {installment}
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
                                             {/* Color indicators & selectors */}
-                                            <div className={`flex flex-wrap gap-2 mt-2 pt-2 border-t transition-opacity duration-200 
-                                                ${isSelectedVariant ? 'border-blue-200 opacity-100' : 'border-slate-200 opacity-70'}
+                                            <div className={`flex flex-wrap gap-1 mt-1 pt-1.5 border-t transition-opacity duration-200 
+                                                ${isSelectedVariant ? 'border-slate-100 opacity-100' : 'border-transparent opacity-50'}
                                             `}>
                                                 {variant.colors.map((color, colorIdx) => {
                                                     const isSelectedColor = isSelectedVariant && currentColorIndex === colorIdx;
@@ -623,16 +623,16 @@ export function ModernProductCard({
                                                                 setUserInteractedWithColor(true);
                                                                 setCurrentColorIndex(colorIdx);
                                                             }}
-                                                            className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer flex items-center justify-center
+                                                            className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-all cursor-pointer flex items-center justify-center
                                                                 ${isSelectedColor
-                                                                    ? 'border-blue-600 scale-110 shadow-md ring-2 ring-blue-200 ring-offset-1 z-10'
-                                                                    : 'border-slate-300 hover:scale-110 hover:border-blue-400'}
+                                                                    ? 'border-blue-400 scale-110 shadow-sm ring-2 ring-blue-100 z-10'
+                                                                    : 'border-slate-200 hover:scale-110'}
                                                             `}
                                                             style={{ backgroundColor: color.hex }}
                                                             title={color.name}
                                                         >
                                                             {isSelectedColor && (
-                                                                <Check className={`w-3 h-3 ${isDarkColor(color.hex) ? 'text-white' : 'text-slate-800'}`} />
+                                                                <Check className={`w-2.5 h-2.5 ${isDarkColor(color.hex) ? 'text-white' : 'text-slate-800'}`} />
                                                             )}
                                                         </div>
                                                     );
@@ -645,16 +645,16 @@ export function ModernProductCard({
                         </div>
                     ) : (
                         // Fallback: Show individual product specs when no productGroup
-                        <div className="space-y-2">
-                            <div className="p-2.5 rounded-lg border-2 border-blue-600 bg-blue-50">
-                                <div className="flex justify-between items-start mb-1">
+                        <div className="space-y-1 sm:space-y-2">
+                            <div className="p-2 sm:p-2.5 rounded-xl border border-slate-100 bg-slate-50/50">
+                                <div className="flex justify-between items-start mb-0.5">
                                     {/* Only show RAM/Storage if at least one exists */}
                                     {(product.specs?.ram && product.specs?.ram !== 'no-ram') || (product.specs?.storage && product.specs?.storage !== 'no-storage') ? (
-                                        <span className="font-semibold text-sm">
+                                        <span className="font-medium text-[10px] sm:text-xs">
                                             {product.specs?.ram || 'N/A'}/{product.specs?.storage || 'N/A'}
                                         </span>
                                     ) : (
-                                        <span className="font-semibold text-sm text-slate-500">
+                                        <span className="font-medium text-[10px] sm:text-xs text-slate-500">
                                             {productGroup && productGroup.variants[0] && productGroup.variants[0].colors.length > 1
                                                 ? `${productGroup.variants[0].colors.length} Cores`
                                                 : product.specs?.color || ''}
@@ -663,15 +663,15 @@ export function ModernProductCard({
                                     <div className="text-right">
                                         {/* Preço riscado se promo ativa (fallback individual) */}
                                         {getActivePromoPrice(product) !== null && (
-                                            <div className="text-xs text-slate-400 line-through">
+                                            <div className="text-[9px] sm:text-[10px] text-slate-400 line-through">
                                                 {formatPrice(product.price_retail)}
                                             </div>
                                         )}
-                                        <div className={`text-base font-bold ${getActivePromoPrice(product) !== null ? 'text-red-600' : 'text-blue-600'}`}>
+                                        <div className={`text-xs sm:text-sm font-semibold tracking-tight ${getActivePromoPrice(product) !== null ? 'text-red-500' : 'text-slate-900'}`}>
                                             {formatPrice(getEffectivePrice(product, customer))}
                                         </div>
                                         {installment12x && effectiveCustomerType !== 'wholesale' && (
-                                            <div className="text-xs text-slate-500">
+                                            <div className="text-[9px] sm:text-[10px] text-slate-500">
                                                 12x de {installment12x}
                                             </div>
                                         )}
@@ -710,67 +710,67 @@ export function ModernProductCard({
                     )}
 
                     {/* CTA Buttons */}
-                    <div className="space-y-2">
+                    <div className="space-y-1.5 sm:space-y-2 pt-1">
                         {/* Botão principal: Admin → Orçar | Cliente → Adicionar ao Carrinho */}
                         {isAdmin ? (
                             <button
                                 onClick={handleCardClick}
                                 disabled={currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)}
-                                className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 
+                                className={`w-full py-1.5 sm:py-2 px-2 sm:px-4 text-[11px] sm:text-sm font-medium rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 sm:gap-2 
                                     ${(currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1))
-                                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none border border-slate-300'
+                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
                                         : (isInCart || addedToCart)
-                                            ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 hover:shadow-lg'
-                                            : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 hover:shadow-lg'
+                                            ? 'bg-green-500 text-white shadow hover:bg-green-600'
+                                            : 'bg-blue-600 text-white shadow hover:bg-blue-700'
                                     }`}
                             >
                                 {currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1) ? (
-                                    <>Escolha uma cor para adicionar</>
+                                    <>Escolha uma cor</>
                                 ) : (isInCart || addedToCart) ? (
-                                    <><Check className="w-4 h-4" />Adicionado</>
+                                    <><Check className="w-3.5 h-3.5" />Adicionado</>
                                 ) : (
-                                    <><ShoppingCart className="w-4 h-4" />Adicionar ao Orçamento</>
+                                    <><ShoppingCart className="w-3.5 h-3.5" />Orçar</>
                                 )}
                             </button>
                         ) : (
                             <button
                                 onClick={handleAddToCart}
                                 disabled={currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)}
-                                className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 
+                                className={`w-full py-1.5 sm:py-2 px-2 sm:px-4 text-[11px] sm:text-sm font-medium rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 sm:gap-2 
                                     ${(currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1))
-                                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none border border-slate-300'
+                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
                                         : addedToCart
-                                            ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
-                                            : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 hover:shadow-lg'
+                                            ? 'bg-green-500 text-white'
+                                            : 'bg-slate-900 text-white hover:bg-slate-800 shadow hover:shadow-md'
                                     }`}
                             >
                                 {currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1) ? (
-                                    <>Escolha uma cor para comprar</>
+                                    <>Escolha uma cor</>
                                 ) : addedToCart ? (
-                                    <><Check className="w-4 h-4" />Adicionado!</>
+                                    <><Check className="w-3.5 h-3.5" />Adicionado</>
                                 ) : (
-                                    <><ShoppingBag className="w-4 h-4" />Comprar</>
+                                    <><ShoppingBag className="w-3.5 h-3.5" />Comprar</>
                                 )}
                             </button>
                         )}
 
-                        <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex flex-col sm:flex-row gap-1.5 sm:gap-2">
                             <button
                                 onClick={handleInfoClick}
-                                className="flex-1 py-2 px-3 border-2 border-slate-300 text-slate-700 font-medium rounded-lg hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50 transition-all text-sm"
+                                className="flex-1 py-1.5 sm:py-2 px-2 border border-slate-200 text-slate-600 font-medium rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-all text-[11px] sm:text-sm flex items-center justify-center"
                             >
                                 Detalhes
                             </button>
                             <button
                                 onClick={handleCompare}
-                                className={`flex-1 py-2 px-2 border-2 font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm ${isInCompare
-                                    ? 'border-blue-600 bg-blue-50 text-blue-700'
-                                    : 'border-slate-300 text-slate-700 hover:border-blue-600 hover:text-blue-600 hover:bg-blue-50'
+                                className={`flex-1 py-1.5 sm:py-2 px-2 border font-medium rounded-xl flex items-center justify-center gap-1 transition-all text-[11px] sm:text-sm ${isInCompare
+                                    ? 'border-blue-500 bg-blue-50 text-blue-600'
+                                    : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                                     }`}
                                 title={isInCompare ? 'Remover da comparação' : 'Comparar produto'}
                             >
-                                <GitCompare className="w-4 h-4 shrink-0" />
-                                <span className="truncate">{isInCompare ? 'Comparando' : 'Comparar'}</span>
+                                <GitCompare className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">{isInCompare ? 'Cancel...' : '+ Comparar'}</span>
                             </button>
                         </div>
                     </div>
