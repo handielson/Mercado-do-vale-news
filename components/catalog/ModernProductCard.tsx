@@ -533,20 +533,15 @@ export function ModernProductCard({
 
                                     // Check if THIS specific variant (exact RAM + Storage) is in cart
                                     // AND the current color matches the cart item's color.
-                                    const variantInCart = isAdmin && items.some(item => {
-                                        const ramMatch = item.variant.ram === variant.ram;
-                                        const storageMatch = item.variant.storage === variant.storage;
-                                        const modelMatch = item.product.model === productForDisplay.model ||
-                                            item.product.name === productForDisplay.name;
-                                        // If no color selected yet, we can't be sure this exact item is in cart
-                                        if (currentColorIndex === -1 && selectedVariantIndex === idx) return false;
-
-                                        // Match color if variant is currently selected
-                                        const colorMatch = selectedVariantIndex === idx
-                                            ? item.product.specs?.color === variant.colors[currentColorIndex]?.name
-                                            : false;
-
-                                        return ramMatch && storageMatch && modelMatch && colorMatch;
+                                    const isSelectedVariant = selectedVariantIndex === idx;
+                                    const variantInCart = isAdmin && isSelectedVariant && currentColorIndex !== -1 && cartItems.some(item => {
+                                        const colorName = variant.colors[currentColorIndex]?.name;
+                                        // A variant item is in the cart if its ID matches any product in this variant group
+                                        // that has the currently selected color.
+                                        return variant.products.some(vp => 
+                                            vp.id === item.product.id && 
+                                            vp.specs?.color === colorName
+                                        );
                                     });
 
                                     const isSelectedVariant = selectedVariantIndex === idx;
