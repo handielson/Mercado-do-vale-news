@@ -14,6 +14,7 @@ import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiv
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { useCompare } from '@/contexts/CompareContext';
 import { useCart } from '@/contexts/CartContext';
+import toast from 'react-hot-toast';
 import { CashbackBadge } from './CashbackBadge';
 import { getActivePromoPrice } from '@/utils/promoPrice';
 import { ProductRatingBadge } from './ProductRatingBadge';
@@ -163,7 +164,12 @@ export function ModernProductCard({
 
     // Check if this product is in cart (by variant, not just product ID)
     const isInCart = useMemo(() => {
-        if (!isAdmin || currentColorIndex === -1) return false;
+        if (!isAdmin) return false;
+
+        // If it requires a color but none is selected, it's not the specific variant they intend to add yet
+        if (currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)) {
+            return false;
+        }
 
         // Get current product's RAM and Storage
         const currentRam = currentProduct.specs?.ram;
@@ -309,6 +315,7 @@ export function ModernProductCard({
         });
         
         // Visual feedback
+        toast.success('Adicionado ao orçamento!');
         setAddedToCart(true);
         setTimeout(() => setAddedToCart(false), 2000);
     };
@@ -761,14 +768,14 @@ export function ModernProductCard({
                                 className={`w-full py-2.5 px-4 font-semibold rounded-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 
                                     ${(currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1))
                                         ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none border border-slate-300'
-                                        : isInCart
+                                        : (isInCart || addedToCart)
                                             ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 hover:shadow-lg'
                                             : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 hover:shadow-lg'
                                     }`}
                             >
                                 {currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1) ? (
                                     <>Escolha uma cor para adicionar</>
-                                ) : isInCart ? (
+                                ) : (isInCart || addedToCart) ? (
                                     <><Check className="w-4 h-4" />Adicionado</>
                                 ) : (
                                     <><ShoppingCart className="w-4 h-4" />Adicionar ao Orçamento</>
