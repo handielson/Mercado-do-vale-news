@@ -142,7 +142,7 @@ export function ModernProductCard({
     }, [selectedVariant, currentColorIndex, product]);
 
     const { customer } = useSupabaseAuth();
-    const { items } = useQuoteCart();
+    const { items, addItem: addToQuoteCart } = useQuoteCart();
     const { addItem: addToCartContext } = useCart();
     const isAdmin = customer?.customer_type === 'ADMIN';
     const [addedToCart, setAddedToCart] = useState(false);
@@ -271,13 +271,46 @@ export function ModernProductCard({
         : null;
 
     // Handlers
-    const handleCardClick = (e?: React.MouseEvent) => {
+    const handleCardClick = async (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
         if (currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)) {
             alert('Por favor, selecione uma cor antes de adicionar ao orçamento.');
             return;
         }
-        setShowQuoteModal(true);
+
+        const variantToAdd = {
+            ram: selectedVariant?.ram || currentProduct.specs?.ram || '',
+            storage: selectedVariant?.storage || currentProduct.specs?.storage || '',
+            color: currentColorIndex !== -1 ? selectedVariant?.colors[currentColorIndex]?.name : (currentProduct.specs?.color || '')
+        };
+
+        const effectivePrice = getEffectivePrice(currentProduct, customer);
+        if (!effectivePrice) return;
+
+        const plans = await calculateInstallments(effectivePrice, 12);
+        const selectedPlan = plans.find(p => p.highlighted) || plans[0];
+
+        // Ensure available colors are passed if there are multiple colors in the group
+        let availColors: string[] = [];
+        if (selectedVariant && selectedVariant.colors.length > 0) {
+            availColors = selectedVariant.colors.map(c => c.name);
+        } else if (currentProduct.specs?.color) {
+            availColors = [currentProduct.specs.color];
+        }
+
+        // Add proper item to quote cart
+        addToQuoteCart({
+            product: currentProduct,
+            variant: variantToAdd,
+            availableColors: availColors,
+            price: effectivePrice,
+            installmentPlan: selectedPlan,
+            paymentOptions: { showCash: true, showInstallment: true }
+        });
+        
+        // Visual feedback
+        setAddedToCart(true);
+        setTimeout(() => setAddedToCart(false), 2000);
     };
 
     const handleTitleClick = (e: React.MouseEvent) => {
@@ -793,23 +826,11 @@ export function ModernProductCard({
                         product={currentProduct}
                         isOpen={showDetailsModal}
                         onClose={() => setShowDetailsModal(false)}
-                        onQuote={() => setShowQuoteModal(true)}
+                        onQuote={() => {
+                            setShowDetailsModal(false);
+                            handleCardClick();
+                        }}
                         totalStock={totalGroupStock}
-                    />
-                    <QuoteModal
-                        product={currentProduct}
-                        variants={variants}
-                        isOpen={showQuoteModal}
-                        onClose={() => setShowQuoteModal(false)}
-                        initialVariant={
-                            selectedVariant
-                                ? { ram: selectedVariant.ram, storage: selectedVariant.storage }
-                                : {
-                                    ram: currentProduct.specs?.ram,
-                                    storage: currentProduct.specs?.storage,
-                                    color: currentProduct.specs?.color
-                                }
-                        }
                     />
                 </>
             )}
