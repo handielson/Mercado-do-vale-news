@@ -96,21 +96,31 @@ export const shippingService = {
         // Salva simultaneamente no banco local/Supabase e no VPS (Master)
         const existing = await shippingService.getSettings();
         
+        // Remove campos que ainda não existem no schema do Supabase local (Fallback) para evitar 400 Bad Request
+        const { 
+            enable_progressive_shipping_subsidy, 
+            min_order_value_for_subsidy, 
+            default_subsidy_discount_percent, 
+            profit_margin_percentage_cap, 
+            ...supabaseInput 
+        } = input;
+
         let localError;
         if (existing?.id) {
             const { error } = await supabase
                 .from('shipping_settings')
-                .update({ ...input, updated_at: new Date().toISOString() })
+                .update({ ...supabaseInput, updated_at: new Date().toISOString() })
                 .eq('id', existing.id);
             localError = error;
         } else {
             const { error } = await supabase
                 .from('shipping_settings')
-                .insert({ ...input, updated_at: new Date().toISOString() });
+                .insert({ ...supabaseInput, updated_at: new Date().toISOString() });
             localError = error;
         }
 
         // Tenta jogar na VPS como Source of Truth principal (Single-tenant view)
+        // Passa o input completo para o VPS, que já deve ter a tabela atualizada
         try {
             await vpsApiService.syncShippingSettings(input);
         } catch (e) {
