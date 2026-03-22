@@ -266,3 +266,34 @@ export const getDeliveryTypeLabel = (deliveryType: DeliveryType | undefined): st
 
     return labels[deliveryType];
 };
+
+/**
+ * Calculate the total shipping volume (dimensions) and weight (grams) of a cart.
+ * Assumes items are stacked vertically (summing height) while keeping the max width and depth.
+ * Returns weight in grams, dimensions in cm, enforcing minimum limits required by carriers.
+ */
+export const calculateCartVolume = (items: any[]) => {
+    let weight_g = 0;
+    let height_cm = 0;
+    let width_cm = 0;
+    let length_cm = 0;
+
+    items.forEach(item => {
+        // weight_kg to grams
+        weight_g += ((item.product?.weight_kg || 0) * 1000) * item.quantity;
+        
+        if (item.product?.dimensions) {
+            height_cm += (item.product.dimensions.height_cm || 0) * item.quantity;
+            width_cm = Math.max(width_cm, item.product.dimensions.width_cm || 0);
+            length_cm = Math.max(length_cm, item.product.dimensions.depth_cm || 0);
+        }
+    });
+
+    // Provide minimum fallbacks for carrier APIs
+    return {
+        weight: Math.max(300, Math.ceil(weight_g)), // at least 300g
+        height: Math.max(10, height_cm),            // at least 10cm
+        width: Math.max(15, width_cm),              // at least 15cm
+        length: Math.max(20, length_cm),            // at least 20cm
+    };
+};

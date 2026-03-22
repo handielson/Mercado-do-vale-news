@@ -8,7 +8,7 @@ import { shippingService } from '@/services/shippingService';
 import { createOrder } from '@/services/orderService';
 import { paymentIntegrationService } from '@/services/paymentIntegrationService';
 import type { PaymentIntegration } from '@/types/paymentIntegration';
-import { formatCurrency } from '@/utils/saleCalculations';
+import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
 import type { ShippingOption } from '@/types/shipping';
 import type { OrderDeliveryType, OrderPaymentMethod, OrderShippingAddress, PaymentGateway } from '@/types/order';
 import type { CardFormData } from '@/services/providers/mercadoPagoProvider';
@@ -149,6 +149,7 @@ export default function CheckoutPage() {
             const res = await shippingService.calculate({
                 to_cep: cep,
                 order_value: subtotal,
+                ...calculateCartVolume(items)
             });
             setShippingOptions(res.options);
         } catch {

@@ -113,9 +113,33 @@ export const ProductCombosPage: React.FC = () => {
     const toastId = toast.loading('Salvando combo...');
     
     try {
+      let total_weight_kg = 0;
+      let total_width = 0;
+      let total_height = 0;
+      let total_depth = 0;
+
+      editingCombo.combo_children.forEach(c => {
+        const prodData = allProducts.find(p => p.id === c.id);
+        if (prodData) {
+          total_weight_kg += (prodData.weight_kg || 0) * c.quantity;
+          if (prodData.dimensions) {
+            // Stacking assumption: stack vertically (sum heights), take max width/depth
+            total_height += (prodData.dimensions.height_cm || 0) * c.quantity;
+            total_width = Math.max(total_width, prodData.dimensions.width_cm || 0);
+            total_depth = Math.max(total_depth, prodData.dimensions.depth_cm || 0);
+          }
+        }
+      });
+
       const payload = {
         ...editingCombo,
         is_combo: true,
+        weight_kg: total_weight_kg || 0.3,
+        dimensions: {
+            width_cm: total_width || 15,
+            height_cm: total_height || 10,
+            depth_cm: total_depth || 20
+        }
       };
 
       let res;

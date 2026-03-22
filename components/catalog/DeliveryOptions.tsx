@@ -19,9 +19,10 @@ interface DeliveryOptionsProps {
     onSelect: (option: DeliveryOption) => void;
     storeStatus?: StoreStatus | null;
     subtotal?: number;
+    cartVolume?: { weight: number; height: number; width: number; length: number };
 }
 
-export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal }: DeliveryOptionsProps) {
+export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, cartVolume }: DeliveryOptionsProps) {
     const [cep, setCep] = useState(selected.address?.cep || '');
     const [isLoadingCEP, setIsLoadingCEP] = useState(false);
     const [cepError, setCepError] = useState('');
@@ -44,7 +45,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal }: D
         // Se o usuário já buscou um cep válido (selected.address.cep existe), 
         // sempre reculculamos o frete reagindo às mudanças de subtotal.
         if (selected.address?.cep && !cepError) {
-            shippingService.calculate({ to_cep: selected.address.cep, order_value: subtotal })
+            shippingService.calculate({ to_cep: selected.address.cep, order_value: subtotal, ...cartVolume })
                 .then(res => {
                     setShippingOptions(res.options);
                     setMissingForFree(res.missingForFree);
@@ -55,7 +56,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal }: D
                 })
                 .catch(() => { });
         }
-    }, [selected.address?.cep, subtotal, cepError]);
+    }, [selected.address?.cep, subtotal, cepError, cartVolume]);
 
     const handleTypeChange = (type: 'pickup' | 'delivery') => {
         onSelect({ ...selected, type, address: type === 'pickup' ? undefined : selected.address });
@@ -78,7 +79,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal }: D
             onSelect(baseOption);
 
             setIsLoadingShipping(true);
-            const res = await shippingService.calculate({ to_cep: cep, order_value: subtotal });
+            const res = await shippingService.calculate({ to_cep: cep, order_value: subtotal, ...cartVolume });
             setShippingOptions(res.options);
             setMissingForFree(res.missingForFree);
             

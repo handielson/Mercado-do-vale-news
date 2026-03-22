@@ -5,7 +5,7 @@ import {
     Trash2, Plus, Minus, ShoppingBag, ChevronDown, Tag, CreditCard,
     MapPin, Shield, ArrowRight, X, Sparkles, ChevronUp, ArrowLeft
 } from 'lucide-react';
-import { formatCurrency } from '@/utils/saleCalculations';
+import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { extractVariants } from '@/services/productVariants';
 import { QuoteModal } from '@/components/catalog/QuoteModal';
@@ -483,6 +483,7 @@ function CartPageContent() {
                             onSelect={setDelivery}
                             storeStatus={storeStatus}
                             subtotal={subtotal / 100}
+                            cartVolume={calculateCartVolume(items)}
                         />
                     </div>
                 )}
