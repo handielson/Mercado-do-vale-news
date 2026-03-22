@@ -62,55 +62,68 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
     }, [items, isHydrated]);
 
+    // Helper to safely save to localStorage
+    const saveToStorage = (newItems: CartItem[]) => {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(newItems));
+        } catch {
+            // quota exceeded
+        }
+    };
+
     const addItem = (product: CatalogProduct, quantity = 1) => {
         setItems(prev => {
             const existing = prev.find(i => i.product.id === product.id);
-            // Se já existe, validar o total
+            let newItems: CartItem[];
             if (existing) {
                 const totalWanted = existing.quantity + quantity;
                 if (product.track_inventory && product.stock_quantity !== undefined && totalWanted > product.stock_quantity) {
                     toast.error(`Apenas ${product.stock_quantity} unidades disponíveis em estoque do produto ${product.name}.`);
                     return prev;
                 }
-                return prev.map(i =>
+                newItems = prev.map(i =>
                     i.product.id === product.id
                         ? { ...i, quantity: totalWanted }
                         : i
                 );
-            }
-
-            // Validação de estoque para adição nova
-            if (product.track_inventory && product.stock_quantity !== undefined && quantity > product.stock_quantity) {
-                toast.error(`Apenas ${product.stock_quantity} unidades disponíveis em estoque.`);
-                return prev;
-            }
-
-            // Determina o preço efetivo (considera promo ativa)
-            const now = new Date();
-            const isPromoActive =
-                product.price_promo &&
-                product.price_promo > 0 &&
-                (!product.promo_start || new Date(product.promo_start) <= now) &&
-                (!product.promo_end || new Date(product.promo_end) >= now);
-
-            const unit_price = isPromoActive
-                ? (product.price_promo as number)
-                : product.price_retail;
-
-            return [
-                ...prev,
-                {
-                    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                    product,
-                    quantity,
-                    unit_price,
+            } else {
+                if (product.track_inventory && product.stock_quantity !== undefined && quantity > product.stock_quantity) {
+                    toast.error(`Apenas ${product.stock_quantity} unidades disponíveis em estoque.`);
+                    return prev;
                 }
-            ];
+
+                const now = new Date();
+                const isPromoActive =
+                    product.price_promo &&
+                    product.price_promo > 0 &&
+                    (!product.promo_start || new Date(product.promo_start) <= now) &&
+                    (!product.promo_end || new Date(product.promo_end) >= now);
+
+                const unit_price = isPromoActive
+                    ? (product.price_promo as number)
+                    : product.price_retail;
+
+                newItems = [
+                    ...prev,
+                    {
+                        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                        product,
+                        quantity,
+                        unit_price,
+                    }
+                ];
+            }
+            saveToStorage(newItems);
+            return newItems;
         });
     };
 
     const removeItem = (id: string) => {
-        setItems(prev => prev.filter(i => i.id !== id));
+        setItems(prev => {
+            const newItems = prev.filter(i => i.id !== id);
+            saveToStorage(newItems);
+            return newItems;
+        });
     };
 
     const updateQuantity = (id: string, quantity: number) => {
@@ -126,11 +139,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     return prev;
                 }
             }
-            return prev.map(i => i.id === id ? { ...i, quantity } : i);
+            const newItems = prev.map(i => i.id === id ? { ...i, quantity } : i);
+            saveToStorage(newItems);
+            return newItems;
         });
     };
 
-    const clear = () => setItems([]);
+    const clear = () => {
+        setItems([]);
+        saveToStorage([]);
+    };
 
     const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
     const subtotal = items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);

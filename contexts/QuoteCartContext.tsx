@@ -74,26 +74,48 @@ export function QuoteCartProvider({ children }: { children: ReactNode }) {
         }
     }, [items, isHydrated]);
 
+    // Save to localStorage immediately
+    const saveToStorage = (newItems: QuoteCartItem[]) => {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(newItems));
+        } catch (error) {
+            console.error('Error saving quote cart to localStorage:', error);
+        }
+    };
+
     const addItem = (item: Omit<QuoteCartItem, 'id'>) => {
         const newItem: QuoteCartItem = {
             ...item,
             id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
         };
-        setItems(prev => [...prev, newItem]);
+        setItems(prev => {
+            const next = [...prev, newItem];
+            saveToStorage(next);
+            return next;
+        });
     };
 
     const removeItem = (id: string) => {
-        setItems(prev => prev.filter(item => item.id !== id));
+        setItems(prev => {
+            const next = prev.filter(item => item.id !== id);
+            saveToStorage(next);
+            return next;
+        });
     };
 
     const updateItem = (id: string, updates: Partial<Omit<QuoteCartItem, 'id'>>) => {
-        setItems(prev => prev.map(item =>
-            item.id === id ? { ...item, ...updates } : item
-        ));
+        setItems(prev => {
+            const next = prev.map(item =>
+                item.id === id ? { ...item, ...updates } : item
+            );
+            saveToStorage(next);
+            return next;
+        });
     };
 
     const clear = () => {
         setItems([]);
+        saveToStorage([]);
     };
 
     return (
