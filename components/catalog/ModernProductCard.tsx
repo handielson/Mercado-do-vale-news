@@ -273,7 +273,7 @@ export function ModernProductCard({
     // Handlers
     const handleCardClick = (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
-        if (currentColorIndex === -1) {
+        if (currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)) {
             alert('Por favor, selecione uma cor antes de adicionar ao orçamento.');
             return;
         }
