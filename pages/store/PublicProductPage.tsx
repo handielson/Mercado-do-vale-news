@@ -105,10 +105,10 @@ export const PublicProductPage: React.FC = () => {
             setLoading(true);
             try {
                 // Fetch dictionary of custom fields to get readable labels
-                const { data: fieldsData } = await supabase.from('custom_fields').select('key, name');
+                const { data: fieldsData } = await supabase.from('custom_fields').select('key, label');
                 if (fieldsData) {
                     const dict: Record<string, string> = {};
-                    fieldsData.forEach(f => { if (f.key) dict[f.key] = f.name; });
+                    fieldsData.forEach(f => { if (f.key) dict[f.key] = f.label; });
                     setCustomFieldNames(dict);
                 }
 
