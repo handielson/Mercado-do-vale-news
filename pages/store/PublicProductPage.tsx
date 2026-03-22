@@ -630,8 +630,8 @@ export const PublicProductPage: React.FC = () => {
 
             <PublicHeader />
 
-            <FloatingCartButton />
-            <QuoteCartSidebar />
+            <FloatingCartButton onClick={() => navigate('/carrinho')} />
+            <QuoteCartSidebar isOpen={false} onClose={() => {}} />
 
             <main className="max-w-7xl mx-auto px-4 py-8">
                 {/* Breadcrumbs */}
@@ -639,10 +639,10 @@ export const PublicProductPage: React.FC = () => {
                     <button onClick={() => navigate('/')} className="hover:text-blue-600 transition-colors">
                         Início
                     </button>
-                    {product.category && (
+                    {(product as any).category && (
                         <>
                             <span>/</span>
-                            <span className="text-slate-700">{typeof product.category === 'string' ? product.category : 'Categoria'}</span>
+                            <span className="text-slate-700">{typeof (product as any).category === 'string' ? (product as any).category : 'Categoria'}</span>
                         </>
                     )}
                     <span>/</span>

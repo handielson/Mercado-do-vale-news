@@ -28,6 +28,8 @@
   },
   "exclude": [
     "pages/api/ai/generate-seo.ts",
-    "scripts/create-test-inventory.ts"
+    "scripts/create-test-inventory.ts",
+    "check_api2.cjs",
+    "tmp-verify-apibling.ts"
   ]
 }
