@@ -313,7 +313,7 @@ export const shippingService = {
         }
 
         // Carriers nacionais: Melhor Envio + Frenet — dual-origin em paralelo
-        if (options.length === 0 && settings) {
+        if (settings) {
             // Origens: primária + secundária (se existir)
             const origins: Array<{ cep: string; label: string }> = [
                 { cep: settings.origin_cep, label: settings.origin_label || 'Depósito 1' },
