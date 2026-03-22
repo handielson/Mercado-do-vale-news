@@ -544,8 +544,6 @@ export function ModernProductCard({
                                         );
                                     });
 
-                                    const isSelectedVariant = selectedVariantIndex === idx;
-
                                     return (
                                         <div
                                             key={idx}
