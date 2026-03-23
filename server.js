@@ -1248,6 +1248,61 @@ fastify.delete('/team/:id', { preHandler: requireSyncKey }, async (req, reply) =
 // Rotas para gerenciar arquivos nos CDNs do Synology NAS
 // Funciona de qualquer rede via QuickConnect (sem CORS: chamadas server-side)
 
+// --- CUSTOMER FAVORITES ---
+fastify.get('/customers/:id/favorites', async (req, reply) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await pool.query('SELECT product_id FROM customer_favorites WHERE customer_id = ?', [id]);
+    return rows.map(r => r.product_id);
+  } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE') {
+      await pool.query(`CREATE TABLE IF NOT EXISTS customer_favorites (
+        customer_id VARCHAR(50) NOT NULL,
+        product_id VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (customer_id, product_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      return [];
+    }
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Failed to fetch favorites' });
+  }
+});
+
+fastify.post('/customers/:id/favorites', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { id } = req.params;
+  const { productId } = req.body;
+  if (!productId) return reply.code(400).send({ error: 'productId required' });
+  try {
+    await pool.query('INSERT IGNORE INTO customer_favorites (customer_id, product_id) VALUES (?, ?)', [id, productId]);
+    return { ok: true };
+  } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE') {
+      await pool.query(`CREATE TABLE IF NOT EXISTS customer_favorites (
+        customer_id VARCHAR(50) NOT NULL,
+        product_id VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (customer_id, product_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+      await pool.query('INSERT IGNORE INTO customer_favorites (customer_id, product_id) VALUES (?, ?)', [id, productId]);
+      return { ok: true };
+    }
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Failed to add favorite' });
+  }
+});
+
+fastify.delete('/customers/:id/favorites/:productId', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { id, productId } = req.params;
+  try {
+    await pool.query('DELETE FROM customer_favorites WHERE customer_id = ? AND product_id = ?', [id, productId]);
+    return { ok: true };
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Failed to remove favorite' });
+  }
+});
+
 const SYNO_URL  = process.env.SYNOLOGY_URL  || 'https://192-168-1-2.handielson.direct.quickconnect.to:5001';
 const SYNO_USER = process.env.SYNOLOGY_USER || '';
 const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
