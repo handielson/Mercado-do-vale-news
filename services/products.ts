@@ -45,7 +45,7 @@ const LIST_COLUMNS = [
     'images', 'status', 'parent_id',
     'bling_id', 'bling_parent_id', 'video_url',
     'slug', 'origin',
-    'specs', 'kits',
+    'specs',
     'created_at', 'updated_at'
 ].join(', ');
 
@@ -219,7 +219,6 @@ async function create(input: ProductInput): Promise<Product> {
             meta_title: input.meta_title || null,
             meta_description: input.meta_description || null,
             seo_keywords: input.keywords || [],
-            kits: input.kits || [],
         })
         .select('*')
         .single();
@@ -336,7 +335,6 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             meta_title: input.meta_title || null,
             meta_description: input.meta_description || null,
             seo_keywords: input.keywords || [],
-            kits: input.kits || [],
         })
         .eq('id', id)
         .eq('company_id', companyId)
@@ -488,7 +486,6 @@ function transformFromDB(row: any): Product {
         exclude_from_seo: Boolean(row.exclude_from_seo),
         meta_title: row.meta_title || undefined,
         meta_description: row.meta_description || undefined,
-        kits: row.kits || undefined,
         created: row.created_at,
         updated: row.updated_at
     };
