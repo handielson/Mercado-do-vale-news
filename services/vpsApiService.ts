@@ -105,7 +105,7 @@ class VpsApiService {
   async updateProductImagesBySku(sku: string, images: string[]): Promise<void> {
     if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return; }
     try {
-      await fetch(`${VPS_BASE}/products/images`, {
+      await fetch(`${VPS_BASE_URL}/products/images`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
         body: JSON.stringify({ sku, images }),
