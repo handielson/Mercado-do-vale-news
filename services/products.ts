@@ -13,7 +13,6 @@ import { vpsApiService } from './vpsApiService';
 
 const TEMP_COMPANY_ID = 'mercado-do-vale';
 let _cachedCompanyId: string | null = null;
-const _cachedCompanyDbId: string | null = null;
 
 async function getCompanyId(): Promise<string> {
     if (_cachedCompanyId) return _cachedCompanyId;
