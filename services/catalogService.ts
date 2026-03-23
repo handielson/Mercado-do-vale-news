@@ -94,17 +94,10 @@ export const catalogService = {
                     );
 
                     // Apply visibility rules + multi-category filter client-side
-                    let result = (vpsRaw as any[]).map((p: any) => {
-                        // Filtra imagens: descarta base64 (migrado do Supabase), mantém apenas URLs HTTP
-                        const httpImages = (p.images || []).filter((img: string) =>
-                            typeof img === 'string' && img.startsWith('http')
-                        );
-                        return {
-                            ...p,
-                            images: httpImages,
-                            category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
-                        };
-                    });
+                    let result = (vpsRaw as any[]).map((p: any) => ({
+                        ...p,
+                        category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
+                    }));
 
                     if (settings.hide_out_of_stock || filters?.inStockOnly) result = result.filter(p => (p.stock_quantity || 0) > 0);
                     if (settings.hide_zero_price)   result = result.filter(p => (p.price_retail || 0) > 0);
