@@ -192,80 +192,83 @@ class CatalogSectionsService {
         }
 
         try {
-            console.log(`🌐 [catalogSectionsService] Fetching section ${section.title} from Supabase (bypassCache: ${bypassCache})`);
-            let query = supabase
-                .from('products')
-                .select('*');
+            console.log(`🌐 [catalogSectionsService] Fetching section ${section.title} from VPS (bypassCache: ${bypassCache})`);
+            
+            // Build query params for the VPS
+            const params = new URLSearchParams();
+            
+            // Limit mapping
+            const fetchLimit = Math.min((section.max_products || 12) * 10, 200);
+            params.append('limit', fetchLimit.toString());
 
-            // Aplicar filtros baseados no tipo de seção
-            query = this.applySectionTypeFilter(query, section.section_type);
+            // App settings filters
+            const settings = await catalogConfigService.getSettings();
+            if (settings.hide_inactive) params.append('status', 'active');
+            
+            if (settings.hide_zero_price) {
+                // Not perfectly mapped natively to API if price_retail != 0, but min_price=0.01 handles it
+                params.append('min_price', '0.01');
+            }
 
-            // Aplicar filtros customizados (para seções custom)
+            // Section Filters
+            if (section.section_type === 'featured') params.append('is_featured', 'true');
+            if (section.section_type === 'new')      params.append('is_new', 'true');
+            if (section.section_type === 'promotions') params.append('has_discount', 'true');
+
             if (section.filter_categories && section.filter_categories.length > 0) {
-                query = query.in('category_id', section.filter_categories);
+                params.append('in_category', section.filter_categories.join(','));
             }
 
             if (section.filter_brands && section.filter_brands.length > 0) {
-                query = query.in('brand', section.filter_brands);
+                params.append('in_brand', section.filter_brands.join(','));
             }
 
             if (section.filter_min_price !== undefined && section.filter_min_price !== null && typeof section.filter_min_price === 'number') {
-                query = query.gte('price_retail', section.filter_min_price);
+                params.append('min_price', section.filter_min_price.toString());
             }
 
             if (section.filter_max_price !== undefined && section.filter_max_price !== null && typeof section.filter_max_price === 'number') {
-                query = query.lte('price_retail', section.filter_max_price);
+                params.append('max_price', section.filter_max_price.toString());
             }
 
-            // Get global catalog settings to apply DB-level filtering BEFORE pagination
-            const settings = await catalogConfigService.getSettings();
+            // Pinned Products (Fetch those directly if configured)
+            // Wait, pinned products ignore other filters typically, but we can pass them in the query,
+            // or we might need to fetch them separately.
+            let products = [] as CatalogProduct[];
+            const VPS_URL = (import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
 
-            // Aplicar regras globais (ativo, estoque, preço) no DB para não quebrar o .limit()
-            if (settings.hide_inactive) {
-                query = query.eq('status', 'active');
-            } else {
-                query = query.eq('status', 'active');
-            }
+            // Sorting
+            if (section.sort_by) params.append('sort_by', section.sort_by);
+            if (section.sort_direction) params.append('sort_direction', section.sort_direction);
 
-            if (settings.hide_out_of_stock) {
-                query = query.gt('stock_quantity', 0);
-            }
+            // Fetch dynamic products
+            const res = await fetch(`${VPS_URL}/products?${params.toString()}`);
+            if (!res.ok) throw new Error(`VPS API returned ${res.status}`);
+            const data = await res.json();
+            products = data || [];
 
-            if (settings.hide_zero_price) {
-                query = query.gt('price_retail', 0);
-            }
-
-            if (settings.min_stock_to_show && settings.min_stock_to_show > 0) {
-                query = query.gte('stock_quantity', settings.min_stock_to_show);
-            }
-
-            // Aplicar ordenação
-            query = this.applySorting(query, section.sort_by, section.sort_direction);
-
-            // Limitar quantidade (Buscamos muito mais produtos brutos porque eles serão agrupados em cards no frontend)
-            // Se o usuário quer 12 cards, precisamos de até 120 produtos (cores/capacidades)
-            const fetchLimit = Math.min((section.max_products || 12) * 10, 200);
-            query = query.limit(fetchLimit);
-
-            const { data, error } = await query;
-
-            if (error) throw error;
-            let products = (data || []) as CatalogProduct[];
-
-            // Se há produtos fixados manualmente, buscá-los por ID (ignora filtros automáticos)
+            // Replace with Pinned products if any (to preserve sorting and exact matching)
+            // Note: Since VPS API `in_ids` would just filter them, if section defines pins we do an explicit lookup.
             if (section.pinned_product_ids && section.pinned_product_ids.length > 0) {
-                const { data: pinnedData, error: pinnedError } = await supabase
-                    .from('products')
-                    .select('*')
-                    .in('id', section.pinned_product_ids)
-                    .limit(fetchLimit);
-
-                if (!pinnedError && pinnedData) {
-                    // Preserva a ordem definida pelo usuário
-                    const orderedPinned = section.pinned_product_ids
-                        .map(id => pinnedData.find((p: any) => p.id === id))
-                        .filter(Boolean) as CatalogProduct[];
-                    products = orderedPinned;
+                try {
+                    const pinnedParams = new URLSearchParams();
+                    pinnedParams.append('limit', fetchLimit.toString());
+                    pinnedParams.append('in_ids', section.pinned_product_ids.join(','));
+                    
+                    const pinnedRes = await fetch(`${VPS_URL}/products?${pinnedParams.toString()}`);
+                    if (pinnedRes.ok) {
+                        const pinnedData = await pinnedRes.json();
+                        // Preserve exact order from pinned_product_ids
+                        const orderedPinned = section.pinned_product_ids
+                            .map(id => pinnedData.find((p: any) => p.id === id))
+                            .filter(Boolean) as CatalogProduct[];
+                        
+                        // Override products with pinned ones, or append depending on logic
+                        // Previously it completely replaced them if any were found:
+                        products = orderedPinned;
+                    }
+                } catch (e) {
+                    console.error('Error fetching pinned products from VPS', e);
                 }
             }
 

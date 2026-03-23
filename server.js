@@ -175,7 +175,46 @@ fastify.get('/products', async (req, reply) => {
   if (category) { sql += ' AND category_id = ?'; params.push(category); }
   if (search)   { sql += ' AND name LIKE ?'; params.push(`%${search}%`); }
 
-  sql += ' ORDER BY name ASC LIMIT ? OFFSET ?';
+  if (req.query.is_featured === 'true') { sql += ' AND is_featured = 1'; }
+  if (req.query.is_new === 'true')      { sql += ' AND is_new = 1'; }
+  if (req.query.has_discount === 'true'){ sql += ' AND discount_percentage > 0'; }
+
+  if (req.query.min_price) { sql += ' AND price_retail >= ?'; params.push(parseFloat(req.query.min_price)); }
+  if (req.query.max_price) { sql += ' AND price_retail <= ?'; params.push(parseFloat(req.query.max_price)); }
+
+  if (req.query.in_category) {
+    const cats = req.query.in_category.split(',');
+    if (cats.length) {
+      sql += ` AND category_id IN (${cats.map(() => '?').join(',')})`;
+      params.push(...cats);
+    }
+  }
+
+  if (req.query.in_brand) {
+    const brands = req.query.in_brand.split(',');
+    if (brands.length) {
+      sql += ` AND brand IN (${brands.map(() => '?').join(',')})`;
+      params.push(...brands);
+    }
+  }
+
+  if (req.query.in_ids) {
+    const ids = req.query.in_ids.split(',');
+    if (ids.length) {
+      sql += ` AND id IN (${ids.map(() => '?').join(',')})`;
+      params.push(...ids);
+    }
+  }
+
+  if (req.query.sort_by) {
+    const validSortCols = ['created_at', 'price_retail', 'name', 'updated_at', 'sales_count', 'view_count'];
+    const sortCol = validSortCols.includes(req.query.sort_by) ? req.query.sort_by : 'created_at';
+    const sortDir = req.query.sort_direction === 'asc' ? 'ASC' : 'DESC';
+    sql += ` ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`;
+  } else {
+    sql += ' ORDER BY name ASC LIMIT ? OFFSET ?';
+  }
+
   params.push(limit, offset);
 
   const [rows] = await pool.query(sql, params);
