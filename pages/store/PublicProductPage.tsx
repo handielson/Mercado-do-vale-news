@@ -116,42 +116,37 @@ export const PublicProductPage: React.FC = () => {
 
                 const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug);
 
-                let query = supabase
-                    .from('products')
-                    .select('*, brand:brands(name), category:categories(name, config)')
-                    .eq('status', 'active');
+                // ── Busca o produto na VPS (fonte exclusiva de dados de produto) ──
+                const { vpsApiService } = await import('@/services/vpsApiService');
+                let vpsData: any = null;
+                try {
+                    vpsData = isUuid
+                        ? await vpsApiService.getProductById(slug)
+                        : await vpsApiService.getProductBySlug(slug);
+                } catch (e) { console.warn('[PublicProductPage] VPS fetch error:', e); }
 
-                if (isUuid) {
-                    query = query.eq('id', slug);
-                } else {
-                    query = query.eq('slug', slug);
-                }
-
-                // Fetch the product
-                const { data, error } = await query.single();
-
-                if (error) {
-                    console.error('Produto não encontrado:', error);
+                // Monta o objeto `data` a partir da VPS (formato compatível)
+                if (!vpsData || vpsData.error) {
+                    console.error('Produto não encontrado na VPS para slug:', slug);
                     toast.error('Produto não encontrado');
                     navigate('/');
                     return;
                 }
 
-                // Check VPS for SEO Blacklist strictly (avoids needing Supabase column)
-                try {
-                    const { vpsApiService } = await import('@/services/vpsApiService');
-                    const vpsData = await vpsApiService.getProductById(data.id);
-                    if (vpsData) {
-                        data.exclude_from_seo = Boolean(vpsData.exclude_from_seo);
-                        if (vpsData.is_combo) {
-                            data.is_combo = true;
-                            const children = await vpsApiService.getComboChildren(data.id);
-                            setComboChildren(children || []);
-                        }
-                    }
-                } catch (v_err) {
-                    console.warn("Failed to check VPS SEO flag or Combo state:", v_err);
+                const data: any = {
+                    ...vpsData,
+                    // Normaliza campos comuns
+                    images:       Array.isArray(vpsData.images) ? vpsData.images : [],
+                    specs:        vpsData.specs || {},
+                    alternative_eans: Array.isArray(vpsData.alternative_eans) ? vpsData.alternative_eans : [],
+                };
+
+                // Combo children via VPS
+                if (vpsData.is_combo) {
+                    const children = await vpsApiService.getComboChildren(vpsData.id);
+                    setComboChildren(children || []);
                 }
+
 
                 let modelData: Record<string, any> = {};
                 let modelRootDescription = '';

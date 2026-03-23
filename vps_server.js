@@ -173,9 +173,14 @@ fastify.get('/products', async (req, reply) => {
 
   if (status && status !== 'all') { sql += ' AND status = ?'; params.push(status); }
   else if (!status)               { sql += ' AND status = ?'; params.push('active'); }
+  // status=all: retorna todos os status (admin)
 
-  if (category) { sql += ' AND category_id = ?'; params.push(category); }
-  if (search)   { sql += ' AND name LIKE ?'; params.push(`%${search}%`); }
+  if (category)           { sql += ' AND category_id = ?';   params.push(category); }
+  if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+  if (req.query.parent_id){ sql += ' AND parent_id = ?';     params.push(req.query.parent_id); }
+  if (req.query.sku)      { sql += ' AND sku = ?';           params.push(req.query.sku); }
+  if (req.query.ean)      { sql += ' AND (ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?)))'; params.push(req.query.ean, req.query.ean); }
+  if (req.query.model_id) { sql += ' AND model_id = ?';      params.push(req.query.model_id); }
 
   if (favoritesOnly && customerId) {
     sql += ' AND id IN (SELECT product_id FROM customer_favorites WHERE customer_id = ?)';
@@ -196,7 +201,12 @@ fastify.get('/products', async (req, reply) => {
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
   }));
 
-  reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
+  // Sem cache para admin (status=all), cache leve para pública
+  if (status === 'all') {
+    reply.header('Cache-Control', 'no-store');
+  } else {
+    reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
+  }
   return result;
 
 });
@@ -212,11 +222,50 @@ fastify.get('/products/:id', async (req, reply) => {
   const r = rows[0];
   return {
     ...r,
-    images:        typeof r.images === 'string'        ? JSON.parse(r.images)        : r.images,
-    specs:         typeof r.specs === 'string'         ? JSON.parse(r.specs)         : r.specs,
-    custom_fields: typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields) : r.custom_fields,
-    kits:          typeof r.kits === 'string'          ? JSON.parse(r.kits)          : r.kits,
+    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
   };
+});
+
+// Busca por slug (para PublicProductPage)
+fastify.get('/products/by-slug/:slug', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT *,
+      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+     FROM products WHERE slug = ?`,
+    [req.params.slug]
+  );
+  if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
+  const r = rows[0];
+  return {
+    ...r,
+    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+  };
+});
+
+// Busca por EAN
+fastify.get('/products/by-ean/:ean', async (req, reply) => {
+  const ean = req.params.ean;
+  const [rows] = await pool.query(
+    `SELECT *, (CASE WHEN is_combo = 1 THEN 0 ELSE stock_quantity END) AS stock_quantity
+     FROM products
+     WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
+    [ean, ean]
+  );
+  return rows.map(r => ({
+    ...r,
+    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+  }));
 });
 
 fastify.get('/products/:id/combo', async (req, reply) => {

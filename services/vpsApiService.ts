@@ -88,15 +88,19 @@ class VpsApiService {
     return this.fetchSafe<any[]>('/categories');
   }
 
-  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean }): Promise<any[] | null> {
+  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string }): Promise<any[] | null> {
     const qs = new URLSearchParams();
-    if (params?.category) qs.set('category', params.category);
-    if (params?.status)   qs.set('status', params.status);
-    if (params?.limit)    qs.set('limit', String(params.limit));
-    if (params?.offset)   qs.set('offset', String(params.offset));
-    if (params?.search)   qs.set('search', params.search);
-    if (params?.compact)  qs.set('compact', 'true');
-    if (params?.noCache)  qs.set('_t', String(Date.now())); // Also append to URL to bust HTTP caches
+    if (params?.category)  qs.set('category',  params.category);
+    if (params?.status)    qs.set('status',     params.status);
+    if (params?.limit)     qs.set('limit',      String(params.limit));
+    if (params?.offset)    qs.set('offset',     String(params.offset));
+    if (params?.search)    qs.set('search',     params.search);
+    if (params?.compact)   qs.set('compact',    'true');
+    if (params?.parent_id) qs.set('parent_id',  params.parent_id);
+    if (params?.sku)       qs.set('sku',         params.sku);
+    if (params?.ean)       qs.set('ean',         params.ean);
+    if (params?.model_id)  qs.set('model_id',    params.model_id);
+    if (params?.noCache)   qs.set('_t',          String(Date.now()));
     const query = qs.toString() ? `?${qs.toString()}` : '';
     return this.fetchSafe<any[]>(`/products${query}`, params?.noCache);
   }
@@ -123,8 +127,39 @@ class VpsApiService {
   }
 
 
-  async getProductById(id: string): Promise<any | null> {
-    return this.fetchSafe<any>(`/products/${id}`);
+  async getProductById(id: string, noCache = false): Promise<any | null> {
+    return this.fetchSafe<any>(`/products/${id}`, noCache);
+  }
+
+  async getProductBySlug(slug: string): Promise<any | null> {
+    return this.fetchSafe<any>(`/products/by-slug/${encodeURIComponent(slug)}`, true);
+  }
+
+  async getProductByEan(ean: string): Promise<any[] | null> {
+    return this.fetchSafe<any[]>(`/products/by-ean/${encodeURIComponent(ean)}`, true);
+  }
+
+  async getProductsByParentId(parentId: string): Promise<any[] | null> {
+    return this.fetchSafe<any[]>(`/products?parent_id=${encodeURIComponent(parentId)}&status=all&limit=500`, true);
+  }
+
+  /** Cria ou upserta um produto na VPS MySQL */
+  async createProduct(data: any): Promise<{ upserted: number; errors: any[] }> {
+    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return { upserted: 0, errors: [] }; }
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(`${VPS_BASE_URL}/products/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        body: JSON.stringify([data]),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return { upserted: 0, errors: [{ error: res.statusText }] };
+      return await res.json();
+    } catch (err: any) {
+      console.error('[vpsApiService] createProduct error:', err);
+      return { upserted: 0, errors: [{ error: err.message }] };
+    }
   }
 
   async getBrands(): Promise<any[] | null> {
