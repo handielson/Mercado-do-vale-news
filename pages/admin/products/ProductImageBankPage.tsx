@@ -37,6 +37,7 @@ export function ProductImageBankPage() {
     const [syncResult, setSyncResult] = useState<{ updated: number; notFound: string[] } | null>(null);
     const [previewFile, setPreviewFile] = useState<{ name: string; url: string } | null>(null);
     const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
+    const [recentUploads, setRecentUploads] = useState<string[]>([]);
 
     // Upload inline por SKU (seção "Faltando Fotos")
     const [uploadingForSku, setUploadingForSku] = useState<string | null>(null);
@@ -79,8 +80,8 @@ export function ProductImageBankPage() {
 
     const handleBankDragEnd = () => setDraggedBankImg(null);
 
-    // Dados do banco para o gerador
-    const [dbSkus, setDbSkus] = useState<{ sku: string; name: string; color?: string }[]>([]);
+    // Dados do banco para o gerador e ordenação
+    const [dbSkus, setDbSkus] = useState<{ sku: string; name: string; color?: string; updated?: string }[]>([]);
     const [dbColors, setDbColors] = useState<string[]>([]);
 
     // Gerador de nomes
@@ -109,8 +110,12 @@ export function ProductImageBankPage() {
             const seen = new Set<string>();
             const skus = products
                 .filter(p => p.sku && !seen.has(p.sku) && seen.add(p.sku!))
-                .map(p => ({ sku: p.sku!, name: p.name, color: p.specs?.color?.toUpperCase() }))
-                .sort((a, b) => a.sku.localeCompare(b.sku));
+                .map(p => ({ sku: p.sku!, name: p.name, color: p.specs?.color?.toUpperCase(), updated: p.updated || p.created }))
+                .sort((a, b) => {
+                    const tA = a.updated ? new Date(a.updated).getTime() : 0;
+                    const tB = b.updated ? new Date(b.updated).getTime() : 0;
+                    return tB - tA;
+                });
             setDbSkus(skus);
         }).catch(() => { });
 
@@ -280,6 +285,9 @@ export function ProductImageBankPage() {
 
         if (result.success.length > 0) {
             toast.success(`✅ ${result.success.length} imagem(ns) enviada(s)!`);
+            
+            const newSkus = [...new Set(result.success.map(s => s.sku))];
+            setRecentUploads(prev => [...new Set([...newSkus, ...prev])]);
 
             // Agrupa as URLs enviadas por SKU e sincroniza diretamente (sem re-listar do Storage)
             const urlsBySku = new Map<string, { order: number; url: string }[]>();
@@ -331,6 +339,9 @@ export function ProductImageBankPage() {
 
         if (result.success.length > 0) {
             toast.success(`✅ ${result.success.length} imagem(ns) enviada(s) para ${sku}!`);
+            
+            setRecentUploads(prev => [...new Set([sku, ...prev])]);
+
             // Sincroniza automaticamente
             const urls = result.success.sort((a, b) => a.order - b.order).map(i => i.url);
             await vpsApiService.updateProductImagesBySku(sku, urls);
@@ -420,7 +431,21 @@ export function ProductImageBankPage() {
     };
 
     const grouped = groupBySku(bankImages);
-    const skuList = Object.keys(grouped).sort();
+    const skuList = Object.keys(grouped).sort((a, b) => {
+        const idxA = recentUploads.indexOf(a);
+        const idxB = recentUploads.indexOf(b);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+
+        const pA = dbSkus.find(s => s.sku === a);
+        const pB = dbSkus.find(s => s.sku === b);
+        const tA = pA?.updated ? new Date(pA.updated).getTime() : 0;
+        const tB = pB?.updated ? new Date(pB.updated).getTime() : 0;
+        if (tA !== tB) return tB - tA; // descending (newest updated first)
+
+        return a.localeCompare(b);
+    });
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
