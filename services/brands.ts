@@ -109,7 +109,31 @@ async function create(input: BrandInput): Promise<Brand> {
         .select()
         .single();
 
-    if (error) throw new Error(`Failed to create brand: ${error.message}`);
+    if (error) {
+        // Tolerância de falhas "Get or Create": se houver conflito Unique, pegamos a marca existente.
+        if (error.code === '23505' || error.message.includes('unique constraint') || error.message.includes('409')) {
+            const { data: existingBrand, error: fetchErr } = await supabase
+                .from('brands')
+                .select('*')
+                .eq('slug', slug)
+                .eq('company_id', companyId)
+                .single();
+            
+            if (!fetchErr && existingBrand) {
+                const result = {
+                    id: existingBrand.id,
+                    name: existingBrand.name,
+                    slug: existingBrand.slug,
+                    active: existingBrand.active ?? true,
+                    warranty_days: existingBrand.warranty_days || 90,
+                    created: existingBrand.created_at,
+                    updated: existingBrand.updated_at
+                };
+                return result;
+            }
+        }
+        throw new Error(`Failed to create brand: ${error.message}`);
+    }
 
     const result = {
         id: data.id,

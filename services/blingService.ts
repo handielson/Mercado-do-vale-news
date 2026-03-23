@@ -1013,7 +1013,7 @@ export async function importBlingProducts(
             
             let resolvedBrandId = brandCache.get(brandName);
             if (!resolvedBrandId) {
-                const brands = await brandService.listActive();
+                const brands = await brandService.list();
                 const existingBrand = brands.find(b => b.name.toLowerCase() === brandName.toLowerCase());
                 if (existingBrand) {
                     resolvedBrandId = existingBrand.id;

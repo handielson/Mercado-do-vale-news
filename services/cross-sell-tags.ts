@@ -28,7 +28,17 @@ export const crossSellTagsService = {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            if (error.code === '23505' || error.message.includes('unique constraint') || error.message.includes('409')) {
+                const { data: existingTag, error: fetchErr } = await supabase
+                    .from('cross_sell_tags')
+                    .select('*')
+                    .eq('slug', slug)
+                    .single();
+                if (!fetchErr && existingTag) return existingTag;
+            }
+            throw error;
+        }
         return data;
     },
 
