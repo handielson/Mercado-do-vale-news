@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
@@ -31,7 +31,6 @@ export const PublicProductPage: React.FC = () => {
     const navigate = useNavigate();
     const { customer } = useSupabaseAuth();
     const { addItem } = useCart();
-    const { add: addToCompare, remove: removeFromCompare, isSelected: isComparing } = useCompare();
 
     const customerType = useEffectiveCustomerType();
 
@@ -48,7 +47,6 @@ export const PublicProductPage: React.FC = () => {
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
     const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
     const [comboChildren, setComboChildren] = useState<any[]>([]);
-    const [selectedKitQuantity, setSelectedKitQuantity] = useState<number>(1);
 
     // Config da categoria: define quais campos existem no template
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
@@ -116,52 +114,21 @@ export const PublicProductPage: React.FC = () => {
 
                 const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug);
 
-                let data: any = null;
-                let error: any = null;
-                const { vpsApiService } = await import('@/services/vpsApiService');
+                let query = supabase
+                    .from('products')
+                    .select('*, brand:brands(name), category:categories(name, config)')
+                    .eq('status', 'active');
 
                 if (isUuid) {
-                    try {
-                        const vpsData = await vpsApiService.getProductById(slug);
-                        if (vpsData && !vpsData.error) data = vpsData;
-                    } catch (e) {
-                        console.warn('[PublicProductPage] VPS fetch by ID failed:', e);
-                    }
+                    query = query.eq('id', slug);
+                } else {
+                    query = query.eq('slug', slug);
                 }
 
-                // Se não temos dados (porque era slug, ou porque o ID falhou na VPS)
-                if (!data) {
-                    // Busca rápida no Supabase (Resolve o Slug -> ID e dá um fallback completo)
-                    let query = supabase
-                        .from('products')
-                        .select('*, brand:brands(name), category:categories(name, config)')
-                        .eq('status', 'active');
+                // Fetch the product
+                const { data, error } = await query.single();
 
-                    if (isUuid) {
-                        query = query.eq('id', slug);
-                    } else {
-                        query = query.ilike('slug', slug); // Ignora Case Sensitive
-                    }
-
-                    const supaResult = await query.maybeSingle();
-                    data = supaResult.data;
-                    error = supaResult.error;
-
-                    // Agora que temos o ID real do Supabase, buscamos os dados (e imagens!) mais frescos da VPS
-                    if (data && data.id) {
-                        try {
-                            const vpsRichData = await vpsApiService.getProductById(data.id);
-                            if (vpsRichData && !vpsRichData.error) {
-                                // Mescla dando preferência à VPS, mas salvando `category` e `brand` do Supabase
-                                data = { ...data, ...vpsRichData, category: data.category, brand: data.brand };
-                            }
-                        } catch (e) {
-                            console.warn('[PublicProductPage] Failed to enrich from VPS by ID:', e);
-                        }
-                    }
-                }
-
-                if (!data || error) {
+                if (error) {
                     console.error('Produto não encontrado:', error);
                     toast.error('Produto não encontrado');
                     navigate('/');
@@ -219,25 +186,10 @@ export const PublicProductPage: React.FC = () => {
                 // Salvar config da categoria para render dinâmico das specs
                 if (categoryRaw?.config) setCategoryConfig(categoryRaw.config);
 
-                // --- Segurança de Parsing ---
-                let parsedImages = data.images;
-                if (typeof data.images === 'string') {
-                    try { parsedImages = JSON.parse(data.images); } catch { parsedImages = []; }
-                }
-                if (!Array.isArray(parsedImages)) parsedImages = [];
-                data.images = parsedImages;
-
-                let parsedSpecs = data.specs;
-                if (typeof data.specs === 'string') {
-                    try { parsedSpecs = JSON.parse(data.specs); } catch { parsedSpecs = {}; }
-                }
-                data.specs = parsedSpecs || {};
-                // -----------------------------
-
                 // Merge: template defaults + product specs + logistics fallbacks
                 const mergedSpecs = {
                     ...(modelSpecDefaults),
-                    ...(data.specs),
+                    ...(data.specs || {}),
                     // Logística: valor do produto se existir, senão do template do modelo
                     weight_kg: data.weight_kg ?? modelData['weight_kg'],
                     width_cm: data.width_cm ?? modelData['dimensions.width_cm'],
@@ -268,17 +220,7 @@ export const PublicProductPage: React.FC = () => {
                         if (!productList || productList.length === 0) return productList;
                         
                         const modelIds = Array.from(new Set(productList.map(p => p.model_id).filter(Boolean)));
-                        if (modelIds.length === 0) return productList.map(p => {
-                            // Sanitização de fallback básica mesmo sem modelo
-                            let tempImages = p.images;
-                            if (typeof tempImages === 'string') { try { tempImages = JSON.parse(tempImages); } catch { tempImages = []; } }
-                            if (!Array.isArray(tempImages)) tempImages = [];
-                            
-                            let tempSpecs = p.specs;
-                            if (typeof tempSpecs === 'string') { try { tempSpecs = JSON.parse(tempSpecs); } catch { tempSpecs = {}; } }
-                            
-                            return { ...p, images: tempImages, specs: tempSpecs || {} };
-                        });
+                        if (modelIds.length === 0) return productList;
 
                         const { data: modelsData, error } = await supabase
                             .from('models')
@@ -293,25 +235,16 @@ export const PublicProductPage: React.FC = () => {
                         }, {} as Record<string, any>);
 
                         return productList.map(p => {
-                            let tempImages = p.images;
-                            if (typeof tempImages === 'string') { try { tempImages = JSON.parse(tempImages); } catch { tempImages = []; } }
-                            if (!Array.isArray(tempImages)) tempImages = [];
-                            
-                            let tempSpecs = p.specs;
-                            if (typeof tempSpecs === 'string') { try { tempSpecs = JSON.parse(tempSpecs); } catch { tempSpecs = {}; } }
-                            
-                            if (!p.model_id || !modelsMap[p.model_id]) return { ...p, images: tempImages, specs: tempSpecs || {} };
-                            
+                            if (!p.model_id || !modelsMap[p.model_id]) return p;
                             const mData = modelsMap[p.model_id];
                             const mTemplate = mData.template_values || {};
-                            const mergedSpecs = { ...mTemplate, ...(tempSpecs || {}) };
+                            const mergedSpecs = { ...mTemplate, ...(p.specs || {}) };
                             const mergedBrand = typeof p.brand === 'object' ? p.brand?.name : p.brand;
                             const modelBrand = typeof mData.brand === 'object' ? mData.brand?.name : mData.brand;
                             
                             return {
                                 ...p,
                                 specs: mergedSpecs,
-                                images: tempImages,
                                 description: mTemplate.description || mData.description || p.description,
                                 meta_title: mTemplate.meta_title || p.meta_title,
                                 meta_description: mTemplate.meta_description || p.meta_description,
@@ -495,42 +428,31 @@ export const PublicProductPage: React.FC = () => {
     // Prices calculation
     const effectivePrice = getEffectivePrice(product, customer);
     const originalPrice = effectivePrice / 100;
-    const baseDiscountedPrice = product.discount_percentage
+    const discountedPrice = product.discount_percentage
         ? originalPrice * (1 - product.discount_percentage / 100)
         : originalPrice;
 
-    // Aplica o preço do Kit na BuyBox se um kit estiver selecionado
-    let displayPrice = baseDiscountedPrice;
-    let isKitSelected = false;
-
-    if (selectedKitQuantity > 1 && product.kits && product.kits.length > 0) {
-        const kit = product.kits.find((k: any) => k.quantity === selectedKitQuantity);
-        if (kit) {
-            displayPrice = kit.price / 100;
-            isKitSelected = true;
-        }
-    }
-
-    const estimatedCoins = cashbackSettings?.active && displayPrice >= (cashbackSettings.min_purchase_for_coins || 0)
-        ? Math.floor(displayPrice * (cashbackSettings.coins_per_real || 0))
+    const estimatedCoins = cashbackSettings?.active && discountedPrice >= (cashbackSettings.min_purchase_for_coins || 0)
+        ? Math.floor(discountedPrice * (cashbackSettings.coins_per_real || 0))
         : 0;
 
     const presencial12x = paymentFees.find(f => f.channel === 'presencial' && f.installments === 12);
     const taxaAplicada12x = presencial12x?.applied_fee_pct || 0;
-    const value12x = (displayPrice * (1 + taxaAplicada12x / 100)) / 12;
+    const value12x = (discountedPrice * (1 + taxaAplicada12x / 100)) / 12;
 
     const title = product.meta_title || `${toTitleCase(product.name)} | Mercado do Vale`;
     const description = product.meta_description || product.description || `Compre ${product.name} no Mercado do Vale.`;
 
     const handleAddToCart = () => {
-        addItem(product, selectedKitQuantity);
-        toast.success(selectedKitQuantity > 1 ? `${selectedKitQuantity}x Produtos adicionados ao carrinho!` : 'Produto adicionado ao carrinho!', {
+        addItem(product);
+        toast.success('Produto adicionado ao carrinho!', {
             icon: '🛒',
             duration: 3000
         });
         navigate('/carrinho');
     };
 
+    const { add: addToCompare, remove: removeFromCompare, isSelected: isComparing } = useCompare();
     const isInCompare = product ? isComparing(product.id) : false;
 
     const handleCompare = () => {
@@ -590,7 +512,7 @@ export const PublicProductPage: React.FC = () => {
         if (variantNames) {
             text += `Disponível: ${variantNames}\n`;
         }
-        text += `R$ ${displayPrice.toFixed(2).replace('.', ',')}, em até 12x de: R$ ${value12x.toFixed(2).replace('.', ',')}\n\n`;
+        text += `R$ ${discountedPrice.toFixed(2).replace('.', ',')}, em até 12x de: R$ ${value12x.toFixed(2).replace('.', ',')}\n\n`;
 
         if (estimatedCoins > 0) {
             text += `Ganhe ${estimatedCoins} Moedas do Vale nessa compra!\n\n`;
@@ -642,7 +564,7 @@ export const PublicProductPage: React.FC = () => {
         try {
             const res = await shippingService.calculate({
                 to_cep: cleanCep,
-                order_value: displayPrice * 100, // needs to be in centavos
+                order_value: discountedPrice * 100, // needs to be in centavos
                 weight: Math.max(300, product.weight_kg ? (product.weight_kg * 1000) : 300),
                 height: Math.max(10, product.dimensions?.height_cm || 10),
                 width: Math.max(15, product.dimensions?.width_cm || 15),
@@ -696,7 +618,7 @@ export const PublicProductPage: React.FC = () => {
                             "@type": "Offer",
                             "url": window.location.href,
                             "priceCurrency": "BRL",
-                            "price": displayPrice.toString(),
+                            "price": discountedPrice.toString(),
                             "availability": product.stock_quantity && product.stock_quantity > 0
                                 ? "https://schema.org/InStock"
                                 : "https://schema.org/OutOfStock",
@@ -884,7 +806,7 @@ export const PublicProductPage: React.FC = () => {
                                 </div>
                             )}
                             <div className={totalGroupStock !== undefined && totalGroupStock > 0 && totalGroupStock <= 2 ? "mt-4" : ""}>
-                                {product.discount_percentage && !isKitSelected ? (
+                                {product.discount_percentage ? (
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className="text-lg text-slate-400 line-through">
@@ -895,7 +817,7 @@ export const PublicProductPage: React.FC = () => {
                                             </span>
                                         </div>
                                         <div className="text-4xl font-extrabold text-slate-900">
-                                            R$ {displayPrice.toFixed(2).replace('.', ',')}
+                                            R$ {discountedPrice.toFixed(2).replace('.', ',')}
                                         </div>
                                         {customerType !== 'wholesale' && (
                                             <p className="text-sm font-medium text-green-600 mt-1">
@@ -917,7 +839,7 @@ export const PublicProductPage: React.FC = () => {
                                 ) : (
                                     <div>
                                         <div className="text-4xl font-extrabold text-slate-900">
-                                            R$ {displayPrice.toFixed(2).replace('.', ',')}
+                                            R$ {discountedPrice.toFixed(2).replace('.', ',')}
                                         </div>
                                         {customerType !== 'wholesale' && (
                                             <p className="text-sm font-medium text-green-600 mt-1">
@@ -938,77 +860,7 @@ export const PublicProductPage: React.FC = () => {
                                     </div>
                                 )}
 
-                                {/* Seletor de Kits (Descontos por Volume) */}
-                                {product.kits && product.kits.length > 0 && (
-                                    <div className="mt-6 pt-4 border-t border-slate-100">
-                                        <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                                            <Layers size={16} className="text-blue-600" />
-                                            Compre mais, pague menos
-                                        </h4>
-                                        <div className="flex flex-col gap-2">
-                                            <button
-                                                onClick={() => setSelectedKitQuantity(1)}
-                                                className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all ${
-                                                    selectedKitQuantity === 1
-                                                        ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
-                                                        : 'border-slate-200 hover:border-slate-300 bg-white'
-                                                }`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedKitQuantity === 1 ? 'border-blue-600' : 'border-slate-300'}`}>
-                                                        {selectedKitQuantity === 1 && <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
-                                                    </div>
-                                                    <span className="font-medium text-slate-800">1 Unidade</span>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="font-bold text-slate-900">R$ {baseDiscountedPrice.toFixed(2).replace('.', ',')}</div>
-                                                </div>
-                                            </button>
-
-                                            {/* Opções de Kits */}
-                                            {[...product.kits].sort((a: any, b: any) => a.quantity - b.quantity).map((kit: any, idx) => {
-                                                const unitPrice = kit.price / kit.quantity;
-                                                const kitPriceDisplay = (kit.price / 100).toFixed(2).replace('.', ',');
-                                                const unitPriceDisplay = (unitPrice / 100).toFixed(2).replace('.', ',');
-                                                const savings = ((baseDiscountedPrice * kit.quantity) - (kit.price / 100));
-
-                                                return (
-                                                    <button
-                                                        key={idx}
-                                                        onClick={() => setSelectedKitQuantity(kit.quantity)}
-                                                        className={`flex flex-col p-3 rounded-xl border-2 transition-all relative overflow-hidden ${
-                                                            selectedKitQuantity === kit.quantity
-                                                                ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
-                                                                : 'border-slate-200 hover:border-slate-300 bg-white'
-                                                        }`}
-                                                    >
-                                                        {savings > 0 && (
-                                                            <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
-                                                                Economia de R$ {savings.toFixed(2).replace('.', ',')}
-                                                            </div>
-                                                        )}
-                                                        <div className="flex items-center justify-between w-full mt-1">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className={`w-5 h-5 flex-shrink-0 rounded-full border-2 flex items-center justify-center ${selectedKitQuantity === kit.quantity ? 'border-blue-600' : 'border-slate-300'}`}>
-                                                                    {selectedKitQuantity === kit.quantity && <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
-                                                                </div>
-                                                                <div className="text-left">
-                                                                    <span className="font-bold text-blue-900">Kit com {kit.quantity} Unidades</span>
-                                                                    <div className="text-xs text-blue-600 font-medium">R$ {unitPriceDisplay} cada</div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-right pl-2">
-                                                                <div className="font-bold text-slate-900 text-lg">R$ {kitPriceDisplay}</div>
-                                                            </div>
-                                                        </div>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {Boolean((product as unknown as any)?.is_combo) && comboChildren && comboChildren.length > 0 && (
+                                {(product as unknown as any)?.is_combo && comboChildren && comboChildren.length > 0 && (
                                     <div className="mt-4 pt-4 border-t border-slate-100">
                                         <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
                                             <Package size={16} className="text-teal-600" />
@@ -1341,7 +1193,7 @@ export const PublicProductPage: React.FC = () => {
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:hidden z-40 flex items-center gap-4">
                 <div className="flex-1">
                     <p className="text-xs text-slate-500 uppercase font-bold">Total à vista</p>
-                    <p className="text-xl font-extrabold text-blue-600">R$ {displayPrice.toFixed(2).replace('.', ',')}</p>
+                    <p className="text-xl font-extrabold text-blue-600">R$ {discountedPrice.toFixed(2).replace('.', ',')}</p>
                 </div>
                 <button
                     onClick={handleAddToCart}

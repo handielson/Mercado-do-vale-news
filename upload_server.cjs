@@ -2,21 +2,27 @@ const { Client } = require('ssh2');
 const fs = require('fs');
 
 const conn = new Client();
+
 conn.on('ready', () => {
   conn.sftp((err, sftp) => {
     if (err) throw err;
-    sftp.fastPut('vps_server.js', '/var/www/mdv-api/server.js', (err) => {
+    const localFile = 'server.js';
+    const remoteFile = '/var/www/mdv-api/server.js';
+    
+    console.log('Uploading server.js...');
+    sftp.fastPut(localFile, remoteFile, (err) => {
       if (err) throw err;
-      console.log('vps_server.js uploaded successfully');
+      console.log('Upload complete!');
       
-      conn.exec('pm2 restart mdv-api && pm2 logs mdv-api --lines 15 --nostream', (err, stream) => {
+      conn.exec('pm2 restart mdv-api', (err, stream) => {
         if (err) throw err;
         stream.on('close', (code, signal) => {
+          console.log('pm2 restart completed.');
           conn.end();
         }).on('data', (data) => {
-          console.log(data.toString());
+          console.log('STDOUT: ' + data);
         }).stderr.on('data', (data) => {
-          console.error('STDERR: ' + data.toString());
+          console.error('STDERR: ' + data);
         });
       });
     });
