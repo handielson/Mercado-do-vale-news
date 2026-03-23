@@ -7,6 +7,7 @@ export interface ProductFiltersState {
     search: string;
     status: ProductStatus | 'all';
     sortBy: 'newest' | 'oldest' | 'name_asc' | 'name_desc';
+    imageStatus: 'all' | 'with_image' | 'without_image';
 }
 
 interface ProductFiltersProps {
@@ -21,7 +22,8 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
     const [filters, setFilters] = useState<ProductFiltersState>({
         search: '',
         status: 'all',
-        sortBy: 'newest'
+        sortBy: 'newest',
+        imageStatus: 'all'
     });
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,13 +44,19 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
         onFilterChange(newFilters);
     };
 
+    const handleImageStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newFilters = { ...filters, imageStatus: e.target.value as ProductFiltersState['imageStatus'] };
+        setFilters(newFilters);
+        onFilterChange(newFilters);
+    };
+
     const handleClearFilters = () => {
-        const clearedFilters: ProductFiltersState = { search: '', status: 'all' };
+        const clearedFilters: ProductFiltersState = { search: '', status: 'all', sortBy: 'newest', imageStatus: 'all' };
         setFilters(clearedFilters);
         onFilterChange(clearedFilters);
     };
 
-    const hasActiveFilters = filters.search !== '' || filters.status !== 'all';
+    const hasActiveFilters = filters.search !== '' || filters.status !== 'all' || filters.imageStatus !== 'all';
 
     return (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -77,6 +85,19 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
                         <option value={ProductStatus.INACTIVE}>Inativo</option>
                         <option value={ProductStatus.OUT_OF_STOCK}>Sem Estoque</option>
                         <option value={ProductStatus.DISCONTINUED}>Descontinuado</option>
+                    </select>
+                </div>
+
+                {/* Image Status Select */}
+                <div className="w-full md:w-48">
+                    <select
+                        value={filters.imageStatus}
+                        onChange={handleImageStatusChange}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    >
+                        <option value="all">Fotos: Todas</option>
+                        <option value="with_image">Com Foto</option>
+                        <option value="without_image">Sem Foto</option>
                     </select>
                 </div>
 

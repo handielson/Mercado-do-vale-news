@@ -102,7 +102,8 @@ export const useProducts = () => {
     const [filters, setFilters] = useState<ProductFiltersState>({
         search: '',
         status: 'all',
-        sortBy: 'newest'
+        sortBy: 'newest',
+        imageStatus: 'all'
     });
 
     // Pagination
@@ -173,6 +174,13 @@ export const useProducts = () => {
         // Status filter
         if (filters.status !== 'all') {
             filtered = filtered.filter(product => product.status === filters.status);
+        }
+
+        // Image status filter
+        if (filters.imageStatus === 'with_image') {
+            filtered = filtered.filter(product => product.images && product.images.length > 0);
+        } else if (filters.imageStatus === 'without_image') {
+            filtered = filtered.filter(product => !product.images || product.images.length === 0);
         }
 
         // Sorting
