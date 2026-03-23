@@ -3,7 +3,6 @@ import { ProductStatus } from '../utils/field-standards';
 import { supabase } from './supabase';
 import { logPriceChange } from './priceHistoryService';
 import { vpsApiService } from './vpsApiService';
-import { v4 as uuidv4 } from 'uuid';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
@@ -112,7 +111,7 @@ async function listChildren(parentId: string): Promise<Product[]> {
 // ─── WRITE ─────────────────────────────────────────────────────────────────
 
 async function create(input: ProductInput): Promise<Product> {
-    const id = uuidv4();
+    const id = crypto.randomUUID();
 
     // Validate model_id
     if (!input.model_id || input.model_id.trim() === '') {
