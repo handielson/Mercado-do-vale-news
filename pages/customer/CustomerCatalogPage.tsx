@@ -67,7 +67,7 @@ export const CustomerCatalogPage: React.FC = () => {
         if (!customer?.id) return;
         try {
             const favs = await catalogService.getUserFavorites(customer.id);
-            setFavorites(favs.map(p => p.id));
+            setFavorites(favs);
         } catch (error) {
             console.error('Error loading favorites:', error);
         }

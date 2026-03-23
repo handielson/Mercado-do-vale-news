@@ -341,10 +341,20 @@ function CatalogContent() {
                     </div>
 
                     {/* Chips de Filtros Ativos Renderizados na Raiz */}
-                    {(filters.brands.length > 0 || (filters.sortBy && filters.sortBy !== 'recent') || filters.priceRange) && (
+                    {(filters.brands.length > 0 || (filters.sortBy && filters.sortBy !== 'recent') || filters.priceRange || filters.favoritesOnly) && (
                         <div className="flex flex-wrap gap-2 mt-4 items-center animate-in fade-in slide-in-from-top-2 duration-300">
                             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mr-1">Filtros Ativos:</span>
                             
+                            {/* Chip de Favoritos */}
+                            {filters.favoritesOnly && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 border border-red-200 shadow-sm text-red-700 rounded-full text-xs font-medium">
+                                    ❤️ Meus Favoritos
+                                    <button onClick={() => setFilters({ ...filters, favoritesOnly: false })} className="hover:text-red-900 transition-colors focus:outline-none">
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </span>
+                            )}
+
                             {/* Chip de Ordem */}
                             {filters.sortBy && filters.sortBy !== 'recent' && (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-blue-200 shadow-sm text-blue-700 rounded-full text-xs font-medium">
@@ -370,9 +380,9 @@ function CatalogContent() {
                             ))}
 
                             {/* Botão de limpar tudo caso haja muitos filtros */}
-                            {filters.brands.length > 1 && (
+                            {(filters.brands.length > 1 || (filters.brands.length > 0 && filters.favoritesOnly)) && (
                                 <button 
-                                    onClick={() => setFilters({ ...filters, brands: [], sortBy: 'recent' })}
+                                    onClick={() => setFilters({ ...filters, brands: [], favoritesOnly: false, sortBy: 'recent' })}
                                     className="text-[11px] font-semibold text-slate-400 hover:text-red-500 ml-1 transition-colors uppercase tracking-widest"
                                 >
                                     Limpar Tudo

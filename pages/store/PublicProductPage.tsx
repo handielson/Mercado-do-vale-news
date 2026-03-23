@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2 } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
@@ -33,6 +33,8 @@ export const PublicProductPage: React.FC = () => {
     const { addItem } = useCart();
 
     const customerType = useEffectiveCustomerType();
+
+    const [selectedKitQuantity, setSelectedKitQuantity] = useState<number>(1);
 
     const [product, setProduct] = useState<CatalogProduct | null>(null);
     const [loading, setLoading] = useState(true);
@@ -428,9 +430,23 @@ export const PublicProductPage: React.FC = () => {
     // Prices calculation
     const effectivePrice = getEffectivePrice(product, customer);
     const originalPrice = effectivePrice / 100;
-    const discountedPrice = product.discount_percentage
+    const baseDiscountedPrice = product.discount_percentage
         ? originalPrice * (1 - product.discount_percentage / 100)
         : originalPrice;
+
+    // Aplica o preço do Kit na BuyBox se um kit estiver selecionado
+    let displayPrice = baseDiscountedPrice;
+    let isKitSelected = false;
+
+    if (selectedKitQuantity > 1 && product.kits) {
+        const kit = product.kits.find(k => k.quantity === selectedKitQuantity);
+        if (kit) {
+            displayPrice = kit.price / 100;
+            isKitSelected = true;
+        }
+    }
+
+    const discountedPrice = displayPrice;
 
     const estimatedCoins = cashbackSettings?.active && discountedPrice >= (cashbackSettings.min_purchase_for_coins || 0)
         ? Math.floor(discountedPrice * (cashbackSettings.coins_per_real || 0))
@@ -444,8 +460,8 @@ export const PublicProductPage: React.FC = () => {
     const description = product.meta_description || product.description || `Compre ${product.name} no Mercado do Vale.`;
 
     const handleAddToCart = () => {
-        addItem(product);
-        toast.success('Produto adicionado ao carrinho!', {
+        addItem(product, selectedKitQuantity);
+        toast.success(`${selectedKitQuantity} item(s) adicionado(s) ao carrinho!`, {
             icon: '🛒',
             duration: 3000
         });
@@ -555,6 +571,9 @@ export const PublicProductPage: React.FC = () => {
 
         // Scroll suave para o topo
         window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        // Resetar o kit ao trocar de variação
+        setSelectedKitQuantity(1);
     };
     const handleCalculateShipping = async () => {
         const cleanCep = cep.replace(/\D/g, '');
@@ -806,7 +825,7 @@ export const PublicProductPage: React.FC = () => {
                                 </div>
                             )}
                             <div className={totalGroupStock !== undefined && totalGroupStock > 0 && totalGroupStock <= 2 ? "mt-4" : ""}>
-                                {product.discount_percentage ? (
+                                {product.discount_percentage && !isKitSelected ? (
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className="text-lg text-slate-400 line-through">
@@ -875,6 +894,75 @@ export const PublicProductPage: React.FC = () => {
                                                     </div>
                                                 </div>
                                             ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Seletor de Kits (Descontos por Volume) */}
+                                {product.kits && product.kits.length > 0 && (
+                                    <div className="mt-6 pt-4 border-t border-slate-100">
+                                        <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                                            <Layers size={16} className="text-blue-600" />
+                                            Compre mais, pague menos:
+                                        </h4>
+                                        <div className="flex flex-col gap-2">
+                                            {/* Opção Padrão (1 Unidade) */}
+                                            <button
+                                                onClick={() => setSelectedKitQuantity(1)}
+                                                className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all text-left ${
+                                                    selectedKitQuantity === 1 
+                                                    ? 'border-blue-600 bg-blue-50/50' 
+                                                    : 'border-slate-100 bg-white hover:border-blue-200'
+                                                }`}
+                                            >
+                                                <div className="flex flex-col items-start">
+                                                    <span className="font-bold text-slate-800">1 Unidade</span>
+                                                    <span className="text-xs text-slate-500">R$ {baseDiscountedPrice.toFixed(2).replace('.', ',')} / un</span>
+                                                </div>
+                                                <div className="font-bold text-slate-900 text-lg">
+                                                    R$ {baseDiscountedPrice.toFixed(2).replace('.', ',')}
+                                                </div>
+                                            </button>
+
+                                            {/* Opções de Kits */}
+                                            {[...product.kits].sort((a, b) => a.quantity - b.quantity).map((kit, idx) => {
+                                                const unitPrice = kit.price / kit.quantity;
+                                                const kitPriceDisplay = (kit.price / 100).toFixed(2).replace('.', ',');
+                                                const unitPriceDisplay = (unitPrice / 100).toFixed(2).replace('.', ',');
+                                                const isSelected = selectedKitQuantity === kit.quantity;
+                                                
+                                                // Calcular % de desconto em relação ao varejo unitário
+                                                const retailUnit = baseDiscountedPrice;
+                                                const kitUnit = unitPrice / 100;
+                                                const savingsPct = retailUnit > kitUnit ? Math.round(((retailUnit - kitUnit) / retailUnit) * 100) : 0;
+
+                                                return (
+                                                    <button
+                                                        key={idx}
+                                                        onClick={() => setSelectedKitQuantity(kit.quantity)}
+                                                        className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all text-left relative overflow-hidden ${
+                                                            isSelected 
+                                                            ? 'border-blue-600 bg-blue-50/50' 
+                                                            : 'border-slate-100 bg-white hover:border-blue-200'
+                                                        }`}
+                                                    >
+                                                        {savingsPct > 0 && (
+                                                            <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
+                                                                ECONOMIZE {savingsPct}%
+                                                            </div>
+                                                        )}
+                                                        <div className="flex flex-col items-start pr-4">
+                                                            <span className="font-bold text-slate-800">{kit.name || `Kit ${kit.quantity} Unidades`}</span>
+                                                            <span className="text-xs text-green-600 font-medium">R$ {unitPriceDisplay} / un</span>
+                                                        </div>
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="font-bold text-blue-700 text-lg whitespace-nowrap">
+                                                                R$ {kitPriceDisplay}
+                                                            </span>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 )}

@@ -33,6 +33,16 @@ export interface ProductDimensions {
 }
 
 /**
+ * Product Kit (Volume Discount)
+ * Example: Buy 5 for R$ 450 total
+ */
+export interface ProductKit {
+    quantity: number;
+    price: number; // Price in centavos for the TOTAL kit
+    name?: string; // Optional name like "Caixa com 5"
+}
+
+/**
  * Product Interface
  * Represents a product in the catalog with category, brand, and specifications
  * All price fields are stored as integers in CENTAVOS (e.g., R$ 10,50 = 1050)
@@ -135,6 +145,9 @@ export interface Product {
     // Media Add-ons
     video_url?: string;        // URL do vídeo do produto (YouTube, Synology, etc.)
 
+    // Product Kits (Volume Pricing)
+    kits?: ProductKit[];       // Descontos por quantidade no mesmo produto
+
     // Timestamps
     created: string;
     updated: string;
@@ -200,4 +213,7 @@ export interface ProductInput {
         id: string;
         quantity: number;
     }>;
+
+    // Product Kits (Volume Pricing)
+    kits?: ProductKit[];
 }

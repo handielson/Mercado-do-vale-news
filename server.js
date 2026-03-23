@@ -154,7 +154,7 @@ fastify.get('/products', async (req, reply) => {
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, created_at, updated_at`
+       slug, origin, specs, custom_fields, kits, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
@@ -163,7 +163,7 @@ fastify.get('/products', async (req, reply) => {
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, created_at, updated_at`;
+       slug, origin, specs, custom_fields, kits, created_at, updated_at`;
 
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
@@ -186,6 +186,7 @@ fastify.get('/products', async (req, reply) => {
     specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
   }));
 
   reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
@@ -207,6 +208,7 @@ fastify.get('/products/:id', async (req, reply) => {
     images:        typeof r.images === 'string'        ? JSON.parse(r.images)        : r.images,
     specs:         typeof r.specs === 'string'         ? JSON.parse(r.specs)         : r.specs,
     custom_fields: typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields) : r.custom_fields,
+    kits:          typeof r.kits === 'string'          ? JSON.parse(r.kits)          : r.kits,
   };
 });
 
@@ -247,8 +249,8 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           images, specs, custom_fields, dimensions, weight_kg,
           ncm, cest, origin, bling_id, bling_parent_id, parent_id,
           video_url, track_inventory, is_gift,
-          warranty_type, warranty_template_id, company_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          warranty_type, warranty_template_id, company_id, kits
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=VALUES(name), slug=VALUES(slug), sku=VALUES(sku),
           ean=VALUES(ean), alternative_eans=VALUES(alternative_eans),
@@ -268,6 +270,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           track_inventory=VALUES(track_inventory), is_gift=VALUES(is_gift),
           warranty_type=VALUES(warranty_type),
           warranty_template_id=VALUES(warranty_template_id),
+          kits=VALUES(kits),
           updated_at=CURRENT_TIMESTAMP`,
         [
           p.id, p.name, p.slug || null, p.sku || null,
@@ -284,7 +287,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.video_url || null,
           p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
           p.warranty_type || 'brand', p.warranty_template_id || null,
-          p.company_id || null,
+          p.company_id || null, jsonStr(p.kits),
         ]
       );
       results.upserted++;
@@ -308,7 +311,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       images=?, specs=?, custom_fields=?, dimensions=?, weight_kg=?,
       ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?,
       video_url=?, track_inventory=?, is_gift=?,
-      warranty_type=?, warranty_template_id=?,
+      warranty_type=?, warranty_template_id=?, kits=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
     [
@@ -325,7 +328,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.bling_id || null, p.bling_parent_id || null, p.parent_id || null,
       p.video_url || null,
       p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
-      p.warranty_type || 'brand', p.warranty_template_id || null,
+      p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
       req.params.id,
     ]
   );

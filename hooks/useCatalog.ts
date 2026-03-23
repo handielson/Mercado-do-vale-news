@@ -13,7 +13,18 @@ interface UseCatalogOptions {
     initialCategory?: string;
     pageSize?: number;
     bypassCache?: boolean;
+    customerId?: string;
 }
+
+const getGuestId = () => {
+    if (typeof window === 'undefined') return 'guest_ssr';
+    let id = localStorage.getItem('@mv:catalog_guest_id');
+    if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('@mv:catalog_guest_id', id);
+    }
+    return `guest_${id}`;
+};
 
 export function useCatalog(options: UseCatalogOptions = {}) {
     const {
@@ -21,8 +32,11 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         initialSearchQuery = '',
         initialCategory = '',
         pageSize = 12,
-        bypassCache = false
+        bypassCache = false,
+        customerId
     } = options;
+
+    const effectiveCustomerId = useMemo(() => customerId || getGuestId(), [customerId]);
 
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
@@ -95,6 +109,8 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 inStockOnly: filters.inStockOnly,
                 featuredOnly: filters.featuredOnly,
                 newOnly: filters.newOnly,
+                favoritesOnly: filters.favoritesOnly,
+                customerId: effectiveCustomerId,
                 sortBy: filters.sortBy as 'recent' | 'price_asc' | 'price_desc' | 'featured' | undefined
             }, currentPage, pageSize, bypassCache);
 
@@ -154,31 +170,36 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     }, [loading, hasMore, loadProducts]);
 
     // Gerenciar favoritos
-    const toggleFavorite = useCallback((productId: string) => {
+    const toggleFavorite = useCallback(async (productId: string) => {
         setFavorites((prev) => {
             const newFavorites = new Set(prev);
-            if (newFavorites.has(productId)) {
+            const isFav = newFavorites.has(productId);
+            
+            if (isFav) {
                 newFavorites.delete(productId);
+                catalogService.removeFromFavorites(productId, effectiveCustomerId).catch(console.error);
             } else {
                 newFavorites.add(productId);
+                catalogService.addToFavorites(productId, effectiveCustomerId).catch(console.error);
             }
-            // Salvar no localStorage
-            localStorage.setItem('catalog_favorites', JSON.stringify(Array.from(newFavorites)));
             return newFavorites;
         });
-    }, []);
+    }, [effectiveCustomerId]);
 
-    // Carregar favoritos do localStorage
+    // Carregar favoritos da VPS
     useEffect(() => {
-        try {
-            const saved = localStorage.getItem('catalog_favorites');
-            if (saved) {
-                setFavorites(new Set(JSON.parse(saved)));
+        let mounted = true;
+        const loadFavs = async () => {
+            try {
+                const favs = await catalogService.getUserFavorites(effectiveCustomerId);
+                if (mounted) setFavorites(new Set(favs));
+            } catch (err) {
+                console.error('Erro ao carregar favoritos:', err);
             }
-        } catch (err) {
-            console.error('Erro ao carregar favoritos:', err);
-        }
-    }, []);
+        };
+        loadFavs();
+        return () => { mounted = false; };
+    }, [effectiveCustomerId]);
 
     // Estatísticas de filtros
     const [filterStats, setFilterStats] = useState<{

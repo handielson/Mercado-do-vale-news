@@ -71,6 +71,32 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const calculateUnitPrice = (product: CatalogProduct, quantity: number): number => {
+        // 1. Verifica Kits / Preço por Volume
+        if (product.kits && product.kits.length > 0) {
+            // Ordena do maior kit para o menor
+            const sortedKits = [...product.kits].sort((a, b) => b.quantity - a.quantity);
+            const applicableKit = sortedKits.find(k => quantity >= k.quantity);
+            if (applicableKit) {
+                // Preço unitário = preço total do kit / quantidade do kit
+                return Math.floor(applicableKit.price / applicableKit.quantity);
+            }
+        }
+
+        // 2. Verifica Promoção
+        const now = new Date();
+        const isPromoActive =
+            product.price_promo &&
+            product.price_promo > 0 &&
+            (!product.promo_start || new Date(product.promo_start) <= now) &&
+            (!product.promo_end || new Date(product.promo_end) >= now);
+
+        if (isPromoActive) return product.price_promo as number;
+
+        // 3. Preço Varejo / Padrão (já trazido com regras do usuario pelo Backend/Hooks)
+        return product.price_retail;
+    };
+
     const addItem = (product: CatalogProduct, quantity = 1) => {
         setItems(prev => {
             const existing = prev.find(i => i.product.id === product.id);
@@ -81,9 +107,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     toast.error(`Apenas ${product.stock_quantity} unidades disponíveis em estoque do produto ${product.name}.`);
                     return prev;
                 }
+                const newUnitPrice = calculateUnitPrice(product, totalWanted);
                 newItems = prev.map(i =>
                     i.product.id === product.id
-                        ? { ...i, quantity: totalWanted }
+                        ? { ...i, quantity: totalWanted, unit_price: newUnitPrice }
                         : i
                 );
             } else {
@@ -92,16 +119,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     return prev;
                 }
 
-                const now = new Date();
-                const isPromoActive =
-                    product.price_promo &&
-                    product.price_promo > 0 &&
-                    (!product.promo_start || new Date(product.promo_start) <= now) &&
-                    (!product.promo_end || new Date(product.promo_end) >= now);
-
-                const unit_price = isPromoActive
-                    ? (product.price_promo as number)
-                    : product.price_retail;
+                const unit_price = calculateUnitPrice(product, quantity);
 
                 newItems = [
                     ...prev,
@@ -139,7 +157,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     return prev;
                 }
             }
-            const newItems = prev.map(i => i.id === id ? { ...i, quantity } : i);
+            const newItems = prev.map(i => {
+                if (i.id === id) {
+                    return { ...i, quantity, unit_price: calculateUnitPrice(i.product, quantity) };
+                }
+                return i;
+            });
             saveToStorage(newItems);
             return newItems;
         });

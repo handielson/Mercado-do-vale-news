@@ -131,6 +131,8 @@ fastify.get('/products', async (req, reply) => {
   const category = req.query.category;
   const status   = req.query.status;
   const search   = req.query.search;
+  const favoritesOnly = req.query.favoritesOnly === 'true';
+  const customerId = req.query.customerId;
   const compact  = req.query.compact === 'true'; // sem images (evita 90+ MB de base64)
 
   // Colunas — compact exclui base64 mas inclui primeira URL de imagem (thumbnail)
@@ -174,6 +176,11 @@ fastify.get('/products', async (req, reply) => {
 
   if (category) { sql += ' AND category_id = ?'; params.push(category); }
   if (search)   { sql += ' AND name LIKE ?'; params.push(`%${search}%`); }
+
+  if (favoritesOnly && customerId) {
+    sql += ' AND id IN (SELECT product_id FROM customer_favorites WHERE customer_id = ?)';
+    params.push(customerId);
+  }
 
   sql += ' ORDER BY name ASC LIMIT ? OFFSET ?';
   params.push(limit, offset);
@@ -1477,6 +1484,44 @@ fastify.delete('/synology/file', { preHandler: requireSyncKey }, async (req, rep
   return { ok: true };
 });
 
+// ─── Customer Favorites ────────────────────────────────────────────────────────
+
+fastify.get('/customers/:id/favorites', async (req, reply) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await pool.query('SELECT product_id FROM customer_favorites WHERE customer_id = ?', [id]);
+    reply.header('Cache-Control', 'no-store');
+    return rows.map(r => r.product_id);
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Database error fetching favorites' });
+  }
+});
+
+fastify.post('/customers/:id/favorites', async (req, reply) => {
+  const { id } = req.params;
+  const { productId } = req.body;
+  if (!productId) return reply.code(400).send({ error: 'Missing productId' });
+  try {
+    await pool.query('INSERT IGNORE INTO customer_favorites (customer_id, product_id) VALUES (?, ?)', [id, productId]);
+    return { success: true };
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Database error adding favorite' });
+  }
+});
+
+fastify.delete('/customers/:id/favorites/:productId', async (req, reply) => {
+  const { id, productId } = req.params;
+  try {
+    await pool.query('DELETE FROM customer_favorites WHERE customer_id = ? AND product_id = ?', [id, productId]);
+    return { success: true };
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Database error removing favorite' });
+  }
+});
+
 // ─── Auto-migrations ────────────────────────────────────────────────────────
 async function addColumnIfMissing(table, column, definition) {
   const [[row]] = await pool.query(
@@ -1493,6 +1538,16 @@ async function addColumnIfMissing(table, column, definition) {
 }
 
 async function runMigrations() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_favorites (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      customer_id VARCHAR(255) NOT NULL,
+      product_id CHAR(36) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_unique_fav (customer_id, product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");

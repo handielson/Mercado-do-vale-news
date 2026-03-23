@@ -60,6 +60,13 @@ export const productSchema = z.object({
         quantity: z.number().int().min(1)
     })).nullable().optional(),
 
+    // Product Kits (Volume Pricing)
+    kits: z.array(z.object({
+        quantity: z.coerce.number().int().min(2, 'A quantidade do kit deve ser pelo menos 2'),
+        price: z.coerce.number().min(0, 'O preço do kit não pode ser negativo'),
+        name: z.string().optional()
+    })).optional().default([]),
+
     // Fiscal Fields - Accept null, empty strings, and undefined
     ncm: z.string().nullable().optional()
         .transform(val => !val ? undefined : val.replace(/\D/g, '').slice(0, 8) || undefined),

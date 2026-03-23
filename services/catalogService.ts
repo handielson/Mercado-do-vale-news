@@ -63,7 +63,7 @@ export const catalogService = {
 
         // ── VPS API FAST PATH ──────────────────────────────────────────────────
         // Use for simple queries: no text search, no brands, no price range, no special flags.
-        // Products from MySQL already include images; category slugs come from /categories.
+        // OR when fetching favorites, since favorites only exist in VPS now.
         const isSimpleQuery = !filters?.search
             && (!filters?.brands || filters.brands.length === 0)
             && !filters?.priceRange
@@ -71,13 +71,15 @@ export const catalogService = {
             && !filters?.featuredOnly
             && !filters?.newOnly;
 
-        if (isSimpleQuery) {
+        if (isSimpleQuery || filters?.favoritesOnly) {
             try {
                 const [vpsRaw, vpsCats] = await Promise.all([
                     vpsApiService.getProducts({
                         status: 'active',
-                        // send a single category id if filtered, otherwise fetch all
                         category: filters?.categories?.length === 1 ? filters.categories[0] : undefined,
+                        search: filters?.search,
+                        favoritesOnly: filters?.favoritesOnly,
+                        customerId: filters?.customerId,
                         limit: 1000,
                     }),
                     vpsApiService.getCategories(),
@@ -97,11 +99,21 @@ export const catalogService = {
                         category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
                     }));
 
-                    if (settings.hide_out_of_stock) result = result.filter(p => (p.stock_quantity || 0) > 0);
+                    if (settings.hide_out_of_stock || filters?.inStockOnly) result = result.filter(p => (p.stock_quantity || 0) > 0);
                     if (settings.hide_zero_price)   result = result.filter(p => (p.price_retail || 0) > 0);
                     if (settings.min_stock_to_show > 0) result = result.filter(p => (p.stock_quantity || 0) >= settings.min_stock_to_show);
+                    
                     if (filters?.categories && filters.categories.length > 1) {
                         result = result.filter(p => p.category_id && filters.categories!.includes(p.category_id));
+                    }
+                    if (filters?.brands && filters.brands.length > 0) {
+                        result = result.filter(p => p.brand && filters.brands!.includes(p.brand));
+                    }
+                    if (filters?.priceRange) {
+                        result = result.filter(p => (p.price_retail || 0) >= filters.priceRange![0] && (p.price_retail || 0) <= filters.priceRange![1]);
+                    }
+                    if (filters?.featuredOnly) {
+                        result = result.filter(p => p.custom_fields && typeof p.custom_fields === 'object' && 'featured' in p.custom_fields && p.custom_fields.featured === true);
                     }
 
                     // Client-side sort
@@ -522,14 +534,10 @@ export const catalogService = {
      * Adicionar aos favoritos
      */
     addToFavorites: async (productId: string, customerId: string): Promise<void> => {
-        const { error } = await supabase
-            .from('customer_favorites')
-            .insert({
-                product_id: productId,
-                customer_id: customerId
-            });
-
-        if (error && error.code !== '23505') { // Ignorar duplicatas
+        try {
+            await vpsApiService.post(`/customers/${customerId}/favorites`, { productId });
+        } catch (error: any) {
+            console.error('Error adding to favorites:', error);
             throw error;
         }
     },
@@ -538,43 +546,38 @@ export const catalogService = {
      * Remover dos favoritos
      */
     removeFromFavorites: async (productId: string, customerId: string): Promise<void> => {
-        const { error } = await supabase
-            .from('customer_favorites')
-            .delete()
-            .eq('product_id', productId)
-            .eq('customer_id', customerId);
-
-        if (error) throw error;
+        try {
+            await vpsApiService.delete(`/customers/${customerId}/favorites/${productId}`);
+        } catch (error: any) {
+            console.error('Error removing from favorites:', error);
+            throw error;
+        }
     },
 
     /**
-     * Buscar favoritos do usuário
+     * Buscar IDs dos produtos favoritos do usuário
      */
-    getUserFavorites: async (customerId: string): Promise<CatalogProduct[]> => {
-        const { data, error } = await supabase
-            .from('customer_favorites')
-            .select('product_id, products(*)')
-            .eq('customer_id', customerId);
-
-        if (error) throw error;
-
-        return (data?.map(f => f.products) || []) as unknown as CatalogProduct[];
+    getUserFavorites: async (customerId: string): Promise<string[]> => {
+        try {
+            const data = await vpsApiService.get<string[]>(`/customers/${customerId}/favorites`);
+            return data || [];
+        } catch (error: any) {
+            console.error('Error getting favorites:', error);
+            return [];
+        }
     },
 
     /**
      * Verificar se produto está nos favoritos
      */
     isFavorite: async (productId: string, customerId: string): Promise<boolean> => {
-        const { data, error } = await supabase
-            .from('customer_favorites')
-            .select('id')
-            .eq('product_id', productId)
-            .eq('customer_id', customerId)
-            .single();
-
-        if (error && error.code !== 'PGRST116') throw error;
-
-        return !!data;
+        try {
+            const favs = await catalogService.getUserFavorites(customerId);
+            return favs.includes(productId);
+        } catch (error: any) {
+            console.error('Error checking favorite:', error);
+            return false;
+        }
     },
 
     /**

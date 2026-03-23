@@ -9,6 +9,7 @@ export interface FilterState {
     featuredOnly: boolean;
     newOnly: boolean;
     sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'featured';
+    favoritesOnly?: boolean;
 }
 
 interface ProductFiltersProps {
@@ -58,6 +59,7 @@ export function ProductFilters({
             inStockOnly: false,
             featuredOnly: false,
             newOnly: false,
+            favoritesOnly: false,
             sortBy: 'recent'
         });
     };
@@ -126,6 +128,20 @@ export function ProductFilters({
                     />
                     <span className="text-sm text-slate-700 group-hover:text-slate-900 flex items-center gap-1">
                         🆕 Apenas novos
+                    </span>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer group">
+                    <input
+                        type="checkbox"
+                        checked={filters.favoritesOnly || false}
+                        onChange={(e) =>
+                            onFilterChange({ ...filters, favoritesOnly: e.target.checked })
+                        }
+                        className="w-4 h-4 text-red-500 rounded focus:ring-2 focus:ring-red-500 border-red-200"
+                    />
+                    <span className="text-sm text-slate-700 group-hover:text-slate-900 flex items-center gap-1 text-red-600 font-medium">
+                        ❤️ Meus Favoritos
                     </span>
                 </label>
             </div>

@@ -33,6 +33,7 @@ import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
 import { BlingLinkSection } from './sections/BlingLinkSection';
+import { ProductKitsSection } from './sections/ProductKitsSection';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -119,6 +120,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         getValues,
         watch,
         control,
+        register,
         reset,
         formState: { errors }
     } = useForm<ProductInput>({
@@ -996,7 +998,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             {/* 6. PRECIFICAÇÃO */}
             <ProductPricing watch={watch} setValue={setValue} errors={errors} modelId={watch('model_id') || undefined} />
 
-            {/* 6. FISCAL & AUTOMAÇÃO */}
+            {/* 6.5 KITS E DESCONTOS POR VOLUME */}
+            <ProductKitsSection
+                control={control}
+                register={register}
+                errors={errors}
+                watch={watch}
+                setValue={setValue}
+            />
+
+            {/* 7. FISCAL & AUTOMAÇÃO */}
             < div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" >
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <FileText size={18} className="text-slate-500" />
