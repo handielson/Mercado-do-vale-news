@@ -130,7 +130,7 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     state_registration: company.stateRegistration || null,
     cnae: company.cnae || null,
     situacao_cadastral: company.situacaoCadastral || null,
-    data_abertura: company.dataAbertura || null,
+    data_abertura: company.dataAbertura ? company.dataAbertura.split('T')[0] : null,
     porte: company.porte || null,
     phone: company.phone || null,
     email: company.email || null,
