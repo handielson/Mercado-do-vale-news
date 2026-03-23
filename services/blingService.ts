@@ -1029,7 +1029,9 @@ export async function importBlingProducts(
             let resolvedBrandId = brandCache.get(brandName);
             if (!resolvedBrandId) {
                 const brands = await brandService.list();
-                const existingBrand = brands.find(b => b.name.toLowerCase() === brandName.toLowerCase());
+                const normalizeString = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                const expectedSlug = normalizeString(brandName);
+                const existingBrand = brands.find(b => b.slug === expectedSlug || normalizeString(b.name) === expectedSlug);
                 if (existingBrand) {
                     resolvedBrandId = existingBrand.id;
                 } else {
