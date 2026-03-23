@@ -94,10 +94,17 @@ export const catalogService = {
                     );
 
                     // Apply visibility rules + multi-category filter client-side
-                    let result = (vpsRaw as CatalogProduct[]).map(p => ({
-                        ...p,
-                        category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
-                    }));
+                    let result = (vpsRaw as any[]).map((p: any) => {
+                        // Filtra imagens: descarta base64 (migrado do Supabase), mantém apenas URLs HTTP
+                        const httpImages = (p.images || []).filter((img: string) =>
+                            typeof img === 'string' && img.startsWith('http')
+                        );
+                        return {
+                            ...p,
+                            images: httpImages,
+                            category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
+                        };
+                    });
 
                     if (settings.hide_out_of_stock || filters?.inStockOnly) result = result.filter(p => (p.stock_quantity || 0) > 0);
                     if (settings.hide_zero_price)   result = result.filter(p => (p.price_retail || 0) > 0);
@@ -535,7 +542,13 @@ export const catalogService = {
      */
     addToFavorites: async (productId: string, customerId: string): Promise<void> => {
         try {
-            await vpsApiService.post(`/customers/${customerId}/favorites`, { productId });
+            const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
+            const VPS_URL = 'https://api.xiaomipetrolina.com.br';
+            await fetch(`${VPS_URL}/customers/${customerId}/favorites`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+                body: JSON.stringify({ productId }),
+            });
         } catch (error: any) {
             console.error('Error adding to favorites:', error);
             throw error;
@@ -547,7 +560,12 @@ export const catalogService = {
      */
     removeFromFavorites: async (productId: string, customerId: string): Promise<void> => {
         try {
-            await vpsApiService.delete(`/customers/${customerId}/favorites/${productId}`);
+            const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
+            const VPS_URL = 'https://api.xiaomipetrolina.com.br';
+            await fetch(`${VPS_URL}/customers/${customerId}/favorites/${productId}`, {
+                method: 'DELETE',
+                headers: { 'X-Sync-Key': SYNC_KEY },
+            });
         } catch (error: any) {
             console.error('Error removing from favorites:', error);
             throw error;
@@ -559,8 +577,18 @@ export const catalogService = {
      */
     getUserFavorites: async (customerId: string): Promise<string[]> => {
         try {
-            const data = await vpsApiService.get<string[]>(`/customers/${customerId}/favorites`);
-            return data || [];
+            const VPS_URL = 'https://api.xiaomipetrolina.com.br';
+            const res = await fetch(`${VPS_URL}/customers/${customerId}/favorites`, {
+                headers: { Accept: 'application/json' },
+                signal: AbortSignal.timeout(5000),
+            });
+            if (!res.ok) return [];
+            const data = await res.json();
+            // Pode retornar array de IDs ou array de objetos { product_id }
+            if (Array.isArray(data)) {
+                return data.map((item: any) => (typeof item === 'string' ? item : item.product_id)).filter(Boolean);
+            }
+            return [];
         } catch (error: any) {
             console.error('Error getting favorites:', error);
             return [];
