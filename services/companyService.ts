@@ -5,6 +5,8 @@
 
 import { supabase } from './supabase';
 import { Company, defaultCompany } from '../types/company';
+import { USE_VPS } from '../config/migration';
+import { vpsClient } from './vpsClient';
 
 /**
  * Database row type for company_settings table
@@ -175,6 +177,15 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
  */
 export const getCompanyData = async (): Promise<Company> => {
     try {
+        if (USE_VPS.company) {
+            try {
+                const data = await vpsClient.get<any>('/company-settings');
+                if (data) return rowToCompany(data);
+            } catch (vpsErr) {
+                console.error('[companyService] VPS fetch error:', vpsErr);
+            }
+        }
+        
         // Fetch company settings (single global record)
         const { data, error } = await supabase
             .from('company_settings')
@@ -216,6 +227,17 @@ export const getCompanyData = async (): Promise<Company> => {
 export const saveCompanyData = async (data: Company): Promise<void> => {
     try {
         const row = companyToRow(data);
+
+        if (USE_VPS.company) {
+            try {
+                console.log('Updating existing company settings record via VPS');
+                await vpsClient.patch('/company-settings', row);
+                return;
+            } catch (vpsErr) {
+                console.error('[companyService] VPS update error:', vpsErr);
+                throw vpsErr;
+            }
+        }
 
         // Check if record exists (should be only one global record)
         const { data: existing } = await supabase
