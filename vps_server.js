@@ -352,11 +352,12 @@ fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, repl
 fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, reply) => {
   const { sku, images } = req.body || {};
   if (!sku || !images) return reply.code(400).send({ error: 'sku and images required' });
-  await pool.query(
+  const [result] = await pool.query(
     'UPDATE products SET images=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
     [JSON.stringify(images), sku]
   );
-  return { ok: true };
+  // affectedRows=0 means the SKU doesn't exist in VPS MySQL yet
+  return { ok: true, affectedRows: result.affectedRows };
 });
 
 fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, reply) => {

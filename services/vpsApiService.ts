@@ -101,19 +101,24 @@ class VpsApiService {
     return this.fetchSafe<any[]>(`/products${query}`, params?.noCache);
   }
 
-  /** Atualiza o array de imagens de um produto pelo SKU (image bank sync) */
-  async updateProductImagesBySku(sku: string, images: string[]): Promise<void> {
-    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return; }
+  /** Atualiza o array de imagens de um produto pelo SKU (image bank sync).
+   * Retorna o número de linhas afetadas. 0 = produto ainda não existe no MySQL VPS. */
+  async updateProductImagesBySku(sku: string, images: string[]): Promise<number> {
+    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return 0; }
     try {
-      await fetch(`${VPS_BASE_URL}/products/images`, {
+      const res = await fetch(`${VPS_BASE_URL}/products/images`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
         body: JSON.stringify({ sku, images }),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
       this.invalidateProductCache();
+      if (!res.ok) return 0;
+      const json = await res.json() as { ok: boolean; affectedRows?: number };
+      return json.affectedRows ?? 0;
     } catch (err) {
       console.warn('[vpsApiService] updateProductImagesBySku error:', err);
+      return 0;
     }
   }
 

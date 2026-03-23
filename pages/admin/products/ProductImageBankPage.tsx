@@ -315,11 +315,17 @@ export function ProductImageBankPage() {
             let synced = 0;
             for (const [sku, newItems] of urlsBySku.entries()) {
                 const newUrls = newItems.sort((a, b) => a.order - b.order).map(i => i.url);
-                // Sync Supabase (loja pública)
-                const ok = await syncImagesToSupabase(sku, newUrls);
-                // Também dispara sync na VPS MySQL (fire-and-forget)
-                vpsApiService.updateProductImagesBySku(sku, newUrls).catch(e => console.warn('[ImageBank] VPS sync:', e));
-                if (ok) synced++;
+                // Tenta VPS primeiro
+                const affectedRows = await vpsApiService.updateProductImagesBySku(sku, newUrls);
+                if (affectedRows > 0) {
+                    console.log(`[ImageBank] VPS MySQL OK for ${sku} (${affectedRows} rows)`);
+                    synced++;
+                } else {
+                    // Produto não existe na VPS MySQL → fallback Supabase
+                    console.warn(`[ImageBank] SKU ${sku} not found in VPS MySQL, falling back to Supabase`);
+                    const ok = await syncImagesToSupabase(sku, newUrls);
+                    if (ok) synced++;
+                }
             }
 
             if (synced > 0) toast.success('🔄 Produto(s) atualizado(s) automaticamente!');
@@ -354,19 +360,24 @@ export function ProductImageBankPage() {
 
         if (result.success.length > 0) {
             toast.success(`✅ ${result.success.length} imagem(ns) enviada(s) para ${sku}!`);
-            
             setRecentUploads(prev => [...new Set([sku, ...prev])]);
 
-            // Sincroniza automaticamente na Loja (Supabase) com logs
             const urls = result.success.sort((a, b) => a.order - b.order).map(i => i.url);
-            const { error: sbErr } = await supabase.from('products').update({ images: urls }).eq('sku', sku);
-            if (sbErr) {
-                console.error(`[ImageBank] Supabase inline sync failed for ${sku}:`, sbErr);
-                toast.error(`Erro ao salvar imagens no produto: ${sbErr.message}`);
+            // Tenta VPS primeiro
+            const affectedRows = await vpsApiService.updateProductImagesBySku(sku, urls);
+            if (affectedRows > 0) {
+                console.log(`[ImageBank] VPS inline OK for ${sku}`);
             } else {
-                console.log(`[ImageBank] Supabase inline OK for ${sku}:`, urls);
+                // Produto não existe na VPS MySQL → fallback Supabase
+                console.warn(`[ImageBank] SKU ${sku} not in VPS, fallback to Supabase`);
+                const { error: sbErr } = await supabase.from('products').update({ images: urls }).eq('sku', sku);
+                if (sbErr) {
+                    console.error(`[ImageBank] Supabase inline sync failed for ${sku}:`, sbErr);
+                    toast.error(`Erro ao salvar imagens no produto: ${sbErr.message}`);
+                } else {
+                    console.log(`[ImageBank] Supabase inline OK for ${sku}:`, urls);
+                }
             }
-            vpsApiService.updateProductImagesBySku(sku, urls).catch(e => console.warn('[ImageBank] VPS sync:', e));
         }
         if (result.errors.length > 0) toast.error(`⚠️ ${result.errors.length} erro(s) no upload`);
         await loadImages();
@@ -436,19 +447,23 @@ export function ProductImageBankPage() {
 
                 if (!matchedSku) { notFound.push(`${folderName}/${colorInFile}`); continue; }
 
-                // Sync Supabase (loja pública) - com logs
-                const { error: sbSyncErr } = await supabase
-                    .from('products')
-                    .update({ images: urls })
-                    .eq('sku', matchedSku);
-                if (sbSyncErr) {
-                    console.error(`[Sync] Supabase failed for ${matchedSku}:`, sbSyncErr);
-                    notFound.push(`${matchedSku} (DB error: ${sbSyncErr.message})`);
-                    continue;
+                // Sync VPS primeiro
+                const affectedRows = await vpsApiService.updateProductImagesBySku(matchedSku, urls).catch(() => 0);
+                if (affectedRows > 0) {
+                    console.log(`[Sync] VPS MySQL OK for ${matchedSku}`);
+                } else {
+                    // Fallback Supabase quando produto não existe na VPS
+                    const { error: sbSyncErr } = await supabase
+                        .from('products')
+                        .update({ images: urls })
+                        .eq('sku', matchedSku);
+                    if (sbSyncErr) {
+                        console.error(`[Sync] Supabase failed for ${matchedSku}:`, sbSyncErr);
+                        notFound.push(`${matchedSku} (DB error: ${sbSyncErr.message})`);
+                        continue;
+                    }
+                    console.log(`[Sync] Supabase OK for ${matchedSku}`);
                 }
-                console.log(`[Sync] Supabase OK for ${matchedSku}`, urls);
-                // VPS MySQL (fire-and-forget)
-                vpsApiService.updateProductImagesBySku(matchedSku, urls).catch(e => console.warn('[Sync] VPS:', e));
                 updated++;
             }
 
