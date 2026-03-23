@@ -447,6 +447,10 @@ export async function fetchBlingCategories(): Promise<BlingCategory[]> {
         const res = await fetch(`/api/bling?resource=categories&page=${page}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
+        
+        // Rate limit protection (Bling allows max 3 requests per second)
+        await new Promise(resolve => setTimeout(resolve, 350));
+        
         if (!res.ok) break;
         const json = await res.json();
         const items: any[] = json.data || [];
@@ -473,6 +477,10 @@ async function fetchStockMap(accessToken: string, productIds: number[]): Promise
         const res = await fetch(`/api/bling?resource=stock&${queryParams}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
+
+        // Rate limit protection
+        await new Promise(resolve => setTimeout(resolve, 350));
+
         if (!res.ok) continue;
 
         const json = await res.json();
@@ -686,6 +694,10 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
 
     do {
         const { items } = await fetchProductsPage(accessToken, page);
+        
+        // Rate limit protection
+        await new Promise(resolve => setTimeout(resolve, 350));
+        
         if (items.length === 0) break;
         all.push(...items.map((item: any) => ({
             id: item.id,
@@ -766,6 +778,9 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
             headers: { 'Authorization': `Bearer ${accessToken}` },
             cache: 'no-store'
         });
+
+        // Rate limit protection
+        await new Promise(resolve => setTimeout(resolve, 350));
 
         if (!res.ok) throw new Error(`Bling API error ${res.status}`);
         const json = await res.json();
