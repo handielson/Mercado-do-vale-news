@@ -50,6 +50,16 @@ const LIST_COLUMNS = [
 ].join(', ');
 
 async function list(): Promise<Product[]> {
+    // VPS MySQL primeiro (fonte de verdade para toda a listagem)
+    try {
+        const vpsData = await vpsApiService.getProducts({ limit: 5000 });
+        if (vpsData) {
+            console.log('[productService.list] using VPS MySQL');
+            return vpsData.map(transformFromDB);
+        }
+    } catch { /* fallback silencioso */ }
+
+    console.log('[productService.list] fallback: Supabase');
     const companyId = await getCompanyId();
 
     const { data, error } = await supabase

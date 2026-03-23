@@ -303,8 +303,6 @@ export function ProductImageBankPage() {
                     const newUrls = newItems.sort((a, b) => a.order - b.order).map(i => i.url);
                     // Sync VPS MySQL (source of truth)
                     await vpsApiService.updateProductImagesBySku(sku, newUrls);
-                    // Sync Supabase (admin UI & lists)
-                    await supabase.from('products').update({ images: newUrls }).eq('sku', sku);
                     synced++;
                 } catch { /* ignora erros individuais */ }
             }
@@ -344,10 +342,9 @@ export function ProductImageBankPage() {
             
             setRecentUploads(prev => [...new Set([sku, ...prev])]);
 
-            // Sincroniza automaticamente em ambas as bases
+            // Sincroniza automaticamente na VPS
             const urls = result.success.sort((a, b) => a.order - b.order).map(i => i.url);
             await vpsApiService.updateProductImagesBySku(sku, urls);
-            await supabase.from('products').update({ images: urls }).eq('sku', sku);
         }
         if (result.errors.length > 0) toast.error(`⚠️ ${result.errors.length} erro(s) no upload`);
         await loadImages();
@@ -417,9 +414,8 @@ export function ProductImageBankPage() {
 
                 if (!matchedSku) { notFound.push(`${folderName}/${colorInFile}`); continue; }
 
-                // Sync VPS MySQL e Supabase
+                // Sync VPS MySQL
                 vpsApiService.updateProductImagesBySku(matchedSku, urls).catch(() => {});
-                supabase.from('products').update({ images: urls }).eq('sku', matchedSku).catch(() => {});
                 updated++;
             }
 

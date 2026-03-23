@@ -78,7 +78,7 @@ class VpsApiService {
     }
   }
 
-  private invalidateProductCache() {
+  invalidateProductCache() {
     [...this.cache.keys()].filter(k => k.startsWith('/products')).forEach(k => this.cache.delete(k));
   }
 
@@ -111,6 +111,7 @@ class VpsApiService {
         body: JSON.stringify({ sku, images }),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
+      this.invalidateProductCache();
     } catch (err) {
       console.warn('[vpsApiService] updateProductImagesBySku error:', err);
     }
