@@ -198,11 +198,46 @@ async function create(input: ProductInput): Promise<Product> {
     if (result.errors.length > 0) throw new Error(`Failed to create product: ${result.errors[0].error}`);
 
     // --- DUAL WRITE SUPABASE ---
+    // Build a sanitized payload matching the Supabase products table schema
     try {
-        const { error: supaErr } = await supabase.from('products').upsert({
-            ...payload,
-            updated_at: new Date().toISOString()
-        });
+        const supPayload = {
+            id: payload.id,
+            model_id: payload.model_id,
+            parent_id: payload.parent_id,
+            brand: payload.brand,
+            category_id: payload.category_id,
+            name: payload.name,
+            sku: payload.sku,
+            description: payload.description,
+            eans: payload.alternative_eans || [],
+            specs: payload.specs,
+            price_cost: payload.price_cost,
+            price_retail: payload.price_retail,
+            price_reseller: payload.price_reseller,
+            price_wholesale: payload.price_wholesale,
+            images: payload.images,
+            ncm: payload.ncm,
+            cest: payload.cest,
+            origin: payload.origin,
+            weight_kg: payload.weight_kg,
+            dimensions: payload.dimensions,
+            stock_quantity: payload.stock_quantity,
+            status: payload.status,
+            track_inventory: Boolean(payload.track_inventory),
+            is_gift: Boolean(payload.is_gift),
+            warranty_type: payload.warranty_type,
+            warranty_template_id: payload.warranty_template_id,
+            price_promo: payload.price_promo,
+            promo_start: payload.promo_start,
+            promo_end: payload.promo_end,
+            bling_id: payload.bling_id,
+            bling_parent_id: payload.bling_parent_id,
+            shopee_item_id: payload.shopee_item_id,
+            video_url: payload.video_url,
+            slug: payload.slug,
+            updated_at: new Date().toISOString(),
+        };
+        const { error: supaErr } = await supabase.from('products').upsert(supPayload);
         if (supaErr) console.warn('[productService] Failed to dual-write create to Supabase:', supaErr);
     } catch (e) {
         console.warn('[productService] Exception dual-writing to Supabase:', e);
@@ -305,11 +340,43 @@ async function update(id: string, input: ProductInput): Promise<Product> {
 
     // --- DUAL WRITE SUPABASE ---
     try {
-        const { error: supaErr } = await supabase.from('products').update({
-            ...payload,
-            updated_at: new Date().toISOString()
-        }).eq('id', id);
-        
+        const supPayload = {
+            model_id: payload.model_id,
+            parent_id: payload.parent_id,
+            brand: payload.brand,
+            category_id: payload.category_id,
+            name: payload.name,
+            sku: payload.sku,
+            description: payload.description,
+            eans: payload.alternative_eans || [],
+            specs: payload.specs,
+            price_cost: payload.price_cost,
+            price_retail: payload.price_retail,
+            price_reseller: payload.price_reseller,
+            price_wholesale: payload.price_wholesale,
+            images: payload.images,
+            ncm: payload.ncm,
+            cest: payload.cest,
+            origin: payload.origin,
+            weight_kg: payload.weight_kg,
+            dimensions: payload.dimensions,
+            stock_quantity: payload.stock_quantity,
+            status: payload.status,
+            track_inventory: Boolean(payload.track_inventory),
+            is_gift: Boolean(payload.is_gift),
+            warranty_type: payload.warranty_type,
+            warranty_template_id: payload.warranty_template_id,
+            price_promo: payload.price_promo,
+            promo_start: payload.promo_start,
+            promo_end: payload.promo_end,
+            bling_id: payload.bling_id,
+            bling_parent_id: payload.bling_parent_id,
+            shopee_item_id: payload.shopee_item_id,
+            video_url: payload.video_url,
+            slug: payload.slug,
+            updated_at: new Date().toISOString(),
+        };
+        const { error: supaErr } = await supabase.from('products').update(supPayload).eq('id', id);
         if (supaErr) console.warn('[productService] Failed to dual-write update to Supabase:', supaErr);
     } catch (e) {
         console.warn('[productService] Exception dual-writing to Supabase:', e);
