@@ -141,8 +141,8 @@ export const PublicProductPage: React.FC = () => {
                     try {
                         const vpsRichData = await vpsApiService.getProductById(data.id);
                         if (vpsRichData && !vpsRichData.error) {
-                            // Mescla dando preferência à VPS (dados vitais), mas protegendo os nomes de `category` e `brand` do Supabase
-                            // Também protege `sku`, `images` e `video_url`: a VPS pode ter esses campos como null se não sincronizou ainda
+                            // Mescla dando preferência à VPS (dados vitais), mas protegendo campos do Supabase
+                            // que podem vir como null da VPS quando não sincronizados ainda.
                             data = {
                                 ...data,
                                 ...vpsRichData,
@@ -152,12 +152,17 @@ export const PublicProductPage: React.FC = () => {
                                 sku: vpsRichData.sku || data.sku,
                                 images: vpsRichData.images || data.images,
                                 video_url: vpsRichData.video_url || data.video_url,
+                                // model_id: protege para não perder o vínculo com o modelo (que contém brand, specs etc.)
+                                model_id: vpsRichData.model_id || data.model_id,
                             };
                         }
                     } catch (e) {
                         console.warn('[PublicProductPage] Failed to enrich from VPS by ID:', e);
                     }
                 }
+
+                // NOTA: O endpoint /products?sku= da VPS não filtra exatamente por SKU,
+                // por isso o fallback por SKU foi removido para evitar mostrar dados do produto errado.
 
                 if (!data || error) {
                     console.error('Produto não encontrado:', error);
