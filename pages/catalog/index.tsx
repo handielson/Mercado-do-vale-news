@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { X } from 'lucide-react';
 import {
     BannerCarousel,
@@ -228,8 +228,20 @@ function CatalogContent() {
                 </div>
             </div>
 
-            {/* Check-in Widget (Flutuante/Minimalista) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex justify-end relative z-10">
+            {/* Check-in Widget + Promoções — na mesma linha */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-end gap-3 relative z-10 flex-wrap">
+                <Link
+                    to="/promocoes"
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95 shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
+                    title="Ver Promoções e Vantagens"
+                >
+                    <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                    </span>
+                    <span>🔥 Promoções</span>
+                </Link>
                 <CheckinWidget />
             </div>
 
