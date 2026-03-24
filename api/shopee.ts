@@ -4,8 +4,16 @@ import crypto from 'crypto';
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!;
 const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
 
-const SHOPEE_API_URL = 'https://partner.shopeemobile.com';
+const SHOPEE_API_LIVE_URL = 'https://partner.shopeemobile.com';
+const SHOPEE_API_SANDBOX_URL = 'https://partner.test-stable.shopeemobile.com';
 
+function getShopeeBaseUrl(partnerId: string) {
+    // Partner IDs known to be Test/Sandbox
+    if (partnerId === '1229870' || process.env.SHOPEE_ENV === 'sandbox') {
+        return SHOPEE_API_SANDBOX_URL;
+    }
+    return SHOPEE_API_LIVE_URL;
+}
 function generateSign(partnerId: string, partnerKey: string, apiPath: string, timestamp: number) {
     const baseString = `${partnerId}${apiPath}${timestamp}`;
     return crypto.createHmac('sha256', partnerKey).update(baseString).digest('hex');
@@ -40,7 +48,8 @@ export default async function handler(req: any, res: any) {
         const sign = generateSign(partnerId, partnerKey, apiPath, timestamp);
         const redirectUrl = `${origin}/api/shopee?action=callback`;
 
-        const authUrl = `${SHOPEE_API_URL}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}&redirect=${encodeURIComponent(redirectUrl)}`;
+        const shopeeApiUrl = getShopeeBaseUrl(partnerId);
+        const authUrl = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}&redirect=${encodeURIComponent(redirectUrl)}`;
         
         return res.status(200).json({ url: authUrl });
     }
@@ -74,7 +83,8 @@ export default async function handler(req: any, res: any) {
             const timestamp = Math.floor(Date.now() / 1000);
             const sign = generateSign(partnerId.toString(), partnerKey, apiPath, timestamp);
 
-            const tokenUrl = `${SHOPEE_API_URL}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}`;
+            const shopeeApiUrl = getShopeeBaseUrl(partnerId.toString());
+            const tokenUrl = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}`;
             
             const payload = {
                 code: code,
