@@ -222,6 +222,9 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                     <BasicInfoSection
                         name={name}
                         onChange={setName}
+                        parentId={parentId}
+                        onParentIdChange={setParentId}
+                        availableParents={availableParents}
                         warrantyDays={warrantyDays}
                         onWarrantyDaysChange={setWarrantyDays}
                         isEditing={!!categoryId}
