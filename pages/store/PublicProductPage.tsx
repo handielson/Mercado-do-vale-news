@@ -147,7 +147,8 @@ export const PublicProductPage: React.FC = () => {
                                 ...data,
                                 ...vpsRichData,
                                 category: data.category,
-                                brand: data.brand,
+                                // Prefere brand do Supabase (JOIN object {name}), mas usa da VPS como fallback (string)
+                                brand: data.brand || vpsRichData.brand,
                                 sku: vpsRichData.sku || data.sku,
                                 images: vpsRichData.images || data.images,
                                 video_url: vpsRichData.video_url || data.video_url,
