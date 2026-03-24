@@ -10,14 +10,18 @@ import type { CatalogProduct } from '@/types/catalog';
 import { groupProductsByVariants } from '@/services/productGrouping';
 import { colorService } from '@/services/colors';
 
+// Mapa seguro para Tailwind JIT
+const SECTION_MOBILE_GRID: Record<number, string> = { 2: 'grid-cols-2', 4: 'grid-cols-4' };
+
 interface CatalogSectionProps {
     section: CatalogSection;
     onFavorite?: (productId: string) => void;
     onShare?: (product: CatalogProduct) => void;
     favorites?: Set<string>;
+    mobileColumns?: 2 | 4;
 }
 
-export function CatalogSectionComponent({ section, onFavorite, onShare, favorites = new Set() }: CatalogSectionProps) {
+export function CatalogSectionComponent({ section, onFavorite, onShare, favorites = new Set(), mobileColumns = 2 }: CatalogSectionProps) {
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [colorHexMap, setColorHexMap] = useState<Record<string, string>>({});
@@ -129,7 +133,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
 
             {/* Grid/Carousel/Lista de Produtos */}
             {section.layout_style === 'grid' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className={`grid gap-2 sm:gap-4 md:gap-6 ${SECTION_MOBILE_GRID[mobileColumns] ?? 'grid-cols-2'} md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`}>
                     {displayItems.map((item) => (
                         <ModernProductCard
                             key={item.key}

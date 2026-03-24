@@ -430,6 +430,7 @@ function CatalogContent() {
                                 onFavorite={toggleFavorite}
                                 onShare={handleShare}
                                 favorites={favorites}
+                                mobileColumns={mobileColumns}
                             />
                         ))}
                     </div>
