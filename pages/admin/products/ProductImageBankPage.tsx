@@ -1059,92 +1059,223 @@ export function ProductImageBankPage() {
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-100">
-                        {skuList.map(sku => (
-                            <div
-                                key={sku}
-                                className={`p-4 transition-colors ${selectedSkus.has(sku) ? 'bg-green-50' : ''}`}
-                            >
-                                <div className="flex items-center gap-2 mb-3">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedSkus.has(sku)}
-                                        onChange={() => toggleSkuSelection(sku)}
-                                        className="w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500 cursor-pointer"
-                                        title="Selecionar para sincronizar"
-                                    />
-                                    <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                                        SKU: {sku}
-                                    </span>
-                                    {(() => {
-                                        const prod = dbSkus.find(s => s.sku === sku);
-                                        return prod ? (
-                                            <span className="text-xs text-slate-600 truncate max-w-xs">
-                                                {prod.name}
-                                                {prod.color && (
-                                                    <span className="ml-1.5 text-slate-400 font-medium">· {prod.color}</span>
-                                                )}
-                                            </span>
-                                        ) : null;
-                                    })()}
-                                    <span className="text-xs text-slate-400 shrink-0">
-                                        {grouped[sku].length} imagem{grouped[sku].length !== 1 ? 'ns' : ''}
-                                        {' — '}
-                                        {[...new Set(grouped[sku].map(i => i.color))].filter(Boolean).join(', ')}
-                                    </span>
-                                </div>
-                                <div className="flex flex-wrap gap-3">
-                                    {grouped[sku].map((img, imgIdx) => {
-                                        const isDraggingThis = draggedBankImg?.sku === sku && draggedBankImg?.fromIdx === imgIdx;
-                                        return (
-                                            <div
-                                                key={img.path}
-                                                draggable
-                                                onDragStart={() => handleBankDragStart(sku, imgIdx)}
-                                                onDragOver={(e) => handleBankDragOver(e, sku, imgIdx)}
-                                                onDragEnd={handleBankDragEnd}
-                                                className={`group relative w-24 h-24 rounded-lg overflow-hidden border-2 bg-slate-50 cursor-grab active:cursor-grabbing transition-all ${
-                                                    isDraggingThis
-                                                        ? 'border-blue-400 opacity-40 scale-95'
-                                                        : imgIdx === 0
-                                                            ? 'border-blue-400'
-                                                            : 'border-slate-200 hover:border-blue-300'
-                                                }`}
-                                                onClick={() => setPreviewFile({ name: img.filename, url: img.url })}
-                                            >
-                                                {/* Grip icon */}
-                                                <div className="absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <GripVertical size={14} className="text-white drop-shadow" />
-                                                </div>
-                                                {/* Badge Principal */}
-                                                {imgIdx === 0 && (
-                                                    <div className="absolute top-1 right-1 z-10 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.5 rounded shadow">
-                                                        CAPA
+                        {skuList.map(sku => {
+                            const isAddingToSku = uploadingForSku === sku;
+                            return (
+                                <div
+                                    key={sku}
+                                    className={`p-4 transition-colors ${selectedSkus.has(sku) ? 'bg-green-50' : ''}`}
+                                >
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedSkus.has(sku)}
+                                            onChange={() => toggleSkuSelection(sku)}
+                                            className="w-4 h-4 text-green-600 rounded border-slate-300 focus:ring-green-500 cursor-pointer"
+                                            title="Selecionar para sincronizar"
+                                        />
+                                        <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                                            SKU: {sku}
+                                        </span>
+                                        {(() => {
+                                            const prod = dbSkus.find(s => s.sku === sku);
+                                            return prod ? (
+                                                <span className="text-xs text-slate-600 truncate max-w-xs">
+                                                    {prod.name}
+                                                    {prod.color && (
+                                                        <span className="ml-1.5 text-slate-400 font-medium">· {prod.color}</span>
+                                                    )}
+                                                </span>
+                                            ) : null;
+                                        })()}
+                                        <span className="text-xs text-slate-400 shrink-0">
+                                            {grouped[sku].length} imagem{grouped[sku].length !== 1 ? 'ns' : ''}
+                                            {' — '}
+                                            {[...new Set(grouped[sku].map(i => i.color))].filter(Boolean).join(', ')}
+                                        </span>
+                                        {/* Botão Adicionar foto */}
+                                        <button
+                                            onClick={() => {
+                                                if (isAddingToSku) {
+                                                    skuUploadQueue.forEach(i => URL.revokeObjectURL(i.preview));
+                                                    setSkuUploadQueue([]);
+                                                    setUploadingForSku(null);
+                                                } else {
+                                                    setSkuUploadQueue([]);
+                                                    setUploadingForSku(sku);
+                                                }
+                                            }}
+                                            className={`ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shrink-0 ${
+                                                isAddingToSku
+                                                    ? 'bg-slate-100 border-slate-300 text-slate-600'
+                                                    : 'bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100'
+                                            }`}
+                                        >
+                                            {isAddingToSku ? <X size={13} /> : <ImagePlus size={13} />}
+                                            {isAddingToSku ? 'Cancelar' : 'Adicionar foto'}
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-3">
+                                        {grouped[sku].map((img, imgIdx) => {
+                                            const isDraggingThis = draggedBankImg?.sku === sku && draggedBankImg?.fromIdx === imgIdx;
+                                            return (
+                                                <div
+                                                    key={img.path}
+                                                    draggable
+                                                    onDragStart={() => handleBankDragStart(sku, imgIdx)}
+                                                    onDragOver={(e) => handleBankDragOver(e, sku, imgIdx)}
+                                                    onDragEnd={handleBankDragEnd}
+                                                    className={`group relative w-24 h-24 rounded-lg overflow-hidden border-2 bg-slate-50 cursor-grab active:cursor-grabbing transition-all ${
+                                                        isDraggingThis
+                                                            ? 'border-blue-400 opacity-40 scale-95'
+                                                            : imgIdx === 0
+                                                                ? 'border-blue-400'
+                                                                : 'border-slate-200 hover:border-blue-300'
+                                                    }`}
+                                                    onClick={() => setPreviewFile({ name: img.filename, url: img.url })}
+                                                >
+                                                    {/* Grip icon */}
+                                                    <div className="absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <GripVertical size={14} className="text-white drop-shadow" />
                                                     </div>
-                                                )}
-                                                <img
-                                                    src={img.url}
-                                                    alt={img.filename}
-                                                    className="w-full h-full object-cover"
+                                                    {/* Badge Principal */}
+                                                    {imgIdx === 0 && (
+                                                        <div className="absolute top-1 right-1 z-10 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.5 rounded shadow">
+                                                            CAPA
+                                                        </div>
+                                                    )}
+                                                    <img
+                                                        src={img.url}
+                                                        alt={img.filename}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleDelete(img); }}
+                                                            className="p-1.5 bg-red-500 text-white rounded-full"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    </div>
+                                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5">
+                                                        <p className="text-[9px] text-white truncate text-center">
+                                                            #{imgIdx + 1} {img.color && img.color !== '' ? img.color : ''}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Mini-uploader inline para adicionar mais fotos */}
+                                    {isAddingToSku && (
+                                        <div className="mt-3">
+                                            <div
+                                                onClick={() => skuFileInputRef.current?.click()}
+                                                onDragOver={e => e.preventDefault()}
+                                                onDrop={e => {
+                                                    e.preventDefault();
+                                                    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                                                    const items = files.map(file => ({ id: Math.random().toString(36).slice(7), file, preview: URL.createObjectURL(file) }));
+                                                    setSkuUploadQueue(prev => [...prev, ...items]);
+                                                }}
+                                                className="border-2 border-dashed border-blue-300 rounded-lg p-4 text-center cursor-pointer hover:bg-blue-50 transition-colors"
+                                            >
+                                                <FileImage size={20} className="mx-auto mb-1 text-blue-400" />
+                                                <p className="text-xs text-slate-500">Clique ou arraste as fotos aqui</p>
+                                                <input
+                                                    ref={skuFileInputRef}
+                                                    type="file"
+                                                    accept="image/*"
+                                                    multiple
+                                                    className="hidden"
+                                                    onChange={e => {
+                                                        const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
+                                                        const items = files.map(file => ({ id: Math.random().toString(36).slice(7), file, preview: URL.createObjectURL(file) }));
+                                                        setSkuUploadQueue(prev => [...prev, ...items]);
+                                                        e.target.value = '';
+                                                    }}
                                                 />
-                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(img); }}
-                                                        className="p-1.5 bg-red-500 text-white rounded-full"
-                                                    >
-                                                        <Trash2 size={12} />
-                                                    </button>
-                                                </div>
-                                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5">
-                                                    <p className="text-[9px] text-white truncate text-center">
-                                                        #{imgIdx + 1} {img.color && img.color !== '' ? img.color : ''}
-                                                    </p>
-                                                </div>
                                             </div>
-                                        );
-                                    })}
+
+                                            {skuUploadQueue.length > 0 && (
+                                                <div className="mt-2">
+                                                    <p className="text-[10px] text-slate-400 mb-1.5 flex items-center gap-1">
+                                                        <GripVertical size={10} />
+                                                        Arraste para ordenar — a 1ª será adicionada após as existentes
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {skuUploadQueue.map((item, idx) => {
+                                                            const isDragged = draggedSkuItemIndex === idx;
+                                                            return (
+                                                                <div
+                                                                    key={item.id}
+                                                                    draggable
+                                                                    onDragStart={() => setDraggedSkuItemIndex(idx)}
+                                                                    onDragOver={e => {
+                                                                        e.preventDefault();
+                                                                        if (draggedSkuItemIndex === null || draggedSkuItemIndex === idx) return;
+                                                                        setSkuUploadQueue(prev => {
+                                                                            const next = [...prev];
+                                                                            const dragged = next[draggedSkuItemIndex];
+                                                                            next.splice(draggedSkuItemIndex, 1);
+                                                                            next.splice(idx, 0, dragged);
+                                                                            setDraggedSkuItemIndex(idx);
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    onDragEnd={() => setDraggedSkuItemIndex(null)}
+                                                                    className={`relative group w-14 h-14 rounded-lg overflow-hidden border-2 bg-slate-50 cursor-grab active:cursor-grabbing transition-all ${
+                                                                        isDragged
+                                                                            ? 'border-blue-400 opacity-40 scale-95'
+                                                                            : 'border-slate-200 hover:border-blue-300'
+                                                                    }`}
+                                                                >
+                                                                    <img src={item.preview} alt={item.file.name} className="w-full h-full object-cover" />
+                                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100">
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                URL.revokeObjectURL(item.preview);
+                                                                                setSkuUploadQueue(prev => prev.filter(i => i.id !== item.id));
+                                                                            }}
+                                                                            className="p-1 bg-red-500 text-white rounded-full"
+                                                                        >
+                                                                            <X size={10} />
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">+{idx + 1}</div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {skuUploadQueue.length > 0 && (
+                                                skuUploadProgress ? (
+                                                    <div className="mt-2 space-y-1">
+                                                        <div className="flex justify-between text-xs text-slate-500">
+                                                            <span>Enviando...</span>
+                                                            <span>{skuUploadProgress.done}/{skuUploadProgress.total}</span>
+                                                        </div>
+                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${(skuUploadProgress.done / skuUploadProgress.total) * 100}%` }} />
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => handleSkuInlineUpload(sku)}
+                                                        className="mt-2 w-full py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                                    >
+                                                        Enviar {skuUploadQueue.length} foto{skuUploadQueue.length !== 1 ? 's' : ''}
+                                                    </button>
+                                                )
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
