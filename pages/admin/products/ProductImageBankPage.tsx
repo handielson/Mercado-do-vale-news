@@ -301,13 +301,13 @@ export function ProductImageBankPage() {
                 const affectedRows = await vpsApiService.updateProductImagesBySku(sku, newUrls);
                 if (affectedRows > 0) {
                     console.log(`[ImageBank] VPS MySQL OK for ${sku} (${affectedRows} rows)`);
-                    synced++;
                 } else {
-                    // Produto não existe na VPS MySQL → fallback Supabase
-                    console.warn(`[ImageBank] SKU ${sku} not found in VPS MySQL, falling back to Supabase`);
-                    const ok = await syncImagesToSupabase(sku, newUrls);
-                    if (ok) synced++;
+                    console.warn(`[ImageBank] SKU ${sku} not found in VPS MySQL`);
                 }
+                
+                // Sempre sincroniza o Supabase, pois a UI do PublicProductPage consulta dele
+                const ok = await syncImagesToSupabase(sku, newUrls);
+                if (ok || affectedRows > 0) synced++;
             }
 
             if (synced > 0) toast.success('🔄 Produto(s) atualizado(s) automaticamente!');
@@ -350,15 +350,16 @@ export function ProductImageBankPage() {
             if (affectedRows > 0) {
                 console.log(`[ImageBank] VPS inline OK for ${sku}`);
             } else {
-                // Produto não existe na VPS MySQL → fallback Supabase
-                console.warn(`[ImageBank] SKU ${sku} not in VPS, fallback to Supabase`);
-                const { error: sbErr } = await supabase.from('products').update({ images: urls }).eq('sku', sku);
-                if (sbErr) {
-                    console.error(`[ImageBank] Supabase inline sync failed for ${sku}:`, sbErr);
-                    toast.error(`Erro ao salvar imagens no produto: ${sbErr.message}`);
-                } else {
-                    console.log(`[ImageBank] Supabase inline OK for ${sku}:`, urls);
-                }
+                console.warn(`[ImageBank] SKU ${sku} not in VPS`);
+            }
+            
+            // Sempre faz o fallback/sync obrigatório pro Supabase
+            const { error: sbErr } = await supabase.from('products').update({ images: urls }).eq('sku', sku);
+            if (sbErr) {
+                console.error(`[ImageBank] Supabase inline sync failed for ${sku}:`, sbErr);
+                toast.error(`Erro ao salvar imagens no produto: ${sbErr.message}`);
+            } else {
+                console.log(`[ImageBank] Supabase inline OK for ${sku}:`, urls);
             }
         }
         if (result.errors.length > 0) toast.error(`⚠️ ${result.errors.length} erro(s) no upload`);
@@ -433,19 +434,19 @@ export function ProductImageBankPage() {
                 const affectedRows = await vpsApiService.updateProductImagesBySku(matchedSku, urls).catch(() => 0);
                 if (affectedRows > 0) {
                     console.log(`[Sync] VPS MySQL OK for ${matchedSku}`);
-                } else {
-                    // Fallback Supabase quando produto não existe na VPS
-                    const { error: sbSyncErr } = await supabase
-                        .from('products')
-                        .update({ images: urls })
-                        .eq('sku', matchedSku);
-                    if (sbSyncErr) {
-                        console.error(`[Sync] Supabase failed for ${matchedSku}:`, sbSyncErr);
-                        notFound.push(`${matchedSku} (DB error: ${sbSyncErr.message})`);
-                        continue;
-                    }
-                    console.log(`[Sync] Supabase OK for ${matchedSku}`);
                 }
+                
+                // Sempre faz Sync Supabase
+                const { error: sbSyncErr } = await supabase
+                    .from('products')
+                    .update({ images: urls })
+                    .eq('sku', matchedSku);
+                if (sbSyncErr) {
+                    console.error(`[Sync] Supabase failed for ${matchedSku}:`, sbSyncErr);
+                    notFound.push(`${matchedSku} (DB error: ${sbSyncErr.message})`);
+                    continue;
+                }
+                console.log(`[Sync] Supabase OK for ${matchedSku}`);
                 updated++;
             }
 
