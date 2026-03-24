@@ -1083,19 +1083,19 @@ export const PublicProductPage: React.FC = () => {
                             </div>
 
                             {/* Badges de Garantia e Entrega */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <ShieldCheck className="w-8 h-8 text-green-600 shrink-0" />
-                                    <div>
-                                        <h4 className="font-bold text-slate-900 text-sm">Garantia de {(product as any).store_warranty_period || (product as any).brand_warranty_period || 90} dias</h4>
-                                        <p className="text-xs text-slate-500 mt-0.5">Compra 100% segura e garantida pela loja.</p>
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                                    <ShieldCheck className="w-5 h-5 text-green-600 shrink-0" />
+                                    <div className="min-w-0">
+                                        <span className="font-semibold text-slate-900 text-sm">Garantia de {(product as any).store_warranty_period || (product as any).brand_warranty_period || 90} dias</span>
+                                        <span className="text-slate-400 text-xs ml-1.5">· Compra 100% segura</span>
                                     </div>
                                 </div>
-                                <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                    <Truck className="w-8 h-8 text-blue-600 shrink-0" />
-                                    <div>
-                                        <h4 className="font-bold text-slate-900 text-sm">Entregamos</h4>
-                                        <p className="text-xs text-slate-500 mt-0.5">Consulte as taxas pro seu CEP no carrinho.</p>
+                                <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+                                    <Truck className="w-5 h-5 text-blue-600 shrink-0" />
+                                    <div className="min-w-0">
+                                        <span className="font-semibold text-slate-900 text-sm">Entregamos</span>
+                                        <span className="text-slate-400 text-xs ml-1.5">· Calcule o frete pelo CEP acima</span>
                                     </div>
                                 </div>
                             </div>
