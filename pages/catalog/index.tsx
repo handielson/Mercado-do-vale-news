@@ -228,21 +228,24 @@ function CatalogContent() {
                 </div>
             </div>
 
-            {/* Check-in Widget + Promoções — na mesma linha */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-end gap-3 relative z-10 flex-wrap">
+            {/* Check-in Widget + Promoções — mesma linha, responsivo */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-end gap-2 relative z-10 flex-nowrap">
                 <Link
                     to="/promocoes"
-                    className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95 shrink-0"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95 shrink-0 whitespace-nowrap"
                     style={{ background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
                     title="Ver Promoções e Vantagens"
                 >
-                    <span className="relative flex h-2 w-2">
+                    <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                        <span className="relative inline-flex rounded-full h-full w-full bg-white" />
                     </span>
-                    <span>🔥 Promoções</span>
+                    <span className="sm:hidden">🔥 Promo</span>
+                    <span className="hidden sm:inline">🔥 Promoções</span>
                 </Link>
-                <CheckinWidget />
+                <div className="min-w-0 shrink">
+                    <CheckinWidget />
+                </div>
             </div>
 
             {/* Category Navigation - NOVO */}

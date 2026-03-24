@@ -111,13 +111,12 @@ export function CheckinWidget() {
                 onClick={isDone || checking ? undefined : handleClick}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
-                className={`relative flex items-center justify-between gap-3 p-1.5 pl-3 rounded-full transition-all duration-300 border backdrop-blur-md
+                className={`relative flex items-center justify-between gap-2 p-1.5 pl-3 rounded-full transition-all duration-300 border backdrop-blur-md min-w-0
                     ${isDone
                         ? 'bg-green-50/90 border-green-200/60 shadow-sm'
                         : 'bg-white/90 border-slate-200/60 shadow-sm hover:shadow-md hover:border-yellow-300/60 cursor-pointer'
                     }
                 `}
-                style={{ minWidth: '220px' }}
             >
                 {/* Background brilho animado (apenas se nao tiver feito checkin) */}
                 {!isDone && (
@@ -153,19 +152,19 @@ export function CheckinWidget() {
                     </div>
 
                     {/* Texto Central */}
-                    <div className="relative flex flex-col items-start leading-tight">
-                        <span className={`text-[13px] font-bold ${isDone ? 'text-green-800' : 'text-slate-800'}`}>
+                    <div className="relative flex flex-col items-start leading-tight min-w-0">
+                        <span className={`text-[11px] sm:text-[13px] font-bold truncate ${isDone ? 'text-green-800' : 'text-slate-800'}`}>
                             {isDone ? 'Check-in Realizado' : 'Resgatar Moedas'}
                         </span>
-                        <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="flex items-center gap-1 mt-0.5">
                             {isDone ? (
-                                <span className="text-[10px] font-medium text-green-600 flex items-center gap-1">
-                                    <Flame className="w-3 h-3 text-orange-500" />
-                                    {status?.streak} {status?.streak === 1 ? 'dia' : 'dias'} seguidos
+                                <span className="text-[9px] sm:text-[10px] font-medium text-green-600 flex items-center gap-0.5">
+                                    <Flame className="w-2.5 h-2.5 text-orange-500" />
+                                    {status?.streak}d
                                 </span>
                             ) : (
-                                <span className="text-[11px] font-bold text-orange-600">
-                                    +{todayCoins} hoje
+                                <span className="text-[10px] sm:text-[11px] font-bold text-orange-600">
+                                    +{todayCoins}
                                 </span>
                             )}
                         </div>
