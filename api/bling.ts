@@ -391,8 +391,18 @@ export default async function handler(req: any, res: any) {
                     .eq('id', pId)
                     .select('id, sku, price_retail, name');
 
-
                 if (upErr) return res.status(200).json({ ok: false, error: upErr.message });
+
+                // Sync updated fields to VPS MySQL (fire-and-forget)
+                const vpsBase = 'https://api.xiaomipetrolina.com.br';
+                const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || '';
+                if (syncKey && pId) {
+                    fetch(`${vpsBase}/products/${pId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+                        body: JSON.stringify(updateData),
+                    }).catch(e => console.warn('[webhook] VPS sync failed:', e));
+                }
 
                 return res.status(200).json({
                     ok: true,
