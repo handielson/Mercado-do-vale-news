@@ -640,6 +640,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/admin/settings/shopee",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ShopeePage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
     path: "/admin/settings/telegram",
     element: (
       <ProtectedRoute requireAdmin={true}>
