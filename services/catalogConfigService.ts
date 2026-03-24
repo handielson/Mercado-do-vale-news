@@ -178,12 +178,18 @@ class CatalogConfigService {
      * Aplicar regras de visibilidade nas categorias
      */
     async applyCategoryVisibilityRules(
-        categories: Array<{ id: string; name: string; count: number }>,
+        categories: Array<{ id: string; name: string; parent_id?: string | null; count: number }>,
         settings: CatalogSettings
-    ): Promise<Array<{ id: string; name: string; count: number }>> {
+    ): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number }>> {
         // Regra: Ocultar categorias vazias
         if (settings.hide_empty_categories) {
-            categories = categories.filter(cat => cat.count > 0);
+            categories = categories.filter(cat => {
+                if (cat.count > 0) return true;
+                // Mantém a categoria se ela for pai de alguma subcategoria com produtos
+                const hasFilledChild = categories.some(child => child.parent_id === cat.id && child.count > 0);
+                if (hasFilledChild) return true;
+                return false;
+            });
         }
 
         // Regra: Ocultar categorias sem estoque
@@ -191,6 +197,7 @@ class CatalogConfigService {
         if (settings.hide_categories_no_stock) {
             const categoriesWithStock = await Promise.all(
                 categories.map(async (cat) => {
+                    // Verifica estoque da própria categoria
                     const { data } = await supabase
                         .from('products')
                         .select('id')
@@ -198,7 +205,21 @@ class CatalogConfigService {
                         .or('stock_quantity.gt.0,stock_quantity.is.null')
                         .limit(1);
 
-                    return data && data.length > 0 ? cat : null;
+                    if (data && data.length > 0) return cat;
+
+                    // Se não tiver, e se for uma categoria pai, verifica nas subcategorias
+                    const childrenIds = categories.filter(c => c.parent_id === cat.id).map(c => c.id);
+                    if (childrenIds.length > 0) {
+                        const { data: childData } = await supabase
+                            .from('products')
+                            .select('id')
+                            .in('category_id', childrenIds)
+                            .or('stock_quantity.gt.0,stock_quantity.is.null')
+                            .limit(1);
+                        if (childData && childData.length > 0) return cat;
+                    }
+
+                    return null;
                 })
             );
 
