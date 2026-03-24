@@ -120,44 +120,32 @@ export const PublicProductPage: React.FC = () => {
                 let error: any = null;
                 const { vpsApiService } = await import('@/services/vpsApiService');
 
+                // Busca inicial no Supabase (Resolve relações como Nome da Marca e Nome da Categoria)
+                let query = supabase
+                    .from('products')
+                    .select('*, brand:brands(name), category:categories(name, config)')
+                    .eq('status', 'active');
+
                 if (isUuid) {
-                    try {
-                        const vpsData = await vpsApiService.getProductById(slug);
-                        if (vpsData && !vpsData.error) data = vpsData;
-                    } catch (e) {
-                        console.warn('[PublicProductPage] VPS fetch by ID failed:', e);
-                    }
+                    query = query.eq('id', slug);
+                } else {
+                    query = query.ilike('slug', slug); // Ignora Case Sensitive
                 }
 
-                // Se não temos dados (porque era slug, ou porque o ID falhou na VPS)
-                if (!data) {
-                    // Busca rápida no Supabase (Resolve o Slug -> ID e dá um fallback completo)
-                    let query = supabase
-                        .from('products')
-                        .select('*, brand:brands(name), category:categories(name, config)')
-                        .eq('status', 'active');
+                const supaResult = await query.maybeSingle();
+                data = supaResult.data;
+                error = supaResult.error;
 
-                    if (isUuid) {
-                        query = query.eq('id', slug);
-                    } else {
-                        query = query.ilike('slug', slug); // Ignora Case Sensitive
-                    }
-
-                    const supaResult = await query.maybeSingle();
-                    data = supaResult.data;
-                    error = supaResult.error;
-
-                    // Agora que temos o ID real do Supabase, buscamos os dados (e imagens!) mais frescos da VPS
-                    if (data && data.id) {
-                        try {
-                            const vpsRichData = await vpsApiService.getProductById(data.id);
-                            if (vpsRichData && !vpsRichData.error) {
-                                // Mescla dando preferência à VPS, mas salvando `category` e `brand` do Supabase
-                                data = { ...data, ...vpsRichData, category: data.category, brand: data.brand };
-                            }
-                        } catch (e) {
-                            console.warn('[PublicProductPage] Failed to enrich from VPS by ID:', e);
+                // Após termos os dados base relacionais, buscamos estoques e preços AO VIVO da VPS
+                if (data && data.id) {
+                    try {
+                        const vpsRichData = await vpsApiService.getProductById(data.id);
+                        if (vpsRichData && !vpsRichData.error) {
+                            // Mescla dando preferência à VPS (dados vitais), mas protegendo os nomes de `category` e `brand` do Supabase
+                            data = { ...data, ...vpsRichData, category: data.category, brand: data.brand };
                         }
+                    } catch (e) {
+                        console.warn('[PublicProductPage] Failed to enrich from VPS by ID:', e);
                     }
                 }
 
