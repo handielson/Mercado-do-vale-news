@@ -803,7 +803,7 @@ export const PublicProductPage: React.FC = () => {
                                 <span className="text-slate-300">|</span>
                                 <span>
                                     Marca:{' '}
-                                    <span className="font-semibold text-slate-800">
+                                    <span>
                                         {typeof product.brand === 'string' && product.brand ? product.brand : '—'}
                                     </span>
                                 </span>
