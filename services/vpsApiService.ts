@@ -43,7 +43,7 @@ class VpsApiService {
       const res = await fetch(`${VPS_BASE_URL}${path}`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
-        cache: noCache ? 'no-store' : 'default',
+        cache: 'no-store', // Sempre ignora cache nativo HTTP para usar o nosso in-memory this.cache
       });
       clearTimeout(timer);
       if (!res.ok) return null;

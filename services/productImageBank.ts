@@ -156,7 +156,7 @@ export async function uploadImagesToBank(
 /** Lista todas as imagens do banco (VPS filesystem) */
 export async function listAllBankImages(): Promise<ImageBankEntry[]> {
     try {
-        const res = await fetch(`${VPS_BASE}/images/list?prefix=products`);
+        const res = await fetch(`${VPS_BASE}/images/list?prefix=products`, { cache: 'no-store' });
         if (!res.ok) return [];
         const files: { path: string; url: string; filename: string }[] = await res.json();
         return files.map(f => {
@@ -173,7 +173,7 @@ export async function listAllBankImages(): Promise<ImageBankEntry[]> {
 /** Lista imagens de um SKU específico (VPS filesystem) */
 export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
     try {
-        const res = await fetch(`${VPS_BASE}/images/list?prefix=products/${sku.toUpperCase()}`);
+        const res = await fetch(`${VPS_BASE}/images/list?prefix=products/${sku.toUpperCase()}`, { cache: 'no-store' });
         if (!res.ok) return [];
         const files: { path: string; url: string; filename: string }[] = await res.json();
         return files.map(f => {
