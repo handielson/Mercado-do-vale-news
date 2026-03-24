@@ -101,8 +101,8 @@ export function ProductGroupGrid({
 
     return (
         <div>
-            {/* Grid de produtos */}
-            <div className={gridClasses}>
+            {/* Grid / Lista de produtos */}
+            <div className={variant === 'list' ? 'space-y-2' : gridClasses}>
                 {groups.map((group) => (
                     <ModernProductCard
                         key={group.groupKey}
@@ -111,6 +111,7 @@ export function ProductGroupGrid({
                         onFavorite={onFavorite}
                         onShare={onShare ? () => onShare(group.representativeProduct) : undefined}
                         isFavorite={favorites.has(group.representativeProduct.id)}
+                        listMode={variant === 'list'}
                     />
                 ))}
 

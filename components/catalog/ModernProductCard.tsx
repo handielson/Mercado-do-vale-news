@@ -31,12 +31,13 @@ const isDarkColor = (colorHex: string) => {
 
 interface ModernProductCardProps {
     product: CatalogProduct;
-    productGroup?: ProductGroup; // Optional: grouped products by variant
-    relatedProducts?: CatalogProduct[]; // Products with same model_id
+    productGroup?: ProductGroup;
+    relatedProducts?: CatalogProduct[];
     onFavorite?: (productId: string) => void;
     onShare?: (product: CatalogProduct) => void;
     isFavorite?: boolean;
-    onCompareToast?: (msg: string) => void; // callback for error toasts
+    onCompareToast?: (msg: string) => void;
+    listMode?: boolean; // layout horizontal compacto
 }
 
 export function ModernProductCard({
@@ -47,6 +48,7 @@ export function ModernProductCard({
     onShare,
     isFavorite = false,
     onCompareToast,
+    listMode = false,
 }: ModernProductCardProps) {
     const [imageError, setImageError] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
@@ -364,6 +366,45 @@ export function ModernProductCard({
 
     return (
         <>
+            {/* ---- MODO LISTA: card horizontal compacto ---- */}
+            {listMode && (
+                <div
+                    className="flex items-center gap-3 bg-white border border-slate-100 rounded-xl shadow-sm px-3 py-2.5 hover:shadow-md transition-all cursor-pointer"
+                    onClick={handleTitleClick}
+                >
+                    {/* Imagem */}
+                    <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-slate-100">
+                        <img
+                            src={currentImage}
+                            alt={productForDisplay.name}
+                            onError={() => setImageError(true)}
+                            className="w-full h-full object-contain"
+                        />
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-semibold text-slate-900 line-clamp-2 leading-tight">
+                            {toTitleCase(productForDisplay.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim())}
+                        </p>
+                        {productForDisplay.brand && (
+                            <p className="text-[10px] text-slate-400 mt-0.5">{productForDisplay.brand}</p>
+                        )}
+                        <p className="text-xs font-bold text-slate-800 mt-1">
+                            {formatPrice(getEffectivePrice(productForDisplay, customer))}
+                        </p>
+                    </div>
+                    {/* Botão */}
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleAddToCart(e); }}
+                        className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-900 text-white hover:bg-slate-700 active:scale-95 transition-all"
+                    >
+                        {addedToCart ? '✓' : isAdmin ? 'Orçar' : 'Comprar'}
+                    </button>
+                </div>
+            )}
+
+            {/* ---- MODO GRADE: card vertical completo ---- */}
+            {!listMode && (
             <div
                 className="group bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col h-full"
                 onMouseEnter={() => setIsHovered(true)}
@@ -776,6 +817,7 @@ export function ModernProductCard({
                     </div>
                 </div>
             </div>
+            )} {/* fim !listMode */}
 
             {/* Modals */}
             {variants && (

@@ -133,7 +133,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
 
             {/* Grid/Carousel/Lista de Produtos */}
             {section.layout_style === 'grid' && mobileView === 'list' && (
-                <div className="space-y-3">
+                <div className="space-y-2">
                     {displayItems.map((item) => (
                         <ModernProductCard
                             key={item.key}
@@ -142,6 +142,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                             onFavorite={onFavorite}
                             onShare={onShare ? () => onShare(item.product) : undefined}
                             isFavorite={favorites.has(item.product.id)}
+                            listMode
                         />
                     ))}
                 </div>
