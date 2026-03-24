@@ -84,25 +84,15 @@ export function ProductImageBankPage() {
     const [dbSkus, setDbSkus] = useState<{ sku: string; name: string; color?: string; updated?: string }[]>([]);
     const [dbColors, setDbColors] = useState<string[]>([]);
 
-    // Gerador de nomes
     const [genSku, setGenSku] = useState('');
-    const [genColor, setGenColor] = useState('');
-    const [genQty, setGenQty] = useState(1);
-    const [genStart, setGenStart] = useState(1);
-    const [genExt, setGenExt] = useState('jpg');
     const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
     const [showSkuDrop, setShowSkuDrop] = useState(false);
-    const [showColorDrop, setShowColorDrop] = useState(false);
     const skuInputRef = useRef<HTMLDivElement>(null);
-    const colorInputRef = useRef<HTMLDivElement>(null);
 
     // Filtragem para dropdown
     const filteredSkus = genSku.length >= 1
         ? dbSkus.filter(s => s.sku.toLowerCase().includes(genSku.toLowerCase()) || s.name.toLowerCase().includes(genSku.toLowerCase())).slice(0, 8)
         : dbSkus.slice(0, 8);
-    const filteredColors = genColor.length >= 1
-        ? dbColors.filter(c => c.toLowerCase().includes(genColor.toLowerCase())).slice(0, 8)
-        : dbColors.slice(0, 8);
 
     // Carrega SKUs e cores do banco
     useEffect(() => {
@@ -128,7 +118,6 @@ export function ProductImageBankPage() {
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (skuInputRef.current && !skuInputRef.current.contains(e.target as Node)) setShowSkuDrop(false);
-            if (colorInputRef.current && !colorInputRef.current.contains(e.target as Node)) setShowColorDrop(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
@@ -148,16 +137,9 @@ export function ProductImageBankPage() {
     const generatedNames = (() => {
         if (!genSku.trim()) return [];
         const skuUp = genSku.trim().toUpperCase();
-        return Array.from({ length: genQty }, (_, i) => {
-            const num = String(genStart + i).padStart(2, '0');
-            if (genColor.trim()) {
-                // Com cor: {SKU}_{cor}_{num}.ext  (formato legado SEO)
-                const colorSlug = toSlug(genColor.trim());
-                const nameSlug = selectedProductName ? toSlug(selectedProductName) : toSlug(genSku.trim());
-                return `${nameSlug}_${colorSlug}_${num}.${genExt}`;
-            }
-            // Sem cor: {SKU}_{num}.ext  (novo padrão recomendado)
-            return `${skuUp}_${num}.${genExt}`;
+        return Array.from({ length: 5 }, (_, i) => {
+            const num = String(1 + i).padStart(2, '0');
+            return `${skuUp}_${num}.jpg`;
         });
     })();
 
@@ -541,19 +523,16 @@ export function ProductImageBankPage() {
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
                 <Info size={18} className="text-blue-600 mt-0.5 shrink-0" />
                 <div className="text-sm text-blue-800">
-                    <p className="font-semibold mb-1">📋 Como fazer upload de imagens por SKU:</p>
+                    <p className="font-semibold mb-1">📋 Como nomear os arquivos para envio rápido em massa:</p>
                     <p className="mt-1 text-blue-700">
-                        <strong>Modo rápido (envio em massa):</strong> renomeie as fotos no padrão{' '}
-                        <code className="font-mono text-xs bg-blue-100 px-1 rounded">SKU_01.jpg</code>,{' '}
-                        <code className="font-mono text-xs bg-blue-100 px-1 rounded">SKU_02.jpg</code>...
-                        e arraste tudo de uma vez — sem precisar selecionar SKU na tela.
+                        Se o seu produto for o SKU <strong>12345</strong>, nomeie a imagem de capa como <code className="font-mono text-xs bg-blue-100 px-1 rounded">12345_01.jpg</code>, 
+                        e as secundárias como <code className="font-mono text-xs bg-blue-100 px-1 rounded">12345_02.jpg</code>, <code className="font-mono text-xs bg-blue-100 px-1 rounded">12345_03.jpg</code> e assim por diante.
                     </p>
                     <p className="mt-1 text-blue-700">
-                        Exemplo: <code className="font-mono text-xs bg-blue-100 px-1 rounded">XRN14-T025_01.jpg</code>{' '}
-                        → salvo como <code className="font-mono text-xs bg-blue-100 px-1 rounded">products/XRN14-T025/XRN14-T025_01.webp</code>
+                        Arraste todos os arquivos nomeados para a área de envio abaixo para upload em lote em vários SKUs diferentes de uma só vez, e clique em "Sincronizar Todos".
                     </p>
                     <p className="mt-1 text-blue-600 text-xs">
-                        💡 Use o <strong>Gerador de Nomes</strong> abaixo para gerar os nomes corretos e copiá-los. O sistema converte automaticamente para WebP (máx 300KB/1000px).
+                        💡 Use o <strong>Gerador de Nomes</strong> abaixo para gerar os nomes padronizados e copiar clicando em "Copiar todos".
                     </p>
                 </div>
             </div>
@@ -566,9 +545,9 @@ export function ProductImageBankPage() {
                     <span className="text-xs font-normal text-slate-400 ml-1">— gere e copie os nomes corretos para renomear suas fotos</span>
                 </h2>
 
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                <div className="mb-4">
                     {/* SKU — combobox dinâmico */}
-                    <div className="md:col-span-2 space-y-1" ref={skuInputRef}>
+                    <div className="space-y-1" ref={skuInputRef}>
                         <label className="text-xs font-medium text-slate-600">SKU do Produto</label>
                         <div className="relative">
                             <input
@@ -587,7 +566,6 @@ export function ProductImageBankPage() {
                                             className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-amber-50"
                                             onMouseDown={() => {
                                                 setGenSku(s.sku);
-                                                if (s.color) setGenColor(s.color);
                                                 setShowSkuDrop(false);
                                             }}
                                         >
@@ -600,70 +578,6 @@ export function ProductImageBankPage() {
                                     ))}
                                 </ul>
                             )}
-                        </div>
-                    </div>
-
-                    {/* Cor — combobox dinâmico */}
-                    <div className="space-y-1" ref={colorInputRef}>
-                        <label className="text-xs font-medium text-slate-600">Cor</label>
-                        <div className="relative">
-                            <input
-                                type="text"
-                                value={genColor}
-                                onChange={e => { setGenColor(e.target.value); setShowColorDrop(true); }}
-                                onFocus={() => setShowColorDrop(true)}
-                                placeholder="Digite ou selecione..."
-                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-400 outline-none"
-                            />
-                            {showColorDrop && filteredColors.length > 0 && (
-                                <ul className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-auto">
-                                    {filteredColors.map(c => (
-                                        <li
-                                            key={c}
-                                            className="px-3 py-2 text-sm font-mono cursor-pointer hover:bg-amber-50 text-slate-700"
-                                            onMouseDown={() => { setGenColor(c); setShowColorDrop(false); }}
-                                        >{c}</li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Extensão */}
-                    <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Extensão</label>
-                        <select
-                            value={genExt}
-                            onChange={e => setGenExt(e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400 outline-none"
-                        >
-                            <option value="jpg">jpg</option>
-                            <option value="jpeg">jpeg</option>
-                            <option value="png">png</option>
-                            <option value="webp">webp</option>
-                        </select>
-                    </div>
-
-                    {/* Qtd + início */}
-                    <div className="space-y-1">
-                        <label className="text-xs font-medium text-slate-600">Fotos / Início</label>
-                        <div className="flex gap-1">
-                            <input
-                                type="number"
-                                min={1} max={20}
-                                value={genQty}
-                                onChange={e => setGenQty(Math.max(1, Number(e.target.value)))}
-                                className="w-1/2 border border-slate-300 rounded-lg px-2 py-2 text-sm text-center focus:ring-2 focus:ring-amber-400 outline-none"
-                                title="Quantidade de fotos"
-                            />
-                            <input
-                                type="number"
-                                min={1} max={99}
-                                value={genStart}
-                                onChange={e => setGenStart(Math.max(1, Number(e.target.value)))}
-                                className="w-1/2 border border-slate-300 rounded-lg px-2 py-2 text-sm text-center focus:ring-2 focus:ring-amber-400 outline-none"
-                                title="Número inicial"
-                            />
                         </div>
                     </div>
                 </div>
@@ -715,7 +629,7 @@ export function ProductImageBankPage() {
 
                 {!genSku.trim() && (
                     <p className="text-xs text-slate-400 text-center py-2">
-                        Preencha o SKU e a Cor acima para gerar os nomes
+                        Preencha o SKU acima para gerar os nomes
                     </p>
                 )}
             </div>
@@ -733,9 +647,8 @@ export function ProductImageBankPage() {
                         <CheckCircle2 size={16} className="text-green-600 shrink-0" />
                         <div className="flex-1 text-sm text-green-800">
                             <span className="font-semibold">SKU:</span> {genSku.toUpperCase()}
-                            {genColor && <><span className="mx-2 text-green-400">·</span><span className="font-semibold">Cor:</span> {genColor.toUpperCase()}</>}
                             <span className="mx-2 text-green-400">·</span>
-                            <span className="text-green-600 text-xs">Arraste as imagens — o sistema gera os nomes SEO e sincroniza automaticamente</span>
+                            <span className="text-green-600 text-xs">Arraste as imagens — o sistema gera os nomes padronizados e sincroniza.</span>
                         </div>
                     </div>
                 ) : (
