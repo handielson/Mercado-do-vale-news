@@ -14,6 +14,7 @@ export default function CategorySettingsPage() {
     // States for Drag & Drop
     const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
     const [hoveredCategoryId, setHoveredCategoryId] = useState<string | null>(null);
+    const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
 
     useEffect(() => {
         loadCategories();
@@ -23,6 +24,13 @@ export default function CategorySettingsPage() {
         try {
             setIsLoading(true);
             const data = await categoryService.list();
+            // Garante ordenação primária por sort_order, fallback para nome
+            data.sort((a, b) => {
+                const orderA = a.sort_order ?? 9999;
+                const orderB = b.sort_order ?? 9999;
+                if (orderA !== orderB) return orderA - orderB;
+                return a.name.localeCompare(b.name);
+            });
             setCategories(data);
         } catch (error) {
             console.error('Error loading categories:', error);
@@ -62,69 +70,141 @@ export default function CategorySettingsPage() {
     };
 
     const onDragOver = (e: React.DragEvent, id: string | null) => {
-        e.preventDefault(); // Necessary to allow dropping
+        e.preventDefault(); // Necessário para permitir o drop
         e.dataTransfer.dropEffect = 'move';
-        if (hoveredCategoryId !== id) {
+        
+        if (id === null) {
+            if (hoveredCategoryId !== null) setHoveredCategoryId(null);
+            if (dropPosition !== 'inside') setDropPosition('inside');
+            return;
+        }
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const threshold = rect.height * 0.25;
+
+        let newPosition: 'before' | 'after' | 'inside' = 'inside';
+        if (y < threshold) {
+            newPosition = 'before';
+        } else if (y > rect.height - threshold) {
+            newPosition = 'after';
+        }
+
+        if (hoveredCategoryId !== id || dropPosition !== newPosition) {
             setHoveredCategoryId(id);
+            setDropPosition(newPosition);
         }
     };
 
     const onDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
         setHoveredCategoryId(null);
+        setDropPosition(null);
     };
 
-    const handleDrop = async (e: React.DragEvent, targetParentId: string | null) => {
+    const handleDrop = async (e: React.DragEvent, targetId: string | null) => {
         e.preventDefault();
-        setHoveredCategoryId(null);
+        
+        const currentDraggedId = draggedCategoryId;
+        const currentTargetId = targetId;
+        const currentPosition = dropPosition;
 
-        if (!draggedCategoryId || draggedCategoryId === targetParentId) {
-            setDraggedCategoryId(null);
+        setHoveredCategoryId(null);
+        setDropPosition(null);
+        setDraggedCategoryId(null);
+
+        if (!currentDraggedId || currentDraggedId === currentTargetId) {
             return;
         }
 
         try {
             setIsLoading(true);
-            const draggedCategory = categories.find(c => c.id === draggedCategoryId);
+            const draggedCategory = categories.find(c => c.id === currentDraggedId);
+            const targetCategory = currentTargetId ? categories.find(c => c.id === currentTargetId) : null;
+            
             if (!draggedCategory) return;
 
-            // Se o parent já for o que estamos enviando, ignora.
-            if (draggedCategory.parent_id === targetParentId) {
-                return;
-            }
-
-            toast.loading('Movendo categoria...', { id: 'move-cat' });
-
-            // Prevention of Loop: Se target é filho de dragged
-            if (targetParentId !== null) {
-                let current = categories.find(c => c.id === targetParentId);
-                while (current && current.parent_id) {
-                    if (current.parent_id === draggedCategoryId) {
-                        toast.error('Impossível: Não pode mover uma categoria pai para dentro da filha.', { id: 'move-cat' });
-                        setDraggedCategoryId(null);
-                        return;
-                    }
-                    current = categories.find(c => c.id === current?.parent_id);
+            // Determinar o novo parent_id
+            let newParentId: string | null = null;
+            if (currentTargetId === null) {
+                // Soltou na zona raiz (desvinculou)
+                newParentId = null;
+            } else if (targetCategory) {
+                if (currentPosition === 'inside') {
+                    newParentId = targetCategory.id;
+                } else {
+                    newParentId = targetCategory.parent_id || null;
                 }
             }
 
-            // Atualiza no banco
-            const { id, created_at, updated_at, ...updateData } = draggedCategory as any;
+            // Prevention of Loop: Se novo parent é descendente do dragged
+            if (newParentId !== null) {
+                let current = categories.find(c => c.id === newParentId);
+                while (current) {
+                    if (current.id === currentDraggedId) {
+                        toast.error('Impossível: Não pode mover uma categoria para dentro de sua própria filha.', { id: 'move-cat' });
+                        setIsLoading(false);
+                        return;
+                    }
+                    current = current.parent_id ? categories.find(c => c.id === current?.parent_id) : undefined;
+                }
+            }
+
+            toast.loading('Organizando categorias...', { id: 'move-cat' });
+
+            // Clonar categorias para manipulação local
+            let newCategories = [...categories];
+
+            // 1. Atualizar parent_id (se mudou)
+            if (draggedCategory.parent_id !== newParentId) {
+                const { id, created_at, updated_at, ...updateData } = draggedCategory as any;
+                await categoryService.update(draggedCategory.id!, {
+                    ...updateData,
+                    parent_id: newParentId
+                });
+                // Atualizar na memória para a ordenação considerar no grupo correto
+                const idx = newCategories.findIndex(c => c.id === currentDraggedId);
+                if (idx !== -1) newCategories[idx] = { ...newCategories[idx], parent_id: newParentId };
+            }
+
+            // 2. Obter irmãos no novo destino (incluindo a própria categoria)
+            let siblings = newCategories.filter(c => c.parent_id === newParentId);
             
-            await categoryService.update(draggedCategory.id!, {
-                ...updateData,
-                parent_id: targetParentId // Alvo atualizado
-            });
+            // Remover a categoria que estamos movendo para reinseri-la na posição certa
+            siblings = siblings.filter(c => c.id !== currentDraggedId);
+
+            // 3. Encontrar índice de inserção
+            if (currentTargetId === null || currentPosition === 'inside') {
+                // Vai pro final do grupo
+                siblings.push(newCategories.find(c => c.id === currentDraggedId)!);
+            } else {
+                // Before ou After target
+                const targetSiblingIndex = siblings.findIndex(c => c.id === currentTargetId);
+                if (targetSiblingIndex !== -1) {
+                    const insertAt = currentPosition === 'before' ? targetSiblingIndex : targetSiblingIndex + 1;
+                    siblings.splice(insertAt, 0, newCategories.find(c => c.id === currentDraggedId)!);
+                } else {
+                    siblings.push(newCategories.find(c => c.id === currentDraggedId)!);
+                }
+            }
+
+            // 4. Salvar as novas ordens (apenas se a ordem original não bater)
+            const updates = siblings.map((cat, index) => ({
+                id: cat.id!,
+                sort_order: (index + 1) * 10
+            }));
+
+            if (updates.length > 0) {
+                await categoryService.updateSortOrder(updates);
+            }
 
             toast.success(`Hierarquia atualizada!`, { id: 'move-cat' });
             
-            // Reload a lista completa
+            // Recarrega do banco
             await loadCategories();
         } catch (error) {
             console.error(error);
             toast.error('Erro ao atualizar hierarquia', { id: 'move-cat' });
-        } finally {
-            setDraggedCategoryId(null);
             setIsLoading(false);
         }
     };
@@ -206,6 +286,13 @@ export default function CategorySettingsPage() {
                                     const isTargetHovered = hoveredCategoryId === category.id;
                                     const isGhost = isBeingDragged;
 
+                                    let dropClass = '';
+                                    if (isTargetHovered) {
+                                        if (dropPosition === 'inside') dropClass = 'ring-2 ring-inset ring-blue-500 bg-blue-50/50 outline outline-[2px] outline-blue-600 scale-[1.002] z-10 shadow-lg relative';
+                                        if (dropPosition === 'before') dropClass = 'border-t-4 border-t-blue-500 drop-shadow-md relative z-10';
+                                        if (dropPosition === 'after') dropClass = 'border-b-4 border-b-blue-500 drop-shadow-md relative z-10';
+                                    }
+
                                     return (
                                         <React.Fragment key={category.id}>
                                             <tr 
@@ -216,11 +303,7 @@ export default function CategorySettingsPage() {
                                                 onDrop={(e) => handleDrop(e, category.id!)}
                                                 className={`transition-all ${
                                                     isGhost ? 'opacity-30 bg-slate-100' : 'hover:bg-slate-50'
-                                                } ${
-                                                    isTargetHovered 
-                                                        ? 'ring-2 ring-inset ring-blue-500 bg-blue-50/50 outline outline-[2px] outline-blue-600 scale-[1.002] z-10 shadow-lg relative' 
-                                                        : ''
-                                                }`}
+                                                } ${dropClass}`}
                                             >
                                                 <td className="px-4 py-4 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500">
                                                     <GripVertical className="w-5 h-5 mx-auto" />

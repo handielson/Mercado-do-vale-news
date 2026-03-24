@@ -134,6 +134,7 @@ export interface CategoryConfig {
 export interface Category {
     id: string;
     parent_id?: string | null;
+    sort_order?: number;
     name: string;
     slug: string;
     config: CategoryConfig;
@@ -141,8 +142,8 @@ export interface Category {
     extended_warranty_enabled: boolean; // Se true, exibe opção de garantia estendida no carrinho
     margin_wholesale?: number;
     margin_reseller?: number;
-    created: string;
-    updated: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 /**
@@ -151,6 +152,7 @@ export interface Category {
  */
 export interface CategoryInput {
     parent_id?: string | null;
+    sort_order?: number;
     name: string;
     slug?: string;
     config: CategoryConfig;

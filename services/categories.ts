@@ -44,6 +44,7 @@ async function list(): Promise<Category[]> {
     return (data || []).map(row => ({
         id: row.id,
         parent_id: row.parent_id,
+        sort_order: row.sort_order,
         name: row.name,
         slug: row.slug,
         config: row.config,
@@ -74,6 +75,7 @@ async function create(input: CategoryInput): Promise<Category> {
         .insert({
             company_id: companyId,
             parent_id: input.parent_id || null,
+            sort_order: input.sort_order,
             name: input.name,
             slug,
             config: input.config,
@@ -90,6 +92,7 @@ async function create(input: CategoryInput): Promise<Category> {
     const result = {
         id: data.id,
         parent_id: data.parent_id,
+        sort_order: data.sort_order,
         name: data.name,
         slug: data.slug,
         config: data.config,
@@ -127,6 +130,7 @@ async function getById(id: string): Promise<Category | null> {
     return {
         id: data.id,
         parent_id: data.parent_id,
+        sort_order: data.sort_order,
         name: data.name,
         slug: data.slug,
         config: data.config,
@@ -157,6 +161,7 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
         .from('categories')
         .update({
             parent_id: input.parent_id || null,
+            sort_order: input.sort_order,
             name: input.name,
             slug,
             config: input.config,
@@ -176,6 +181,7 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
 
     vpsApiService.updateCategory(id, {
         parent_id: input.parent_id || null,
+        sort_order: input.sort_order,
         name: input.name,
         slug,
         config: input.config,
