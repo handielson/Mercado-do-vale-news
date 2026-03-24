@@ -5,8 +5,8 @@
  */
 
 const VPS_BASE_URL = 'https://api.xiaomipetrolina.com.br';
-const TIMEOUT_MS = 3000;
-const WRITE_TIMEOUT_MS = 10000;
+const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
+const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 5 * 60 * 1000;
 const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
 
@@ -216,7 +216,7 @@ class VpsApiService {
     if (!products?.length) return true;
     this.invalidateProductCache();
 
-    const chunkSize = 5;
+    const chunkSize = 1; // Limit back to 1 to prevent Fastify 413 Payload Too Large from base64 images
     let allOk = true;
 
     for (let i = 0; i < products.length; i += chunkSize) {

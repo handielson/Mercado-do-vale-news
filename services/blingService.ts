@@ -1155,12 +1155,14 @@ export async function importBlingProducts(
                 vpsRows.push({ ...dbRow, id: existing.id });
             } else {
                 operation = 'criação';
-                const { error } = await supabase
+                const { data: insertedData, error } = await supabase
                     .from('products')
-                    .insert(dbRow);
+                    .insert(dbRow)
+                    .select('id')
+                    .single();
                 if (error) throw new Error(error.message);
                 result.created++;
-                vpsRows.push(dbRow);
+                vpsRows.push({ ...dbRow, id: insertedData?.id });
             }
 
             // Associa cor ao model_color_images se o produto tiver model_id e cor mapeada
