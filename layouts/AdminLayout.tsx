@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server } from 'lucide-react';
 
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -70,6 +70,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       items: [
         { to: '/admin/settings/company', icon: <Settings size={18} />, label: 'Dados da Empresa', keywords: 'cnpj endereco horarios' },
         { to: '/admin/settings/bling', icon: <Link2 size={18} />, label: 'Bling', keywords: 'erp integracao' },
+        { to: '/admin/settings/shopee', icon: <Store size={18} />, label: 'Shopee', keywords: 'shopee marketplace integracao loja api' },
         { to: '/admin/settings/shipping', icon: <Truck size={18} />, label: 'Frete', keywords: 'entrega correios transportadora' },
         { to: '/admin/settings/payment-fees', icon: <CreditCard size={18} />, label: 'Taxas', keywords: 'juros maquina cartao' },
         { to: '/admin/settings/integrations', icon: <Link2 size={18} />, label: 'Gateways Pagamento', keywords: 'mercado pago pagar.me stripe' },

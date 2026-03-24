@@ -53,6 +53,14 @@ interface CompanySettingsRow {
     google_analytics_id: string | null;
     synology_video_base_url: string | null;
     synology_video_extension: string | null;
+    
+    // Shopee Integration
+    shopee_partner_id: string | null;
+    shopee_partner_key: string | null;
+    shopee_shop_id: string | null;
+    shopee_access_token: string | null;
+    shopee_refresh_token: string | null;
+
     catalog_footer_text: string | null;
     maintenance_mode: boolean | null;
     maintenance_message: string | null;
@@ -112,6 +120,13 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     googleAnalyticsId: row.google_analytics_id || '',
     synologyVideoBaseUrl: row.synology_video_base_url || '',
     synologyVideoExtension: row.synology_video_extension || '.mp4',
+
+    shopee_partner_id: row.shopee_partner_id || '',
+    shopee_partner_key: row.shopee_partner_key || '',
+    shopee_shop_id: row.shopee_shop_id || '',
+    shopee_access_token: row.shopee_access_token || '',
+    shopee_refresh_token: row.shopee_refresh_token || '',
+
     catalogFooterText: row.catalog_footer_text || '',
     maintenanceMode: row.maintenance_mode ?? false,
     maintenanceMessage: row.maintenance_message || '',
@@ -164,6 +179,13 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     google_analytics_id: company.googleAnalyticsId || null,
     synology_video_base_url: company.synologyVideoBaseUrl || null,
     synology_video_extension: company.synologyVideoExtension || null,
+    
+    shopee_partner_id: company.shopee_partner_id || null,
+    shopee_partner_key: company.shopee_partner_key || null,
+    shopee_shop_id: company.shopee_shop_id || null,
+    shopee_access_token: company.shopee_access_token || null,
+    shopee_refresh_token: company.shopee_refresh_token || null,
+
     catalog_footer_text: company.catalogFooterText || null,
     maintenance_mode: company.maintenanceMode ?? null,
     maintenance_message: company.maintenanceMessage || null,

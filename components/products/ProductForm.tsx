@@ -33,6 +33,7 @@ import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
 import { BlingLinkSection } from './sections/BlingLinkSection';
+import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
 
 interface ProductFormProps {
@@ -48,6 +49,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [isCompressing, setIsCompressing] = useState(false);
     const [blingId, setBlingId] = useState<number | undefined>(initialData?.bling_id);
     const [blingParentId, setBlingParentId] = useState<number | undefined>(initialData?.bling_parent_id);
+    const [shopeeItemId, setShopeeItemId] = useState<number | undefined>(initialData?.shopee_item_id);
 
     // Estado para armazenar as regras da categoria (Traffic Light)
     const [categoryConfig, setCategoryConfig] = useState<CategoryConfig | null>(null);
@@ -591,9 +593,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 console.log('✅ Cleared stock_quantity (inventory tracking disabled)');
             }
 
-            // Inject bling link
+            // Inject external integration IDs
             mergedData.bling_id = blingId;
             mergedData.bling_parent_id = blingParentId;
+            mergedData.shopee_item_id = shopeeItemId;
 
             // 1. Salvar produto(s)
             console.log('📤 [ProductForm] Sending to onSubmit:', mergedData);
@@ -913,7 +916,6 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 </div>
             </div>
 
-            {/* VÍNCULO COM BLING */}
             <BlingLinkSection
                 blingId={blingId}
                 blingParentId={blingParentId}
@@ -925,6 +927,14 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     setBlingId(undefined);
                     setBlingParentId(undefined);
                 }}
+            />
+
+            {/* VÍNCULO COM SHOPEE */}
+            <ShopeeLinkSection 
+                productId={initialData?.id}
+                shopeeItemId={shopeeItemId}
+                onLink={(id) => setShopeeItemId(id)}
+                onUnlink={() => setShopeeItemId(undefined)}
             />
 
             {/* OTIMIZAÇÃO DE SEO */}

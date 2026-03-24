@@ -75,6 +75,7 @@ import { AboutUsPage } from '../pages/catalog/AboutUsPage';
 import { FAQPage } from '../pages/catalog/FAQPage';
 import BlingPage from '../pages/admin/settings/BlingPage';
 import BlingCallbackPage from '../pages/admin/settings/BlingCallbackPage';
+import ShopeePage from '../pages/admin/settings/ShopeePage';
 import { ProductImageBankPage } from '../pages/admin/products/ProductImageBankPage';
 import CartPage from '../pages/store/CartPage';
 import CheckoutPage from '../pages/store/CheckoutPage';
@@ -892,6 +893,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><BlingPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/shopee",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ShopeePage /></AdminLayout>
       </ProtectedRoute>
     )
   },

@@ -67,6 +67,11 @@ export interface Company {
     googleAnalyticsId?: string; // Google Analytics Measurement ID (ex: G-XXXXXXXXXX)
     synologyVideoBaseUrl?: string; // URL base para vídeos no Synology (ex: http://192.168.1.2/videos/)
     synologyVideoExtension?: string; // Extensão dos vídeos (ex: .mp4, .webm) — padrão: .mp4
+    shopee_partner_id?: string;
+    shopee_partner_key?: string;
+    shopee_shop_id?: string;
+    shopee_access_token?: string;
+    shopee_refresh_token?: string;
 
     // Maintenance Mode
     maintenanceMode?: boolean;

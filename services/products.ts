@@ -59,6 +59,7 @@ function transformFromDB(row: any): Product {
         parent_id: row.parent_id || undefined,
         bling_id: row.bling_id || undefined,
         bling_parent_id: row.bling_parent_id || undefined,
+        shopee_item_id: row.shopee_item_id || undefined,
         video_url: row.video_url || undefined,
         price_promo: row.price_promo || undefined,
         promo_start: row.promo_start || undefined,
@@ -188,6 +189,7 @@ async function create(input: ProductInput): Promise<Product> {
         promo_end: input.promo_end || null,
         bling_id: input.bling_id || null,
         bling_parent_id: input.bling_parent_id || null,
+        shopee_item_id: input.shopee_item_id || null,
         video_url: finalVideoUrl,
         slug: input.slug || null,
     };
@@ -276,16 +278,22 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         promo_end: input.promo_end || null,
         bling_id: input.bling_id || null,
         bling_parent_id: input.bling_parent_id || null,
+        shopee_item_id: input.shopee_item_id || null,
         video_url: finalVideoUrl,
         slug: input.slug || null,
     };
+
+    // Pegamos o oldProduct ANTES de atualizar para comparar preços e estoques
+    let oldProduct: Product | null = null;
+    try {
+        oldProduct = await getById(id);
+    } catch(e) {}
 
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);
 
     // Log price change (usa Supabase — tabela price_history não está na VPS)
     try {
-        const oldProduct = await getById(id);
         if (oldProduct) {
             const pricesChanged =
                 oldProduct.price_cost !== input.price_cost ||
@@ -303,6 +311,18 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         }
     } catch (logErr) {
         console.warn('[productService] Failed to log price change:', logErr);
+    }
+
+    // Shopee Sync Automático
+    if (payload.shopee_item_id && oldProduct) {
+        import('./shopeeService').then(({ shopeeService }) => {
+            if (oldProduct.price_retail !== input.price_retail) {
+                shopeeService.updatePrice(id, input.price_retail).catch(e => console.error("Shopee Price Sync Error:", e));
+            }
+            if (input.track_inventory && oldProduct.stock_quantity !== input.stock_quantity) {
+                shopeeService.updateStock(id, input.stock_quantity || 0).catch(e => console.error("Shopee Stock Sync Error:", e));
+            }
+        });
     }
 
     return transformFromDB(payload);

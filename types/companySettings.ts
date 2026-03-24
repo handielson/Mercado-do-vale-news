@@ -83,6 +83,13 @@ export interface CompanySettings {
     // Vídeos Synology por SKU
     synology_video_base_url?: string;   // URL base (ex: https://mdvvideos.i234.me/videos/)
     synology_video_extension?: string;  // Extensão (ex: .mp4, .webm) — padrão: .mp4
+    
+    // Shopee Integration
+    shopee_partner_id?: string;
+    shopee_partner_key?: string;
+    shopee_shop_id?: string;
+    shopee_access_token?: string;
+    shopee_refresh_token?: string;
 
     created_at: string;
     updated_at: string;
@@ -139,4 +146,10 @@ export interface CompanySettingsInput {
     synology_video_base_url?: string;
     synology_video_extension?: string;
 
+    // Shopee Integration
+    shopee_partner_id?: string;
+    shopee_partner_key?: string;
+    shopee_shop_id?: string;
+    shopee_access_token?: string;
+    shopee_refresh_token?: string;
 }

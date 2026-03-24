@@ -606,6 +606,10 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
     'name', 'razao_social', 'state_registration', 'cnae', 'situacao_cadastral',
     'data_abertura', 'porte', 'logo', 'watermark_url', 'favicon',
     
+    // Shopee Integration
+    'shopee_partner_id', 'shopee_partner_key', 'shopee_shop_id', 
+    'shopee_access_token', 'shopee_refresh_token',
+
     // Campos de Endereço Extensos
     'address_zip_code', 'address_street', 'address_number', 'address_complement',
     'address_neighborhood', 'address_city', 'address_state', 'address_lat', 'address_lng',

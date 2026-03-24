@@ -142,6 +142,9 @@ export interface Product {
     bling_id?: number;         // ID do produto no Bling
     bling_parent_id?: number;  // ID do produto pai no Bling (para variações)
 
+    // Shopee Integration
+    shopee_item_id?: number;   // ID do item na Shopee (item_id)
+
     // Media Add-ons
     video_url?: string;        // URL do vídeo do produto (YouTube, Synology, etc.)
 
@@ -202,6 +205,8 @@ export interface ProductInput {
     // Bling ERP Integration
     bling_id?: number;
     bling_parent_id?: number;
+    // Shopee Integration
+    shopee_item_id?: number;
     // Media Add-ons
     video_url?: string;
 
