@@ -197,6 +197,17 @@ async function create(input: ProductInput): Promise<Product> {
     const result = await vpsApiService.createProduct(payload);
     if (result.errors.length > 0) throw new Error(`Failed to create product: ${result.errors[0].error}`);
 
+    // --- DUAL WRITE SUPABASE ---
+    try {
+        const { error: supaErr } = await supabase.from('products').upsert({
+            ...payload,
+            updated_at: new Date().toISOString()
+        });
+        if (supaErr) console.warn('[productService] Failed to dual-write create to Supabase:', supaErr);
+    } catch (e) {
+        console.warn('[productService] Exception dual-writing to Supabase:', e);
+    }
+
     return transformFromDB(payload);
 }
 
@@ -292,6 +303,18 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);
 
+    // --- DUAL WRITE SUPABASE ---
+    try {
+        const { error: supaErr } = await supabase.from('products').update({
+            ...payload,
+            updated_at: new Date().toISOString()
+        }).eq('id', id);
+        
+        if (supaErr) console.warn('[productService] Failed to dual-write update to Supabase:', supaErr);
+    } catch (e) {
+        console.warn('[productService] Exception dual-writing to Supabase:', e);
+    }
+
     // Log price change (usa Supabase — tabela price_history não está na VPS)
     try {
         if (oldProduct) {
@@ -331,6 +354,13 @@ async function update(id: string, input: ProductInput): Promise<Product> {
 async function deleteProduct(id: string): Promise<void> {
     const ok = await vpsApiService.deleteProduct(id);
     if (!ok) throw new Error(`Failed to delete product from VPS`);
+
+    // --- DUAL WRITE SUPABASE ---
+    try {
+        await supabase.from('products').delete().eq('id', id);
+    } catch (e) {
+        console.warn('[productService] Exception dual-writing delete to Supabase:', e);
+    }
 }
 
 export const productService = {
