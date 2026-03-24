@@ -63,12 +63,16 @@ export default function CheckoutPage() {
     } || {};
 
     const [form, setForm] = useState<CheckoutForm>(() => {
+        let base = INITIAL_FORM;
         const saved = sessionStorage.getItem('mv_checkout_form');
         if (saved) {
-            try { return JSON.parse(saved); } catch (e) { }
+            try { base = JSON.parse(saved); } catch (e) { }
         }
-        // Usa delivery_type passado pelo carrinho se disponível
-        return { ...INITIAL_FORM, delivery_type: state.delivery?.type ?? 'pickup' };
+        // delivery_type do carrinho tem prioridade sobre sessionStorage
+        if (state.delivery?.type) {
+            base = { ...base, delivery_type: state.delivery.type };
+        }
+        return base;
     });
 
     useEffect(() => {
