@@ -81,7 +81,7 @@ export function ProductImageBankPage() {
     const handleBankDragEnd = () => setDraggedBankImg(null);
 
     // Dados do banco para o gerador e ordenação
-    const [dbSkus, setDbSkus] = useState<{ sku: string; name: string; color?: string; updated?: string }[]>([]);
+    const [dbSkus, setDbSkus] = useState<{ sku: string; name: string; color?: string; updated?: string; hasImages?: boolean }[]>([]);
     const [dbColors, setDbColors] = useState<string[]>([]);
 
     const [genSku, setGenSku] = useState('');
@@ -100,7 +100,13 @@ export function ProductImageBankPage() {
             const seen = new Set<string>();
             const skus = products
                 .filter(p => p.sku && !seen.has(p.sku) && seen.add(p.sku!))
-                .map(p => ({ sku: p.sku!, name: p.name, color: p.specs?.color?.toUpperCase(), updated: p.updated || p.created }))
+                .map(p => ({ 
+                    sku: p.sku!, 
+                    name: p.name, 
+                    color: p.specs?.color?.toUpperCase(), 
+                    updated: p.updated || p.created,
+                    hasImages: Array.isArray(p.images) && p.images.length > 0
+                }))
                 .sort((a, b) => {
                     const tA = a.updated ? new Date(a.updated).getTime() : 0;
                     const tB = b.updated ? new Date(b.updated).getTime() : 0;
@@ -861,7 +867,7 @@ export function ProductImageBankPage() {
                 {/* Sub-seção: SKUs sem fotos */}
                 {(() => {
                     const skuSet = new Set(skuList);
-                    const skusWithoutImages = dbSkus.filter(s => !skuSet.has(s.sku));
+                    const skusWithoutImages = dbSkus.filter(s => !skuSet.has(s.sku) && !s.hasImages);
                     if (skusWithoutImages.length === 0) return null;
                     return (
                         <div className="border-b border-slate-100">
