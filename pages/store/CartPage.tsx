@@ -685,14 +685,18 @@ function CartPageContent() {
                 {paySheetOpen && (
                     <>
                         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" onClick={() => setPaySheetOpen(false)} />
-                        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b">
+                        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[85vh]">
+                            {/* Handle bar */}
+                            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-1 flex-shrink-0" />
+                            {/* Header fixo */}
+                            <div className="flex items-center justify-between px-5 pt-3 pb-3 border-b flex-shrink-0">
                                 <h2 className="font-bold text-gray-900 text-base">Como deseja pagar?</h2>
                                 <button onClick={() => setPaySheetOpen(false)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
                                     <X className="w-4 h-4 text-gray-600" />
                                 </button>
                             </div>
-                            <div className="px-4 py-4 space-y-3 pb-10">
+                            {/* Conteúdo rolável */}
+                            <div className="overflow-y-auto flex-1 px-4 py-4 space-y-3 pb-10">
                                 <div className="border border-gray-200 rounded-2xl overflow-hidden">
                                     <button onClick={() => setPresencialOpen(o => !o)} className="w-full flex items-center justify-between px-4 py-4 active:bg-gray-50">
                                         <div className="flex items-center gap-3">
