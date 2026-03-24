@@ -18,10 +18,10 @@ interface CatalogSectionProps {
     onFavorite?: (productId: string) => void;
     onShare?: (product: CatalogProduct) => void;
     favorites?: Set<string>;
-    mobileColumns?: 2 | 4;
+    mobileView?: 'grid' | 'list';
 }
 
-export function CatalogSectionComponent({ section, onFavorite, onShare, favorites = new Set(), mobileColumns = 2 }: CatalogSectionProps) {
+export function CatalogSectionComponent({ section, onFavorite, onShare, favorites = new Set(), mobileView = 'grid' }: CatalogSectionProps) {
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [colorHexMap, setColorHexMap] = useState<Record<string, string>>({});
@@ -132,8 +132,23 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
             </div>
 
             {/* Grid/Carousel/Lista de Produtos */}
-            {section.layout_style === 'grid' && (
-                <div className={`grid gap-2 sm:gap-4 md:gap-6 ${SECTION_MOBILE_GRID[mobileColumns] ?? 'grid-cols-2'} md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`}>
+            {section.layout_style === 'grid' && mobileView === 'list' && (
+                <div className="space-y-3">
+                    {displayItems.map((item) => (
+                        <ModernProductCard
+                            key={item.key}
+                            product={item.product}
+                            productGroup={item.productGroup}
+                            onFavorite={onFavorite}
+                            onShare={onShare ? () => onShare(item.product) : undefined}
+                            isFavorite={favorites.has(item.product.id)}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {section.layout_style === 'grid' && mobileView === 'grid' && (
+                <div className="grid gap-2 sm:gap-4 md:gap-6 grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {displayItems.map((item) => (
                         <ModernProductCard
                             key={item.key}

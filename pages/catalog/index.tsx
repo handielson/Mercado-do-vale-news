@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { X, LayoutGrid, Grid2X2 } from 'lucide-react';
+import { X, LayoutGrid, List } from 'lucide-react';
 import {
     BannerCarousel,
     ProductFilters,
@@ -42,7 +42,7 @@ function CatalogContent() {
     const [promoTimeLeft, setPromoTimeLeft] = useState<{ days: number, hours: number, minutes: number, seconds: number } | null>(null);
 
     const { customer } = useSupabaseAuth();
-    const [mobileColumns, setMobileColumns] = useState<2 | 4>(2);
+    const [mobileView, setMobileView] = useState<'grid' | 'list'>('grid');
 
     // Mapeia customer_type do banco (retail/wholesale/resale) → CustomerType do banner (varejo/revenda/atacado)
     const customerType = ((): CustomerType | undefined => {
@@ -350,15 +350,15 @@ function CatalogContent() {
                                 placeholder="Buscar por nome ou marca..."
                             />
                         </div>
-                        {/* Toggle mobile 2/4 colunas — só no mobile */}
+                        {/* Toggle mobile grade/lista — só no mobile */}
                         <button
                             className="sm:hidden flex items-center justify-center w-10 h-10 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 active:scale-95 transition-all shrink-0"
-                            onClick={() => setMobileColumns(c => c === 2 ? 4 : 2)}
-                            title={mobileColumns === 2 ? 'Ver 4 por linha' : 'Ver 2 por linha'}
-                            aria-label="Alternar colunas"
+                            onClick={() => setMobileView(v => v === 'grid' ? 'list' : 'grid')}
+                            title={mobileView === 'grid' ? 'Ver em lista' : 'Ver em grade'}
+                            aria-label="Alternar visualização"
                         >
-                            {mobileColumns === 2
-                                ? <Grid2X2 className="w-4 h-4" />
+                            {mobileView === 'grid'
+                                ? <List className="w-4 h-4" />
                                 : <LayoutGrid className="w-4 h-4" />}
                         </button>
                         <CatalogFilters
@@ -430,7 +430,7 @@ function CatalogContent() {
                                 onFavorite={toggleFavorite}
                                 onShare={handleShare}
                                 favorites={favorites}
-                                mobileColumns={mobileColumns}
+                                mobileView={mobileView}
                             />
                         ))}
                     </div>
@@ -452,7 +452,8 @@ function CatalogContent() {
                     onShare={handleShare}
                     favorites={favorites}
                     variant="grid"
-                    mobileColumns={mobileColumns}
+                    mobileColumns={2}
+                    variant={mobileView === 'list' ? 'list' : 'grid'}
                     columns={{
                         mobile: 2,
                         tablet: 3,
