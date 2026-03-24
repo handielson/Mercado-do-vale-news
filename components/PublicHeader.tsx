@@ -88,7 +88,7 @@ export const PublicHeader: React.FC = () => {
     return (
         <header className="sticky top-0 z-50 bg-white shadow-md border-b border-slate-200">
             <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-                {/* Logo and Age Badge Group */}
+                {/* Logo */}
                 <div className="flex items-center gap-2">
                     <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                         {themeSettings.logo_main ? (
@@ -104,7 +104,8 @@ export const PublicHeader: React.FC = () => {
                             </>
                         )}
                     </Link>
-                    {getStoreAgeBadge()}
+                    {/* Badge anos — só no desktop */}
+                    <div className="hidden sm:flex">{getStoreAgeBadge()}</div>
                     {/* Clima — só no desktop */}
                     <div className="hidden sm:flex">
                         <WeatherWidget
@@ -282,13 +283,16 @@ export const PublicHeader: React.FC = () => {
             {/* Segunda linha — só no mobile, some ao rolar */}
             <div
                 className="sm:hidden overflow-hidden transition-all duration-300 ease-in-out border-t border-slate-100"
-                style={{ maxHeight: scrolled ? '0px' : '48px', opacity: scrolled ? 0 : 1 }}
+                style={{ maxHeight: scrolled ? '0px' : '52px', opacity: scrolled ? 0 : 1 }}
             >
-                <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center justify-between gap-3">
-                    <WeatherWidget
-                        defaultCity={themeSettings.address_city}
-                        defaultState={themeSettings.address_state}
-                    />
+                <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                        <WeatherWidget
+                            defaultCity={themeSettings.address_city}
+                            defaultState={themeSettings.address_state}
+                        />
+                        {getStoreAgeBadge()}
+                    </div>
                     <Link
                         to="/promocoes"
                         className="flex items-center gap-2 px-3 py-1 text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95"

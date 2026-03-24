@@ -145,12 +145,12 @@ export function BannerCarousel({
 
                             {/* Overlay com título */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
-                                <div className="absolute bottom-0 left-0 right-0 p-8">
-                                    <h2 className="text-white text-3xl md:text-4xl font-bold mb-2 drop-shadow-lg">
+                                <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-8">
+                                    <h2 className="text-white text-base sm:text-3xl md:text-4xl font-bold mb-1 sm:mb-2 drop-shadow-lg">
                                         {banner.title}
                                     </h2>
                                     {banner.subtitle && (
-                                        <p className="text-white/90 text-lg md:text-xl drop-shadow-lg">
+                                        <p className="hidden sm:block text-white/90 text-lg md:text-xl drop-shadow-lg">
                                             {banner.subtitle}
                                         </p>
                                     )}
