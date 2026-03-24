@@ -142,7 +142,16 @@ export const PublicProductPage: React.FC = () => {
                         const vpsRichData = await vpsApiService.getProductById(data.id);
                         if (vpsRichData && !vpsRichData.error) {
                             // Mescla dando preferência à VPS (dados vitais), mas protegendo os nomes de `category` e `brand` do Supabase
-                            data = { ...data, ...vpsRichData, category: data.category, brand: data.brand };
+                            // Também protege `sku`, `images` e `video_url`: a VPS pode ter esses campos como null se não sincronizou ainda
+                            data = {
+                                ...data,
+                                ...vpsRichData,
+                                category: data.category,
+                                brand: data.brand,
+                                sku: vpsRichData.sku || data.sku,
+                                images: vpsRichData.images || data.images,
+                                video_url: vpsRichData.video_url || data.video_url,
+                            };
                         }
                     } catch (e) {
                         console.warn('[PublicProductPage] Failed to enrich from VPS by ID:', e);
