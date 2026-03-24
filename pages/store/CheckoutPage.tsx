@@ -169,7 +169,8 @@ export default function CheckoutPage() {
         }
     };
 
-    const shippingCost = selectedShipping?.price ?? 0;
+    // selectedShipping.price é em reais; subtotal em centavos → convertemos para centavos
+    const shippingCost = Math.round((selectedShipping?.price ?? 0) * 100);
     const total = subtotal + shippingCost;
     const mpGateway = activeGateways.find(g => g.gateway_name === 'mercado_pago');
     const isMpCardSelected = form.selected_payment === 'mercado_pago_pro';
