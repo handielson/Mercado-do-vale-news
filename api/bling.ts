@@ -358,11 +358,12 @@ export default async function handler(req: any, res: any) {
                 return res.status(200).json({ ok: true, ignored: true, reason: 'missing_event' });
             }
 
-            // ── Evento de PRODUTO (price_retail) ────────────────────────────────
+            // ── Evento de PRODUTO (price_retail e nome) ────────────────────────────────
             if (event.startsWith('product.')) {
                 const blingId: number | undefined = payload?.data?.id;
                 const preco: number | undefined = payload?.data?.preco;
                 const sku: string | undefined = payload?.data?.codigo;
+                const nome: string | undefined = payload?.data?.nome;
 
                 if (!blingId || preco === undefined) {
                     return res.status(200).json({ ok: true, ignored: true, reason: 'missing_product_fields', blingId, preco });
@@ -379,11 +380,16 @@ export default async function handler(req: any, res: any) {
                     return res.status(200).json({ ok: true, updated: false, reason: 'product_not_found', blingId, sku });
                 }
 
+                const updateData: any = { price_retail: Math.round(preco * 100) };
+                if (nome) {
+                    updateData.name = nome;
+                }
+
                 const { data: upd, error: upErr } = await supabase
                     .from('products')
-                    .update({ price_retail: Math.round(preco * 100) })
+                    .update(updateData)
                     .eq('id', pId)
-                    .select('id, sku, price_retail');
+                    .select('id, sku, price_retail, name');
 
 
                 if (upErr) return res.status(200).json({ ok: false, error: upErr.message });
