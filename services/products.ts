@@ -376,7 +376,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             slug: payload.slug,
             updated_at: new Date().toISOString(),
         };
-        const { error: supaErr } = await supabase.from('products').update(supPayload).eq('id', id);
+        const { error: supaErr } = await supabase.from('products').upsert({ id, ...supPayload });
         if (supaErr) console.warn('[productService] Failed to dual-write update to Supabase:', supaErr);
     } catch (e) {
         console.warn('[productService] Exception dual-writing to Supabase:', e);
