@@ -818,26 +818,32 @@ export default function BlingPage() {
                                         )}
 
                                         {/* Search bar */}
-                                        <div className="flex gap-2">
-                                            <div className="relative flex-1">
-                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                                <input
-                                                    type="text"
-                                                    value={blingSearch}
-                                                    onChange={e => setBlingSearch(e.target.value)}
-                                                    onKeyDown={e => e.key === 'Enter' && handleFetchBlingProducts()}
-                                                    placeholder="Pesquisar produto no Bling (nome ou SKU)..."
-                                                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                                />
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex gap-2">
+                                                <div className="relative flex-1">
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                    <input
+                                                        type="text"
+                                                        value={blingSearch}
+                                                        onChange={e => setBlingSearch(e.target.value)}
+                                                        onKeyDown={e => e.key === 'Enter' && handleFetchBlingProducts()}
+                                                        placeholder="Pesquisar produto no Bling (Início do Nome ou SKU)..."
+                                                        className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                    />
+                                                </div>
+                                                <button
+                                                    onClick={() => handleFetchBlingProducts()}
+                                                    disabled={fetching || importing}
+                                                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 flex-shrink-0"
+                                                >
+                                                    {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                                    {fetching ? 'Buscando...' : blingProducts.length > 0 ? 'Atualizar' : 'Buscar'}
+                                                </button>
                                             </div>
-                                            <button
-                                                onClick={() => handleFetchBlingProducts()}
-                                                disabled={fetching || importing}
-                                                className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 flex-shrink-0"
-                                            >
-                                                {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                                {fetching ? 'Buscando...' : blingProducts.length > 0 ? 'Atualizar' : 'Buscar'}
-                                            </button>
+                                            <p className="text-[11.5px] text-slate-500 flex items-center gap-1.5 ml-1 mt-0.5">
+                                                <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                                                A API do Bling requer que a busca seja pelo início exato do nome (ex: "Kit Teclado"). Para buscar palavras no meio do nome, carregue os produtos acima e use o filtro local abaixo.
+                                            </p>
                                         </div>
 
                                         {/* Product list */}
