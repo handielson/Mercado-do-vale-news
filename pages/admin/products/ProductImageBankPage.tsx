@@ -124,13 +124,15 @@ export function ProductImageBankPage() {
     }, []);
 
     // Slug SEO: "Capa de Silicone Realme Note 70" → "capa-de-silicone-realme-note-70"
-    const toSlug = (text: string) =>
-        text.toLowerCase()
+    const toSlug = (text?: string | null) => {
+        if (!text) return '';
+        return text.toLowerCase()
             .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-z0-9\s-]/g, '')
             .replace(/\s+/g, '-')
             .replace(/-+/g, '-')
             .replace(/^-|-$/g, '');
+    };
 
     const selectedProductName = dbSkus.find(s => s.sku === genSku.trim().toUpperCase())?.name ?? '';
 
@@ -410,7 +412,7 @@ export function ProductImageBankPage() {
 
                 // Estrategia 1: pasta é um SKU exato
                 let matchedSku = allProductsList.find(p =>
-                    p.sku.toUpperCase() === folderName.toUpperCase()
+                    p.sku?.toUpperCase() === folderName.toUpperCase()
                 )?.sku ?? null;
 
                 // Estrategia 2: pasta é slug do nome → busca por specs.color + palavras-chave do nome
