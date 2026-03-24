@@ -36,7 +36,7 @@ function CartPageContent() {
     const navigate = useNavigate();
     const [couponOpen, setCouponOpen] = useState(false);
     const [warrantyOpen, setWarrantyOpen] = useState(false);
-    const [paySheetOpen, setPaySheetOpen] = useState(() => sessionStorage.getItem('mv_cart_paySheetOpen') === 'true');
+    const [paySheetOpen, setPaySheetOpen] = useState(false);
     const [presencialOpen, setPresencialOpen] = useState(() => sessionStorage.getItem('mv_cart_presencialOpen') === 'true');
     const coupon = useCoupon(subtotal / 100, customer?.customer_type);
     const [storeStatus, setStoreStatus] = useState<StoreStatus | null>(null);
@@ -184,7 +184,6 @@ function CartPageContent() {
     const hasModifiers = warrantyPrice > 0 || couponDiscount > 0 || cartCoinDiscount > 0 || shippingCost > 0;
 
     useEffect(() => {
-        sessionStorage.setItem('mv_cart_paySheetOpen', String(paySheetOpen));
         sessionStorage.setItem('mv_cart_presencialOpen', String(presencialOpen));
         sessionStorage.setItem('mv_cart_referralInput', referralInput);
         sessionStorage.setItem('mv_cart_referralName', referralName);
@@ -775,7 +774,7 @@ function CartPageContent() {
                         </p>
                     )}
                     <button
-                        onClick={() => setPaySheetOpen(o => !o)}
+                        onClick={() => setPaySheetOpen(true)}
                         className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-2xl py-4 flex items-center justify-between px-5 active:scale-[0.98] transition-transform shadow-lg"
                     >
                         <div className="text-left">
