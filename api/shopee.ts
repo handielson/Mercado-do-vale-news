@@ -25,7 +25,7 @@ export default async function handler(req: any, res: any) {
         const { data: settings } = await supabase
             .from('company_settings')
             .select('shopee_partner_id, shopee_partner_key')
-            .eq('id', 1)
+            .limit(1)
             .single();
 
         if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
@@ -57,7 +57,7 @@ export default async function handler(req: any, res: any) {
         const { data: settings } = await supabase
             .from('company_settings')
             .select('id, shopee_partner_id, shopee_partner_key')
-            .eq('id', 1)
+            .limit(1)
             .single();
 
         if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
