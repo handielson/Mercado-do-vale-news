@@ -101,38 +101,54 @@ export default function CategorySettingsPage() {
                                 </td>
                             </tr>
                         ) : (
-                            categories.map((category) => (
-                                <tr key={category.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="font-medium text-slate-900">{category.name}</div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <code className="text-sm text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                                            {category.slug}
-                                        </code>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                            {category.warranty_days || 90} dias
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="text-sm text-slate-600">
-                                            {getConfigSummary(category)}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleEdit(category)}
-                                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                            title="Editar categoria"
-                                        >
-                                            <Edit2 className="w-4 h-4" />
-                                            Editar
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))
+                            categories.filter(c => !c.parent_id).map(rootCategory => {
+                                const renderCategoryRow = (category: Category, level: number = 0) => {
+                                    const children = categories.filter(c => c.parent_id === category.id);
+                                    return (
+                                        <React.Fragment key={category.id}>
+                                            <tr className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div 
+                                                        className="font-medium text-slate-900 flex items-center gap-2"
+                                                        style={{ paddingLeft: `${level * 24}px` }}
+                                                    >
+                                                        {level > 0 && <span className="text-slate-400">↳</span>}
+                                                        {category.name}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <code className="text-sm text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                                                        {category.slug}
+                                                    </code>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                        {category.warranty_days || 90} dias
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm text-slate-600">
+                                                        {getConfigSummary(category)}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button
+                                                        onClick={() => handleEdit(category)}
+                                                        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title="Editar categoria"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                        Editar
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {children.map(child => renderCategoryRow(child, level + 1))}
+                                        </React.Fragment>
+                                    );
+                                };
+
+                                return renderCategoryRow(rootCategory, 0);
+                            })
                         )}
                     </tbody>
                 </table>

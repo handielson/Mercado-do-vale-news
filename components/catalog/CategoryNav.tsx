@@ -7,12 +7,13 @@ interface Category {
     name: string;
     icon: React.ReactNode;
     count?: number;
+    parent_id?: string | null;
 }
 
 interface CategoryNavProps {
     activeCategory: string | null;
     onCategoryChange: (categoryId: string | null) => void;
-    categories: Array<{ id?: string; name: string; count: number }>;
+    categories: Array<{ id?: string; name: string; count: number; parent_id?: string | null }>;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -24,7 +25,7 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 };
 
 // ============================================================
-// CATEGORY NAV - PREMIUM EXPANDABLE GRID
+// CATEGORY NAV - PREMIUM EXPANDABLE GRID WITH SUBCATEGORIES
 // ============================================================
 export const CategoryNav: React.FC<CategoryNavProps> = ({
     activeCategory,
@@ -34,30 +35,52 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
     const [isExpanded, setIsExpanded] = useState(false);
 
     const safeCategories = Array.isArray(categories) ? categories : [];
+    
+    // Separação Raízes vs Filhos
+    const rootCategoriesData = safeCategories.filter(c => !c.parent_id);
+    const childCategories = safeCategories.filter(c => c.parent_id);
+
+    // Identificar qual raiz está ativa (seja ela mesma ou um filho seu)
+    const activeCatObj = safeCategories.find(c => c.id === activeCategory);
+    const activeRootId = activeCatObj ? (activeCatObj.parent_id || activeCatObj.id) : null;
+
     const allCategories: Category[] = [
         {
             id: null,
             name: 'TODOS',
             icon: CATEGORY_ICONS['TODOS'],
+            // Soma todos os produtos no "Todos"
             count: safeCategories.reduce((sum, cat) => sum + cat.count, 0)
         },
-        ...safeCategories.map(cat => ({
-            id: cat.id || cat.name,
-            name: cat.name.toUpperCase(),
-            icon: CATEGORY_ICONS[cat.name.toUpperCase()] || CATEGORY_ICONS['OUTROS'],
-            count: cat.count
-        }))
+        ...rootCategoriesData.map(cat => {
+            // Conta os produtos da categoria pai + produtos das subcategorias diretas
+            const childrenForThisRoot = childCategories.filter(c => c.parent_id === cat.id);
+            const childrenCount = childrenForThisRoot.reduce((s, c) => s + c.count, 0);
+            
+            return {
+                id: cat.id || cat.name,
+                name: cat.name.toUpperCase(),
+                icon: CATEGORY_ICONS[cat.name.toUpperCase()] || CATEGORY_ICONS['OUTROS'],
+                count: cat.count + childrenCount,
+                parent_id: cat.parent_id
+            };
+        })
     ];
 
-    // Responsive setup: quantia inicial a exibir baseada na tela de celular ou tablet
+    // Responsive setup
     const INITIAL_VISIBLE_COUNT = 6;
     const hasMore = allCategories.length > INITIAL_VISIBLE_COUNT;
 
     const visibleCategories = allCategories.slice(0, INITIAL_VISIBLE_COUNT);
     const hiddenCategories = allCategories.slice(INITIAL_VISIBLE_COUNT);
 
+    const activeRootChildren = activeRootId 
+        ? childCategories.filter(c => c.parent_id === activeRootId)
+        : [];
+
     const CategoryCard = ({ category }: { category: Category }) => {
-        const isActive = activeCategory === category.id;
+        // O card raiz fica ativo se "todos", se ele próprio ou se uma subcategoria dele estiver ativa
+        const isActive = activeRootId === category.id;
         
         return (
             <motion.button
@@ -141,6 +164,44 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
                         </button>
                     </motion.div>
                 )}
+
+                {/* Subcategories Row (Cascata/Pills) */}
+                <AnimatePresence>
+                    {activeRootChildren.length > 0 && (
+                        <motion.div 
+                            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                            animate={{ opacity: 1, height: 'auto', marginTop: 16 }}
+                            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="pt-4 border-t border-slate-100 flex flex-wrap gap-2 justify-center">
+                                <button 
+                                    onClick={() => onCategoryChange(activeRootId)}
+                                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                                        activeCategory === activeRootId 
+                                            ? 'bg-blue-600 text-white shadow-md' 
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                >
+                                    Todos ({allCategories.find(c => c.id === activeRootId)?.count || 0})
+                                </button>
+                                {activeRootChildren.map(child => (
+                                    <button 
+                                        key={child.id!}
+                                        onClick={() => onCategoryChange(child.id!)}
+                                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                                            activeCategory === child.id 
+                                                ? 'bg-blue-600 text-white shadow-md' 
+                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        }`}
+                                    >
+                                        {child.name} {child.count > 0 && `(${child.count})`}
+                                    </button>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
                 
             </div>
         </div>

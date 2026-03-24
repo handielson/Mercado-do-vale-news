@@ -1,5 +1,6 @@
 import { Category, CategoryInput } from '../types/category';
 import { supabase } from './supabase';
+import { vpsApiService } from './vpsApiService';
 
 /**
  * CATEGORY SERVICE - Supabase Implementation
@@ -42,6 +43,7 @@ async function list(): Promise<Category[]> {
     // Transform Supabase data to our Category type
     return (data || []).map(row => ({
         id: row.id,
+        parent_id: row.parent_id,
         name: row.name,
         slug: row.slug,
         config: row.config,
@@ -71,6 +73,7 @@ async function create(input: CategoryInput): Promise<Category> {
         .from('categories')
         .insert({
             company_id: companyId,
+            parent_id: input.parent_id || null,
             name: input.name,
             slug,
             config: input.config,
@@ -84,8 +87,9 @@ async function create(input: CategoryInput): Promise<Category> {
 
     if (error) throw new Error(`Failed to create category: ${error.message}`);
 
-    return {
+    const result = {
         id: data.id,
+        parent_id: data.parent_id,
         name: data.name,
         slug: data.slug,
         config: data.config,
@@ -96,6 +100,10 @@ async function create(input: CategoryInput): Promise<Category> {
         created: data.created_at,
         updated: data.updated_at
     };
+
+    vpsApiService.syncCategory({ ...data, company_id: data.company_id }).catch(console.warn);
+
+    return result;
 }
 
 /**
@@ -118,6 +126,7 @@ async function getById(id: string): Promise<Category | null> {
 
     return {
         id: data.id,
+        parent_id: data.parent_id,
         name: data.name,
         slug: data.slug,
         config: data.config,
@@ -147,6 +156,7 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
     const { error } = await supabase
         .from('categories')
         .update({
+            parent_id: input.parent_id || null,
             name: input.name,
             slug,
             config: input.config,
@@ -163,6 +173,18 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
     // SELECT separado após UPDATE (tem permissão de leitura)
     const updated = await getById(id);
     if (!updated) throw new Error('Category not found after update.');
+
+    vpsApiService.updateCategory(id, {
+        parent_id: input.parent_id || null,
+        name: input.name,
+        slug,
+        config: input.config,
+        warranty_days: input.warranty_days || 90,
+        extended_warranty_enabled: input.extended_warranty_enabled ?? false,
+        margin_wholesale: input.margin_wholesale,
+        margin_reseller: input.margin_reseller
+    }).catch(console.warn);
+
     return updated;
 }
 
@@ -179,6 +201,8 @@ async function remove(id: string): Promise<void> {
         .eq('company_id', companyId);
 
     if (error) throw new Error(`Failed to delete category: ${error.message}`);
+
+    vpsApiService.deleteCategory(id).catch(console.warn);
 }
 
 /**

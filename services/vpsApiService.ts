@@ -215,9 +215,21 @@ class VpsApiService {
   async syncProducts(products: any[]): Promise<boolean> {
     if (!products?.length) return true;
     this.invalidateProductCache();
-    const ok = await this.writeSafe('POST', '/products/batch', products);
-    console.log(`[vpsApiService] syncProducts(${products.length}) → ${ok ? 'OK' : 'FAIL'}`);
-    return ok;
+
+    const chunkSize = 5;
+    let allOk = true;
+
+    for (let i = 0; i < products.length; i += chunkSize) {
+      const chunk = products.slice(i, i + chunkSize);
+      const ok = await this.writeSafe('POST', '/products/batch', chunk);
+      if (!ok) {
+        allOk = false;
+        console.warn(`[vpsApiService] Batch sync failed at chunk ${i / chunkSize}`);
+      }
+    }
+
+    console.log(`[vpsApiService] syncProducts(${products.length}) → ${allOk ? 'OK' : 'FAIL (Partial)'}`);
+    return allOk;
   }
 
   async updateProduct(id: string, data: any): Promise<boolean> {
@@ -250,6 +262,23 @@ class VpsApiService {
   async deleteBrand(id: string): Promise<boolean> {
     this.cache.delete('/brands');
     return this.writeSafe('DELETE', `/brands/${id}`);
+  }
+
+  // --- CATEGORIES SYNC ---
+
+  async syncCategory(category: any): Promise<boolean> {
+    this.cache.delete('/categories');
+    return this.writeSafe('POST', '/categories', category);
+  }
+
+  async updateCategory(id: string, data: any): Promise<boolean> {
+    this.cache.delete('/categories');
+    return this.writeSafe('PUT', `/categories/${id}`, data);
+  }
+
+  async deleteCategory(id: string): Promise<boolean> {
+    this.cache.delete('/categories');
+    return this.writeSafe('DELETE', `/categories/${id}`);
   }
 
   async syncShippingSettings(settings: any): Promise<boolean> {

@@ -1,8 +1,12 @@
 import React from 'react';
+import { Category } from '../../../types/category';
 
 interface BasicInfoSectionProps {
     name: string;
     onChange: (name: string) => void;
+    parentId?: string | null;
+    onParentIdChange?: (id: string | null) => void;
+    availableParents?: Category[];
     warrantyDays: number;
     onWarrantyDaysChange: (days: number) => void;
     isEditing?: boolean;
@@ -20,6 +24,9 @@ interface BasicInfoSectionProps {
 export const BasicInfoSection: React.FC<BasicInfoSectionProps> = ({
     name,
     onChange,
+    parentId,
+    onParentIdChange,
+    availableParents = [],
     warrantyDays,
     onWarrantyDaysChange,
     isEditing = false
@@ -57,6 +64,30 @@ export const BasicInfoSection: React.FC<BasicInfoSectionProps> = ({
                         Nome que aparecerá no sistema e nos formulários
                     </p>
                 </div>
+
+                {/* Parent Category */}
+                {onParentIdChange && (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Categoria Pai <span className="text-slate-400 font-normal">(opcional)</span>
+                        </label>
+                        <select
+                            value={parentId || ''}
+                            onChange={(e) => onParentIdChange(e.target.value || null)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        >
+                            <option value="">Nenhuma (Categoria Principal)</option>
+                            {availableParents.map((parent) => (
+                                <option key={parent.id} value={parent.id}>
+                                    {parent.name}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Selecione caso esta seja uma subcategoria de outro departamento
+                        </p>
+                    </div>
+                )}
 
                 {/* Slug (Auto-generated, Read-only) */}
                 <div>

@@ -30,6 +30,8 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
     const [isLoading, setIsLoading] = useState(!!categoryId);
     const [isSaving, setIsSaving] = useState(false);
     const [name, setName] = useState('');
+    const [parentId, setParentId] = useState<string | null>(null);
+    const [availableParents, setAvailableParents] = useState<Category[]>([]);
     const [warrantyDays, setWarrantyDays] = useState(90);
     const [extendedWarrantyEnabled, setExtendedWarrantyEnabled] = useState(false);
     const [marginWholesale, setMarginWholesale] = useState<number | undefined>();
@@ -48,11 +50,25 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
     });
     const [uniqueFields, setUniqueFields] = useState<string[]>([]);
 
-    // Load category data if editing
+    // Load category data if editing and load available parents
     useEffect(() => {
-        if (categoryId) {
-            loadCategory(categoryId);
-        }
+        const initData = async () => {
+            try {
+                // Fetch all categories to populate the "Parent Category" dropdown
+                const allCategories = await categoryService.list();
+                // A category cannot be its own parent, nor can it be a parent to a category if that would cause a loop.
+                // For a simple hierarchy, we exclude the current category from the list.
+                setAvailableParents(allCategories.filter(c => c.id !== categoryId && c.parent_id === null)); // Allowing only root items as parents to avoid deep nesting for now
+
+                if (categoryId) {
+                    await loadCategory(categoryId);
+                }
+            } catch (error) {
+                console.error('Error initializing CategoryEditPage:', error);
+            }
+        };
+
+        initData();
     }, [categoryId]);
 
     const loadCategory = async (id: string) => {
@@ -61,6 +77,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
             const category = await categoryService.getById(id);
             if (category) {
                 setName(category.name);
+                setParentId(category.parent_id || null);
                 setWarrantyDays(category.warranty_days || 90);
                 setExtendedWarrantyEnabled(category.extended_warranty_enabled ?? false);
                 setMarginWholesale(category.margin_wholesale);
@@ -136,6 +153,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
 
             const categoryData: CategoryInput = {
                 name: name.trim(),
+                parent_id: parentId,
                 config,
                 warranty_days: warrantyDays,
                 extended_warranty_enabled: extendedWarrantyEnabled,

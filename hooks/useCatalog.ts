@@ -101,9 +101,21 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             setLoading(true);
             setError(null);
 
+            // Expand category to include its children automatically
+            let expandedCategories = filters.categories;
+            if (filters.categories && filters.categories.length === 1 && filterStats?.categories?.length > 0) {
+                const selectedId = filters.categories[0];
+                const childIds = filterStats.categories
+                    .filter(c => c.parent_id === selectedId)
+                    .map(c => c.id);
+                if (childIds.length > 0) {
+                    expandedCategories = [selectedId, ...childIds];
+                }
+            }
+
             const response = await catalogService.getProducts({
                 search: searchQuery || undefined,
-                categories: filters.categories,
+                categories: expandedCategories,
                 brands: filters.brands,
                 priceRange: filters.priceRange ? [filters.priceRange.min, filters.priceRange.max] : undefined,
                 inStockOnly: filters.inStockOnly,
@@ -203,7 +215,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
 
     // Estatísticas de filtros
     const [filterStats, setFilterStats] = useState<{
-        categories: Array<{ id: string; name: string; count: number }>;
+        categories: Array<{ id: string; name: string; parent_id?: string | null; count: number }>;
         brands: Array<{ name: string; count: number }>;
         priceRange?: { min: number; max: number };
     }>({

@@ -133,6 +133,7 @@ export interface CategoryConfig {
  */
 export interface Category {
     id: string;
+    parent_id?: string | null;
     name: string;
     slug: string;
     config: CategoryConfig;
@@ -149,6 +150,7 @@ export interface Category {
  * Data required to create or update a category
  */
 export interface CategoryInput {
+    parent_id?: string | null;
     name: string;
     slug?: string;
     config: CategoryConfig;

@@ -255,6 +255,7 @@ function CatalogContent() {
                 categories={(filterStats?.categories || []).map(cat => ({
                     id: cat.id,
                     name: cat.name,
+                    parent_id: cat.parent_id,
                     count: cat.count
                 }))}
             />

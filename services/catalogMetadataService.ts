@@ -25,11 +25,11 @@ export const catalogMetadataService = {
     /**
      * Buscar todas as categorias com contagem de produtos
      */
-    getAllCategories: async (): Promise<Array<{ id: string; name: string; count: number }>> => {
+    getAllCategories: async (): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number }>> => {
         // Fetch all categories
         const { data: cats, error: catsError } = await supabase
             .from('categories')
-            .select('id, name, sort_order')
+            .select('id, name, parent_id, sort_order')
             .order('sort_order', { ascending: true })
             .order('name', { ascending: true });
 
@@ -64,6 +64,7 @@ export const catalogMetadataService = {
         return (cats || []).map(cat => ({
             id: cat.id,
             name: cat.name,
+            parent_id: cat.parent_id,
             count: countMap.get(cat.id) || 0
         }));
     },

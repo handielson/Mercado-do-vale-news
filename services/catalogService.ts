@@ -23,6 +23,8 @@ export const catalogService = {
             inStockOnly?: boolean;
             featuredOnly?: boolean;
             newOnly?: boolean;
+            favoritesOnly?: boolean;
+            customerId?: string;
             sortBy?: 'recent' | 'price_asc' | 'price_desc' | 'featured';
         },
         page: number = 1,
