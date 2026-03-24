@@ -58,7 +58,8 @@ export default function CheckoutPage() {
         warrantyProductId?: string,
         warrantyImageUrl?: string,
         referralCode?: string,
-        referralName?: string
+        referralName?: string,
+        delivery?: { type: 'pickup' | 'delivery', shippingOption?: any },
     } || {};
 
     const [form, setForm] = useState<CheckoutForm>(() => {
@@ -66,14 +67,19 @@ export default function CheckoutPage() {
         if (saved) {
             try { return JSON.parse(saved); } catch (e) { }
         }
-        return INITIAL_FORM;
+        // Usa delivery_type passado pelo carrinho se disponível
+        return { ...INITIAL_FORM, delivery_type: state.delivery?.type ?? 'pickup' };
     });
 
     useEffect(() => {
         sessionStorage.setItem('mv_checkout_form', JSON.stringify(form));
     }, [form]);
     const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
-    const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
+    const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(
+        state.delivery?.type === 'delivery' && state.delivery?.shippingOption
+            ? state.delivery.shippingOption
+            : null
+    );
     const [loadingShipping, setLoadingShipping] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');

@@ -745,7 +745,8 @@ function CartPageContent() {
                                             warrantyProductId: eligibleProductId,
                                             warrantyImageUrl: eligibleImageUrl,
                                             referralCode: referralInput,
-                                            referralName: referralName
+                                            referralName: referralName,
+                                            delivery,
                                         }
                                     })}
                                     className="w-full flex items-center justify-between px-4 py-4 border border-gray-200 rounded-2xl active:bg-gray-50 text-left"

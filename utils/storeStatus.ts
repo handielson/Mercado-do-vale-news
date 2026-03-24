@@ -127,7 +127,7 @@ export async function getStoreStatus(
     } else {
         return {
             status: 'closed',
-            message: 'Fechado',
+            message: 'Loja física fechada',
             actionMessage: 'A loja encerrou o expediente de hoje. Seu pedido será processado amanhã.'
         };
     }
