@@ -26,12 +26,26 @@ export default async function handler(req: any, res: any) {
     const { action, payload } = req.body;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Buscar configurações da empresa
-    const { data: settings } = await supabase
-        .from('company_settings')
-        .select('shopee_partner_id, shopee_partner_key, shopee_shop_id, shopee_access_token')
-        .limit(1)
-        .single();
+    // Buscar configurações da empresa primariamente pelo VPS
+    let settings = null;
+    try {
+        const vpsUrl = process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br';
+        const vpsRes = await fetch(`${vpsUrl}/company-settings`);
+        if (vpsRes.ok) {
+            settings = await vpsRes.json();
+        }
+    } catch (e) {
+        console.error('Erro ao buscar do VPS:', e);
+    }
+
+    if (!settings?.shopee_access_token) {
+        const { data } = await supabase
+            .from('company_settings')
+            .select('shopee_partner_id, shopee_partner_key, shopee_shop_id, shopee_access_token')
+            .limit(1)
+            .single();
+        settings = data;
+    }
 
     if (!settings?.shopee_access_token || !settings?.shopee_shop_id) {
         return res.status(401).json({ error: 'Shopee não conectada ou sem token' });

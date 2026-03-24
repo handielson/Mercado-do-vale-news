@@ -29,12 +29,26 @@ export default async function handler(req: any, res: any) {
             ? (req.headers.host.includes('localhost') ? `http://${req.headers.host}` : `https://${req.headers.host}`)
             : 'https://mercadodovale.com.br';
             
-        // Buscar chaves do banco de dados (Pegamos a empresa ID 1)
-        const { data: settings } = await supabase
-            .from('company_settings')
-            .select('shopee_partner_id, shopee_partner_key')
-            .limit(1)
-            .single();
+        // Buscar chaves do banco de dados 
+        let settings = null;
+        try {
+            const vpsUrl = process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br';
+            const vpsRes = await fetch(`${vpsUrl}/company-settings`);
+            if (vpsRes.ok) {
+                settings = await vpsRes.json();
+            }
+        } catch (e) {
+            console.error('Erro ao buscar do VPS:', e);
+        }
+
+        if (!settings?.shopee_partner_id) {
+            const { data } = await supabase
+                .from('company_settings')
+                .select('shopee_partner_id, shopee_partner_key')
+                .limit(1)
+                .single();
+            settings = data;
+        }
 
         if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
             return res.status(400).json({ error: 'Shopee Partner ID e Key não configurados no painel.' });
@@ -63,11 +77,26 @@ export default async function handler(req: any, res: any) {
         }
 
         // Recuperar chaves
-        const { data: settings } = await supabase
-            .from('company_settings')
-            .select('id, shopee_partner_id, shopee_partner_key')
-            .limit(1)
-            .single();
+        let settings = null;
+        try {
+            const vpsUrl = process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br';
+            const vpsRes = await fetch(`${vpsUrl}/company-settings`);
+            if (vpsRes.ok) {
+                settings = await vpsRes.json();
+            }
+        } catch (e) {
+            console.error('Erro ao buscar do VPS:', e);
+        }
+
+        // Fallback Supabase
+        if (!settings?.shopee_partner_id) {
+            const { data } = await supabase
+                .from('company_settings')
+                .select('id, shopee_partner_id, shopee_partner_key')
+                .limit(1)
+                .single();
+            settings = data;
+        }
 
         if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
             return res.status(500).send('<h1>Erro Interno</h1><p>Credenciais da Shopee não encontradas.</p>');
