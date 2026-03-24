@@ -15,12 +15,28 @@ interface ProductCardProps {
     onDelete?: (product: Product) => void;
 }
 
+const productImagesCache = new Map<string, string[]>();
+
+const getProductImagesWithCache = async (productId: string): Promise<string[]> => {
+    if (productImagesCache.has(productId)) {
+        return productImagesCache.get(productId)!;
+    }
+    try {
+        const { data } = await supabase.from('products').select('images').eq('id', productId).single();
+        const images = data?.images || [];
+        productImagesCache.set(productId, images);
+        return images;
+    } catch {
+        return [];
+    }
+};
+
 /**
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
-    const [modelImageUrl, setModelImageUrl] = useState<string | null>(null);
+    const [fetchedImages, setFetchedImages] = useState<string[]>([]);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [currentStatus, setCurrentStatus] = useState<ProductStatus>(product.status);
     const [currentStock, setCurrentStock] = useState<number | undefined>(product.stock_quantity);
@@ -83,28 +99,38 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
-    // Buscar foto do modelo como fallback quando produto não tem imagem própria (USANDO CACHE)
+    // Lazy load individual product images (since useProducts fetches with compact:true which strips images)
     useEffect(() => {
-        if (product.images && product.images.length > 0) return;
-        if (!product.model_id) return;
+        if (product.images && product.images.length > 0) {
+            setFetchedImages(product.images);
+            return;
+        }
 
         let isMounted = true;
         
-        const fetchModelImage = async () => {
-            const imageUrl = await getModelImageWithCache(product.model_id!, product.specs?.color);
-            if (isMounted && imageUrl) {
-                setModelImageUrl(imageUrl);
+        const loadImages = async () => {
+            // 1. Try to fetch the product's own images from Supabase
+            const ownImages = await getProductImagesWithCache(product.id);
+            if (isMounted && ownImages.length > 0) {
+                setFetchedImages(ownImages);
+                return;
+            }
+
+            // 2. Fallback to model image if product has no specific images
+            if (product.model_id) {
+                const imageUrl = await getModelImageWithCache(product.model_id, product.specs?.color);
+                if (isMounted && imageUrl) {
+                    setFetchedImages([imageUrl]);
+                }
             }
         };
 
-        fetchModelImage();
+        loadImages();
         
         return () => { isMounted = false; }
-    }, [product.model_id, product.specs?.color]);
+    }, [product.id, product.images, product.model_id, product.specs?.color]);
 
-    const coverImage = (product.images && product.images.length > 0)
-        ? product.images[0]
-        : modelImageUrl;
+    const coverImage = fetchedImages.length > 0 ? fetchedImages[0] : null;
 
     // Format price from centavos to BRL
     const formatPrice = (centavos: number): string => {
