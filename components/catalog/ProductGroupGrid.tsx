@@ -16,6 +16,7 @@ interface ProductGroupGridProps {
         desktop?: number;
         wide?: number;
     };
+    mobileColumns?: 2 | 4; // toggle mobile: 2 colunas (padrão) ou 4
 }
 
 // Skeleton loader para ProductCard
@@ -33,6 +34,14 @@ function ProductCardSkeleton() {
     );
 }
 
+// Mapa seguro de classes Tailwind — interpolação dinâmica quebra o JIT em produção
+const MOBILE_GRID: Record<number, string> = {
+    1: 'grid-cols-1',
+    2: 'grid-cols-2',
+    3: 'grid-cols-3',
+    4: 'grid-cols-4',
+};
+
 export function ProductGroupGrid({
     groups,
     loading = false,
@@ -42,16 +51,21 @@ export function ProductGroupGrid({
     onShare,
     favorites = new Set(),
     variant = 'grid',
-    columns = {
-        mobile: 1,
-        tablet: 2,
-        desktop: 3,
-        wide: 4
-    }
+    columns = { mobile: 2, tablet: 3, desktop: 4, wide: 5 },
+    mobileColumns,
 }: ProductGroupGridProps) {
-    // Gerar classes de grid baseado nas colunas
-    const gridClasses = `grid gap-4 md:gap-6 ${variant === 'grid'
-        ? `grid-cols-${columns.mobile} sm:grid-cols-${columns.tablet} lg:grid-cols-${columns.desktop} xl:grid-cols-${columns.wide}`
+    const effectiveMobile = mobileColumns ?? columns.mobile ?? 2;
+
+    // Classes seguras — sem interpolação dinâmica
+    const tabletClass = columns.tablet === 3 ? 'sm:grid-cols-3' : columns.tablet === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-3';
+    const desktopClass = columns.desktop === 4 ? 'lg:grid-cols-4' : columns.desktop === 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4';
+    const wideClass = columns.wide === 5 ? 'xl:grid-cols-5' : columns.wide === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-5';
+
+    const mobileClass = MOBILE_GRID[effectiveMobile] ?? 'grid-cols-2';
+    const gapClass = effectiveMobile === 4 ? 'gap-1.5 sm:gap-4 md:gap-6' : 'gap-3 sm:gap-4 md:gap-6';
+
+    const gridClasses = `grid ${gapClass} ${variant === 'grid'
+        ? `${mobileClass} ${tabletClass} ${desktopClass} ${wideClass}`
         : 'grid-cols-1'
         }`;
 
@@ -102,7 +116,7 @@ export function ProductGroupGrid({
 
                 {/* Skeleton loaders durante carregamento */}
                 {loading &&
-                    Array.from({ length: columns.desktop || 3 }).map((_, i) => (
+                    Array.from({ length: columns.desktop || 4 }).map((_, i) => (
                         <ProductCardSkeleton key={`skeleton-${i}`} />
                     ))}
             </div>

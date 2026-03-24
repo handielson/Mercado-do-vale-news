@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { X, LayoutGrid, Grid2X2 } from 'lucide-react';
 import {
     BannerCarousel,
     ProductFilters,
@@ -42,6 +42,7 @@ function CatalogContent() {
     const [promoTimeLeft, setPromoTimeLeft] = useState<{ days: number, hours: number, minutes: number, seconds: number } | null>(null);
 
     const { customer } = useSupabaseAuth();
+    const [mobileColumns, setMobileColumns] = useState<2 | 4>(2);
 
     // Mapeia customer_type do banco (retail/wholesale/resale) → CustomerType do banner (varejo/revenda/atacado)
     const customerType = ((): CustomerType | undefined => {
@@ -340,7 +341,7 @@ function CatalogContent() {
                         </div>
                     </div>
 
-                    {/* Barra de busca + Filtros na mesma linha */}
+                    {/* Barra de busca + Filtros + Toggle de colunas */}
                     <div className="flex items-stretch gap-2">
                         <div className="flex-1">
                             <SearchBar
@@ -349,6 +350,17 @@ function CatalogContent() {
                                 placeholder="Buscar por nome ou marca..."
                             />
                         </div>
+                        {/* Toggle mobile 2/4 colunas — só no mobile */}
+                        <button
+                            className="sm:hidden flex items-center justify-center w-10 h-10 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 active:scale-95 transition-all shrink-0"
+                            onClick={() => setMobileColumns(c => c === 2 ? 4 : 2)}
+                            title={mobileColumns === 2 ? 'Ver 4 por linha' : 'Ver 2 por linha'}
+                            aria-label="Alternar colunas"
+                        >
+                            {mobileColumns === 2
+                                ? <Grid2X2 className="w-4 h-4" />
+                                : <LayoutGrid className="w-4 h-4" />}
+                        </button>
                         <CatalogFilters
                             filters={filters}
                             onFiltersChange={setFilters}
@@ -439,6 +451,7 @@ function CatalogContent() {
                     onShare={handleShare}
                     favorites={favorites}
                     variant="grid"
+                    mobileColumns={mobileColumns}
                     columns={{
                         mobile: 2,
                         tablet: 3,
