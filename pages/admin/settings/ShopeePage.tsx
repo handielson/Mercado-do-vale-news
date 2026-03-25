@@ -195,7 +195,7 @@ export default function ShopeePage() {
             const unmatched: any[] = [];
 
             for (const item of detailedItems) {
-                const sellerSku = (item.seller_sku || '').toLowerCase();
+                const sellerSku = (item.item_sku || '').toLowerCase(); // API field is item_sku (not seller_sku)
                 let localMatch = sellerSku ? skuMap.get(sellerSku) : null;
 
                 if (!localMatch) {
