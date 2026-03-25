@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
+import { supabase } from '../../../config/supabase';
 import { Company } from '../../../types/company';
 
 export default function ShopeePage() {
     const [company, setCompany] = useState<Company | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [shopeeConnected, setShopeeConnected] = useState(false);
+    const [shopeeShopId, setShopeeShopId] = useState<string | null>(null);
 
     useEffect(() => {
         loadData();
@@ -18,6 +21,17 @@ export default function ShopeePage() {
             setLoading(true);
             const data = await getCompanyData();
             setCompany(data);
+            // Busca o status OAuth do Shopee diretamente do Supabase
+            // (VPS pode ter dados desatualizados sem o access_token)
+            const { data: sbSettings } = await supabase
+                .from('company_settings')
+                .select('shopee_access_token, shopee_shop_id')
+                .limit(1)
+                .single();
+            if (sbSettings?.shopee_access_token) {
+                setShopeeConnected(true);
+                setShopeeShopId(sbSettings.shopee_shop_id);
+            }
         } catch (err: any) {
             toast.error('Erro ao buscar configurações.');
         } finally {
@@ -69,7 +83,7 @@ export default function ShopeePage() {
         );
     }
 
-    const isConnected = !!company?.shopee_access_token;
+    const isConnected = shopeeConnected;
 
     return (
         <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-6">
@@ -167,7 +181,7 @@ export default function ShopeePage() {
                         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
                             <div>
                                 <p className="text-sm font-bold text-green-800">Autenticação Ativa</p>
-                                <p className="text-xs text-green-700 mt-1">Shop ID: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-200">{company?.shopee_shop_id}</span></p>
+                                <p className="text-xs text-green-700 mt-1">Shop ID: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-200">{shopeeShopId}</span></p>
                             </div>
                             <button
                                 onClick={handleOAuthLogin}
