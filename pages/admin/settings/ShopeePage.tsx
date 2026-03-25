@@ -196,7 +196,7 @@ export default function ShopeePage() {
             }
 
             // 3. Fetch VPS products for matching
-            const localProds = await vpsApiService.getProducts({ limit: 5000, status: 'all' }) || [];
+            const localProds = await vpsApiService.getProducts({ limit: 5000, noCache: true }) || [];
             const skuMap = new Map(localProds.filter((p: any) => p.sku).map((p: any) => [p.sku.toLowerCase(), p]));
 
             // 4. Match: SKU first → fuzzy name fallback
@@ -251,9 +251,14 @@ export default function ShopeePage() {
             }
 
             const bySkuCount = matched.filter(m => m.bysku).length;
+            const byNameCount = matched.length - bySkuCount;
+            const alreadyExisted = matched.length - toInsert.length;
             toast.success(
-                `✅ ${toInsert.length} vinculados! (${bySkuCount} por SKU, ${matched.length - bySkuCount} por nome)${unmatched.length > 0 ? `. ${unmatched.length} sem match.` : ''}`,
-                { id: 'shopee-import', duration: 7000 }
+                `✅ ${toInsert.length} novos vínculos criados\n` +
+                `📦 Shopee: ${shopeeItems.length} itens | VPS: ${localProds.length} produtos\n` +
+                `🔗 Match SKU: ${bySkuCount} | Nome: ${byNameCount} | Já existiam: ${alreadyExisted}\n` +
+                `❌ Sem match: ${unmatched.length}`,
+                { id: 'shopee-import', duration: 10000 }
             );
             loadProducts();
         } catch (e: any) {
