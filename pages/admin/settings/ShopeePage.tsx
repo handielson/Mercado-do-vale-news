@@ -255,11 +255,21 @@ export default function ShopeePage() {
             }
 
 
-            // 5. Upsert matches to Supabase (skip already linked)
+            // 5. Deduplicate by product_id (SKU match wins over name match) and upsert
             const { data: existing } = await supabase.from('shopee_products').select('product_id');
             const existingIds = new Set((existing || []).map((r: any) => r.product_id));
 
-            const toInsert = matched
+            // Keep one Shopee item per VPS product (SKU match wins over name match)
+            const bestMatchByProduct = new Map<string, typeof matched[0]>();
+            for (const m of matched) {
+                const pid = String(m.localProduct.id);
+                const current = bestMatchByProduct.get(pid);
+                if (!current || (!current.bysku && m.bysku)) {
+                    bestMatchByProduct.set(pid, m);
+                }
+            }
+
+            const toUpsert = [...bestMatchByProduct.values()]
                 .filter(m => !existingIds.has(String(m.localProduct.id)))
                 .map(m => ({
                     product_id: String(m.localProduct.id),
@@ -272,15 +282,21 @@ export default function ShopeePage() {
                     last_synced_at: new Date().toISOString(),
                 }));
 
-            if (toInsert.length > 0) {
-                await supabase.from('shopee_products').insert(toInsert);
+            let insertedCount = 0;
+            if (toUpsert.length > 0) {
+                const { error: upsertError, count } = await supabase
+                    .from('shopee_products')
+                    .upsert(toUpsert, { onConflict: 'product_id', count: 'exact' });
+                if (upsertError) throw new Error(`Supabase: ${upsertError.message}`);
+                insertedCount = count ?? toUpsert.length;
             }
 
-            const bySkuCount = matched.filter(m => m.bysku).length;
-            const byNameCount = matched.length - bySkuCount;
-            const alreadyExisted = matched.length - toInsert.length;
+            const bySkuCount = [...bestMatchByProduct.values()].filter(m => m.bysku).length;
+            const byNameCount = bestMatchByProduct.size - bySkuCount;
+            const alreadyExisted = bestMatchByProduct.size - toUpsert.length;
+
             toast.success(
-                `✅ ${toInsert.length} novos vínculos criados\n` +
+                `✅ ${insertedCount} novos vínculos criados\n` +
                 `📦 Shopee: ${shopeeItems.length} itens | VPS: ${localProds.length} produtos\n` +
                 `🔗 Match SKU: ${bySkuCount} | Nome: ${byNameCount} | Já existiam: ${alreadyExisted}\n` +
                 `❌ Sem match: ${unmatched.length}`,
