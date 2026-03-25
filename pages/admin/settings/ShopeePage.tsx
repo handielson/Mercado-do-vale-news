@@ -163,10 +163,20 @@ export default function ShopeePage() {
         setImporting(true);
         toast.loading('Buscando produtos na Shopee...', { id: 'shopee-import' });
         try {
-            // 1. Fetch all active Shopee item IDs
-            const listRes = await fetch('/api/shopee-catalog?action=get_item_list&item_status=NORMAL&page_size=100');
-            const listData = await listRes.json();
-            const shopeeItems: any[] = listData.response?.item || [];
+            // 1. Fetch ALL active Shopee item IDs (paginated)
+            const shopeeItems: any[] = [];
+            let offset = 0;
+            let hasNextPage = true;
+            while (hasNextPage) {
+                const listRes = await fetch(`/api/shopee-catalog?action=get_item_list&item_status=NORMAL&page_size=100&offset=${offset}`);
+                const listData = await listRes.json();
+                const pageItems: any[] = listData.response?.item || [];
+                shopeeItems.push(...pageItems);
+                hasNextPage = listData.response?.has_next_page === true;
+                offset = listData.response?.next_offset ?? (offset + 100);
+                if (pageItems.length === 0) break; // safety exit
+                toast.loading(`Buscando produtos Shopee... ${shopeeItems.length} encontrados`, { id: 'shopee-import' });
+            }
 
             if (shopeeItems.length === 0) {
                 toast.warning('Nenhum produto encontrado na Shopee.', { id: 'shopee-import' });
@@ -186,7 +196,7 @@ export default function ShopeePage() {
             }
 
             // 3. Fetch VPS products for matching
-            const localProds = await vpsApiService.getProducts({ limit: 500, status: 'all' }) || [];
+            const localProds = await vpsApiService.getProducts({ limit: 5000, status: 'all' }) || [];
             const skuMap = new Map(localProds.filter((p: any) => p.sku).map((p: any) => [p.sku.toLowerCase(), p]));
 
             // 4. Match: SKU first → fuzzy name fallback
