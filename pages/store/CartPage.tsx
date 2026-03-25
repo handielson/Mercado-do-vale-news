@@ -579,6 +579,12 @@ function CartPageContent() {
                             isOpen={true}
                             onClose={() => { }}
                             inline
+                            initialVariant={{
+                                ram: firstItem.product.specs?.ram || firstItem.product.specs?.RAM || undefined,
+                                storage: firstItem.product.specs?.storage || firstItem.product.specs?.Storage ||
+                                    Object.entries(firstItem.product.specs ?? {}).find(([k]) => k.toLowerCase().includes('armaz') || k.toLowerCase().includes('mem'))?.[1] || undefined,
+                                color: firstItem.product.specs?.color || firstItem.product.specs?.Cor || undefined,
+                            }}
                             totalOverride={grandTotal}
                             selectedWarranty={selectedWarranty}
                             onWarrantyChange={setSelectedWarranty}
@@ -797,6 +803,12 @@ function CartPageContent() {
                                                 isOpen={true}
                                                 onClose={() => { }}
                                                 inline
+                                                initialVariant={{
+                                                    ram: firstItem.product.specs?.ram || firstItem.product.specs?.RAM || undefined,
+                                                    storage: firstItem.product.specs?.storage || firstItem.product.specs?.Storage ||
+                                                        Object.entries(firstItem.product.specs ?? {}).find(([k]) => k.toLowerCase().includes('armaz') || k.toLowerCase().includes('mem'))?.[1] || undefined,
+                                                    color: firstItem.product.specs?.color || firstItem.product.specs?.Cor || undefined,
+                                                }}
                                                 totalOverride={grandTotal}
                                                 selectedWarranty={selectedWarranty}
                                                 onWarrantyChange={setSelectedWarranty}

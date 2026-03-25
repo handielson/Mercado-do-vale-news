@@ -136,6 +136,10 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
         message += `• ${productName}`;
         if (specs.length > 0) message += `, ${specs.join(', ')}`;
         message += ` \n`;
+        const productSlug = product.slug || product.id;
+        if (productSlug) {
+            message += `🔗 https://mercadodovale.com.br/produto/${productSlug}\n`;
+        }
 
         if (selectedWarranty) {
             const warrantyPriceFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedWarranty.price / 100);
