@@ -144,6 +144,35 @@ export default async function handler(req: any, res: any) {
             return res.status(r.status).json(data);
         }
 
+        // GET /api/shopee-catalog?action=debug — inspect raw API responses
+        if (action === 'debug') {
+            // Step 1: get item list (first 5 items)
+            const listPath = '/api/v2/product/get_item_list';
+            const { url: listUrl } = buildShopeeUrl(listPath, creds);
+            const listR = await fetch(`${listUrl}&offset=0&page_size=5&item_status=NORMAL`);
+            const listData = await listR.json();
+            const itemIds: number[] = (listData.response?.item || []).map((i: any) => i.item_id);
+
+            let baseInfoData: any = null;
+            if (itemIds.length > 0) {
+                const infoPath = '/api/v2/product/get_item_base_info';
+                const { url: infoUrl } = buildShopeeUrl(infoPath, creds);
+                const infoR = await fetch(`${infoUrl}&item_id_list=${itemIds.join(',')}&need_tax_info=false&need_complaint_policy=false`);
+                baseInfoData = await infoR.json();
+            }
+
+            return res.status(200).json({
+                get_item_list_response: listData,
+                item_ids_found: itemIds,
+                get_item_base_info_response: baseInfoData,
+                first_item_keys: baseInfoData?.response?.item_list?.[0]
+                    ? Object.keys(baseInfoData.response.item_list[0])
+                    : 'item_list is null or empty - check top-level key',
+                top_level_keys_base_info: baseInfoData ? Object.keys(baseInfoData) : null,
+                response_keys_base_info: baseInfoData?.response ? Object.keys(baseInfoData.response) : null,
+            });
+        }
+
         return res.status(400).json({ error: `Unknown action: ${action}` });
 
     } catch (err: any) {
