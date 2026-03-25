@@ -71,6 +71,8 @@ export default function ShopeePage() {
     const [editingPrice, setEditingPrice] = useState<Record<string, number>>({});
     const [linkingProductId, setLinkingProductId] = useState<string | null>(null);
     const [linkInput, setLinkInput] = useState('');
+    const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+    const [expandStock, setExpandStock] = useState<Record<string, number>>({});
 
     useEffect(() => { loadData(); }, []);
 
@@ -608,7 +610,8 @@ export default function ShopeePage() {
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {filtered.map(p => (
-                                            <tr key={p.product_id} className="hover:bg-slate-50/50 transition-colors">
+                                            <React.Fragment key={p.product_id}>
+                                            <tr className="hover:bg-slate-50/50 transition-colors">
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-3">
                                                         {p.images?.[0] ? (
@@ -619,7 +622,19 @@ export default function ShopeePage() {
                                                             </div>
                                                         )}
                                                         <div className="min-w-0">
-                                                            <p className="font-medium text-slate-800 truncate max-w-[200px]">{p.name}</p>
+                                                            {p.shopee_item_id ? (
+                                                                <a
+                                                                    href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="font-medium text-slate-800 hover:text-orange-600 truncate max-w-[200px] flex items-center gap-1 transition-colors"
+                                                                >
+                                                                    <span className="truncate max-w-[185px]">{p.name}</span>
+                                                                    <ExternalLink className="w-3 h-3 shrink-0 text-slate-400" />
+                                                                </a>
+                                                            ) : (
+                                                                <p className="font-medium text-slate-800 truncate max-w-[200px]">{p.name}</p>
+                                                            )}
                                                             <p className="text-xs text-slate-400 font-mono">{p.sku || '—'}</p>
                                                         </div>
                                                     </div>
@@ -734,8 +749,86 @@ export default function ShopeePage() {
                                                         )}
                                                     </div>
                                                 </td>
+
+                                                {/* Expand chevron */}
+                                                <td className="px-2">
+                                                    <button onClick={() => setExpandedProductId(expandedProductId === p.product_id ? null : p.product_id)}
+                                                        className="p-1 rounded hover:bg-slate-100 transition-colors text-slate-400"
+                                                        title="Expandir detalhes">
+                                                        {expandedProductId === p.product_id
+                                                            ? <ChevronDown className="w-4 h-4" />
+                                                            : <ChevronRight className="w-4 h-4" />}
+                                                    </button>
+                                                </td>
                                             </tr>
+
+                                            {/* ── Expanded panel ─────────────────────── */}
+                                            {expandedProductId === p.product_id && (
+                                                <tr className="bg-orange-50/60">
+                                                    <td colSpan={6} className="px-6 py-4">
+                                                        <div className="flex flex-wrap items-end gap-4">
+                                                            {p.shopee_item_id && (
+                                                                <div>
+                                                                    <p className="text-xs text-slate-500 mb-1 font-medium">Shopee Item ID</p>
+                                                                    <a href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
+                                                                        target="_blank" rel="noopener noreferrer"
+                                                                        className="text-sm font-mono text-orange-600 hover:underline flex items-center gap-1">
+                                                                        #{p.shopee_item_id} <ExternalLink className="w-3 h-3" />
+                                                                    </a>
+                                                                </div>
+                                                            )}
+                                                            <div>
+                                                                <p className="text-xs text-slate-500 mb-1 font-medium">Preço (R$)</p>
+                                                                <input type="number" step="0.01"
+                                                                    defaultValue={(p.shopee_price || p.price_retail || 0) / 100}
+                                                                    onChange={e => setEditingPrice(prev => ({ ...prev, [p.product_id]: Math.round(parseFloat(e.target.value) * 100) }))}
+                                                                    className="w-28 px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xs text-slate-500 mb-1 font-medium">Estoque</p>
+                                                                <input type="number" min="0"
+                                                                    value={expandStock[p.product_id] ?? 0}
+                                                                    onChange={e => setExpandStock(prev => ({ ...prev, [p.product_id]: parseInt(e.target.value) || 0 }))}
+                                                                    className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500"
+                                                                />
+                                                            </div>
+                                                            <div className="flex gap-2 ml-auto">
+                                                                {p.shopee_item_id && (
+                                                                    <>
+                                                                        <button onClick={() => handleUpdatePrice(p)}
+                                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition-colors">
+                                                                            Atualizar Preço
+                                                                        </button>
+                                                                        <button onClick={async () => {
+                                                                            try {
+                                                                                const res = await fetch('/api/shopee-catalog?action=update_stock', {
+                                                                                    method: 'POST',
+                                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                                    body: JSON.stringify({ item_id: p.shopee_item_id, stock_list: [{ model_id: 0, seller_stock: [{ stock: expandStock[p.product_id] ?? 0 }] }] }),
+                                                                                });
+                                                                                const r = await res.json();
+                                                                                if (r.error) throw new Error(r.message || r.error);
+                                                                                toast.success('Estoque atualizado na Shopee!');
+                                                                            } catch (e: any) { toast.error(`Erro: ${e.message}`); }
+                                                                        }}
+                                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600 transition-colors">
+                                                                            Atualizar Estoque
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                                <button onClick={() => setExpandedProductId(null)}
+                                                                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                                                                    Fechar
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            </React.Fragment>
                                         ))}
+
                                     </tbody>
                                 </table>
                             </div>
