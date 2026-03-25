@@ -197,37 +197,63 @@ export default function ShopeePage() {
 
             // 3. Fetch VPS products for matching
             const localProds = await vpsApiService.getProducts({ limit: 5000, noCache: true }) || [];
-            const skuMap = new Map(localProds.filter((p: any) => p.sku).map((p: any) => [p.sku.toLowerCase(), p]));
+            // Build SKU map: both exact and cleaned (no hyphens/spaces) → works for "RMP-12P" vs "RMP12P"
+            const cleanSku = (s: string) => s.toLowerCase().replace(/[-\s]/g, '');
+            const skuMap    = new Map<string, any>();
+            const skuClean  = new Map<string, any>();
+            for (const p of localProds) {
+                if (!p.sku) continue;
+                skuMap.set(p.sku.toLowerCase(), p);
+                skuClean.set(cleanSku(p.sku), p);
+            }
 
-            // 4. Match: SKU first → fuzzy name fallback
+            // 4. Match: item_sku → model_sku → cleaned SKU → fuzzy name
             const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
             const matched: any[] = [];
             const unmatched: any[] = [];
 
             for (const item of detailedItems) {
-                const sellerSku = (item.item_sku || '').toLowerCase(); // API field is item_sku (not seller_sku)
-                let localMatch = sellerSku ? skuMap.get(sellerSku) : null;
+                let localMatch: any = null;
+                let matchedBySku = false;
 
+                // 4a. item_sku (exact + cleaned)
+                const itemSku = (item.item_sku || '').toLowerCase().trim();
+                if (itemSku) {
+                    localMatch = skuMap.get(itemSku) || skuClean.get(cleanSku(itemSku)) || null;
+                    if (localMatch) matchedBySku = true;
+                }
+
+                // 4b. model_sku for each variation (Shopee hides item-level SKU for variant products)
+                if (!localMatch && Array.isArray(item.models)) {
+                    for (const model of item.models) {
+                        const mSku = (model.model_sku || '').toLowerCase().trim();
+                        if (!mSku) continue;
+                        localMatch = skuMap.get(mSku) || skuClean.get(cleanSku(mSku)) || null;
+                        if (localMatch) { matchedBySku = true; break; }
+                    }
+                }
+
+                // 4c. Fuzzy name fallback (lowered threshold 0.45 → 0.35)
                 if (!localMatch) {
-                    // Fallback: fuzzy name match
                     const shopeeNameNorm = normalize(item.item_name || '');
                     let bestScore = 0;
                     for (const local of localProds) {
                         const localNorm = normalize(local.name || '');
                         const shopeeWords = shopeeNameNorm.split(/\s+/);
-                        const localWords = localNorm.split(/\s+/);
+                        const localWords  = localNorm.split(/\s+/);
                         const common = shopeeWords.filter(w => w.length > 2 && localWords.some(lw => lw.includes(w) || w.includes(lw)));
-                        const score = common.length / Math.max(shopeeWords.length, localWords.length);
-                        if (score > bestScore && score >= 0.45) { bestScore = score; localMatch = local; }
+                        const score  = common.length / Math.max(shopeeWords.length, localWords.length);
+                        if (score > bestScore && score >= 0.35) { bestScore = score; localMatch = local; }
                     }
                 }
 
                 if (localMatch) {
-                    matched.push({ shopeeItem: item, localProduct: localMatch, bysku: !!sellerSku });
+                    matched.push({ shopeeItem: item, localProduct: localMatch, bysku: matchedBySku });
                 } else {
                     unmatched.push(item);
                 }
             }
+
 
             // 5. Upsert matches to Supabase (skip already linked)
             const { data: existing } = await supabase.from('shopee_products').select('product_id');
