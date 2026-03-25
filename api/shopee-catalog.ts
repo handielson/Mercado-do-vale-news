@@ -153,7 +153,7 @@ export default async function handler(req: any, res: any) {
             if (!rawIds) return res.status(400).json({ error: 'item_id_list required' });
             const apiPath = '/api/v2/product/get_item_base_info';
             const { url } = buildShopeeUrl(apiPath, creds);
-            const r = await fetch(`${url}&item_id_list=${rawIds}&need_tax_info=false&need_complaint_policy=false`);
+            const r = await fetch(`${url}&item_id_list=${rawIds}&need_tax_info=true&need_complaint_policy=false`);
             const data = await r.json();
             return res.status(r.status).json(data);
         }
