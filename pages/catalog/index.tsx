@@ -233,7 +233,7 @@ function CatalogContent() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-end gap-2 relative z-10 flex-nowrap">
                 <Link
                     to="/promocoes"
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95 shrink-0 whitespace-nowrap"
+                    className="flex sm:hidden items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-bold text-white rounded-full transition-all hover:scale-105 hover:shadow-lg active:scale-95 shrink-0 whitespace-nowrap"
                     style={{ background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
                     title="Ver Promoções e Vantagens"
                 >
@@ -241,8 +241,7 @@ function CatalogContent() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
                         <span className="relative inline-flex rounded-full h-full w-full bg-white" />
                     </span>
-                    <span className="sm:hidden">🔥 Promo</span>
-                    <span className="hidden sm:inline">🔥 Promoções</span>
+                    <span>🔥 Promo</span>
                 </Link>
                 <div className="min-w-0 shrink">
                     <CheckinWidget />
