@@ -161,15 +161,23 @@ export default async function handler(req: any, res: any) {
                 baseInfoData = await infoR.json();
             }
 
+            // Step 2: fetch 3 products from VPS to inspect field names
+            const vpsR = await fetch('https://api.xiaomipetrolina.com.br/products?limit=3&status=all');
+            const vpsData = vpsR.ok ? await vpsR.json() : null;
+            const vpsFirstItem = Array.isArray(vpsData) ? vpsData[0] : null;
+            const skuSamples = Array.isArray(vpsData)
+                ? vpsData.slice(0, 5).map((p: any) => ({ id: p.id, sku: p.sku, codigo: p.codigo, name: p.name }))
+                : 'VPS fetch failed';
+
             return res.status(200).json({
-                get_item_list_response: listData,
-                item_ids_found: itemIds,
-                get_item_base_info_response: baseInfoData,
-                first_item_keys: baseInfoData?.response?.item_list?.[0]
-                    ? Object.keys(baseInfoData.response.item_list[0])
-                    : 'item_list is null or empty - check top-level key',
-                top_level_keys_base_info: baseInfoData ? Object.keys(baseInfoData) : null,
-                response_keys_base_info: baseInfoData?.response ? Object.keys(baseInfoData.response) : null,
+                shopee_skus_sample: (baseInfoData?.response?.item_list || []).slice(0, 5).map((i: any) => ({
+                    item_id: i.item_id,
+                    item_sku: i.item_sku,
+                    item_name: i.item_name?.slice(0, 40),
+                })),
+                vps_field_keys: vpsFirstItem ? Object.keys(vpsFirstItem) : 'fetch failed',
+                vps_sku_samples: skuSamples,
+                get_item_list_total: listData.response?.total_count,
             });
         }
 
