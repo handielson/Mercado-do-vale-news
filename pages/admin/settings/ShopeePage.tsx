@@ -69,6 +69,8 @@ export default function ShopeePage() {
     const [searchQ, setSearchQ] = useState('');
     const [syncModal, setSyncModal] = useState<LocalProduct | null>(null);
     const [editingPrice, setEditingPrice] = useState<Record<string, number>>({});
+    const [linkingProductId, setLinkingProductId] = useState<string | null>(null);
+    const [linkInput, setLinkInput] = useState('');
 
     useEffect(() => { loadData(); }, []);
 
@@ -161,49 +163,63 @@ export default function ShopeePage() {
         setImporting(true);
         toast.loading('Buscando produtos na Shopee...', { id: 'shopee-import' });
         try {
-            // 1. Fetch all active Shopee items
-            const res = await fetch('/api/shopee-catalog?action=get_item_list&item_status=NORMAL&page_size=100');
-            const data = await res.json();
-            const shopeeItems: any[] = data.response?.item || [];
+            // 1. Fetch all active Shopee item IDs
+            const listRes = await fetch('/api/shopee-catalog?action=get_item_list&item_status=NORMAL&page_size=100');
+            const listData = await listRes.json();
+            const shopeeItems: any[] = listData.response?.item || [];
 
             if (shopeeItems.length === 0) {
                 toast.warning('Nenhum produto encontrado na Shopee.', { id: 'shopee-import' });
                 return;
             }
 
-            // 2. Fetch VPS products for matching
-            const localProds = await vpsApiService.getProducts({ limit: 500, status: 'all' }) || [];
+            // 2. Fetch full base info (incl. seller SKU) in batches of 50
+            toast.loading(`Carregando detalhes de ${shopeeItems.length} itens...`, { id: 'shopee-import' });
+            const itemIds = shopeeItems.map((i: any) => i.item_id);
+            const batchSize = 50;
+            const detailedItems: any[] = [];
+            for (let i = 0; i < itemIds.length; i += batchSize) {
+                const batch = itemIds.slice(i, i + batchSize).join(',');
+                const infoRes = await fetch(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${batch}`);
+                const infoData = await infoRes.json();
+                detailedItems.push(...(infoData.response?.item_list || []));
+            }
 
-            // 3. Fuzzy match by name similarity
+            // 3. Fetch VPS products for matching
+            const localProds = await vpsApiService.getProducts({ limit: 500, status: 'all' }) || [];
+            const skuMap = new Map(localProds.filter((p: any) => p.sku).map((p: any) => [p.sku.toLowerCase(), p]));
+
+            // 4. Match: SKU first → fuzzy name fallback
             const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
             const matched: any[] = [];
             const unmatched: any[] = [];
 
-            for (const item of shopeeItems) {
-                const shopeeNameNorm = normalize(item.item_name || '');
-                // Try to find best local match
-                let bestMatch: any = null;
-                let bestScore = 0;
-                for (const local of localProds) {
-                    const localNorm = normalize(local.name || '');
-                    // Count matching words
-                    const shopeeWords = shopeeNameNorm.split(/\s+/);
-                    const localWords = localNorm.split(/\s+/);
-                    const commonWords = shopeeWords.filter(w => w.length > 2 && localWords.some(lw => lw.includes(w) || w.includes(lw)));
-                    const score = commonWords.length / Math.max(shopeeWords.length, localWords.length);
-                    if (score > bestScore && score >= 0.4) {
-                        bestScore = score;
-                        bestMatch = local;
+            for (const item of detailedItems) {
+                const sellerSku = (item.seller_sku || '').toLowerCase();
+                let localMatch = sellerSku ? skuMap.get(sellerSku) : null;
+
+                if (!localMatch) {
+                    // Fallback: fuzzy name match
+                    const shopeeNameNorm = normalize(item.item_name || '');
+                    let bestScore = 0;
+                    for (const local of localProds) {
+                        const localNorm = normalize(local.name || '');
+                        const shopeeWords = shopeeNameNorm.split(/\s+/);
+                        const localWords = localNorm.split(/\s+/);
+                        const common = shopeeWords.filter(w => w.length > 2 && localWords.some(lw => lw.includes(w) || w.includes(lw)));
+                        const score = common.length / Math.max(shopeeWords.length, localWords.length);
+                        if (score > bestScore && score >= 0.45) { bestScore = score; localMatch = local; }
                     }
                 }
-                if (bestMatch) {
-                    matched.push({ shopeeItem: item, localProduct: bestMatch });
+
+                if (localMatch) {
+                    matched.push({ shopeeItem: item, localProduct: localMatch, bysku: !!sellerSku });
                 } else {
                     unmatched.push(item);
                 }
             }
 
-            // 4. Save matches to Supabase (skip existing)
+            // 5. Upsert matches to Supabase (skip already linked)
             const { data: existing } = await supabase.from('shopee_products').select('product_id');
             const existingIds = new Set((existing || []).map((r: any) => r.product_id));
 
@@ -216,7 +232,7 @@ export default function ShopeePage() {
                     shopee_price: m.shopeeItem.price_info?.[0]?.original_price
                         ? Math.round(m.shopeeItem.price_info[0].original_price * 100)
                         : null,
-                    status: m.shopeeItem.item_status === 'NORMAL' ? 'active' : 'inactive',
+                    status: 'active',
                     last_synced_at: new Date().toISOString(),
                 }));
 
@@ -224,9 +240,10 @@ export default function ShopeePage() {
                 await supabase.from('shopee_products').insert(toInsert);
             }
 
+            const bySkuCount = matched.filter(m => m.bysku).length;
             toast.success(
-                `✅ ${toInsert.length} produtos importados! ${unmatched.length > 0 ? `${unmatched.length} sem correspondência local.` : ''}`,
-                { id: 'shopee-import', duration: 6000 }
+                `✅ ${toInsert.length} vinculados! (${bySkuCount} por SKU, ${matched.length - bySkuCount} por nome)${unmatched.length > 0 ? `. ${unmatched.length} sem match.` : ''}`,
+                { id: 'shopee-import', duration: 7000 }
             );
             loadProducts();
         } catch (e: any) {
@@ -234,6 +251,27 @@ export default function ShopeePage() {
         } finally {
             setImporting(false);
         }
+    };
+
+
+    const handleManualLink = async (p: ShopeeProduct) => {
+        const itemId = linkInput.trim();
+        if (!itemId || isNaN(Number(itemId))) {
+            toast.error('Digite um Shopee Item ID válido (numérico).');
+            return;
+        }
+        try {
+            await supabase.from('shopee_products').upsert({
+                product_id: p.product_id,
+                shopee_item_id: Number(itemId),
+                status: 'active',
+                last_synced_at: new Date().toISOString(),
+            }, { onConflict: 'product_id' });
+            toast.success(`Produto vinculado ao Item Shopee #${itemId}!`);
+            setLinkingProductId(null);
+            setLinkInput('');
+            loadProducts();
+        } catch { toast.error('Erro ao vincular produto.'); }
     };
 
     const handleToggleStatus = async (p: ShopeeProduct) => {
@@ -573,20 +611,50 @@ export default function ShopeePage() {
                                                                 }
                                                             </button>
                                                         )}
-                                                        {/* Sincronizar — ONLY for not_synced products */}
+                                                        {/* Actions */}
                                                         {p.status === 'not_synced' ? (
-                                                            <button
-                                                                onClick={() => setSyncModal({
-                                                                    id: p.product_id,
-                                                                    name: p.name || '',
-                                                                    sku: p.sku || '',
-                                                                    images: p.images || [],
-                                                                    price_retail: p.price_retail || 0,
-                                                                    category_slug: p.category_slug || '',
-                                                                })}
-                                                                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-[#ee4d2d] text-white hover:bg-[#d73f21]">
-                                                                Sincronizar
-                                                            </button>
+                                                            linkingProductId === p.product_id ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <input
+                                                                        autoFocus
+                                                                        type="number"
+                                                                        value={linkInput}
+                                                                        onChange={e => setLinkInput(e.target.value)}
+                                                                        onKeyDown={e => e.key === 'Enter' && handleManualLink(p)}
+                                                                        placeholder="Item ID Shopee"
+                                                                        className="w-28 px-2 py-1 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-orange-500"
+                                                                    />
+                                                                    <button onClick={() => handleManualLink(p)}
+                                                                        className="p-1 rounded bg-green-500 text-white hover:bg-green-600">
+                                                                        <Check className="w-3 h-3" />
+                                                                    </button>
+                                                                    <button onClick={() => { setLinkingProductId(null); setLinkInput(''); }}
+                                                                        className="p-1 rounded bg-slate-200 text-slate-600 hover:bg-slate-300">
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1">
+                                                                    <button
+                                                                        onClick={() => setSyncModal({
+                                                                            id: p.product_id,
+                                                                            name: p.name || '',
+                                                                            sku: p.sku || '',
+                                                                            images: p.images || [],
+                                                                            price_retail: p.price_retail || 0,
+                                                                            category_slug: p.category_slug || '',
+                                                                        })}
+                                                                        className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-[#ee4d2d] text-white hover:bg-[#d73f21]">
+                                                                        Sincronizar
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setLinkingProductId(p.product_id); setLinkInput(''); }}
+                                                                        title="Vincular a item já existente na Shopee"
+                                                                        className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors">
+                                                                        <Tag className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </div>
+                                                            )
                                                         ) : (
                                                             <span title={`Item Shopee: ${p.shopee_item_id}`}
                                                                 className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-400 cursor-default select-none">
