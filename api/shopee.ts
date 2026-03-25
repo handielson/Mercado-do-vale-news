@@ -30,26 +30,13 @@ export default async function handler(req: any, res: any) {
             ? (req.headers.host.includes('localhost') ? `http://${req.headers.host}` : `https://${req.headers.host}`)
             : 'https://mercadodovale.com.br';
             
-        // Buscar chaves do banco de dados 
-        let settings = null;
-        try {
-            const vpsUrl = process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br';
-            const vpsRes = await fetch(`${vpsUrl}/company-settings`);
-            if (vpsRes.ok) {
-                settings = await vpsRes.json();
-            }
-        } catch (e) {
-            console.error('Erro ao buscar do VPS:', e);
-        }
-
-        if (!settings?.shopee_partner_id) {
-            const { data } = await supabase
-                .from('company_settings')
-                .select('shopee_partner_id, shopee_partner_key')
-                .limit(1)
-                .single();
-            settings = data;
-        }
+        // Credenciais OAuth Shopee ficam SEMPRE no Supabase (fonte de verdade para OAuth)
+        // A VPS pode ter dados desatualizados de sandbox, então nunca usamos VPS para estas credenciais.
+        const { data: settings } = await supabase
+            .from('company_settings')
+            .select('shopee_partner_id, shopee_partner_key')
+            .limit(1)
+            .single();
 
         if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
             return res.status(400).json({ error: 'Shopee Partner ID e Key não configurados no painel.' });
@@ -77,27 +64,12 @@ export default async function handler(req: any, res: any) {
             return res.status(400).send('<h1>Falha na autorização</h1><p>Parâmetros ausentes (code, shop_id).</p>');
         }
 
-        // Recuperar chaves
-        let settings = null;
-        try {
-            const vpsUrl = process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br';
-            const vpsRes = await fetch(`${vpsUrl}/company-settings`);
-            if (vpsRes.ok) {
-                settings = await vpsRes.json();
-            }
-        } catch (e) {
-            console.error('Erro ao buscar do VPS:', e);
-        }
-
-        // Fallback Supabase
-        if (!settings?.shopee_partner_id) {
-            const { data } = await supabase
-                .from('company_settings')
-                .select('id, shopee_partner_id, shopee_partner_key')
-                .limit(1)
-                .single();
-            settings = data;
-        }
+        // Credenciais OAuth Shopee ficam SEMPRE no Supabase (fonte de verdade para OAuth)
+        const { data: settings } = await supabase
+            .from('company_settings')
+            .select('id, shopee_partner_id, shopee_partner_key')
+            .limit(1)
+            .single();
 
         if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
             return res.status(500).send('<h1>Erro Interno</h1><p>Credenciais da Shopee não encontradas.</p>');
