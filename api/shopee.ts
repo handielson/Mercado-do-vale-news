@@ -1,3 +1,4 @@
+// v2025-03-25 - Production credentials: uses db-stored partner_id (not hardcoded)
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
