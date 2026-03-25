@@ -1091,12 +1091,16 @@ function ExpandedItemPanel({
             .then(d => {
                 const item = d.response?.item_list?.[0];
                 if (!item) return;
+                // Extended description fallback (HTML blocks format)
+                const extDesc = item.description_info?.extended_description?.field_list
+                    ?.filter((f: any) => f.field_type === 'text')
+                    .map((f: any) => f.text).join('\n') || '';
                 setForm(prev => ({
                     ...prev,
-                    item_name:      item.item_name || prev.item_name,
-                    description:    item.description || '',
-                    item_sku:       item.item_sku || prev.item_sku,
-                    item_weight:    item.item_weight != null ? String(item.item_weight) : '',
+                    item_name:      item.item_name      || prev.item_name,
+                    description:    item.description    || extDesc || '',
+                    item_sku:       item.item_sku       || prev.item_sku,
+                    item_weight:    item.weight         != null ? String(item.weight)         : '',
                     package_length: item.package_length != null ? String(item.package_length) : '',
                     package_width:  item.package_width  != null ? String(item.package_width)  : '',
                     package_height: item.package_height != null ? String(item.package_height) : '',
