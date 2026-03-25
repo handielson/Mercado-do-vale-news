@@ -1,43 +1,134 @@
-import React, { useState, useEffect } from 'react';
-import { Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+    Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
+    Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
+    Upload, Check, X, Loader2, Tag
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { supabase } from '../../../services/supabase';
 import { Company } from '../../../types/company';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface ShopeeProduct {
+    id: string;
+    product_id: string;
+    shopee_item_id: number | null;
+    shopee_category_id: number | null;
+    shopee_category_name: string | null;
+    shopee_price: number | null;
+    status: 'active' | 'inactive' | 'not_synced';
+    last_synced_at: string | null;
+    // joined from products table
+    name?: string;
+    sku?: string;
+    images?: string[];
+    price_retail?: number;
+    category_slug?: string;
+}
+
+interface LocalProduct {
+    id: string;
+    name: string;
+    sku: string;
+    images: string[];
+    price_retail: number;
+    category_slug: string;
+}
+
+type Tab = 'config' | 'products';
+type Filter = 'all' | 'synced' | 'not_synced' | 'inactive';
+
+// ─── Helper ───────────────────────────────────────────────────────────────────
+const fmt = (cents: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+
+const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
+    if (status === 'active')
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">🟢 Ativo</span>;
+    if (status === 'inactive')
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700">🟡 Inativo</span>;
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-500">⚫ Não sincronizado</span>;
+};
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ShopeePage() {
+    const [tab, setTab] = useState<Tab>('config');
     const [company, setCompany] = useState<Company | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [shopeeConnected, setShopeeConnected] = useState(false);
     const [shopeeShopId, setShopeeShopId] = useState<string | null>(null);
 
-    useEffect(() => {
-        loadData();
-    }, []);
+    // Products tab state
+    const [products, setProducts] = useState<ShopeeProduct[]>([]);
+    const [loadingProducts, setLoadingProducts] = useState(false);
+    const [filter, setFilter] = useState<Filter>('all');
+    const [searchQ, setSearchQ] = useState('');
+    const [syncModal, setSyncModal] = useState<LocalProduct | null>(null);
+    const [editingPrice, setEditingPrice] = useState<Record<string, number>>({});
+
+    useEffect(() => { loadData(); }, []);
 
     async function loadData() {
         try {
             setLoading(true);
             const data = await getCompanyData();
             setCompany(data);
-            // Busca o status OAuth do Shopee diretamente do Supabase
-            // (VPS pode ter dados desatualizados sem o access_token)
             const { data: sbSettings } = await supabase
                 .from('company_settings')
                 .select('shopee_access_token, shopee_shop_id')
-                .limit(1)
-                .single();
+                .limit(1).single();
             if (sbSettings?.shopee_access_token) {
                 setShopeeConnected(true);
                 setShopeeShopId(sbSettings.shopee_shop_id);
             }
-        } catch (err: any) {
-            toast.error('Erro ao buscar configurações.');
-        } finally {
-            setLoading(false);
-        }
+        } catch { toast.error('Erro ao buscar configurações.'); }
+        finally { setLoading(false); }
     }
+
+    const loadProducts = useCallback(async () => {
+        setLoadingProducts(true);
+        try {
+            // Fetch local products
+            const { data: localProds } = await supabase
+                .from('products')
+                .select('id, name, sku, images, price_retail, category_slug')
+                .order('name');
+
+            // Fetch shopee sync records
+            const { data: shopeeRecords } = await supabase
+                .from('shopee_products')
+                .select('*');
+
+            const syncMap = new Map((shopeeRecords || []).map((r: any) => [r.product_id, r]));
+
+            const merged: ShopeeProduct[] = (localProds || []).map((p: any) => {
+                const sr = syncMap.get(p.id) as any;
+                return {
+                    id: sr?.id || p.id,
+                    product_id: p.id,
+                    shopee_item_id: sr?.shopee_item_id || null,
+                    shopee_category_id: sr?.shopee_category_id || null,
+                    shopee_category_name: sr?.shopee_category_name || null,
+                    shopee_price: sr?.shopee_price || null,
+                    status: sr?.status || 'not_synced',
+                    last_synced_at: sr?.last_synced_at || null,
+                    name: p.name,
+                    sku: p.sku,
+                    images: p.images,
+                    price_retail: p.price_retail,
+                    category_slug: p.category_slug,
+                };
+            });
+            setProducts(merged);
+        } catch (e) { toast.error('Erro ao carregar produtos.'); }
+        finally { setLoadingProducts(false); }
+    }, []);
+
+    useEffect(() => {
+        if (tab === 'products') loadProducts();
+    }, [tab, loadProducts]);
 
     const handleSave = async () => {
         if (!company) return;
@@ -45,11 +136,8 @@ export default function ShopeePage() {
             setSaving(true);
             await saveCompanyData(company);
             toast.success('Configurações da Shopee salvas!');
-        } catch (err: any) {
-            toast.error('Erro ao salvar as configurações.');
-        } finally {
-            setSaving(false);
-        }
+        } catch { toast.error('Erro ao salvar as configurações.'); }
+        finally { setSaving(false); }
     };
 
     const handleOAuthLogin = async () => {
@@ -57,160 +145,631 @@ export default function ShopeePage() {
             toast.error('Preencha o Partner ID e a Partner Key antes de tentar autenticar.');
             return;
         }
-        
         try {
             toast.loading('Gerando link de integração...', { id: 'shopee-auth' });
             const res = await fetch('/api/shopee?action=auth');
             const data = await res.json();
-            
             if (res.ok && data.url) {
                 toast.success('Redirecionando para a Shopee...', { id: 'shopee-auth' });
                 window.location.href = data.url;
             } else {
                 toast.error(data.error || 'Erro ao gerar URL de autorização.', { id: 'shopee-auth' });
             }
-        } catch (err) {
-            console.error(err);
-            toast.error('Erro de conexão ao tentar autorizar.', { id: 'shopee-auth' });
-        }
+        } catch { toast.error('Erro de conexão ao tentar autorizar.', { id: 'shopee-auth' }); }
     };
 
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
-            </div>
-        );
-    }
+    const handleToggleStatus = async (p: ShopeeProduct) => {
+        if (!p.shopee_item_id) return;
+        const newStatus = p.status === 'active' ? 'INACTIVE' : 'NORMAL';
+        try {
+            const res = await fetch('/api/shopee-catalog?action=update_item_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: p.shopee_item_id, item_status: newStatus }),
+            });
+            const data = await res.json();
+            if (data.error) { toast.error(`Erro: ${data.message}`); return; }
+            await supabase.from('shopee_products').update({
+                status: newStatus === 'NORMAL' ? 'active' : 'inactive'
+            }).eq('product_id', p.product_id);
+            toast.success(`Produto ${newStatus === 'NORMAL' ? 'ativado' : 'desativado'} na Shopee!`);
+            loadProducts();
+        } catch { toast.error('Erro ao alterar status.'); }
+    };
+
+    const handleUpdatePrice = async (p: ShopeeProduct) => {
+        const newPrice = editingPrice[p.product_id];
+        if (!newPrice || !p.shopee_item_id) return;
+        try {
+            const res = await fetch('/api/shopee-catalog?action=update_price', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: p.shopee_item_id,
+                    price_list: [{ model_id: 0, original_price: newPrice / 100 }],
+                }),
+            });
+            const data = await res.json();
+            if (data.error) { toast.error(`Erro: ${data.message}`); return; }
+            await supabase.from('shopee_products')
+                .update({ shopee_price: newPrice })
+                .eq('product_id', p.product_id);
+            toast.success('Preço atualizado na Shopee!');
+            setEditingPrice(prev => { const n = { ...prev }; delete n[p.product_id]; return n; });
+            loadProducts();
+        } catch { toast.error('Erro ao atualizar preço.'); }
+    };
+
+    if (loading) return (
+        <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+        </div>
+    );
 
     const isConnected = shopeeConnected;
 
+    const filtered = products.filter(p => {
+        const matchFilter =
+            filter === 'all' ? true :
+            filter === 'synced' ? p.status === 'active' :
+            filter === 'not_synced' ? p.status === 'not_synced' :
+            p.status === 'inactive';
+        const matchSearch = !searchQ || p.name?.toLowerCase().includes(searchQ.toLowerCase()) || p.sku?.toLowerCase().includes(searchQ.toLowerCase());
+        return matchFilter && matchSearch;
+    });
+
+    const stats = {
+        total: products.length,
+        synced: products.filter(p => p.status === 'active').length,
+        inactive: products.filter(p => p.status === 'inactive').length,
+        notSynced: products.filter(p => p.status === 'not_synced').length,
+    };
+
     return (
-        <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-6">
+        <div className="animate-in fade-in duration-500 max-w-5xl mx-auto space-y-6">
+            {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold flex items-center gap-3">
                         <Store className="w-8 h-8 text-orange-500" />
                         Shopee Integration
                     </h1>
-                    <p className="text-slate-500 mt-1">Conecte sua loja na Shopee Open Platform via OAuth 2.0</p>
+                    <p className="text-slate-500 mt-1">Gerencie sua loja na Shopee Open Platform</p>
                 </div>
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-orange-600 transition-colors disabled:opacity-50 shadow-sm"
-                >
-                    {saving ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                        <Save className="w-5 h-5" />
-                    )}
-                    Salvar Chaves
-                </button>
+                {tab === 'config' && (
+                    <button onClick={handleSave} disabled={saving}
+                        className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-orange-600 transition-colors disabled:opacity-50 shadow-sm">
+                        {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-5 h-5" />}
+                        Salvar Chaves
+                    </button>
+                )}
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <Key className="w-5 h-5 text-slate-500" />
-                        <div>
-                            <h2 className="text-base font-bold text-slate-800">Credenciais do Custom App</h2>
-                            <p className="text-xs text-slate-500">Crie um app na Shopee Open Platform e copie as chaves abaixo.</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div className="p-6 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Partner ID</label>
-                            <input
-                                type="text"
-                                value={company?.shopee_partner_id || ''}
-                                onChange={(e) => company && setCompany({ ...company, shopee_partner_id: e.target.value })}
-                                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-orange-500 bg-white"
-                                placeholder="Ex: 1229870"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Partner Key</label>
-                            <input
-                                type="password"
-                                value={company?.shopee_partner_key || ''}
-                                onChange={(e) => company && setCompany({ ...company, shopee_partner_key: e.target.value })}
-                                className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-orange-500 bg-white font-mono text-sm"
-                                placeholder="Ex: shpk..."
-                            />
-                        </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm text-slate-600">
-                            <AlertCircle className="w-4 h-4 text-amber-500" />
-                            Ambiente de Sandbox (Testes) configurado automaticamente se o Partner ID do Sandbox for usado.
-                        </div>
-                        <a href="https://open.shopee.com/" target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-orange-500 hover:text-orange-600 flex items-center gap-1">
-                            Acessar Console <ExternalLink className="w-4 h-4" />
-                        </a>
-                    </div>
-                </div>
+            {/* Tabs */}
+            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+                {[
+                    { id: 'config' as Tab, label: 'Configurações', icon: Key },
+                    { id: 'products' as Tab, label: 'Produtos', icon: Package },
+                ].map(({ id, label, icon: Icon }) => (
+                    <button key={id} onClick={() => setTab(id)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                            tab === id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                        }`}>
+                        <Icon className="w-4 h-4" />
+                        {label}
+                    </button>
+                ))}
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <ShieldCheck className="w-5 h-5 text-slate-500" />
-                        <div>
-                            <h2 className="text-base font-bold text-slate-800">Autorização OAuth 2.0</h2>
-                            <p className="text-xs text-slate-500">Vincule a sua conta de Vendedor (Shop) ao nosso App.</p>
-                        </div>
-                    </div>
-                    {isConnected ? (
-                        <div className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200 uppercase tracking-wider">
-                            Conectado
-                        </div>
-                    ) : (
-                        <div className="px-3 py-1 bg-slate-200 text-slate-500 text-xs font-bold rounded-full border border-slate-300 uppercase tracking-wider">
-                            Desconectado
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-6 space-y-4">
-                    {isConnected ? (
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* ── Tab: Configurações ── */}
+            {tab === 'config' && (
+                <div className="space-y-6">
+                    {/* Credentials card */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+                            <Key className="w-5 h-5 text-slate-500" />
                             <div>
-                                <p className="text-sm font-bold text-green-800">Autenticação Ativa</p>
-                                <p className="text-xs text-green-700 mt-1">Shop ID: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-200">{shopeeShopId}</span></p>
+                                <h2 className="text-base font-bold text-slate-800">Credenciais do Custom App</h2>
+                                <p className="text-xs text-slate-500">Crie um app na Shopee Open Platform e copie as chaves abaixo.</p>
                             </div>
-                            <button
-                                onClick={handleOAuthLogin}
-                                className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-colors flex items-center gap-2"
-                            >
-                                <RefreshCw className="w-4 h-4" />
-                                Reconectar / Atualizar Token
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Partner ID</label>
+                                    <input type="text" value={company?.shopee_partner_id || ''}
+                                        onChange={(e) => company && setCompany({ ...company, shopee_partner_id: e.target.value })}
+                                        className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-orange-500 bg-white"
+                                        placeholder="Ex: 2031856" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Partner Key</label>
+                                    <input type="password" value={company?.shopee_partner_key || ''}
+                                        onChange={(e) => company && setCompany({ ...company, shopee_partner_key: e.target.value })}
+                                        className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-orange-500 bg-white font-mono text-sm"
+                                        placeholder="Sua chave secreta" />
+                                </div>
+                            </div>
+                            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm text-slate-600">
+                                    <AlertCircle className="w-4 h-4 text-amber-500" />
+                                    Sandbox ativo se o Partner ID for do ambiente de testes.
+                                </div>
+                                <a href="https://open.shopee.com/" target="_blank" rel="noopener noreferrer"
+                                    className="text-sm font-semibold text-orange-500 hover:text-orange-600 flex items-center gap-1">
+                                    Acessar Console <ExternalLink className="w-4 h-4" />
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* OAuth card */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <ShieldCheck className="w-5 h-5 text-slate-500" />
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800">Autorização OAuth 2.0</h2>
+                                    <p className="text-xs text-slate-500">Vincule sua conta de Vendedor ao App.</p>
+                                </div>
+                            </div>
+                            {isConnected
+                                ? <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200 uppercase">Conectado</span>
+                                : <span className="px-3 py-1 bg-slate-200 text-slate-500 text-xs font-bold rounded-full border border-slate-300 uppercase">Desconectado</span>
+                            }
+                        </div>
+                        <div className="p-6">
+                            {isConnected ? (
+                                <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-bold text-green-800">Autenticação Ativa</p>
+                                        <p className="text-xs text-green-700 mt-1">Shop ID: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-200">{shopeeShopId}</span></p>
+                                    </div>
+                                    <button onClick={handleOAuthLogin}
+                                        className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-colors flex items-center gap-2">
+                                        <RefreshCw className="w-4 h-4" />
+                                        Reconectar / Atualizar Token
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-8 text-center space-y-4">
+                                    <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center">
+                                        <Store className="w-8 h-8 text-orange-500" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-slate-800">Conecte sua Loja</h3>
+                                        <p className="text-sm text-slate-500 mx-auto max-w-sm mt-1">Para sincronizar produtos, autorize este sistema a acessar sua conta da Shopee.</p>
+                                    </div>
+                                    <button onClick={handleOAuthLogin}
+                                        className="mt-2 bg-[#ee4d2d] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#d73f21] transition-colors shadow-md shadow-orange-500/20">
+                                        Autorizar com a Shopee
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Tab: Produtos ── */}
+            {tab === 'products' && (
+                <div className="space-y-4">
+                    {!isConnected && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-amber-800 text-sm">
+                            <AlertCircle className="w-5 h-5 shrink-0" />
+                            Conecte sua loja Shopee na aba <strong>Configurações</strong> antes de gerenciar produtos.
+                        </div>
+                    )}
+
+                    {/* Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                            { label: 'Total', value: stats.total, color: 'slate' },
+                            { label: 'Ativos', value: stats.synced, color: 'green' },
+                            { label: 'Inativos', value: stats.inactive, color: 'amber' },
+                            { label: 'Não sincronizados', value: stats.notSynced, color: 'slate' },
+                        ].map(s => (
+                            <div key={s.label} className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm">
+                                <p className="text-xs text-slate-500">{s.label}</p>
+                                <p className="text-2xl font-bold text-slate-800 mt-0.5">{s.value}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Filters + Search */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input value={searchQ} onChange={e => setSearchQ(e.target.value)}
+                                placeholder="Buscar por nome ou SKU..."
+                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white" />
+                        </div>
+                        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl text-xs font-medium">
+                            {([
+                                ['all', 'Todos'],
+                                ['synced', '🟢 Ativos'],
+                                ['not_synced', '⚫ Não sincronizados'],
+                                ['inactive', '🟡 Inativos'],
+                            ] as [Filter, string][]).map(([id, label]) => (
+                                <button key={id} onClick={() => setFilter(id)}
+                                    className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${filter === id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        {loadingProducts ? (
+                            <div className="flex items-center justify-center py-16">
+                                <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+                            </div>
+                        ) : filtered.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                <Package className="w-10 h-10 mb-2 opacity-30" />
+                                <p className="text-sm">Nenhum produto encontrado</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                        <tr>
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600">Produto</th>
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600 hidden md:table-cell">Categoria Shopee</th>
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600">Preço Shopee</th>
+                                            <th className="text-right px-4 py-3 font-semibold text-slate-600">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {filtered.map(p => (
+                                            <tr key={p.product_id} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        {p.images?.[0] ? (
+                                                            <img src={p.images[0]} alt={p.name} className="w-10 h-10 rounded-lg object-contain bg-slate-100 shrink-0" />
+                                                        ) : (
+                                                            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                                                                <Package className="w-5 h-5 text-slate-300" />
+                                                            </div>
+                                                        )}
+                                                        <div className="min-w-0">
+                                                            <p className="font-medium text-slate-800 truncate max-w-[200px]">{p.name}</p>
+                                                            <p className="text-xs text-slate-400 font-mono">{p.sku || '—'}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 hidden md:table-cell">
+                                                    <span className="text-xs text-slate-500">
+                                                        {p.shopee_category_name || <span className="italic text-slate-300">Não mapeado</span>}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <StatusBadge status={p.status} />
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            value={
+                                                                editingPrice[p.product_id] !== undefined
+                                                                    ? editingPrice[p.product_id] / 100
+                                                                    : (p.shopee_price || p.price_retail || 0) / 100
+                                                            }
+                                                            onChange={e => setEditingPrice(prev => ({
+                                                                ...prev,
+                                                                [p.product_id]: Math.round(parseFloat(e.target.value) * 100)
+                                                            }))}
+                                                            className="w-24 px-2 py-1 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-orange-500"
+                                                        />
+                                                        {editingPrice[p.product_id] !== undefined && p.shopee_item_id && (
+                                                            <button onClick={() => handleUpdatePrice(p)}
+                                                                className="p-1 rounded bg-green-500 text-white hover:bg-green-600">
+                                                                <Check className="w-3 h-3" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-2 justify-end">
+                                                        {/* Toggle ativo/inativo */}
+                                                        {p.shopee_item_id && (
+                                                            <button onClick={() => handleToggleStatus(p)} title={p.status === 'active' ? 'Desativar' : 'Ativar'}
+                                                                className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500">
+                                                                {p.status === 'active'
+                                                                    ? <ToggleRight className="w-5 h-5 text-green-500" />
+                                                                    : <ToggleLeft className="w-5 h-5 text-slate-400" />
+                                                                }
+                                                            </button>
+                                                        )}
+                                                        {/* Sincronizar */}
+                                                        <button
+                                                            onClick={() => setSyncModal({
+                                                                id: p.product_id,
+                                                                name: p.name || '',
+                                                                sku: p.sku || '',
+                                                                images: p.images || [],
+                                                                price_retail: p.price_retail || 0,
+                                                                category_slug: p.category_slug || '',
+                                                            })}
+                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-[#ee4d2d] text-white hover:bg-[#d73f21]">
+                                                            {p.shopee_item_id ? 'Re-sync' : 'Sincronizar'}
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {syncModal && (
+                        <ShopeeSyncModal
+                            product={syncModal}
+                            onClose={() => setSyncModal(null)}
+                            onSuccess={() => { setSyncModal(null); loadProducts(); }}
+                        />
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Sync Modal ───────────────────────────────────────────────────────────────
+function ShopeeSyncModal({
+    product, onClose, onSuccess
+}: { product: LocalProduct; onClose: () => void; onSuccess: () => void }) {
+    const [step, setStep] = useState<1 | 2 | 3>(1);
+    const [catSearch, setCatSearch] = useState('');
+    const [categories, setCategories] = useState<any[]>([]);
+    const [loadingCats, setLoadingCats] = useState(false);
+    const [selectedCat, setSelectedCat] = useState<any>(null);
+    const [attributes, setAttributes] = useState<any[]>([]);
+    const [loadingAttrs, setLoadingAttrs] = useState(false);
+    const [attrValues, setAttrValues] = useState<Record<number, any>>({});
+    const [syncing, setSyncing] = useState(false);
+    const [shopeePrice, setShopeePrice] = useState(product.price_retail / 100);
+    const [shopeeStock, setShopeeStock] = useState(10);
+
+    const searchCategories = async () => {
+        if (!catSearch.trim()) return;
+        setLoadingCats(true);
+        try {
+            const res = await fetch(`/api/shopee-catalog?action=categories`);
+            const data = await res.json();
+            // filter categories that have names matching the search (leaf nodes)
+            const flattenCats = (cats: any[], level = 0): any[] => {
+                return cats.flatMap((c: any) => {
+                    const children = c.children ? flattenCats(c.children, level + 1) : [];
+                    const match = c.display_category_name?.toLowerCase().includes(catSearch.toLowerCase()) ||
+                        c.original_category_name?.toLowerCase().includes(catSearch.toLowerCase());
+                    return [...(match ? [{ ...c, level }] : []), ...children];
+                });
+            };
+            const allCats = data.response?.category_list || [];
+            setCategories(flattenCats(allCats).slice(0, 30));
+        } catch { toast.error('Erro ao buscar categorias.'); }
+        finally { setLoadingCats(false); }
+    };
+
+    const selectCategory = async (cat: any) => {
+        setSelectedCat(cat);
+        setStep(2);
+        setLoadingAttrs(true);
+        try {
+            const res = await fetch(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`);
+            const data = await res.json();
+            const attrs = data.response?.attribute_list || [];
+            setAttributes(attrs);
+        } catch { toast.error('Erro ao carregar atributos.'); }
+        finally { setLoadingAttrs(false); }
+    };
+
+    const handleSync = async () => {
+        setSyncing(true);
+        try {
+            // Build attribute list
+            const attributeList = Object.entries(attrValues).map(([attrId, val]) => ({
+                attribute_id: parseInt(attrId),
+                attribute_value_list: Array.isArray(val)
+                    ? val.map((v: any) => ({ value_id: v.value_id || 0, original_attribute_value: v.original_attribute_value || String(v) }))
+                    : [{ value_id: val.value_id || 0, original_attribute_value: val.original_attribute_value || String(val) }]
+            }));
+
+            const payload = {
+                original_price: shopeePrice,
+                description: product.name,
+                item_name: product.name,
+                category_id: selectedCat.category_id,
+                attribute_list: attributeList,
+                logistics_info: [{ logistic_id: 80031, enabled: true }],
+                stock_info_v2: {
+                    summary_info: { total_reserved_stock: 0, total_available_stock: shopeeStock }
+                },
+                image: {
+                    image_url_list: product.images?.slice(0, 9) || []
+                },
+                weight: '0.3',
+                item_status: 'NORMAL',
+                condition: 'NEW',
+            };
+
+            const res = await fetch('/api/shopee-catalog?action=add_item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+
+            if (data.error && data.error !== '') {
+                toast.error(`Shopee: ${data.message || data.error}`);
+                return;
+            }
+
+            // Save to Supabase
+            const shopeeItemId = data.response?.item_id;
+            await supabase.from('shopee_products').upsert({
+                product_id: product.id,
+                shopee_item_id: shopeeItemId,
+                shopee_category_id: selectedCat.category_id,
+                shopee_category_name: selectedCat.display_category_name,
+                shopee_price: Math.round(shopeePrice * 100),
+                status: 'active',
+                last_synced_at: new Date().toISOString(),
+            }, { onConflict: 'product_id' });
+
+            toast.success('Produto publicado na Shopee! 🎉');
+            onSuccess();
+        } catch (e: any) {
+            toast.error('Erro ao sincronizar produto.');
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                {/* Modal header */}
+                <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-800">Sincronizar com Shopee</h2>
+                        <p className="text-xs text-slate-500 truncate max-w-sm">{product.name}</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5" /></button>
+                </div>
+
+                {/* Steps indicator */}
+                <div className="flex items-center gap-2 px-6 py-4 border-b border-slate-50">
+                    {[['1', 'Categoria'], ['2', 'Atributos'], ['3', 'Confirmar']].map(([n, label], i) => (
+                        <React.Fragment key={n}>
+                            <div className={`flex items-center gap-1.5 text-xs font-semibold ${step >= parseInt(n) ? 'text-orange-500' : 'text-slate-400'}`}>
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${step >= parseInt(n) ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-400'}`}>{n}</span>
+                                <span className="hidden sm:inline">{label}</span>
+                            </div>
+                            {i < 2 && <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />}
+                        </React.Fragment>
+                    ))}
+                </div>
+
+                <div className="p-6 space-y-4">
+                    {/* Step 1: Category Search */}
+                    {step === 1 && (
+                        <div className="space-y-4">
+                            <p className="text-sm text-slate-600">Busque a categoria da Shopee que melhor representa este produto.</p>
+                            <div className="flex gap-2">
+                                <input value={catSearch} onChange={e => setCatSearch(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && searchCategories()}
+                                    placeholder="Ex: Celular, Notebook, Câmera..."
+                                    className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500" />
+                                <button onClick={searchCategories} disabled={loadingCats}
+                                    className="px-4 py-2.5 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50">
+                                    {loadingCats ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                </button>
+                            </div>
+                            {categories.length > 0 && (
+                                <div className="space-y-1 max-h-60 overflow-y-auto">
+                                    {categories.map(cat => (
+                                        <button key={cat.category_id} onClick={() => selectCategory(cat)}
+                                            className="w-full text-left px-4 py-2.5 rounded-xl hover:bg-orange-50 border border-transparent hover:border-orange-200 transition-all text-sm">
+                                            <span className="font-medium text-slate-800">{cat.display_category_name}</span>
+                                            <span className="ml-2 text-xs text-slate-400">ID: {cat.category_id}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Step 2: Attributes */}
+                    {step === 2 && (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 text-sm">
+                                <Tag className="w-4 h-4 text-orange-500" />
+                                <span className="font-medium text-slate-700">Categoria: <span className="text-orange-600">{selectedCat?.display_category_name}</span></span>
+                            </div>
+                            {loadingAttrs ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+                                </div>
+                            ) : (
+                                <div className="space-y-3 max-h-72 overflow-y-auto">
+                                    {attributes.filter(a => a.is_mandatory).map((attr: any) => (
+                                        <div key={attr.attribute_id}>
+                                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                                {attr.display_attribute_name}
+                                                <span className="text-red-400 ml-1">*</span>
+                                            </label>
+                                            {attr.input_type === 'DROP_DOWN' || attr.input_type === 'MULTIPLE_SELECT' ? (
+                                                <select
+                                                    onChange={e => {
+                                                        const opt = attr.attribute_value_list?.find((v: any) => String(v.value_id) === e.target.value);
+                                                        setAttrValues(prev => ({ ...prev, [attr.attribute_id]: opt || { original_attribute_value: e.target.value } }));
+                                                    }}
+                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500">
+                                                    <option value="">Selecione...</option>
+                                                    {(attr.attribute_value_list || []).map((v: any) => (
+                                                        <option key={v.value_id} value={v.value_id}>{v.display_attribute_value}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input type="text"
+                                                    onChange={e => setAttrValues(prev => ({ ...prev, [attr.attribute_id]: { original_attribute_value: e.target.value } }))}
+                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500"
+                                                    placeholder={attr.display_attribute_name} />
+                                            )}
+                                        </div>
+                                    ))}
+                                    {attributes.filter(a => a.is_mandatory).length === 0 && (
+                                        <p className="text-sm text-slate-500 text-center py-4">Nenhum atributo obrigatório para esta categoria.</p>
+                                    )}
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Preço (R$)</label>
+                                    <input type="number" step="0.01" value={shopeePrice}
+                                        onChange={e => setShopeePrice(parseFloat(e.target.value))}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Estoque inicial</label>
+                                    <input type="number" value={shopeeStock}
+                                        onChange={e => setShopeeStock(parseInt(e.target.value))}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                </div>
+                            </div>
+                            <button onClick={() => setStep(3)}
+                                className="w-full py-2.5 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors text-sm">
+                                Avançar → Confirmar
                             </button>
                         </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-8 text-center space-y-4">
-                            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center">
-                                <Store className="w-8 h-8 text-orange-500" />
+                    )}
+
+                    {/* Step 3: Confirm */}
+                    {step === 3 && (
+                        <div className="space-y-4">
+                            <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
+                                <div className="flex justify-between"><span className="text-slate-500">Produto</span><span className="font-medium text-slate-800 text-right max-w-[60%]">{product.name}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Categoria</span><span className="font-medium text-orange-600">{selectedCat?.display_category_name}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Preço</span><span className="font-semibold text-slate-800">R$ {shopeePrice.toFixed(2)}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Estoque</span><span className="font-medium">{shopeeStock} un.</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Atributos preenchidos</span><span className="font-medium">{Object.keys(attrValues).length}</span></div>
                             </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-800">Conecte sua Loja</h3>
-                                <p className="text-sm text-slate-500 mx-auto max-w-sm mt-1">Para sincronizar produtos, você precisa autorizar este sistema a acessar a sua conta da Shopee.</p>
-                            </div>
-                            <button
-                                onClick={handleOAuthLogin}
-                                className="mt-2 bg-[#ee4d2d] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#d73f21] transition-colors shadow-md shadow-orange-500/20"
-                            >
-                                Autorizar com a Shopee
+                            <button onClick={handleSync} disabled={syncing}
+                                className="w-full py-3 bg-[#ee4d2d] text-white rounded-xl font-bold hover:bg-[#d73f21] transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
+                                {syncing ? <><Loader2 className="w-4 h-4 animate-spin" />Publicando...</> : <><Upload className="w-4 h-4" />Publicar na Shopee</>}
                             </button>
+                            <button onClick={() => setStep(2)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-800">← Voltar e ajustar</button>
                         </div>
                     )}
                 </div>
             </div>
-
         </div>
     );
 }

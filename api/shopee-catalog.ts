@@ -1,0 +1,142 @@
+import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!;
+const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
+
+const SHOPEE_LIVE_URL = 'https://partner.shopeemobile.com';
+
+function generateSign(partnerId: string, partnerKey: string, apiPath: string, timestamp: number, accessToken: string, shopId: string) {
+    const baseString = `${partnerId}${apiPath}${timestamp}${accessToken}${shopId}`;
+    return crypto.createHmac('sha256', partnerKey).update(baseString).digest('hex');
+}
+
+async function getCredentials() {
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data } = await supabase
+        .from('company_settings')
+        .select('shopee_partner_id, shopee_partner_key, shopee_access_token, shopee_shop_id')
+        .limit(1)
+        .single();
+    if (!data?.shopee_partner_id || !data?.shopee_access_token) {
+        throw new Error('Shopee não autenticada. Configure as credenciais no painel.');
+    }
+    return {
+        partnerId: data.shopee_partner_id,
+        partnerKey: data.shopee_partner_key,
+        accessToken: data.shopee_access_token,
+        shopId: data.shopee_shop_id,
+    };
+}
+
+function buildShopeeUrl(apiPath: string, creds: ReturnType<typeof getCredentials> extends Promise<infer T> ? T : never) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const sign = generateSign(creds.partnerId, creds.partnerKey, apiPath, timestamp, creds.accessToken, creds.shopId);
+    const base = `${SHOPEE_LIVE_URL}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&access_token=${creds.accessToken}&shop_id=${creds.shopId}&sign=${sign}`;
+    return { url: base, timestamp, sign };
+}
+
+export default async function handler(req: any, res: any) {
+    const action = req.query.action as string;
+
+    try {
+        const creds = await getCredentials();
+
+        // GET /api/shopee-catalog?action=categories&keyword=...
+        if (action === 'categories') {
+            const apiPath = '/api/v2/product/get_category';
+            const { url } = buildShopeeUrl(apiPath, creds);
+            const lang = req.query.language || 'pt-BR';
+            const r = await fetch(`${url}&language=${lang}`);
+            const data = await r.json();
+            return res.status(r.status).json(data);
+        }
+
+        // GET /api/shopee-catalog?action=attributes&category_id=...
+        if (action === 'attributes') {
+            const { category_id } = req.query;
+            if (!category_id) return res.status(400).json({ error: 'category_id required' });
+            const apiPath = '/api/v2/product/get_attributes';
+            const { url } = buildShopeeUrl(apiPath, creds);
+            const r = await fetch(`${url}&category_id=${category_id}&language=pt-BR`);
+            const data = await r.json();
+            return res.status(r.status).json(data);
+        }
+
+        // POST /api/shopee-catalog?action=add_item
+        if (action === 'add_item') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+            const apiPath = '/api/v2/product/add_item';
+            const { url } = buildShopeeUrl(apiPath, creds);
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req.body),
+            });
+            const data = await r.json();
+            return res.status(r.status).json(data);
+        }
+
+        // POST /api/shopee-catalog?action=update_price
+        if (action === 'update_price') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+            const apiPath = '/api/v2/product/update_price';
+            const { url } = buildShopeeUrl(apiPath, creds);
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req.body),
+            });
+            const data = await r.json();
+            return res.status(r.status).json(data);
+        }
+
+        // POST /api/shopee-catalog?action=update_stock
+        if (action === 'update_stock') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+            const apiPath = '/api/v2/product/update_stock';
+            const { url } = buildShopeeUrl(apiPath, creds);
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req.body),
+            });
+            const data = await r.json();
+            return res.status(r.status).json(data);
+        }
+
+        // POST /api/shopee-catalog?action=update_item_status (active/inactive)
+        if (action === 'update_item_status') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+            const apiPath = '/api/v2/product/update_item_status';
+            const { url } = buildShopeeUrl(apiPath, creds);
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req.body),
+            });
+            const data = await r.json();
+            return res.status(r.status).json(data);
+        }
+
+        // GET /api/shopee-catalog?action=get_item_list
+        if (action === 'get_item_list') {
+            const apiPath = '/api/v2/product/get_item_list';
+            const { url } = buildShopeeUrl(apiPath, creds);
+            const params = new URLSearchParams({
+                offset: req.query.offset || '0',
+                page_size: req.query.page_size || '100',
+                item_status: req.query.item_status || 'NORMAL',
+            });
+            const r = await fetch(`${url}&${params}`);
+            const data = await r.json();
+            return res.status(r.status).json(data);
+        }
+
+        return res.status(400).json({ error: `Unknown action: ${action}` });
+
+    } catch (err: any) {
+        console.error('[shopee-catalog]', err);
+        return res.status(500).json({ error: err.message });
+    }
+}
