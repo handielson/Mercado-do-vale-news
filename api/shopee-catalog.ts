@@ -6,199 +6,180 @@ const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SU
 
 const SHOPEE_LIVE_URL = 'https://partner.shopeemobile.com';
 
+// Sign for shop-level APIs (access_token + shop_id in base string)
 function generateSign(partnerId: string, partnerKey: string, apiPath: string, timestamp: number, accessToken: string, shopId: string) {
     const baseString = `${partnerId}${apiPath}${timestamp}${accessToken}${shopId}`;
     return crypto.createHmac('sha256', partnerKey).update(baseString).digest('hex');
 }
 
-async function getCredentials() {
+// Sign for public/auth APIs (no access_token, no shop_id)
+function generatePublicSign(partnerId: string, partnerKey: string, apiPath: string, timestamp: number) {
+    const baseString = `${partnerId}${apiPath}${timestamp}`;
+    return crypto.createHmac('sha256', partnerKey).update(baseString).digest('hex');
+}
+
+type Creds = {
+    partnerId: string; partnerKey: string; accessToken: string;
+    shopId: string; refreshToken: string | null;
+};
+
+async function getCredentials(): Promise<Creds> {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const { data } = await supabase
         .from('company_settings')
-        .select('shopee_partner_id, shopee_partner_key, shopee_access_token, shopee_shop_id')
+        .select('shopee_partner_id, shopee_partner_key, shopee_access_token, shopee_shop_id, shopee_refresh_token')
         .limit(1)
         .single();
     if (!data?.shopee_partner_id || !data?.shopee_access_token) {
-        throw new Error('Shopee não autenticada. Configure as credenciais no painel.');
+        throw new Error('Shopee nÃ£o autenticada. Configure as credenciais no painel.');
     }
     return {
         partnerId: data.shopee_partner_id,
         partnerKey: data.shopee_partner_key,
         accessToken: data.shopee_access_token,
         shopId: data.shopee_shop_id,
+        refreshToken: data.shopee_refresh_token || null,
     };
 }
 
-function buildShopeeUrl(apiPath: string, creds: ReturnType<typeof getCredentials> extends Promise<infer T> ? T : never) {
+async function doRefreshToken(creds: Creds): Promise<string> {
+    if (!creds.refreshToken) throw new Error('refresh_token nÃ£o disponÃ­vel. Reconecte Ã  Shopee.');
+    const apiPath = '/api/v2/auth/access_token';
+    const timestamp = Math.floor(Date.now() / 1000);
+    const sign = generatePublicSign(creds.partnerId, creds.partnerKey, apiPath, timestamp);
+    const url = `${SHOPEE_LIVE_URL}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&sign=${sign}`;
+    const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            partner_id: parseInt(creds.partnerId),
+            shop_id: parseInt(creds.shopId),
+            refresh_token: creds.refreshToken,
+        }),
+    });
+    const data = await r.json();
+    if (data.error || !data.access_token) throw new Error(`Refresh falhou: ${data.message || data.error}`);
+    // Save new tokens to Supabase
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    await supabase.from('company_settings').update({
+        shopee_access_token: data.access_token,
+        shopee_refresh_token: data.refresh_token || creds.refreshToken,
+    }).not('shopee_partner_id', 'is', null);
+    console.log('[shopee-catalog] Token renovado com sucesso');
+    return data.access_token;
+}
+
+function buildShopeeUrl(apiPath: string, creds: Creds) {
     const timestamp = Math.floor(Date.now() / 1000);
     const sign = generateSign(creds.partnerId, creds.partnerKey, apiPath, timestamp, creds.accessToken, creds.shopId);
     const base = `${SHOPEE_LIVE_URL}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&access_token=${creds.accessToken}&shop_id=${creds.shopId}&sign=${sign}`;
     return { url: base, timestamp, sign };
 }
 
+// Fetch wrapper: auto-refresh on invalid token, retry once
+async function shopeeGet(apiPath: string, creds: Creds, extraParams: string): Promise<any> {
+    const { url } = buildShopeeUrl(apiPath, creds);
+    const r = await fetch(`${url}${extraParams}`);
+    const data = await r.json();
+    if ((data.error === 'invalid_acceess_token' || data.error === 'error_auth') && creds.refreshToken) {
+        creds.accessToken = await doRefreshToken(creds);
+        const { url: url2 } = buildShopeeUrl(apiPath, creds);
+        const r2 = await fetch(`${url2}${extraParams}`);
+        return r2.json();
+    }
+    return data;
+}
+
+async function shopeePost(apiPath: string, creds: Creds, body: any): Promise<any> {
+    const { url } = buildShopeeUrl(apiPath, creds);
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await r.json();
+    if ((data.error === 'invalid_acceess_token' || data.error === 'error_auth') && creds.refreshToken) {
+        creds.accessToken = await doRefreshToken(creds);
+        const { url: url2 } = buildShopeeUrl(apiPath, creds);
+        const r2 = await fetch(url2, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        return r2.json();
+    }
+    return data;
+}
+
 export default async function handler(req: any, res: any) {
     const action = req.query.action as string;
-
     try {
         const creds = await getCredentials();
 
-        // GET /api/shopee-catalog?action=categories&keyword=...
         if (action === 'categories') {
-            const apiPath = '/api/v2/product/get_category';
-            const { url } = buildShopeeUrl(apiPath, creds);
             const lang = req.query.language || 'pt-BR';
-            const r = await fetch(`${url}&language=${lang}`);
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            const data = await shopeeGet('/api/v2/product/get_category', creds, `&language=${lang}`);
+            return res.status(200).json(data);
         }
-
-        // GET /api/shopee-catalog?action=attributes&category_id=...
         if (action === 'attributes') {
             const { category_id } = req.query;
             if (!category_id) return res.status(400).json({ error: 'category_id required' });
-            const apiPath = '/api/v2/product/get_attributes';
-            const { url } = buildShopeeUrl(apiPath, creds);
-            const r = await fetch(`${url}&category_id=${category_id}&language=pt-BR`);
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            const data = await shopeeGet('/api/v2/product/get_attributes', creds, `&category_id=${category_id}&language=pt-BR`);
+            return res.status(200).json(data);
         }
-
-        // POST /api/shopee-catalog?action=add_item
         if (action === 'add_item') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
-            const apiPath = '/api/v2/product/add_item';
-            const { url } = buildShopeeUrl(apiPath, creds);
-            const r = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(req.body),
-            });
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            return res.status(200).json(await shopeePost('/api/v2/product/add_item', creds, req.body));
         }
-
-        // POST /api/shopee-catalog?action=update_price
         if (action === 'update_price') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
-            const apiPath = '/api/v2/product/update_price';
-            const { url } = buildShopeeUrl(apiPath, creds);
-            const r = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(req.body),
-            });
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            return res.status(200).json(await shopeePost('/api/v2/product/update_price', creds, req.body));
         }
-
-        // POST /api/shopee-catalog?action=update_stock
         if (action === 'update_stock') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
-            const apiPath = '/api/v2/product/update_stock';
-            const { url } = buildShopeeUrl(apiPath, creds);
-            const r = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(req.body),
-            });
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            return res.status(200).json(await shopeePost('/api/v2/product/update_stock', creds, req.body));
         }
-
-        // POST /api/shopee-catalog?action=update_item_status (active/inactive)
         if (action === 'update_item_status') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
-            const apiPath = '/api/v2/product/update_item_status';
-            const { url } = buildShopeeUrl(apiPath, creds);
-            const r = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(req.body),
-            });
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            return res.status(200).json(await shopeePost('/api/v2/product/update_item_status', creds, req.body));
         }
-
-        // POST /api/shopee-catalog?action=update_item
         if (action === 'update_item') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
-            const apiPath = '/api/v2/product/update_item';
-            const { url } = buildShopeeUrl(apiPath, creds);
-            const r = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(req.body),
-            });
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            return res.status(200).json(await shopeePost('/api/v2/product/update_item', creds, req.body));
         }
-
-        // GET /api/shopee-catalog?action=get_item_list
         if (action === 'get_item_list') {
-            const apiPath = '/api/v2/product/get_item_list';
-            const { url } = buildShopeeUrl(apiPath, creds);
             const params = new URLSearchParams({
                 offset: req.query.offset || '0',
                 page_size: req.query.page_size || '100',
                 item_status: req.query.item_status || 'NORMAL',
             });
-            const r = await fetch(`${url}&${params}`);
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            return res.status(200).json(await shopeeGet('/api/v2/product/get_item_list', creds, `&${params}`));
         }
-
-        // GET /api/shopee-catalog?action=get_item_base_info&item_id_list=123,456,...
         if (action === 'get_item_base_info') {
             const rawIds = req.query.item_id_list as string;
             if (!rawIds) return res.status(400).json({ error: 'item_id_list required' });
-            const apiPath = '/api/v2/product/get_item_base_info';
-            const { url } = buildShopeeUrl(apiPath, creds);
-            const r = await fetch(`${url}&item_id_list=${rawIds}&need_tax_info=true&need_complaint_policy=false`);
-            const data = await r.json();
-            return res.status(r.status).json(data);
+            return res.status(200).json(
+                await shopeeGet('/api/v2/product/get_item_base_info', creds, `&item_id_list=${rawIds}&need_tax_info=true&need_complaint_policy=false`)
+            );
         }
-
-        // GET /api/shopee-catalog?action=debug — inspect raw API responses
         if (action === 'debug') {
-            // Step 1: get item list (first 5 items)
-            const listPath = '/api/v2/product/get_item_list';
-            const { url: listUrl } = buildShopeeUrl(listPath, creds);
-            const listR = await fetch(`${listUrl}&offset=0&page_size=5&item_status=NORMAL`);
-            const listData = await listR.json();
+            const listData = await shopeeGet('/api/v2/product/get_item_list', creds, '&offset=0&page_size=5&item_status=NORMAL');
             const itemIds: number[] = (listData.response?.item || []).map((i: any) => i.item_id);
-
             let baseInfoData: any = null;
             if (itemIds.length > 0) {
-                const infoPath = '/api/v2/product/get_item_base_info';
-                const { url: infoUrl } = buildShopeeUrl(infoPath, creds);
-                const infoR = await fetch(`${infoUrl}&item_id_list=${itemIds.join(',')}&need_tax_info=false&need_complaint_policy=false`);
-                baseInfoData = await infoR.json();
+                baseInfoData = await shopeeGet('/api/v2/product/get_item_base_info', creds,
+                    `&item_id_list=${itemIds.join(',')}&need_tax_info=true&need_complaint_policy=false`);
             }
-
-            // Step 2: fetch 3 products from VPS to inspect field names
             const vpsR = await fetch('https://api.xiaomipetrolina.com.br/products?limit=3&status=all');
             const vpsData = vpsR.ok ? await vpsR.json() : null;
             const vpsFirstItem = Array.isArray(vpsData) ? vpsData[0] : null;
-            const skuSamples = Array.isArray(vpsData)
-                ? vpsData.slice(0, 5).map((p: any) => ({ id: p.id, sku: p.sku, codigo: p.codigo, name: p.name }))
-                : 'VPS fetch failed';
-
             return res.status(200).json({
-                shopee_skus_sample: (baseInfoData?.response?.item_list || []).slice(0, 5).map((i: any) => ({
-                    item_id: i.item_id,
-                    item_sku: i.item_sku,
-                    item_name: i.item_name?.slice(0, 40),
+                shopee_item_sample: (baseInfoData?.response?.item_list || []).slice(0, 2).map((i: any) => ({
+                    item_id: i.item_id, item_name: i.item_name?.slice(0, 40),
+                    weight: i.weight, dimension: i.dimension, tax_info: i.tax_info,
+                    description_len: i.description?.length,
                 })),
                 vps_field_keys: vpsFirstItem ? Object.keys(vpsFirstItem) : 'fetch failed',
-                vps_sku_samples: skuSamples,
                 get_item_list_total: listData.response?.total_count,
             });
         }
 
         return res.status(400).json({ error: `Unknown action: ${action}` });
-
     } catch (err: any) {
         console.error('[shopee-catalog]', err);
         return res.status(500).json({ error: err.message });
     }
 }
+
