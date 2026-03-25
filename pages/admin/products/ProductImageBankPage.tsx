@@ -81,7 +81,8 @@ export function ProductImageBankPage() {
     const handleBankDragEnd = () => setDraggedBankImg(null);
 
     // Dados do banco para o gerador e ordenação
-    const [dbSkus, setDbSkus] = useState<{ sku: string; name: string; color?: string; updated?: string; hasImages?: boolean }[]>([]);
+    const [dbSkus, setDbSkus] = useState<{ sku: string; name: string; color?: string; updated?: string; hasImages?: boolean; stock_quantity?: number | null }[]>([]);
+    const [onlyInStock, setOnlyInStock] = useState(false);
     const [dbColors, setDbColors] = useState<string[]>([]);
 
     const [genSku, setGenSku] = useState('');
@@ -105,7 +106,8 @@ export function ProductImageBankPage() {
                     name: p.name, 
                     color: p.specs?.color?.toUpperCase(), 
                     updated: p.updated || p.created,
-                    hasImages: Array.isArray(p.images) && p.images.length > 0
+                    hasImages: Array.isArray(p.images) && p.images.length > 0,
+                    stock_quantity: p.stock_quantity
                 }))
                 .sort((a, b) => {
                     const tA = a.updated ? new Date(a.updated).getTime() : 0;
@@ -867,17 +869,30 @@ export function ProductImageBankPage() {
                 {/* Sub-seção: SKUs sem fotos */}
                 {(() => {
                     const skuSet = new Set(skuList);
-                    const skusWithoutImages = dbSkus.filter(s => !skuSet.has(s.sku) && !s.hasImages);
-                    if (skusWithoutImages.length === 0) return null;
+                    const allWithoutImages = dbSkus.filter(s => !skuSet.has(s.sku) && !s.hasImages);
+                    const skusWithoutImages = onlyInStock
+                        ? allWithoutImages.filter(s => s.stock_quantity == null || s.stock_quantity > 0)
+                        : allWithoutImages;
+                    if (allWithoutImages.length === 0) return null;
                     return (
                         <div className="border-b border-slate-100">
-                            <div className="px-4 py-3 bg-orange-50 flex items-center gap-2">
+                            <div className="px-4 py-3 bg-orange-50 flex items-center gap-2 flex-wrap">
                                 <Camera size={15} className="text-orange-500 shrink-0" />
                                 <span className="text-sm font-semibold text-orange-700">Faltando Fotos</span>
                                 <span className="text-xs bg-orange-200 text-orange-800 font-bold px-2 py-0.5 rounded-full">
                                     {skusWithoutImages.length}
                                 </span>
                                 <span className="text-xs text-orange-500 ml-1">— clique em Enviar foto para fazer upload</span>
+                                <button
+                                    onClick={() => setOnlyInStock(prev => !prev)}
+                                    className={`ml-auto flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border font-medium transition-all ${
+                                        onlyInStock
+                                            ? 'bg-green-600 text-white border-green-600'
+                                            : 'bg-white text-slate-600 border-slate-300 hover:border-green-400 hover:text-green-700'
+                                    }`}
+                                >
+                                    {onlyInStock ? '✓ Com estoque' : 'Todos'}
+                                </button>
                             </div>
                             <div className="divide-y divide-slate-50">
                                 {skusWithoutImages.map(s => {
