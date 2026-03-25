@@ -1089,16 +1089,26 @@ function ExpandedItemPanel({
         fetch(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${p.shopee_item_id}`)
             .then(r => r.json())
             .then(d => {
+                // DEBUG: log full raw response
+                console.log('[Shopee Panel] full response:', JSON.stringify(d).substring(0, 2000));
+
+                if (d.error && d.error !== '') {
+                    toast.error(`Shopee API: ${d.message || d.error}`);
+                    return;
+                }
                 const item = d.response?.item_list?.[0];
-                if (!item) return;
+                if (!item) {
+                    toast.error('Shopee não retornou dados do item');
+                    return;
+                }
+
+                console.log('[Shopee Panel] item keys:', Object.keys(item));
+                console.log('[Shopee Panel] weight:', item.weight, '| dimension:', JSON.stringify(item.dimension), '| tax_info:', JSON.stringify(item.tax_info), '| description length:', item.description?.length);
+
                 // Extended description fallback (HTML blocks format)
                 const extDesc = item.description_info?.extended_description?.field_list
                     ?.filter((f: any) => f.field_type === 'text')
                     .map((f: any) => f.text).join('\n') || '';
-
-                // DEBUG: log raw structure to console (temporary)
-                console.log('[Shopee Panel] raw item keys:', Object.keys(item));
-                console.log('[Shopee Panel] weight:', item.weight, '| dimension:', item.dimension, '| tax_info:', item.tax_info);
 
                 const dim = item.dimension || {};
                 setForm(prev => ({
@@ -1118,7 +1128,7 @@ function ExpandedItemPanel({
                         : prev.price,
                 }));
             })
-            .catch(() => {})
+            .catch((e) => { console.error('[Shopee Panel] fetch error:', e); toast.error('Erro ao buscar dados da Shopee'); })
             .finally(() => setLoadingItem(false));
     }, [p.shopee_item_id]);
 
