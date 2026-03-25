@@ -59,20 +59,21 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
         if (cardCents <= 0) return [];
 
         const creditFees = paymentFees
-            .filter(f => f.payment_method === 'credit' && f.installments <= 12 && f.channel === 'presencial')
+            .filter(f => (f.payment_method === 'credit' || f.method === 'credit') && f.installments <= 12 && (f.channel === 'presencial' || f.channel === 'all'))
             .sort((a, b) => a.installments - b.installments)
             // Dedup: keep only first entry per installment count
             .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments));
 
         return creditFees.map(fee => {
-            const feeAmount = Math.round(cardCents * (fee.applied_fee / 100));
+            const feePercent = fee.applied_fee ?? fee.applied_fee_pct ?? 0;
+            const feeAmount = Math.round(cardCents * (feePercent / 100));
             const totalWithFee = cardCents + feeAmount;
             const monthlyValue = Math.round(totalWithFee / fee.installments);
             return {
                 installments: fee.installments,
                 monthlyValue,
                 totalWithFee,
-                feePercent: fee.applied_fee,
+                feePercent,
             };
         });
     }, [cardCents, paymentFees]);
@@ -166,7 +167,7 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
                 </div>
             )}
 
-            {/* Opções de parcelamento - aparece em tempo real conforme digita */}
+            {/* Opções de parcelamento - aparece quando há valor no cartão */}
             {cardCents > 0 && cardOptions.length > 0 && (
                 <div className="space-y-2">
                     <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 uppercase tracking-wide">
