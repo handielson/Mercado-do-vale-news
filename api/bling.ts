@@ -138,7 +138,6 @@ export default async function handler(req: any, res: any) {
                 const stockData = await stockRes.json();
                 for (const item of (stockData.data || [])) stock_quantity += item.saldoFisico ?? 0;
             }
-            if (stock_quantity === 0 && produto.estoque?.saldoVirtualTotal) stock_quantity = produto.estoque.saldoVirtualTotal;
             return res.status(200).json({ ...produto, stock_quantity });
         } catch (err: any) {
             return res.status(500).json({ error: 'network_error', message: err.message });
