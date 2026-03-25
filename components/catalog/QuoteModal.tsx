@@ -680,56 +680,6 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                     />
                 )}
 
-                {/* Payment Options (Admin Only) */}
-                {isAdmin && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                        <p className="text-sm font-medium text-blue-900 mb-2">
-                            📋 Incluir no orçamento:
-                        </p>
-                        <div className="space-y-2">
-                            <label className="flex items-center gap-2 cursor-pointer hover:bg-blue-100 p-1.5 rounded transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={paymentOptions.showCash}
-                                    onChange={(e) => {
-                                        // Only prevent unchecking if it's the last option checked
-                                        if (!e.target.checked && !paymentOptions.showInstallment) {
-                                            return; // Can't uncheck if installment is also unchecked
-                                        }
-                                        setPaymentOptions(prev => ({
-                                            ...prev,
-                                            showCash: e.target.checked
-                                        }));
-                                    }}
-                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-blue-800 font-medium">
-                                    💰 Preço à vista
-                                </span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer hover:bg-blue-100 p-1.5 rounded transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={paymentOptions.showInstallment}
-                                    onChange={(e) => {
-                                        // Only prevent unchecking if it's the last option checked
-                                        if (!e.target.checked && !paymentOptions.showCash) {
-                                            return; // Can't uncheck if cash is also unchecked
-                                        }
-                                        setPaymentOptions(prev => ({
-                                            ...prev,
-                                            showInstallment: e.target.checked
-                                        }));
-                                    }}
-                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-blue-800 font-medium">
-                                    💳 Preço parcelado
-                                </span>
-                            </label>
-                        </div>
-                    </div>
-                )}
 
                 {/* Atalho: Pagamento Online — oculto no inline (CartPage já tem botão Mercado Pago) */}
                 {!isAdmin && !inline && hasOnlineGateway && (
