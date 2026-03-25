@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
-    Upload, Check, X, Loader2, Tag
+    Upload, Check, X, Loader2, Tag, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
@@ -64,6 +64,7 @@ export default function ShopeePage() {
     // Products tab state
     const [products, setProducts] = useState<ShopeeProduct[]>([]);
     const [loadingProducts, setLoadingProducts] = useState(false);
+    const [importing, setImporting] = useState(false);
     const [filter, setFilter] = useState<Filter>('all');
     const [searchQ, setSearchQ] = useState('');
     const [syncModal, setSyncModal] = useState<LocalProduct | null>(null);
@@ -154,6 +155,85 @@ export default function ShopeePage() {
                 toast.error(data.error || 'Erro ao gerar URL de autorização.', { id: 'shopee-auth' });
             }
         } catch { toast.error('Erro de conexão ao tentar autorizar.', { id: 'shopee-auth' }); }
+    };
+
+    const importFromShopee = async () => {
+        setImporting(true);
+        toast.loading('Buscando produtos na Shopee...', { id: 'shopee-import' });
+        try {
+            // 1. Fetch all active Shopee items
+            const res = await fetch('/api/shopee-catalog?action=get_item_list&item_status=NORMAL&page_size=100');
+            const data = await res.json();
+            const shopeeItems: any[] = data.response?.item || [];
+
+            if (shopeeItems.length === 0) {
+                toast.warning('Nenhum produto encontrado na Shopee.', { id: 'shopee-import' });
+                return;
+            }
+
+            // 2. Fetch VPS products for matching
+            const localProds = await vpsApiService.getProducts({ limit: 500, status: 'all' }) || [];
+
+            // 3. Fuzzy match by name similarity
+            const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+            const matched: any[] = [];
+            const unmatched: any[] = [];
+
+            for (const item of shopeeItems) {
+                const shopeeNameNorm = normalize(item.item_name || '');
+                // Try to find best local match
+                let bestMatch: any = null;
+                let bestScore = 0;
+                for (const local of localProds) {
+                    const localNorm = normalize(local.name || '');
+                    // Count matching words
+                    const shopeeWords = shopeeNameNorm.split(/\s+/);
+                    const localWords = localNorm.split(/\s+/);
+                    const commonWords = shopeeWords.filter(w => w.length > 2 && localWords.some(lw => lw.includes(w) || w.includes(lw)));
+                    const score = commonWords.length / Math.max(shopeeWords.length, localWords.length);
+                    if (score > bestScore && score >= 0.4) {
+                        bestScore = score;
+                        bestMatch = local;
+                    }
+                }
+                if (bestMatch) {
+                    matched.push({ shopeeItem: item, localProduct: bestMatch });
+                } else {
+                    unmatched.push(item);
+                }
+            }
+
+            // 4. Save matches to Supabase (skip existing)
+            const { data: existing } = await supabase.from('shopee_products').select('product_id');
+            const existingIds = new Set((existing || []).map((r: any) => r.product_id));
+
+            const toInsert = matched
+                .filter(m => !existingIds.has(String(m.localProduct.id)))
+                .map(m => ({
+                    product_id: String(m.localProduct.id),
+                    shopee_item_id: m.shopeeItem.item_id,
+                    shopee_category_id: m.shopeeItem.category_id || null,
+                    shopee_price: m.shopeeItem.price_info?.[0]?.original_price
+                        ? Math.round(m.shopeeItem.price_info[0].original_price * 100)
+                        : null,
+                    status: m.shopeeItem.item_status === 'NORMAL' ? 'active' : 'inactive',
+                    last_synced_at: new Date().toISOString(),
+                }));
+
+            if (toInsert.length > 0) {
+                await supabase.from('shopee_products').insert(toInsert);
+            }
+
+            toast.success(
+                `✅ ${toInsert.length} produtos importados! ${unmatched.length > 0 ? `${unmatched.length} sem correspondência local.` : ''}`,
+                { id: 'shopee-import', duration: 6000 }
+            );
+            loadProducts();
+        } catch (e: any) {
+            toast.error(`Erro ao importar: ${e.message}`, { id: 'shopee-import' });
+        } finally {
+            setImporting(false);
+        }
     };
 
     const handleToggleStatus = async (p: ShopeeProduct) => {
@@ -359,6 +439,17 @@ export default function ShopeePage() {
                         </div>
                     )}
 
+                    {/* Import from Shopee button */}
+                    {isConnected && (
+                        <div className="flex justify-end">
+                            <button onClick={importFromShopee} disabled={importing || loadingProducts}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50 shadow-sm">
+                                {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4 text-slate-500" />}
+                                Importar da Shopee
+                            </button>
+                        </div>
+                    )}
+
                     {/* Stats */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {[
@@ -482,19 +573,26 @@ export default function ShopeePage() {
                                                                 }
                                                             </button>
                                                         )}
-                                                        {/* Sincronizar */}
-                                                        <button
-                                                            onClick={() => setSyncModal({
-                                                                id: p.product_id,
-                                                                name: p.name || '',
-                                                                sku: p.sku || '',
-                                                                images: p.images || [],
-                                                                price_retail: p.price_retail || 0,
-                                                                category_slug: p.category_slug || '',
-                                                            })}
-                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-[#ee4d2d] text-white hover:bg-[#d73f21]">
-                                                            {p.shopee_item_id ? 'Re-sync' : 'Sincronizar'}
-                                                        </button>
+                                                        {/* Sincronizar — ONLY for not_synced products */}
+                                                        {p.status === 'not_synced' ? (
+                                                            <button
+                                                                onClick={() => setSyncModal({
+                                                                    id: p.product_id,
+                                                                    name: p.name || '',
+                                                                    sku: p.sku || '',
+                                                                    images: p.images || [],
+                                                                    price_retail: p.price_retail || 0,
+                                                                    category_slug: p.category_slug || '',
+                                                                })}
+                                                                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-[#ee4d2d] text-white hover:bg-[#d73f21]">
+                                                                Sincronizar
+                                                            </button>
+                                                        ) : (
+                                                            <span title={`Item Shopee: ${p.shopee_item_id}`}
+                                                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-400 cursor-default select-none">
+                                                                #{p.shopee_item_id}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
