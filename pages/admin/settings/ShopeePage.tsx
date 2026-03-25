@@ -1080,6 +1080,37 @@ function ExpandedItemPanel({
         gtin:           '',
     });
     const setF = (k: keyof typeof form, v: string) => setForm(prev => ({ ...prev, [k]: v }));
+    const [loadingItem, setLoadingItem] = useState(false);
+
+    // Load current item data from Shopee on mount to pre-populate form
+    useEffect(() => {
+        if (!p.shopee_item_id) return;
+        setLoadingItem(true);
+        fetch(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${p.shopee_item_id}`)
+            .then(r => r.json())
+            .then(d => {
+                const item = d.response?.item_list?.[0];
+                if (!item) return;
+                setForm(prev => ({
+                    ...prev,
+                    item_name:      item.item_name || prev.item_name,
+                    description:    item.description || '',
+                    item_sku:       item.item_sku || prev.item_sku,
+                    item_weight:    item.weight != null ? String(item.weight) : '',
+                    package_length: item.package_length != null ? String(item.package_length) : '',
+                    package_width:  item.package_width  != null ? String(item.package_width)  : '',
+                    package_height: item.package_height != null ? String(item.package_height) : '',
+                    condition:      item.condition === 'USED' ? 'USED' : 'NEW',
+                    ncm:            item.tax_info?.ncm  || '',
+                    gtin:           item.tax_info?.gtin || '',
+                    price: item.price_info?.[0]?.original_price != null
+                        ? String(item.price_info[0].original_price)
+                        : prev.price,
+                }));
+            })
+            .catch(() => {})
+            .finally(() => setLoadingItem(false));
+    }, [p.shopee_item_id]);
 
     // Load category attributes on mount
     useEffect(() => {
@@ -1161,6 +1192,7 @@ function ExpandedItemPanel({
                 {/* Header */}
                 <div className="flex items-center gap-2 mb-5">
                     <span className="text-sm font-semibold text-slate-700">✏️ Editar na Shopee</span>
+                    {loadingItem && <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400" />}
                     {p.shopee_item_id && (
                         <a href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
                             target="_blank" rel="noopener noreferrer"
