@@ -547,7 +547,7 @@ export function ModernProductCard({
                         <ProductRatingBadge productId={product.id} className="mb-0.5" />
                         <h3
                             onClick={handleTitleClick}
-                            className="font-medium text-xs sm:text-sm text-slate-900 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer"
+                            className="font-medium text-xs sm:text-sm text-slate-900 line-clamp-3 hover:text-blue-600 transition-colors cursor-pointer"
                         >
                             {toTitleCase(productForDisplay.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim())}
                         </h3>
