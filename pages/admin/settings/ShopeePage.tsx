@@ -764,69 +764,17 @@ export default function ShopeePage() {
 
                                             {/* ── Expanded panel ─────────────────────── */}
                                             {expandedProductId === p.product_id && (
-                                                <tr className="bg-orange-50/60">
-                                                    <td colSpan={6} className="px-6 py-4">
-                                                        <div className="flex flex-wrap items-end gap-4">
-                                                            {p.shopee_item_id && (
-                                                                <div>
-                                                                    <p className="text-xs text-slate-500 mb-1 font-medium">Shopee Item ID</p>
-                                                                    <a href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
-                                                                        target="_blank" rel="noopener noreferrer"
-                                                                        className="text-sm font-mono text-orange-600 hover:underline flex items-center gap-1">
-                                                                        #{p.shopee_item_id} <ExternalLink className="w-3 h-3" />
-                                                                    </a>
-                                                                </div>
-                                                            )}
-                                                            <div>
-                                                                <p className="text-xs text-slate-500 mb-1 font-medium">Preço (R$)</p>
-                                                                <input type="number" step="0.01"
-                                                                    defaultValue={(p.shopee_price || p.price_retail || 0) / 100}
-                                                                    onChange={e => setEditingPrice(prev => ({ ...prev, [p.product_id]: Math.round(parseFloat(e.target.value) * 100) }))}
-                                                                    className="w-28 px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs text-slate-500 mb-1 font-medium">Estoque</p>
-                                                                <input type="number" min="0"
-                                                                    value={expandStock[p.product_id] ?? 0}
-                                                                    onChange={e => setExpandStock(prev => ({ ...prev, [p.product_id]: parseInt(e.target.value) || 0 }))}
-                                                                    className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500"
-                                                                />
-                                                            </div>
-                                                            <div className="flex gap-2 ml-auto">
-                                                                {p.shopee_item_id && (
-                                                                    <>
-                                                                        <button onClick={() => handleUpdatePrice(p)}
-                                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition-colors">
-                                                                            Atualizar Preço
-                                                                        </button>
-                                                                        <button onClick={async () => {
-                                                                            try {
-                                                                                const res = await fetch('/api/shopee-catalog?action=update_stock', {
-                                                                                    method: 'POST',
-                                                                                    headers: { 'Content-Type': 'application/json' },
-                                                                                    body: JSON.stringify({ item_id: p.shopee_item_id, stock_list: [{ model_id: 0, seller_stock: [{ stock: expandStock[p.product_id] ?? 0 }] }] }),
-                                                                                });
-                                                                                const r = await res.json();
-                                                                                if (r.error) throw new Error(r.message || r.error);
-                                                                                toast.success('Estoque atualizado na Shopee!');
-                                                                            } catch (e: any) { toast.error(`Erro: ${e.message}`); }
-                                                                        }}
-                                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600 transition-colors">
-                                                                            Atualizar Estoque
-                                                                        </button>
-                                                                    </>
-                                                                )}
-                                                                <button onClick={() => setExpandedProductId(null)}
-                                                                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
-                                                                    Fechar
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                                                <ExpandedItemPanel
+                                                    p={p}
+                                                    shopeeShopId={shopeeShopId}
+                                                    onClose={() => setExpandedProductId(null)}
+                                                    onPriceChange={val => setEditingPrice(prev => ({ ...prev, [p.product_id]: val }))}
+                                                    editingPriceVal={editingPrice[p.product_id]}
+                                                    onSaved={() => { setExpandedProductId(null); loadProducts(); }}
+                                                />
                                             )}
                                             </React.Fragment>
+
                                         ))}
 
                                     </tbody>
@@ -1089,15 +1037,171 @@ function ShopeeSyncModal({
                                 <div className="flex justify-between"><span className="text-slate-500">Estoque</span><span className="font-medium">{shopeeStock} un.</span></div>
                                 <div className="flex justify-between"><span className="text-slate-500">Atributos preenchidos</span><span className="font-medium">{Object.keys(attrValues).length}</span></div>
                             </div>
-                            <button onClick={handleSync} disabled={syncing}
-                                className="w-full py-3 bg-[#ee4d2d] text-white rounded-xl font-bold hover:bg-[#d73f21] transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
-                                {syncing ? <><Loader2 className="w-4 h-4 animate-spin" />Publicando...</> : <><Upload className="w-4 h-4" />Publicar na Shopee</>}
-                            </button>
-                            <button onClick={() => setStep(2)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-800">← Voltar e ajustar</button>
+                                                                    Publicar na Shopee
+                                            </>) : (<><Upload className="w-4 h-4" />Publicar na Shopee</>)}
+                                            </button>
+                                            <button onClick={() => setStep(2)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-800">← Voltar e ajustar</button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                    )}
-                </div>
-            </div>
+                    );
+}
+
+// ─── Expanded Item Panel ───────────────────────────────────────────────────────
+function ExpandedItemPanel({
+    p, shopeeShopId, onClose, onPriceChange, editingPriceVal, onSaved,
+}: {
+    p: ShopeeProduct;
+    shopeeShopId: string | null;
+    onClose: () => void;
+    onPriceChange: (val: number) => void;
+    editingPriceVal?: number;
+    onSaved: () => void;
+}) {
+    const [saving, setSaving] = useState(false);
+    const [form, setForm] = useState({
+        item_name:       p.name || '',
+        description:     '',
+        item_sku:        p.sku || '',
+        price:           ((p.shopee_price || p.price_retail || 0) / 100).toFixed(2),
+        item_weight:     '',
+        package_length:  '',
+        package_width:   '',
+        package_height:  '',
+        condition:       'NEW' as 'NEW' | 'USED',
+    });
+
+    const setF = (key: keyof typeof form, val: string) => setForm(prev => ({ ...prev, [key]: val }));
+
+    const handleSave = async () => {
+        if (!p.shopee_item_id) { toast.error('Produto sem Item ID na Shopee.'); return; }
+        setSaving(true);
+        try {
+            const payload: Record<string, any> = { item_id: p.shopee_item_id };
+            if (form.item_name.trim())    payload.item_name      = form.item_name.trim();
+            if (form.description.trim())  payload.description    = form.description.trim();
+            if (form.item_sku.trim())     payload.item_sku       = form.item_sku.trim();
+            if (form.item_weight)         payload.item_weight    = parseFloat(form.item_weight);
+            if (form.package_length)      payload.package_length = parseInt(form.package_length);
+            if (form.package_width)       payload.package_width  = parseInt(form.package_width);
+            if (form.package_height)      payload.package_height = parseInt(form.package_height);
+            payload.condition = form.condition;
+
+            const promises: Promise<any>[] = [
+                fetch('/api/shopee-catalog?action=update_item', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).then(r => r.json()),
+            ];
+
+            const priceVal = parseFloat(form.price);
+            if (!isNaN(priceVal) && priceVal > 0) {
+                promises.push(
+                    fetch('/api/shopee-catalog?action=update_price', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            item_id: p.shopee_item_id,
+                            price_list: [{ model_id: 0, original_price: priceVal }],
+                        }),
+                    }).then(r => r.json())
+                );
+            }
+
+            const results = await Promise.all(promises);
+            const errors = results.filter(r => r.error || r.message?.toLowerCase().includes('error'));
+            if (errors.length > 0) throw new Error(errors[0].message || errors[0].error);
+            toast.success('Item atualizado na Shopee!');
+            onSaved();
+        } catch (e: any) {
+            toast.error(`Erro: ${e.message}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const field = (label: string, key: keyof typeof form, type = 'text', placeholder = '') => (
+        <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-500">{label}</label>
+            <input
+                type={type}
+                value={form[key]}
+                placeholder={placeholder}
+                onChange={e => setF(key, e.target.value)}
+                className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white"
+            />
         </div>
+    );
+
+    return (
+        <tr className="bg-orange-50/50">
+            <td colSpan={6} className="px-6 py-5">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-700">Editar na Shopee</span>
+                        {p.shopee_item_id && (
+                            <a href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="text-xs font-mono text-orange-500 hover:underline flex items-center gap-0.5">
+                                #{p.shopee_item_id} <ExternalLink className="w-3 h-3" />
+                            </a>
+                        )}
+                    </div>
+                </div>
+
+                {/* Form grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <div className="col-span-2 flex flex-col gap-1">
+                        <label className="text-xs font-medium text-slate-500">Nome do Produto (Shopee)</label>
+                        <input type="text" value={form.item_name}
+                            onChange={e => setF('item_name', e.target.value)}
+                            className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white"
+                        />
+                    </div>
+                    {field('SKU Shopee', 'item_sku', 'text', p.sku || '')}
+                    {field('Preço (R$)', 'price', 'number', '0.00')}
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    {field('Peso (kg)', 'item_weight', 'number', 'ex: 0.35')}
+                    {field('Comprimento (cm)', 'package_length', 'number', 'ex: 30')}
+                    {field('Largura (cm)', 'package_width', 'number', 'ex: 20')}
+                    {field('Altura (cm)', 'package_height', 'number', 'ex: 10')}
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-medium text-slate-500">Condição</label>
+                        <select value={form.condition} onChange={e => setF('condition', e.target.value as any)}
+                            className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white">
+                            <option value="NEW">Novo</option>
+                            <option value="USED">Usado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-1 mb-4">
+                    <label className="text-xs font-medium text-slate-500">Descrição</label>
+                    <textarea value={form.description} rows={3}
+                        placeholder="Descrição do produto na Shopee (deixe em branco para não alterar)"
+                        onChange={e => setF('description', e.target.value)}
+                        className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white resize-y"
+                    />
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                    <button onClick={onClose}
+                        className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                        Cancelar
+                    </button>
+                    <button onClick={handleSave} disabled={saving || !p.shopee_item_id}
+                        className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[#ee4d2d] text-white hover:bg-[#d73f21] transition-colors flex items-center gap-1.5 disabled:opacity-50">
+                        {saving ? <><Loader2 className="w-3 h-3 animate-spin" />Salvando...</> : <><Upload className="w-3 h-3" />Salvar na Shopee</>}
+                    </button>
+                </div>
+            </td>
+        </tr>
     );
 }
