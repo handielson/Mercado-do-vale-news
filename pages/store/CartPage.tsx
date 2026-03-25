@@ -187,6 +187,22 @@ function CartPageContent() {
         return extractVariants([firstItem.product]);
     }, [firstItem?.product?.id]);
 
+    const firstItemVariant = useMemo(() => {
+        if (!firstItem) return {};
+        const specs: Record<string, any> = firstItem.product.specs ?? {};
+        const color = specs.color || specs.Cor;
+        const ramKey = Object.keys(specs).find(k => k.toLowerCase().includes('ram'));
+        const storKey = Object.keys(specs).find(k => {
+            const l = k.toLowerCase();
+            return l.includes('armaz') || l.includes('storage') || (l.includes('mem') && l.includes('int'));
+        });
+        return {
+            ram: ramKey ? specs[ramKey] : undefined,
+            storage: storKey ? specs[storKey] : undefined,
+            color: color || undefined,
+        };
+    }, [firstItem?.product?.id]);
+
     const warrantyPrice = selectedWarranty ? Math.round(eligibleTotal * selectedWarranty.percentage / 100) : 0;
     const couponDiscount = Math.round(coupon.discount * 100);
     const shippingCost = delivery.type === 'delivery' ? Math.round((delivery.shippingOption?.price ?? 0) * 100) : 0;
@@ -579,12 +595,7 @@ function CartPageContent() {
                             isOpen={true}
                             onClose={() => { }}
                             inline
-                            initialVariant={{
-                                ram: firstItem.product.specs?.ram || firstItem.product.specs?.RAM || undefined,
-                                storage: firstItem.product.specs?.storage || firstItem.product.specs?.Storage ||
-                                    Object.entries(firstItem.product.specs ?? {}).find(([k]) => k.toLowerCase().includes('armaz') || k.toLowerCase().includes('mem'))?.[1] || undefined,
-                                color: firstItem.product.specs?.color || firstItem.product.specs?.Cor || undefined,
-                            }}
+                            initialVariant={firstItemVariant}
                             totalOverride={grandTotal}
                             selectedWarranty={selectedWarranty}
                             onWarrantyChange={setSelectedWarranty}
@@ -803,12 +814,7 @@ function CartPageContent() {
                                                 isOpen={true}
                                                 onClose={() => { }}
                                                 inline
-                                                initialVariant={{
-                                                    ram: firstItem.product.specs?.ram || firstItem.product.specs?.RAM || undefined,
-                                                    storage: firstItem.product.specs?.storage || firstItem.product.specs?.Storage ||
-                                                        Object.entries(firstItem.product.specs ?? {}).find(([k]) => k.toLowerCase().includes('armaz') || k.toLowerCase().includes('mem'))?.[1] || undefined,
-                                                    color: firstItem.product.specs?.color || firstItem.product.specs?.Cor || undefined,
-                                                }}
+                                                initialVariant={firstItemVariant}
                                                 totalOverride={grandTotal}
                                                 selectedWarranty={selectedWarranty}
                                                 onWarrantyChange={setSelectedWarranty}
