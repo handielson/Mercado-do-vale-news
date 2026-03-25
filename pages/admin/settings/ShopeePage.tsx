@@ -1095,15 +1095,21 @@ function ExpandedItemPanel({
                 const extDesc = item.description_info?.extended_description?.field_list
                     ?.filter((f: any) => f.field_type === 'text')
                     .map((f: any) => f.text).join('\n') || '';
+
+                // DEBUG: log raw structure to console (temporary)
+                console.log('[Shopee Panel] raw item keys:', Object.keys(item));
+                console.log('[Shopee Panel] weight:', item.weight, '| dimension:', item.dimension, '| tax_info:', item.tax_info);
+
+                const dim = item.dimension || {};
                 setForm(prev => ({
                     ...prev,
                     item_name:      item.item_name      || prev.item_name,
                     description:    item.description    || extDesc || '',
                     item_sku:       item.item_sku       || prev.item_sku,
-                    item_weight:    item.weight         != null ? String(item.weight)         : '',
-                    package_length: item.package_length != null ? String(item.package_length) : '',
-                    package_width:  item.package_width  != null ? String(item.package_width)  : '',
-                    package_height: item.package_height != null ? String(item.package_height) : '',
+                    item_weight:    item.weight         != null ? String(item.weight) : '',
+                    package_length: dim.package_length  != null ? String(dim.package_length) : '',
+                    package_width:  dim.package_width   != null ? String(dim.package_width)  : '',
+                    package_height: dim.package_height  != null ? String(dim.package_height) : '',
                     condition:      item.condition === 'USED' ? 'USED' : 'NEW',
                     ncm:            item.tax_info?.ncm  || '',
                     gtin:           item.tax_info?.gtin || '',
