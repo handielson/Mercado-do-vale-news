@@ -86,6 +86,9 @@ export function ProductImageBankPage() {
     const [dbColors, setDbColors] = useState<string[]>([]);
 
     const [genSku, setGenSku] = useState('');
+    const [genColor, setGenColor] = useState('');
+    const [genStart, setGenStart] = useState(1);
+    const [hasUploadContext, setHasUploadContext] = useState(true);
     const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
     const [showSkuDrop, setShowSkuDrop] = useState(false);
     const skuInputRef = useRef<HTMLDivElement>(null);
