@@ -1066,7 +1066,7 @@ function ExpandedItemPanel({
     const [attrs, setAttrs] = useState<any[]>([]);
     const [loadingAttrs, setLoadingAttrs] = useState(false);
     const [attrValues, setAttrValues] = useState<Record<number, string>>({});
-    const [effectiveCategoryId, setEffectiveCategoryId] = useState(p.shopee_category_id || '');
+    const [effectiveCategoryId, setEffectiveCategoryId] = useState('');
     const descRef = useRef<HTMLTextAreaElement>(null);
     const [form, setForm] = useState({
         item_name:      p.name || '',
