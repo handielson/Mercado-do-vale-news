@@ -1061,19 +1061,34 @@ function ExpandedItemPanel({
     onSaved: () => void;
 }) {
     const [saving, setSaving] = useState(false);
+    const [attrs, setAttrs] = useState<any[]>([]);
+    const [loadingAttrs, setLoadingAttrs] = useState(false);
+    const [attrValues, setAttrValues] = useState<Record<number, string>>({});
     const [form, setForm] = useState({
-        item_name:       p.name || '',
-        description:     '',
-        item_sku:        p.sku || '',
-        price:           ((p.shopee_price || p.price_retail || 0) / 100).toFixed(2),
-        item_weight:     '',
-        package_length:  '',
-        package_width:   '',
-        package_height:  '',
-        condition:       'NEW' as 'NEW' | 'USED',
+        item_name:      p.name || '',
+        description:    '',
+        item_sku:       p.sku || '',
+        price:          ((p.shopee_price || p.price_retail || 0) / 100).toFixed(2),
+        item_weight:    '',
+        package_length: '',
+        package_width:  '',
+        package_height: '',
+        condition:      'NEW' as 'NEW' | 'USED',
+        ncm:            '',
+        gtin:           '',
     });
+    const setF = (k: keyof typeof form, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
-    const setF = (key: keyof typeof form, val: string) => setForm(prev => ({ ...prev, [key]: val }));
+    // Load category attributes on mount
+    useEffect(() => {
+        if (!p.shopee_category_id) return;
+        setLoadingAttrs(true);
+        fetch(`/api/shopee-catalog?action=attributes&category_id=${p.shopee_category_id}`)
+            .then(r => r.json())
+            .then(d => setAttrs(d.response?.attribute_list || []))
+            .catch(() => {})
+            .finally(() => setLoadingAttrs(false));
+    }, [p.shopee_category_id]);
 
     const handleSave = async () => {
         if (!p.shopee_item_id) { toast.error('Produto sem Item ID na Shopee.'); return; }
@@ -1089,89 +1104,94 @@ function ExpandedItemPanel({
             if (form.package_height)      payload.package_height = parseInt(form.package_height);
             payload.condition = form.condition;
 
+            // Tax info
+            if (form.ncm.trim() || form.gtin.trim()) {
+                payload.tax_info = {};
+                if (form.ncm.trim())  payload.tax_info.ncm  = form.ncm.trim();
+                if (form.gtin.trim()) payload.tax_info.gtin = form.gtin.trim();
+            }
+
+            // Dynamic category attributes (INMETRO, ANATEL, etc.)
+            const attrList = Object.entries(attrValues)
+                .filter(([, v]) => v?.trim())
+                .map(([id, val]) => ({
+                    attribute_id: parseInt(id),
+                    attribute_value_list: [{ original_value: val.trim() }],
+                }));
+            if (attrList.length > 0) payload.attribute_list = attrList;
+
             const promises: Promise<any>[] = [
                 fetch('/api/shopee-catalog?action=update_item', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 }).then(r => r.json()),
             ];
-
             const priceVal = parseFloat(form.price);
             if (!isNaN(priceVal) && priceVal > 0) {
-                promises.push(
-                    fetch('/api/shopee-catalog?action=update_price', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            item_id: p.shopee_item_id,
-                            price_list: [{ model_id: 0, original_price: priceVal }],
-                        }),
-                    }).then(r => r.json())
-                );
+                promises.push(fetch('/api/shopee-catalog?action=update_price', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_id: p.shopee_item_id, price_list: [{ model_id: 0, original_price: priceVal }] }),
+                }).then(r => r.json()));
             }
 
             const results = await Promise.all(promises);
-            const errors = results.filter(r => r.error || r.message?.toLowerCase().includes('error'));
-            if (errors.length > 0) throw new Error(errors[0].message || errors[0].error);
+            const errs = results.filter(r => r.error || r.message?.toLowerCase().includes('error'));
+            if (errs.length > 0) throw new Error(errs[0].message || errs[0].error);
             toast.success('Item atualizado na Shopee!');
             onSaved();
         } catch (e: any) {
             toast.error(`Erro: ${e.message}`);
-        } finally {
-            setSaving(false);
-        }
+        } finally { setSaving(false); }
     };
 
-    const field = (label: string, key: keyof typeof form, type = 'text', placeholder = '') => (
-        <div className="flex flex-col gap-1">
+    const inp = (label: string, k: keyof typeof form, type = 'text', ph = '', cls = '') => (
+        <div className={`flex flex-col gap-1 ${cls}`}>
             <label className="text-xs font-medium text-slate-500">{label}</label>
-            <input
-                type={type}
-                value={form[key]}
-                placeholder={placeholder}
-                onChange={e => setF(key, e.target.value)}
-                className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white"
-            />
+            <input type={type} value={form[k]} placeholder={ph}
+                onChange={e => setF(k, e.target.value)}
+                className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white" />
         </div>
     );
 
     return (
-        <tr className="bg-orange-50/50">
-            <td colSpan={6} className="px-6 py-5">
+        <tr className="bg-orange-50/40">
+            <td colSpan={6} className="px-6 py-5 border-t border-orange-100">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-700">Editar na Shopee</span>
-                        {p.shopee_item_id && (
-                            <a href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
-                                target="_blank" rel="noopener noreferrer"
-                                className="text-xs font-mono text-orange-500 hover:underline flex items-center gap-0.5">
-                                #{p.shopee_item_id} <ExternalLink className="w-3 h-3" />
-                            </a>
-                        )}
-                    </div>
+                <div className="flex items-center gap-2 mb-5">
+                    <span className="text-sm font-semibold text-slate-700">✏️ Editar na Shopee</span>
+                    {p.shopee_item_id && (
+                        <a href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-xs font-mono text-orange-500 hover:underline flex items-center gap-0.5">
+                            #{p.shopee_item_id} <ExternalLink className="w-3 h-3" />
+                        </a>
+                    )}
+                    {!p.shopee_category_id && (
+                        <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                            ⚠️ Sem categoria — atributos (INMETRO/ANATEL) indisponíveis
+                        </span>
+                    )}
                 </div>
 
-                {/* Form grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                    <div className="col-span-2 flex flex-col gap-1">
-                        <label className="text-xs font-medium text-slate-500">Nome do Produto (Shopee)</label>
-                        <input type="text" value={form.item_name}
-                            onChange={e => setF('item_name', e.target.value)}
-                            className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white"
-                        />
-                    </div>
-                    {field('SKU Shopee', 'item_sku', 'text', p.sku || '')}
-                    {field('Preço (R$)', 'price', 'number', '0.00')}
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                    {field('Peso (kg)', 'item_weight', 'number', 'ex: 0.35')}
-                    {field('Comprimento (cm)', 'package_length', 'number', 'ex: 30')}
-                    {field('Largura (cm)', 'package_width', 'number', 'ex: 20')}
-                    {field('Altura (cm)', 'package_height', 'number', 'ex: 10')}
-                </div>
-
+                {/* ── Informações básicas */}
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Informações Básicas</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    <div className="col-span-2 flex flex-col gap-1">
+                        <label className="text-xs font-medium text-slate-500">Nome (Shopee)</label>
+                        <input type="text" value={form.item_name} onChange={e => setF('item_name', e.target.value)}
+                            className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white" />
+                    </div>
+                    {inp('SKU Shopee', 'item_sku', 'text', p.sku || '')}
+                    {inp('Preço (R$)', 'price', 'number', '0.00')}
+                </div>
+
+                {/* ── Embalagem */}
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Embalagem & Logística</p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                    {inp('Peso (kg)', 'item_weight', 'number', '0.35')}
+                    {inp('Comprimento (cm)', 'package_length', 'number', '30')}
+                    {inp('Largura (cm)', 'package_width', 'number', '20')}
+                    {inp('Altura (cm)', 'package_height', 'number', '10')}
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-medium text-slate-500">Condição</label>
                         <select value={form.condition} onChange={e => setF('condition', e.target.value as any)}
@@ -1182,15 +1202,64 @@ function ExpandedItemPanel({
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-1 mb-4">
-                    <label className="text-xs font-medium text-slate-500">Descrição</label>
-                    <textarea value={form.description} rows={3}
-                        placeholder="Descrição do produto na Shopee (deixe em branco para não alterar)"
-                        onChange={e => setF('description', e.target.value)}
-                        className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white resize-y"
-                    />
+                {/* ── Fiscal */}
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Informações Fiscais</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    {inp('NCM', 'ncm', 'text', 'ex: 8525.80.29')}
+                    {inp('GTIN / EAN', 'gtin', 'text', 'ex: 7891234560123')}
                 </div>
 
+                {/* ── Atributos de categoria (INMETRO, ANATEL etc.) */}
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                    Atributos da Categoria {loadingAttrs && <span className="text-orange-400 normal-case font-normal">carregando...</span>}
+                </p>
+                {!p.shopee_category_id ? (
+                    <p className="text-xs text-slate-400 mb-4 italic">
+                        Vincule o produto a uma categoria Shopee via "Sincronizar" para ver os atributos de INMETRO, ANATEL e outros.
+                    </p>
+                ) : attrs.length === 0 && !loadingAttrs ? (
+                    <p className="text-xs text-slate-400 mb-4 italic">Nenhum atributo disponível para esta categoria.</p>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                        {attrs.map((attr: any) => {
+                            const isEnum = Array.isArray(attr.attribute_value_list) && attr.attribute_value_list.length > 0;
+                            return (
+                                <div key={attr.attribute_id} className="flex flex-col gap-1">
+                                    <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
+                                        {attr.attribute_name}
+                                        {attr.is_mandatory && <span className="text-red-400 text-[10px]">*</span>}
+                                    </label>
+                                    {isEnum ? (
+                                        <select
+                                            value={attrValues[attr.attribute_id] || ''}
+                                            onChange={e => setAttrValues(prev => ({ ...prev, [attr.attribute_id]: e.target.value }))}
+                                            className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white">
+                                            <option value="">— selecione —</option>
+                                            {attr.attribute_value_list.map((v: any) => (
+                                                <option key={v.value_id} value={v.original_value}>{v.original_value}</option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <input type="text"
+                                            value={attrValues[attr.attribute_id] || ''}
+                                            placeholder={attr.input_type === 3 ? 'texto longo...' : 'valor...'}
+                                            onChange={e => setAttrValues(prev => ({ ...prev, [attr.attribute_id]: e.target.value }))}
+                                            className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white" />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* ── Descrição */}
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Descrição</p>
+                <textarea value={form.description} rows={3}
+                    placeholder="Deixe em branco para não alterar"
+                    onChange={e => setF('description', e.target.value)}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white resize-y mb-4" />
+
+                {/* Actions */}
                 <div className="flex gap-2 justify-end">
                     <button onClick={onClose}
                         className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
@@ -1205,3 +1274,5 @@ function ExpandedItemPanel({
         </tr>
     );
 }
+
+
