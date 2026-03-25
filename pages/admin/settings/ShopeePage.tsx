@@ -1127,10 +1127,25 @@ function ExpandedItemPanel({
                         ? String(item.price_info[0].original_price)
                         : prev.price,
                 }));
+
+                // Pre-populate category attribute values (Resolução, Garantia, etc.)
+                if (Array.isArray(item.attribute_list) && item.attribute_list.length > 0) {
+                    const attrMap: Record<number, string> = {};
+                    for (const attr of item.attribute_list) {
+                        const v = attr.attribute_value_list?.[0];
+                        if (!v) continue;
+                        // value_id > 0 = select option; 0 = text input
+                        attrMap[attr.attribute_id] = v.value_id > 0
+                            ? String(v.value_id)
+                            : (v.original_attribute_value || '');
+                    }
+                    if (Object.keys(attrMap).length > 0) setAttrValues(attrMap);
+                }
             })
             .catch((e) => { console.error('[Shopee Panel] fetch error:', e); toast.error('Erro ao buscar dados da Shopee'); })
             .finally(() => setLoadingItem(false));
     }, [p.shopee_item_id]);
+
 
     // Load category attributes on mount
     useEffect(() => {
