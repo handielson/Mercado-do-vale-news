@@ -900,10 +900,27 @@ export function ProductImageBankPage() {
                                     return (
                                         <div key={s.sku} className="px-4 py-3">
                                             <div className="flex items-center gap-3">
-                                                {/* Placeholder de imagem */}
-                                                <div className="w-10 h-10 rounded-lg bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0">
-                                                    <ImagePlus size={16} className="text-slate-300" />
-                                                </div>
+                                                {/* Placeholder de imagem clicável (agora atua como o botão) */}
+                                                <button
+                                                    onClick={() => {
+                                                        if (isOpen) {
+                                                            skuUploadQueue.forEach(i => URL.revokeObjectURL(i.preview));
+                                                            setSkuUploadQueue([]);
+                                                            setUploadingForSku(null);
+                                                        } else {
+                                                            setSkuUploadQueue([]);
+                                                            setUploadingForSku(s.sku);
+                                                        }
+                                                    }}
+                                                    title={isOpen ? "Cancelar envio" : "Enviar foto"}
+                                                    className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-all cursor-pointer border-2 ${
+                                                        isOpen
+                                                            ? 'bg-orange-50 border-orange-400 text-orange-600 shadow-sm'
+                                                            : 'bg-slate-100 border-dashed border-slate-300 text-slate-400 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-500'
+                                                    }`}
+                                                >
+                                                    {isOpen ? <X size={16} /> : <ImagePlus size={16} />}
+                                                </button>
                                                 {/* Info */}
                                                 <div className="flex-1 min-w-0">
                                                     <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{s.sku}</span>
@@ -928,27 +945,6 @@ export function ProductImageBankPage() {
                                                         sem estoque
                                                     </span>
                                                 )}
-                                                {/* Botão */}
-                                                <button
-                                                    onClick={() => {
-                                                        if (isOpen) {
-                                                            skuUploadQueue.forEach(i => URL.revokeObjectURL(i.preview));
-                                                            setSkuUploadQueue([]);
-                                                            setUploadingForSku(null);
-                                                        } else {
-                                                            setSkuUploadQueue([]);
-                                                            setUploadingForSku(s.sku);
-                                                        }
-                                                    }}
-                                                    className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shrink-0 ${
-                                                        isOpen
-                                                            ? 'bg-slate-100 border-slate-300 text-slate-600'
-                                                            : 'bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100'
-                                                    }`}
-                                                >
-                                                    {isOpen ? <X size={13} /> : <Upload size={13} />}
-                                                    {isOpen ? 'Cancelar' : 'Enviar foto'}
-                                                </button>
                                             </div>
 
                                             {/* Mini-uploader inline */}
