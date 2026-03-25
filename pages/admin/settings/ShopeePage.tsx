@@ -1066,6 +1066,8 @@ function ExpandedItemPanel({
     const [attrs, setAttrs] = useState<any[]>([]);
     const [loadingAttrs, setLoadingAttrs] = useState(false);
     const [attrValues, setAttrValues] = useState<Record<number, string>>({});
+    const [effectiveCategoryId, setEffectiveCategoryId] = useState(p.shopee_category_id || '');
+    const descRef = useRef<HTMLTextAreaElement>(null);
     const [form, setForm] = useState({
         item_name:      p.name || '',
         description:    '',
@@ -1134,29 +1136,36 @@ function ExpandedItemPanel({
                     for (const attr of item.attribute_list) {
                         const v = attr.attribute_value_list?.[0];
                         if (!v) continue;
-                        // value_id > 0 = select option; 0 = text input
-                        attrMap[attr.attribute_id] = v.value_id > 0
-                            ? String(v.value_id)
-                            : (v.original_attribute_value || '');
+                        // Always use original_attribute_value (text) to match select option values
+                        attrMap[attr.attribute_id] = v.original_attribute_value || '';
                     }
                     if (Object.keys(attrMap).length > 0) setAttrValues(attrMap);
                 }
+                // Resolve category id from live API (covers cases where Supabase has null)
+                if (item.category_id) setEffectiveCategoryId(String(item.category_id));
+                // Auto-resize description textarea
+                setTimeout(() => {
+                    if (descRef.current) {
+                        descRef.current.style.height = 'auto';
+                        descRef.current.style.height = descRef.current.scrollHeight + 'px';
+                    }
+                }, 50);
             })
             .catch((e) => { console.error('[Shopee Panel] fetch error:', e); toast.error('Erro ao buscar dados da Shopee'); })
             .finally(() => setLoadingItem(false));
     }, [p.shopee_item_id]);
 
 
-    // Load category attributes on mount
+    // Load category attributes — uses effectiveCategoryId (from Shopee live data) as fallback
     useEffect(() => {
-        if (!p.shopee_category_id) return;
+        if (!effectiveCategoryId) return;
         setLoadingAttrs(true);
-        fetch(`/api/shopee-catalog?action=attributes&category_id=${p.shopee_category_id}`)
+        fetch(`/api/shopee-catalog?action=attributes&category_id=${effectiveCategoryId}`)
             .then(r => r.json())
             .then(d => setAttrs(d.response?.attribute_list || []))
             .catch(() => {})
             .finally(() => setLoadingAttrs(false));
-    }, [p.shopee_category_id]);
+    }, [effectiveCategoryId]);
 
     const handleSave = async () => {
         if (!p.shopee_item_id) { toast.error('Produto sem Item ID na Shopee.'); return; }
@@ -1282,7 +1291,7 @@ function ExpandedItemPanel({
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">
                     Atributos da Categoria {loadingAttrs && <span className="text-orange-400 normal-case font-normal">carregando...</span>}
                 </p>
-                {!p.shopee_category_id ? (
+                {!effectiveCategoryId ? (
                     <p className="text-xs text-slate-400 mb-4 italic">
                         Vincule o produto a uma categoria Shopee via "Sincronizar" para ver os atributos de INMETRO, ANATEL e outros.
                     </p>
@@ -1323,10 +1332,15 @@ function ExpandedItemPanel({
 
                 {/* ── Descrição */}
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Descrição</p>
-                <textarea value={form.description} rows={3}
+                <textarea ref={descRef} value={form.description}
                     placeholder="Deixe em branco para não alterar"
-                    onChange={e => setF('description', e.target.value)}
-                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white resize-y mb-4" />
+                    onChange={e => {
+                        setF('description', e.target.value);
+                        e.currentTarget.style.height = 'auto';
+                        e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
+                    }}
+                    style={{ resize: 'none', overflow: 'hidden', minHeight: '80px' }}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white mb-4" />
 
                 {/* Actions */}
                 <div className="flex gap-2 justify-end">
