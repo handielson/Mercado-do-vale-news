@@ -7,6 +7,7 @@ import {
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { supabase } from '../../../services/supabase';
+import { vpsApiService } from '../../../services/vpsApiService';
 import { Company } from '../../../types/company';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -90,13 +91,10 @@ export default function ShopeePage() {
     const loadProducts = useCallback(async () => {
         setLoadingProducts(true);
         try {
-            // Fetch local products
-            const { data: localProds } = await supabase
-                .from('products')
-                .select('id, name, sku, images, price_retail, category_slug')
-                .order('name');
+            // Fetch products from VPS (source of truth for catalog)
+            const localProds = await vpsApiService.getProducts({ limit: 500, status: 'all' });
 
-            // Fetch shopee sync records
+            // Fetch Shopee sync records from Supabase (integration metadata)
             const { data: shopeeRecords } = await supabase
                 .from('shopee_products')
                 .select('*');
@@ -104,10 +102,10 @@ export default function ShopeePage() {
             const syncMap = new Map((shopeeRecords || []).map((r: any) => [r.product_id, r]));
 
             const merged: ShopeeProduct[] = (localProds || []).map((p: any) => {
-                const sr = syncMap.get(p.id) as any;
+                const sr = syncMap.get(String(p.id)) as any;
                 return {
                     id: sr?.id || p.id,
-                    product_id: p.id,
+                    product_id: String(p.id),
                     shopee_item_id: sr?.shopee_item_id || null,
                     shopee_category_id: sr?.shopee_category_id || null,
                     shopee_category_name: sr?.shopee_category_name || null,
