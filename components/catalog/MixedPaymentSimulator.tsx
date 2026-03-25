@@ -58,14 +58,14 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
     const cardOptions: CardOption[] = useMemo(() => {
         if (cardCents <= 0) return [];
 
+        // method é null no banco — filtra apenas por channel e installments
         const creditFees = paymentFees
-            .filter(f => (f.payment_method === 'credit' || f.method === 'credit') && f.installments <= 12 && (f.channel === 'presencial' || f.channel === 'all'))
+            .filter(f => f.channel === 'presencial' && f.installments >= 1 && f.installments <= 12)
             .sort((a, b) => a.installments - b.installments)
-            // Dedup: keep only first entry per installment count
             .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments));
 
         return creditFees.map(fee => {
-            const feePercent = fee.applied_fee ?? fee.applied_fee_pct ?? 0;
+            const feePercent = parseFloat(String(fee.applied_fee_pct ?? fee.applied_fee ?? 0));
             const feeAmount = Math.round(cardCents * (feePercent / 100));
             const totalWithFee = cardCents + feeAmount;
             const monthlyValue = Math.round(totalWithFee / fee.installments);

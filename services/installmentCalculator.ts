@@ -23,12 +23,10 @@ export async function calculateInstallments(
     // Get payment fees from database
     const fees = await paymentFeesService.list();
 
-    // PIX (à vista - 0% fee)
-    const pixFee = fees.find(f => (f.method === 'pix' || (f as any).payment_method === 'pix') && f.installments === 1);
-    const appliedPixFee = (pixFee as any)?.applied_fee_pct ?? (pixFee as any)?.applied_fee ?? 0;
-    const pixTotal = pixFee
-        ? Math.round(priceInCents * (1 + appliedPixFee / 100))
-        : priceInCents;
+    // PIX (à vista - canal presencial 1x)
+    const pixFee = fees.find(f => f.channel === 'presencial' && f.installments === 1);
+    const appliedPixFee = parseFloat(String(pixFee?.applied_fee_pct ?? (pixFee as any)?.applied_fee ?? 0));
+    const pixTotal = Math.round(priceInCents * (1 + appliedPixFee / 100));
 
     plans.push({
         installments: 1,
@@ -38,23 +36,25 @@ export async function calculateInstallments(
         highlighted: true
     });
 
-    // Credit card installments (1x-12x)
-    for (let i = 1; i <= maxInstallments; i++) {
-        const fee = fees.find(f => (f.method === 'credit' || (f as any).payment_method === 'credit') && f.installments === i);
+    // Credit card installments (1x-12x) - method é null no banco, filtra por channel
+    const presencialFees = fees
+        .filter(f => f.channel === 'presencial' && f.installments >= 1 && f.installments <= maxInstallments)
+        .sort((a, b) => a.installments - b.installments)
+        .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments));
 
-        if (!fee) continue;
+    for (const fee of presencialFees) {
+        if (fee.installments === 1) continue; // PIX já adicionado acima
 
-        // Calculate total with compound interest
-        const appliedFeeDecimal = ((fee as any).applied_fee_pct ?? (fee as any).applied_fee ?? 0) / 100;
-        const total = Math.round(priceInCents * Math.pow(1 + appliedFeeDecimal, 1));
-        const installmentValue = Math.round(total / i);
+        const appliedFeeDecimal = parseFloat(String(fee.applied_fee_pct ?? (fee as any).applied_fee ?? 0)) / 100;
+        const total = Math.round(priceInCents * (1 + appliedFeeDecimal));
+        const installmentValue = Math.round(total / fee.installments);
 
         plans.push({
-            installments: i,
+            installments: fee.installments,
             value: installmentValue,
             total: total,
-            label: i === 1 ? '1x' : `${i}x`,
-            highlighted: i === 10 // Highlight 10x as default
+            label: `${fee.installments}x`,
+            highlighted: fee.installments === 10
         });
     }
 
