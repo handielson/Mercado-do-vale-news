@@ -1037,17 +1037,19 @@ function ShopeeSyncModal({
                                 <div className="flex justify-between"><span className="text-slate-500">Estoque</span><span className="font-medium">{shopeeStock} un.</span></div>
                                 <div className="flex justify-between"><span className="text-slate-500">Atributos preenchidos</span><span className="font-medium">{Object.keys(attrValues).length}</span></div>
                             </div>
-                                                                    Publicar na Shopee
-                                            </>) : (<><Upload className="w-4 h-4" />Publicar na Shopee</>)}
-                                            </button>
-                                            <button onClick={() => setStep(2)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-800">← Voltar e ajustar</button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                            <button onClick={handleSync} disabled={syncing}
+                                className="w-full py-3 bg-[#ee4d2d] text-white rounded-xl font-bold hover:bg-[#d73f21] transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
+                                {syncing ? <><Loader2 className="w-4 h-4 animate-spin" />Publicando...</> : <><Upload className="w-4 h-4" />Publicar na Shopee</>}
+                            </button>
+                            <button onClick={() => setStep(2)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-800">← Voltar e ajustar</button>
                         </div>
-                    );
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }
+
 
 // ─── Expanded Item Panel ───────────────────────────────────────────────────────
 function ExpandedItemPanel({
