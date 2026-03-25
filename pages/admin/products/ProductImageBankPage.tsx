@@ -914,6 +914,20 @@ export function ProductImageBankPage() {
                                                         )}
                                                     </p>
                                                 </div>
+                                                {/* Badge de estoque */}
+                                                {s.stock_quantity == null ? (
+                                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0 whitespace-nowrap">
+                                                        s/ controle
+                                                    </span>
+                                                ) : s.stock_quantity > 0 ? (
+                                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 shrink-0 whitespace-nowrap">
+                                                        {s.stock_quantity} em estoque
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-600 shrink-0 whitespace-nowrap">
+                                                        sem estoque
+                                                    </span>
+                                                )}
                                                 {/* Botão */}
                                                 <button
                                                     onClick={() => {
