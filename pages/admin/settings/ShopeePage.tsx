@@ -634,28 +634,42 @@ export default function ShopeePage() {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2">
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            value={
-                                                                editingPrice[p.product_id] !== undefined
-                                                                    ? editingPrice[p.product_id] / 100
-                                                                    : (p.shopee_price || p.price_retail || 0) / 100
-                                                            }
-                                                            onChange={e => setEditingPrice(prev => ({
-                                                                ...prev,
-                                                                [p.product_id]: Math.round(parseFloat(e.target.value) * 100)
-                                                            }))}
-                                                            className="w-24 px-2 py-1 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-orange-500"
-                                                        />
-                                                        {editingPrice[p.product_id] !== undefined && p.shopee_item_id && (
-                                                            <button onClick={() => handleUpdatePrice(p)}
-                                                                className="p-1 rounded bg-green-500 text-white hover:bg-green-600">
-                                                                <Check className="w-3 h-3" />
-                                                            </button>
+                                                        {editingPrice[p.product_id] !== undefined ? (
+                                                            <>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    autoFocus
+                                                                    value={editingPrice[p.product_id] / 100}
+                                                                    onChange={e => setEditingPrice(prev => ({
+                                                                        ...prev,
+                                                                        [p.product_id]: Math.round(parseFloat(e.target.value) * 100)
+                                                                    }))}
+                                                                    onBlur={e => { if (!e.target.value) setEditingPrice(prev => { const n = { ...prev }; delete n[p.product_id]; return n; }); }}
+                                                                    className="w-24 px-2 py-1 border border-orange-400 rounded-lg text-xs focus:ring-1 focus:ring-orange-500"
+                                                                />
+                                                                {p.shopee_item_id && (
+                                                                    <button onClick={() => handleUpdatePrice(p)}
+                                                                        className="p-1 rounded bg-green-500 text-white hover:bg-green-600">
+                                                                        <Check className="w-3 h-3" />
+                                                                    </button>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <span
+                                                                onClick={() => setEditingPrice(prev => ({
+                                                                    ...prev,
+                                                                    [p.product_id]: p.shopee_price || p.price_retail || 0
+                                                                }))}
+                                                                title="Clique para editar"
+                                                                className="text-sm font-medium text-slate-700 cursor-pointer hover:text-orange-600 transition-colors"
+                                                            >
+                                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((p.shopee_price || p.price_retail || 0) / 100)}
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </td>
+
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2 justify-end">
                                                         {/* Toggle ativo/inativo */}
