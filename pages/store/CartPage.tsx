@@ -673,22 +673,24 @@ function CartPageContent() {
                 </button>
             )}
 
-            {/* ── Botão Novo Pedido (todos) ── */}
-            <button
-                onClick={() => setShowNewOrderModal(true)}
-                className="w-full flex items-center justify-between px-4 py-4 border border-green-200 rounded-2xl text-left hover:border-green-400 hover:bg-green-50/30 active:bg-green-50 transition-colors"
-            >
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-                        <MessageCircle className="w-5 h-5 text-white" />
+            {/* ── Botão Novo Pedido (cliente) ── */}
+            {customer?.customer_type !== 'ADMIN' && (
+                <button
+                    onClick={() => setShowNewOrderModal(true)}
+                    className="w-full flex items-center justify-between px-4 py-4 border border-green-200 rounded-2xl text-left hover:border-green-400 hover:bg-green-50/30 active:bg-green-50 transition-colors"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                            <MessageCircle className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-sm text-gray-900">Novo Pedido</p>
+                            <p className="text-xs text-gray-400">Enviar pedido via WhatsApp</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="font-bold text-sm text-gray-900">Novo Pedido</p>
-                        <p className="text-xs text-gray-400">Enviar pedido via WhatsApp</p>
-                    </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-gray-400" />
-            </button>
+                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                </button>
+            )}
         </div>
     );
 
@@ -860,22 +862,24 @@ function CartPageContent() {
                                     <ArrowRight className="w-4 h-4 text-gray-400" />
                                 </button>
 
-                                {/* Botão Novo Pedido via WhatsApp */}
-                                <button
-                                    onClick={() => setShowNewOrderModal(true)}
-                                    className="w-full flex items-center justify-between px-4 py-4 border border-green-200 rounded-2xl active:bg-green-50 text-left hover:border-green-400 transition-colors"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-                                            <MessageCircle className="w-5 h-5 text-white" />
+                                {/* Botão Novo Pedido via WhatsApp (cliente) */}
+                                {customer?.customer_type !== 'ADMIN' && (
+                                    <button
+                                        onClick={() => setShowNewOrderModal(true)}
+                                        className="w-full flex items-center justify-between px-4 py-4 border border-green-200 rounded-2xl active:bg-green-50 text-left hover:border-green-400 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                                                <MessageCircle className="w-5 h-5 text-white" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-sm text-gray-900">Novo Pedido</p>
+                                                <p className="text-xs text-gray-400">Enviar pedido via WhatsApp</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-sm text-gray-900">Novo Pedido</p>
-                                            <p className="text-xs text-gray-400">Enviar pedido via WhatsApp</p>
-                                        </div>
-                                    </div>
-                                    <ArrowRight className="w-4 h-4 text-gray-400" />
-                                </button>
+                                        <ArrowRight className="w-4 h-4 text-gray-400" />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </>

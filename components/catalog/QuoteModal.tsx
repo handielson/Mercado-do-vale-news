@@ -835,7 +835,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                         </button>
                     ) : (
                         <>
-                            {isAdmin && (
+                            {isAdmin && !inline && (
                                 <button
                                     onClick={handleCopyMessage}
                                     className="flex-1 py-3 px-4 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
@@ -858,14 +858,16 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                                     {isSubmittingOrder ? 'Gerando pedido...' : customer ? 'Fazer Pedido' : 'Fazer Pedido (Login)'}
                                 </button>
                             )}
-                            <button
-                                onClick={handleSendWhatsApp}
-                                disabled={isLoading || !selectedPlan || !!referralError || isVerifyingReferral}
-                                className="flex-1 py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-bold rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                                <Send className="w-5 h-5" />
-                                {isLoading ? 'Gerando...' : 'Enviar WhatsApp'}
-                            </button>
+                            {!inline && (
+                                <button
+                                    onClick={handleSendWhatsApp}
+                                    disabled={isLoading || !selectedPlan || !!referralError || isVerifyingReferral}
+                                    className="flex-1 py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-bold rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    <Send className="w-5 h-5" />
+                                    {isLoading ? 'Gerando...' : 'Enviar WhatsApp'}
+                                </button>
+                            )}
                         </>
                     )}
                 </div>
