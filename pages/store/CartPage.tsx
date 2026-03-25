@@ -3,7 +3,8 @@ import { QuoteCartProvider } from '@/contexts/QuoteCartContext';
 import { Link, useNavigate } from 'react-router-dom';
 import {
     Trash2, Plus, Minus, ShoppingBag, ChevronDown, Tag, CreditCard,
-    MapPin, Shield, ArrowRight, X, Sparkles, ChevronUp, ArrowLeft
+    MapPin, Shield, ArrowRight, X, Sparkles, ChevronUp, ArrowLeft,
+    ClipboardCopy, Check, MessageCircle
 } from 'lucide-react';
 import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -18,6 +19,9 @@ import type { WarrantyOption } from '@/types/companySettings';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import { categoryService } from '@/services/categories';
 import { supabase } from '@/services/supabase';
+import { generateBudgetText } from '@/utils/cartShareUtils';
+import { NewOrderModal } from '@/components/cart/NewOrderModal';
+import { getCompanyData } from '@/services/companyService';
 
 export default function CartPage() {
     return (
@@ -38,6 +42,11 @@ function CartPageContent() {
     const [warrantyOpen, setWarrantyOpen] = useState(false);
     const [paySheetOpen, setPaySheetOpen] = useState(false);
     const [presencialOpen, setPresencialOpen] = useState(() => sessionStorage.getItem('mv_cart_presencialOpen') === 'true');
+    // Share / Order
+    const [budgetCopied, setBudgetCopied] = useState(false);
+    const [generatingBudget, setGeneratingBudget] = useState(false);
+    const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+    const [companyPhone, setCompanyPhone] = useState('');
     const coupon = useCoupon(subtotal / 100, customer?.customer_type);
     const [storeStatus, setStoreStatus] = useState<StoreStatus | null>(null);
     const [warrantyOptions, setWarrantyOptions] = useState<WarrantyOption[]>([]);
@@ -100,6 +109,7 @@ function CartPageContent() {
                 setWarrantyOptions(s.extended_warranty_options.filter(o => o.active));
             }
         }).catch(() => { });
+        getCompanyData().then(c => setCompanyPhone(c.phone || '')).catch(() => { });
     }, []);
 
     useEffect(() => {
@@ -668,6 +678,31 @@ function CartPageContent() {
                 <div className="px-4 pt-4 pb-44 space-y-3">
                     {statusBanner}
                     {itemsList}
+
+                    {/* ── Botão ADMIN: Copiar Orçamento ── */}
+                    {customer?.customer_type === 'ADMIN' && (
+                        <button
+                            onClick={async () => {
+                                setGeneratingBudget(true);
+                                try {
+                                    const text = await generateBudgetText(items.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })));
+                                    await navigator.clipboard.writeText(text);
+                                    setBudgetCopied(true);
+                                    setTimeout(() => setBudgetCopied(false), 2500);
+                                } catch (e) {
+                                    console.error(e);
+                                } finally {
+                                    setGeneratingBudget(false);
+                                }
+                            }}
+                            disabled={generatingBudget}
+                            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-blue-300 text-blue-700 font-medium text-sm bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-60"
+                        >
+                            {budgetCopied ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardCopy className="w-4 h-4" />}
+                            {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar Orçamento'}
+                        </button>
+                    )}
+
                     {continueShoppingBtn}
                     {optionsPanel}
                     {hasModifiers && (
@@ -765,6 +800,23 @@ function CartPageContent() {
                                     </div>
                                     <ArrowRight className="w-4 h-4 text-gray-400" />
                                 </button>
+
+                                {/* Botão Novo Pedido via WhatsApp */}
+                                <button
+                                    onClick={() => setShowNewOrderModal(true)}
+                                    className="w-full flex items-center justify-between px-4 py-4 border border-green-200 rounded-2xl active:bg-green-50 text-left hover:border-green-400 transition-colors"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                                            <MessageCircle className="w-5 h-5 text-white" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm text-gray-900">Novo Pedido</p>
+                                            <p className="text-xs text-gray-400">Enviar pedido via WhatsApp</p>
+                                        </div>
+                                    </div>
+                                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                                </button>
                             </div>
                         </div>
                     </>
@@ -793,6 +845,22 @@ function CartPageContent() {
                         </div>
                     </button>
                 </div>
+
+                {/* Modal Novo Pedido */}
+                {showNewOrderModal && (
+                    <NewOrderModal
+                        items={items}
+                        delivery={delivery}
+                        paymentLabel={
+                            delivery.type === 'delivery'
+                                ? (delivery.shippingOption?.name ?? 'Entrega')
+                                : 'Retirada na loja'
+                        }
+                        grandTotal={grandTotal}
+                        whatsappNumber={companyPhone}
+                        onClose={() => setShowNewOrderModal(false)}
+                    />
+                )}
             </div>
         );
     }
