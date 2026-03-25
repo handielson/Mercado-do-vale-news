@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
-import { supabase } from '../../../config/supabase';
+import { supabase } from '../../../services/supabase';
 import { Company } from '../../../types/company';
 
 export default function ShopeePage() {
