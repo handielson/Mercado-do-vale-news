@@ -438,7 +438,6 @@ function CatalogContent() {
                     onFavorite={toggleFavorite}
                     onShare={handleShare}
                     favorites={favorites}
-                    variant="grid"
                     mobileColumns={2}
                     variant={mobileView === 'list' ? 'list' : 'grid'}
                     columns={{
