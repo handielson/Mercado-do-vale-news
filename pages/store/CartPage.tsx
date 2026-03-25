@@ -631,6 +631,47 @@ function CartPageContent() {
                     </p>
                 </div>
             </div>
+
+            {/* ── Botão ADMIN: Copiar Orçamento ── */}
+            {customer?.customer_type === 'ADMIN' && (
+                <button
+                    onClick={async () => {
+                        setGeneratingBudget(true);
+                        try {
+                            const text = await generateBudgetText(items.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })));
+                            await navigator.clipboard.writeText(text);
+                            setBudgetCopied(true);
+                            setTimeout(() => setBudgetCopied(false), 2500);
+                        } catch (e) {
+                            console.error(e);
+                        } finally {
+                            setGeneratingBudget(false);
+                        }
+                    }}
+                    disabled={generatingBudget}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-blue-300 text-blue-700 font-medium text-sm bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-60"
+                >
+                    {budgetCopied ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardCopy className="w-4 h-4" />}
+                    {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar Orçamento'}
+                </button>
+            )}
+
+            {/* ── Botão Novo Pedido (todos) ── */}
+            <button
+                onClick={() => setShowNewOrderModal(true)}
+                className="w-full flex items-center justify-between px-4 py-4 border border-green-200 rounded-2xl text-left hover:border-green-400 hover:bg-green-50/30 active:bg-green-50 transition-colors"
+            >
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                        <MessageCircle className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <p className="font-bold text-sm text-gray-900">Novo Pedido</p>
+                        <p className="text-xs text-gray-400">Enviar pedido via WhatsApp</p>
+                    </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-gray-400" />
+            </button>
         </div>
     );
 
@@ -879,6 +920,16 @@ function CartPageContent() {
                     {optionsPanel}
                     {summaryPanel}
                 </div>
+                {showNewOrderModal && (
+                    <NewOrderModal
+                        items={items}
+                        delivery={delivery}
+                        paymentLabel={delivery.type === 'delivery' ? (delivery.shippingOption?.name ?? 'Entrega') : 'Retirada na loja'}
+                        grandTotal={grandTotal}
+                        whatsappNumber={companyPhone}
+                        onClose={() => setShowNewOrderModal(false)}
+                    />
+                )}
             </div>
         );
     }
@@ -907,6 +958,16 @@ function CartPageContent() {
                     </div>
                 </div>
             </div>
+            {showNewOrderModal && (
+                <NewOrderModal
+                    items={items}
+                    delivery={delivery}
+                    paymentLabel={delivery.type === 'delivery' ? (delivery.shippingOption?.name ?? 'Entrega') : 'Retirada na loja'}
+                    grandTotal={grandTotal}
+                    whatsappNumber={companyPhone}
+                    onClose={() => setShowNewOrderModal(false)}
+                />
+            )}
         </div>
     );
 }

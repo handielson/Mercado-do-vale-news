@@ -430,16 +430,20 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
 
     // Load installment plans when price changes
     useEffect(() => {
-        if (!finalTotalCents) return;
+        // No inline mode (CartPage), usa o totalOverride (total real do carrinho)
+        const basePrice = (inline && totalOverride !== undefined && totalOverride > 0)
+            ? totalOverride
+            : finalTotalCents;
+        if (!basePrice) return;
 
         const loadPlans = async () => {
-            const plans = await calculateInstallments(finalTotalCents, 12);
+            const plans = await calculateInstallments(basePrice, 12);
             setInstallmentPlans(plans);
             setSelectedPlan(plans.find(p => p.highlighted) || plans[0]);
         };
 
         loadPlans();
-    }, [finalTotalCents, customer]);
+    }, [inline, totalOverride, finalTotalCents, customer]);
 
     // Generate WhatsApp message
     const handleSendWhatsApp = async () => {
