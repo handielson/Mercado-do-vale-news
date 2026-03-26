@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 
 interface EscrowItem {
     order_sn: string;
+    create_time: number;         // Unix timestamp da criação do pedido
+    order_status: string;        // COMPLETED, CANCELLED, REFUNDED, etc.
     buyer_total_amount: number;  // Bruto total (com frete)
     shipping_fee: number;        // Frete pago pelo comprador
     product_value: number;       // Bruto SEM frete (base tributária)
@@ -53,38 +55,45 @@ async function safeRefreshToken() {
     return r.ok;
 }
 
-async function fetchOrdersChunk(from: number, to: number): Promise<{ order_sn: string }[]> {
-    const res = await fetch(`/api/shopee-actions?action=get_order_list&time_from=${from}&time_to=${to}&page_size=50&order_status=COMPLETED`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    return data.response?.order_list || [];
+// Statuses relevantes para o financeiro
+const FINANCE_STATUSES = ['COMPLETED', 'CANCELLED', 'IN_CANCEL', 'IN_REFUND', 'REFUNDED'];
+
+async function fetchOrdersChunk(from: number, to: number): Promise<{ order_sn: string; create_time: number; order_status: string }[]> {
+    const allOrders: { order_sn: string; create_time: number; order_status: string }[] = [];
+    await Promise.all(FINANCE_STATUSES.map(async (status) => {
+        const res = await fetch(`/api/shopee-actions?action=get_order_list&time_from=${from}&time_to=${to}&page_size=50&order_status=${status}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        const list = data.response?.order_list || [];
+        list.forEach((o: any) => allOrders.push({ order_sn: o.order_sn, create_time: o.create_time || 0, order_status: status }));
+    }));
+    return allOrders;
 }
 
-async function fetchEscrowDetail(orderSn: string): Promise<EscrowItem | null> {
+async function fetchEscrowDetail(order: { order_sn: string; create_time: number; order_status: string }): Promise<EscrowItem> {
     try {
-        const r = await fetch(`/api/shopee-actions?action=get_escrow_detail&order_sn=${orderSn}`);
+        const r = await fetch(`/api/shopee-actions?action=get_escrow_detail&order_sn=${order.order_sn}`);
         const d = await r.json();
         const income = d.response?.order_income;
-        if (!income) return null;
+        if (!income) {
+            // Cancelled / returned orders — no financial transfer
+            return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: 0, shipping_fee: 0, product_value: 0, escrow_amount: 0, fee: 0 };
+        }
         const buyer_total = income.buyer_total_amount || 0;
         const shipping_fee = income.buyer_paid_shipping_fee || 0;
         const product_value = buyer_total - shipping_fee;
         const escrow = income.escrow_amount || 0;
-        return {
-            order_sn: orderSn,
-            buyer_total_amount: buyer_total,
-            shipping_fee,
-            product_value,
-            escrow_amount: escrow,
-            fee: buyer_total - escrow,
-        };
-    } catch { return null; }
+        return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: buyer_total, shipping_fee, product_value, escrow_amount: escrow, fee: buyer_total - escrow };
+    } catch {
+        return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: 0, shipping_fee: 0, product_value: 0, escrow_amount: 0, fee: 0 };
+    }
 }
 
 function exportCSV(items: EscrowItem[], dateRange: number) {
-    const header = 'Pedido,Vendas Brutas (R$),Frete (R$),Base Tributária s/ Frete (R$),Taxas Shopee (R$),Líquido Recebido (R$)\n';
+    const fmtDate = (ts: number) => ts ? new Date(ts * 1000).toLocaleDateString('pt-BR') : '-';
+    const header = 'Pedido,Data,Status,Vendas Brutas (R$),Frete (R$),Base Tributária s/ Frete (R$),Taxas Shopee (R$),Líquido Recebido (R$)\n';
     const rows = items.map(i =>
-        `${i.order_sn},${i.buyer_total_amount.toFixed(2)},${i.shipping_fee.toFixed(2)},${i.product_value.toFixed(2)},${i.fee.toFixed(2)},${i.escrow_amount.toFixed(2)}`
+        `${i.order_sn},${fmtDate(i.create_time)},${i.order_status},${i.buyer_total_amount.toFixed(2)},${i.shipping_fee.toFixed(2)},${i.product_value.toFixed(2)},${i.fee.toFixed(2)},${i.escrow_amount.toFixed(2)}`
     ).join('\n');
     const totals = [
         'TOTAL',
@@ -214,8 +223,8 @@ export default function ShopeeFinanceTab() {
                 if (abortRef.current) return;
                 const batch = toFetchEscrow.slice(i, i + BATCH);
                 setProgress(`Calculando valores... (${Math.min(i + BATCH, toFetchEscrow.length)}/${toFetchEscrow.length})`);
-                const resolved = await Promise.all(batch.map(o => fetchEscrowDetail(o.order_sn)));
-                resolved.forEach(r => { if (r) cache.items[r.order_sn] = r; });
+                const resolved = await Promise.all(batch.map(o => fetchEscrowDetail(o)));
+                resolved.forEach(r => { cache.items[r.order_sn] = r; });
                 // Show incrementally - all cache items (old + new)
                 const all = Object.values(cache.items);
                 setItems([...all]);
@@ -380,49 +389,77 @@ export default function ShopeeFinanceTab() {
                     <table className="w-full text-left text-sm">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="py-3 px-5 font-bold text-slate-600">Pedido</th>
-                                <th className="py-3 px-5 font-bold text-slate-600 text-right">Bruto</th>
-                                <th className="py-3 px-5 font-bold text-slate-600 text-right">Frete</th>
-                                <th className="py-3 px-5 font-bold text-blue-700 text-right">Sem Frete ★</th>
-                                <th className="py-3 px-5 font-bold text-slate-600 text-right">Taxas</th>
-                                <th className="py-3 px-5 font-bold text-slate-600 text-right">Líquido</th>
-                                <th className="py-3 px-5 font-bold text-slate-600 text-center">Status</th>
+                                <th className="py-3 px-4 font-bold text-slate-600">Data</th>
+                                <th className="py-3 px-4 font-bold text-slate-600">Pedido</th>
+                                <th className="py-3 px-4 font-bold text-slate-600 text-right">Bruto</th>
+                                <th className="py-3 px-4 font-bold text-slate-600 text-right">Frete</th>
+                                <th className="py-3 px-4 font-bold text-blue-700 text-right">Sem Frete ★</th>
+                                <th className="py-3 px-4 font-bold text-slate-600 text-right">Taxas</th>
+                                <th className="py-3 px-4 font-bold text-slate-600 text-right">Líquido</th>
+                                <th className="py-3 px-4 font-bold text-slate-600 text-center">Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading && items.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-slate-500">
+                                    <td colSpan={8} className="py-12 text-center text-slate-500">
                                         <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                                         {progress || 'Buscando dados...'}
                                     </td>
                                 </tr>
                             ) : items.length === 0 && !apiError ? (
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-slate-400">
-                                        Nenhum pedido concluído encontrado neste período.
+                                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                                        Nenhum pedido encontrado neste período.
                                     </td>
                                 </tr>
                             ) : (
                                 <>
-                                    {items.map(item => (
-                                        <tr key={item.order_sn} className="hover:bg-slate-50 transition-colors">
-                                            <td className="py-3 px-5 font-bold text-slate-800">#{item.order_sn}</td>
-                                            <td className="py-3 px-5 text-right text-slate-700">{fmt(item.buyer_total_amount)}</td>
-                                            <td className="py-3 px-5 text-right text-slate-500">{fmt(item.shipping_fee)}</td>
-                                            <td className="py-3 px-5 text-right font-bold text-blue-700">{fmt(item.product_value)}</td>
-                                            <td className="py-3 px-5 text-right text-red-600 font-medium">-{fmt(item.fee)}</td>
-                                            <td className="py-3 px-5 text-right font-bold text-green-600">{fmt(item.escrow_amount)}</td>
-                                            <td className="py-3 px-5 text-center">
-                                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold inline-flex items-center gap-1">
-                                                    <Check className="w-3 h-3" /> Concluído
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {items
+                                        .slice()
+                                        .sort((a, b) => (b.create_time || 0) - (a.create_time || 0))
+                                        .map(item => {
+                                            const dateStr = item.create_time
+                                                ? new Date(item.create_time * 1000).toLocaleDateString('pt-BR')
+                                                : '—';
+                                            const shopeeUrl = `https://seller.shopee.com.br/portal/sale/detail/${item.order_sn}`;
+
+                                            const statusBadge = () => {
+                                                switch (item.order_status) {
+                                                    case 'COMPLETED':
+                                                        return <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold inline-flex items-center gap-1"><Check className="w-3 h-3" /> Concluído</span>;
+                                                    case 'CANCELLED':
+                                                    case 'IN_CANCEL':
+                                                        return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">Cancelado</span>;
+                                                    case 'REFUNDED':
+                                                    case 'IN_REFUND':
+                                                        return <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">Devolvido</span>;
+                                                    default:
+                                                        return <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{item.order_status}</span>;
+                                                }
+                                            };
+
+                                            return (
+                                                <tr key={item.order_sn} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="py-3 px-4 text-slate-500 text-xs whitespace-nowrap">{dateStr}</td>
+                                                    <td className="py-3 px-4">
+                                                        <a href={shopeeUrl} target="_blank" rel="noopener noreferrer"
+                                                            className="font-bold text-orange-600 hover:text-orange-800 hover:underline transition-colors">
+                                                            #{item.order_sn}
+                                                        </a>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-right text-slate-700">{fmt(item.buyer_total_amount)}</td>
+                                                    <td className="py-3 px-4 text-right text-slate-500">{fmt(item.shipping_fee)}</td>
+                                                    <td className="py-3 px-4 text-right font-bold text-blue-700">{fmt(item.product_value)}</td>
+                                                    <td className="py-3 px-4 text-right text-red-600 font-medium">{item.fee > 0 ? `-${fmt(item.fee)}` : '—'}</td>
+                                                    <td className="py-3 px-4 text-right font-bold text-green-600">{item.escrow_amount > 0 ? fmt(item.escrow_amount) : '—'}</td>
+                                                    <td className="py-3 px-4 text-center">{statusBadge()}</td>
+                                                </tr>
+                                            );
+                                        })}
                                     {loading && (
                                         <tr>
-                                            <td colSpan={7} className="py-3 text-center text-slate-400 text-xs">
+                                            <td colSpan={8} className="py-3 text-center text-slate-400 text-xs">
                                                 <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
                                                 {progress}
                                             </td>
