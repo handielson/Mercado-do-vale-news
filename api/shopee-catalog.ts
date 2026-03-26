@@ -116,7 +116,7 @@ export default async function handler(req: any, res: any) {
         if (action === 'attributes') {
             const { category_id } = req.query;
             if (!category_id) return res.status(400).json({ error: 'category_id required' });
-            const data = await shopeeGet('/api/v2/product/get_attributes', creds, `&category_id=${category_id}&language=pt-BR`);
+            const data = await shopeeGet('/api/v2/product/get_attribute_tree', creds, `&category_id_list=${category_id}&language=pt-BR`);
             return res.status(200).json(data);
         }
         if (action === 'add_item') {
