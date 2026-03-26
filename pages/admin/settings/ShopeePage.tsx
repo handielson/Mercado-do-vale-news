@@ -25,6 +25,7 @@ interface ShopeeProduct {
     sku?: string;
     images?: string[];
     price_retail?: number;
+    price_cost?: number;
     category_slug?: string;
 }
 
@@ -34,6 +35,7 @@ interface LocalProduct {
     sku: string;
     images: string[];
     price_retail: number;
+    price_cost: number;
     category_slug: string;
 }
 
@@ -121,6 +123,7 @@ export default function ShopeePage() {
                     sku: p.sku,
                     images: p.images,
                     price_retail: p.price_retail,
+                    price_cost: p.price_cost,
                     category_slug: p.category_slug,
                 };
             });
@@ -1306,18 +1309,26 @@ function ExpandedItemPanel({
                             else if (val < 200) taxaFixa = 20;
                             else if (val < 500) taxaFixa = 26;
                             else taxaFixa = 28;
+                            
+                            const custoProduto = (p.price_cost || 0) / 100;
                             const liquido = val - comissao - taxaFixa;
+                            const lucroReal = liquido - custoProduto;
 
                             return (
-                                <div className="flex items-center gap-4 text-xs font-medium text-slate-600">
+                                <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-600">
                                     <div className="flex flex-col items-end">
                                         <span className="text-red-500">- R$ {comissao.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(20%)</span></span>
                                         <span className="text-red-500">- R$ {taxaFixa.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(Fixo)</span></span>
                                     </div>
-                                    <div className="h-6 w-px bg-slate-200"></div>
+                                    <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
                                     <div className="flex flex-col">
                                         <span className="text-[10px] text-slate-400 uppercase">Você recebe líquido</span>
-                                        <span className={`text-base font-bold ${liquido > 0 ? 'text-emerald-600' : 'text-red-600'}`}>R$ {liquido.toFixed(2)}</span>
+                                        <span className={`text-sm font-bold ${liquido > 0 ? 'text-emerald-600' : 'text-slate-600'}`}>R$ {liquido.toFixed(2)}</span>
+                                    </div>
+                                    <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-slate-400 uppercase border-b border-indigo-200 mb-0.5 pb-0.5">Lucro Real (Líquido - Custo R$ {custoProduto.toFixed(2)})</span>
+                                        <span className={`text-base font-bold ${lucroReal > 0 ? 'text-indigo-600' : 'text-red-600'}`}>R$ {lucroReal.toFixed(2)}</span>
                                     </div>
                                 </div>
                             );
