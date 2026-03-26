@@ -1304,10 +1304,11 @@ function ExpandedItemPanel({
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                         {attrs.map((attr: any) => {
                             const isEnum = Array.isArray(attr.attribute_value_list) && attr.attribute_value_list.length > 0;
+                            const translatedAttrName = attr.multi_lang?.find((m: any) => m.language === 'pt-BR')?.value || attr.name;
                             return (
                                 <div key={attr.attribute_id} className="flex flex-col gap-1">
                                     <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
-                                        {attr.name}
+                                        {translatedAttrName}
                                         {attr.mandatory && <span className="text-red-400 text-[10px]">*</span>}
                                     </label>
                                     {isEnum ? (
@@ -1316,9 +1317,10 @@ function ExpandedItemPanel({
                                             onChange={e => setAttrValues(prev => ({ ...prev, [attr.attribute_id]: e.target.value }))}
                                             className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white">
                                             <option value="">— selecione —</option>
-                                            {attr.attribute_value_list.map((v: any) => (
-                                                <option key={v.value_id} value={v.name}>{v.name}</option>
-                                            ))}
+                                            {attr.attribute_value_list.map((v: any) => {
+                                                const translatedValueName = v.multi_lang?.find((m: any) => m.language === 'pt-BR')?.value || v.name;
+                                                return <option key={v.value_id} value={v.name}>{translatedValueName}</option>;
+                                            })}
                                         </select>
                                     ) : (
                                         <input type="text"
