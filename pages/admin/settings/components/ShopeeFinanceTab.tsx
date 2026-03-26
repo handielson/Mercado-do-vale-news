@@ -115,7 +115,7 @@ function loadTaxConfig(): TaxConfig {
         const raw = localStorage.getItem(TAX_CONFIG_KEY);
         if (raw) return JSON.parse(raw);
     } catch { /* */ }
-    return { rbt12: 0, anexo: 'I', baseCalculo: 'bruto' };
+    return { rbt12: 0, anexo: 'I', baseCalculo: 'semFrete' };
 }
 
 function saveTaxConfig(cfg: TaxConfig) {
@@ -493,11 +493,11 @@ export default function ShopeeFinanceTab() {
                                 <select value={taxConfig.baseCalculo}
                                     onChange={e => saveTax({ ...taxConfig, baseCalculo: e.target.value as 'bruto' | 'semFrete' })}
                                     className="w-full px-3 py-2 border border-indigo-200 bg-white rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-300">
-                                    <option value="bruto">Bruto total (com frete) — padrão Simples</option>
-                                    <option value="semFrete">Sem frete (somente produto)</option>
+                                    <option value="semFrete">Sem frete ✓ (padrão Shopee)</option>
+                                    <option value="bruto">Bruto total (com frete)</option>
                                 </select>
                                 <p className="text-xs text-indigo-400 mt-1">
-                                    ⚠️ Pelo Simples Nacional, a base oficial inclui o frete.
+                                    Na Shopee o frete vai direto à transportadora, não entra na base tributária.
                                 </p>
                             </div>
                         </div>
