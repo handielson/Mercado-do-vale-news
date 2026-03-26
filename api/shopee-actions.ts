@@ -126,6 +126,21 @@ export default async function handler(req: any, res: any) {
             return res.status(200).json(data);
         }
 
+        if (action === 'get_escrow_detail') {
+            const { order_sn } = payload;
+            if (!order_sn) return res.status(400).json({ error: 'order_sn não fornecido' });
+
+            const apiPath = '/api/v2/payment/get_escrow_detail';
+            const timestamp = Math.floor(Date.now() / 1000);
+            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
+            
+            const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}&order_sn=${order_sn}`;
+
+            const r = await fetch(url);
+            const data = await r.json();
+            return res.status(200).json(data);
+        }
+
         if (action === 'ship_order') {
             const { order_sn } = payload;
             if (!order_sn) return res.status(400).json({ error: 'order_sn não fornecido' });

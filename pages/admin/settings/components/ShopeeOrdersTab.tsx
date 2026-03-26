@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Package, Search, ExternalLink, Mail, Clock, CheckCircle2, XCircle, Truck, Calculator } from 'lucide-react';
+import { Loader2, Package, Search, ExternalLink, Mail, Clock, CheckCircle2, XCircle, Truck, Calculator, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ShopeeOrdersTabProps {
@@ -13,6 +13,8 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
     const [statusFilter, setStatusFilter] = useState<string>('ALL');
     const [trackingData, setTrackingData] = useState<Record<string, any>>({});
     const [loadingTracking, setLoadingTracking] = useState<Record<string, boolean>>({});
+    const [escrowData, setEscrowData] = useState<Record<string, any>>({});
+    const [loadingEscrow, setLoadingEscrow] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (isConnected) {
@@ -128,6 +130,28 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
             toast.error('Erro de conexão ao buscar rastreio.');
         } finally {
             setLoadingTracking(prev => ({ ...prev, [orderSn]: false }));
+        }
+    };
+
+    const handleEscrow = async (orderSn: string) => {
+        if (escrowData[orderSn]) {
+            setEscrowData(prev => { const n = {...prev}; delete n[orderSn]; return n; });
+            return;
+        }
+
+        setLoadingEscrow(prev => ({ ...prev, [orderSn]: true }));
+        try {
+            const res = await fetch(`/api/shopee-actions?action=get_escrow_detail&order_sn=${orderSn}`);
+            const data = await res.json();
+            if (data.error) {
+                toast.error(`Finanças indisponíveis: ${data.message || data.error}`);
+            } else {
+                setEscrowData(prev => ({ ...prev, [orderSn]: data.response?.order_income || { no_data: true } }));
+            }
+        } catch {
+            toast.error('Erro de conexão ao buscar finanças.');
+        } finally {
+            setLoadingEscrow(prev => ({ ...prev, [orderSn]: false }));
         }
     };
 
@@ -325,15 +349,52 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                                         Preparar Envio
                                     </button>
                                 )}
-                                <a 
-                                    href={`https://seller.shopee.com.br/portal/sale/order/${order.order_sn}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-1"
+                                <button 
+                                    onClick={() => handleEscrow(order.order_sn)}
+                                    disabled={loadingEscrow[order.order_sn]}
+                                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-1 disabled:opacity-50"
                                 >
-                                    <ExternalLink className="w-4 h-4" /> Detalhes na Shopee
-                                </a>
+                                    {loadingEscrow[order.order_sn] ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                                    Detalhes Financeiros
+                                </button>
                             </div>
+
+                            {/* Escrow Details */}
+                            {escrowData[order.order_sn] && (
+                                <div className="mt-4 pt-4 border-t border-slate-100 bg-slate-50 rounded-xl p-4">
+                                    <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                        <DollarSign className="w-4 h-4 text-green-600" />
+                                        Resumo Financeiro
+                                    </h4>
+                                    
+                                    {escrowData[order.order_sn].no_data ? (
+                                        <div className="text-sm text-slate-500 bg-white p-3 rounded-lg border border-slate-200">
+                                            As taxas e o lucro líquido só ficam disponíveis após o repasse/conclusão do pedido pela Shopee. O valor de venda registrado é de <strong>R$ {order.total_amount?.toFixed(2)}</strong>.
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                                <div className="text-xs font-semibold text-slate-500 mb-1">Preço de Venda</div>
+                                                <div className="text-lg font-bold text-slate-800">
+                                                    R$ {(escrowData[order.order_sn].buyer_total_amount || order.total_amount || 0).toFixed(2)}
+                                                </div>
+                                            </div>
+                                            <div className="bg-white p-4 rounded-xl border border-rose-100 shadow-sm">
+                                                <div className="text-xs font-semibold text-rose-500 mb-1">Taxas Shopee (Estimadas)</div>
+                                                <div className="text-lg font-bold text-rose-600">
+                                                    - R$ {((escrowData[order.order_sn].buyer_total_amount || order.total_amount || 0) - (escrowData[order.order_sn].escrow_amount || 0)).toFixed(2)}
+                                                </div>
+                                            </div>
+                                            <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm">
+                                                <div className="text-xs font-semibold text-emerald-600 mb-1">Seu Lucro Líquido (A Receber)</div>
+                                                <div className="text-lg font-bold text-emerald-600">
+                                                    R$ {(escrowData[order.order_sn].escrow_amount || 0).toFixed(2)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
