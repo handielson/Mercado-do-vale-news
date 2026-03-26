@@ -45,7 +45,7 @@ function startLocalServer() {
             try {
                 const ptp = require('pdf-to-printer');
                 ptp.getPrinters().then(printers => {
-                    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
                     res.end(`
                         <html>
                             <head><title>Impressoras Shopee</title></head>
@@ -58,9 +58,28 @@ function startLocalServer() {
                     `);
                 });
             } catch(e) {
-                res.writeHead(500);
+                res.writeHead(500, { 'Access-Control-Allow-Origin': '*' });
                 res.end("Instale npm i pdf-to-printer para ver a lista!");
             }
+        } else if (req.url.startsWith('/test-print')) {
+            // Permitir requests do painel admin na web
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            const urlParams = new URLSearchParams(req.url.split('?')[1]);
+            const printerName = urlParams.get('printer');
+            if (!printerName) {
+                res.writeHead(400);
+                return res.end('Nome da impressora ausente');
+            }
+            // Disparar a página de teste nativa do Windows
+            const { exec } = require('child_process');
+            exec(`RUNDLL32 PRINTUI.DLL,PrintUIEntry /k /n "${printerName}"`, (err) => {
+                if (err) {
+                    res.writeHead(500);
+                    return res.end('Erro ao imprimir: ' + err.message);
+                }
+                res.writeHead(200);
+                res.end('Página de teste enviada para ' + printerName);
+            });
         }
     });
     server.listen(8080, () => {

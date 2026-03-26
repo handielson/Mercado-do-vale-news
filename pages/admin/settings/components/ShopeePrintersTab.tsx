@@ -38,6 +38,21 @@ export default function ShopeePrintersTab() {
         }
     };
 
+    const handleTestPrint = async (printerName?: string) => {
+        if (!printerName?.trim()) {
+            toast.error('Informe o nome da impressora para testar.');
+            return;
+        }
+        toast.loading('Enviando página de teste do Windows...', { id: 'test-print' });
+        try {
+            const res = await fetch(`http://localhost:8080/test-print?printer=${encodeURIComponent(printerName)}`);
+            if (!res.ok) throw new Error('Falha no comando de teste');
+            toast.success(`Página de teste enviada para "${printerName}"!`, { id: 'test-print' });
+        } catch (error: any) {
+            toast.error(`Verifique se o PM2 está rodando localmente (HTTP 8080). Erro: ${error.message}`, { id: 'test-print' });
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -83,40 +98,64 @@ export default function ShopeePrintersTab() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                            <label className="block text-sm font-bold text-slate-700">
-                                Impressora Térmica (10x15)
-                            </label>
-                            <p className="text-xs text-slate-500 mb-2">
-                                Nome da impressora para emitir E-AWB (Etiqueta de Envio Shopee).
-                            </p>
-                            <input 
-                                type="text"
-                                value={company?.shopee_printer_thermal || ''}
-                                onChange={e => {
-                                    if(company) setCompany({ ...company, shopee_printer_thermal: e.target.value })
-                                }}
-                                placeholder="Ex: Zebra TLP2844"
-                                className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white"
-                            />
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-bold text-slate-700">
+                                    Impressora Térmica (10x15)
+                                </label>
+                                <p className="text-xs text-slate-500 mb-2">
+                                    Nome da impressora para emitir E-AWB (Etiqueta de Envio Shopee).
+                                </p>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text"
+                                        value={company?.shopee_printer_thermal || ''}
+                                        onChange={e => {
+                                            if(company) setCompany({ ...company, shopee_printer_thermal: e.target.value })
+                                        }}
+                                        placeholder="Ex: Zebra TLP2844"
+                                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white"
+                                    />
+                                    <button 
+                                        type="button"
+                                        onClick={() => handleTestPrint(company?.shopee_printer_thermal)}
+                                        className="px-3 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center shrink-0"
+                                        title="Imprimir Página de Teste"
+                                    >
+                                        <Printer className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="block text-sm font-bold text-slate-700">
-                                Impressora A4 (Resumo)
-                            </label>
-                            <p className="text-xs text-slate-500 mb-2">
-                                Nome da impressora para imprimir a guia/resumo do pedido de itens de separação (Pick List).
-                            </p>
-                            <input 
-                                type="text"
-                                value={company?.shopee_printer_a4 || ''}
-                                onChange={e => {
-                                    if(company) setCompany({ ...company, shopee_printer_a4: e.target.value })
-                                }}
-                                placeholder="Ex: HP LaserJet Pro P1102w"
-                                className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white"
-                            />
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-bold text-slate-700">
+                                    Impressora A4 (Resumo)
+                                </label>
+                                <p className="text-xs text-slate-500 mb-2">
+                                    Nome da impressora para imprimir a guia/resumo do pedido de itens de separação (Pick List).
+                                </p>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text"
+                                        value={company?.shopee_printer_a4 || ''}
+                                        onChange={e => {
+                                            if(company) setCompany({ ...company, shopee_printer_a4: e.target.value })
+                                        }}
+                                        placeholder="Ex: HP LaserJet Pro P1102w"
+                                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white"
+                                    />
+                                    <button 
+                                        type="button"
+                                        onClick={() => handleTestPrint(company?.shopee_printer_a4)}
+                                        className="px-3 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center shrink-0"
+                                        title="Imprimir Página de Teste"
+                                    >
+                                        <Printer className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

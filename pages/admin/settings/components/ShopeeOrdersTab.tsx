@@ -296,9 +296,14 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                                         Preparar Envio
                                     </button>
                                 )}
-                                <button className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-1">
+                                <a 
+                                    href={`https://seller.shopee.com.br/portal/sale/order/${order.order_sn}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-1"
+                                >
                                     <ExternalLink className="w-4 h-4" /> Detalhes na Shopee
-                                </button>
+                                </a>
                             </div>
                         </div>
                     ))}
