@@ -713,5 +713,36 @@ export default async function handler(req: any, res: any) {
         }
     }
 
-    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance' });
+    // ─── NFe: lista NF-e emitidas ─────────────────────────────────────────────
+    if (resource === 'nfe' || resource === 'nfce') {
+        if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+        const authHeader = req.headers['authorization'];
+        if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
+        const endpoint = resource === 'nfe' ? 'nfe' : 'nfce';
+        const q = req.query as Record<string, string>;
+        // Accept both blingNfService names (dataEmissaoInicio/Fim) and Bling native names
+        const inicio = q.dataEmissaoInicio || q.dataEmissaoInicial || '';
+        const fim    = q.dataEmissaoFim    || q.dataEmissaoFinal   || '';
+        const situacao = q.situacao || '';
+        const pagina   = q.pagina  || '1';
+        let url = `https://api.bling.com.br/Api/v3/${endpoint}?pagina=${pagina}&limite=100`;
+        if (inicio)   url += `&dataEmissaoInicial=${inicio}`;
+        if (fim)      url += `&dataEmissaoFinal=${fim}`;
+        if (situacao) url += `&situacao=${situacao}`;
+        try {
+            const r = await fetch(url, {
+                headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
+            });
+            if (!r.ok) {
+                const txt = await r.text();
+                return res.status(r.status).json({ error: `Bling ${endpoint} error: ${r.status}`, detail: txt });
+            }
+            return res.status(200).json(await r.json());
+        } catch (err: any) {
+            return res.status(500).json({ error: 'network_error', message: err.message });
+        }
+    }
+
+    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce' });
 }
+
