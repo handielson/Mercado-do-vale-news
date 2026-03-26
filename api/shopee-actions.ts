@@ -65,29 +65,52 @@ export default async function handler(req: any, res: any) {
             if (!settings?.shopee_refresh_token || !settings?.id) {
                 return res.status(400).json({ error: 'Falta refresh_token ou ID da empresa' });
             }
-            const apiPath = '/api/v2/auth/access_token/get';
-            const timestamp = Math.floor(Date.now() / 1000);
-            
-            // For token API, sign base is just partnerId + path + timestamp
-            const baseStr = partnerId + apiPath + timestamp;
-            const sign = crypto.createHmac('sha256', partnerKey).update(baseStr).digest('hex');
-            
-            const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}`;
-            const r = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ shop_id: Number(shopId), refresh_token: settings.shopee_refresh_token, partner_id: Number(partnerId) })
-            });
-            const data = await r.json();
-            
-            if (data.access_token) {
-                await supabase.from('company_settings').update({
-                    shopee_access_token: data.access_token,
-                    shopee_refresh_token: data.refresh_token
-                }).eq('id', settings.id);
-                return res.status(200).json({ success: true, access_token: data.access_token });
-            } else {
-                return res.status(400).json({ error: 'Falha ao renovar token', details: data });
+
+            // Evitar múltiplas renovações simultâneas que invalidam o token na Shopee
+            const globalAny = global as any;
+            if (globalAny.__shopeeRefreshPromise) {
+                console.log('⏳ Aguardando renovação de token em andamento...');
+                try {
+                    const data = await globalAny.__shopeeRefreshPromise;
+                    if (data?.access_token) {
+                        return res.status(200).json({ success: true, access_token: data.access_token });
+                    }
+                    return res.status(400).json({ error: 'Falha na renovação simultânea' });
+                } catch (e) {
+                    return res.status(400).json({ error: 'Falha na renovação' });
+                }
+            }
+
+            globalAny.__shopeeRefreshPromise = (async () => {
+                const apiPath = '/api/v2/auth/access_token/get';
+                const timestamp = Math.floor(Date.now() / 1000);
+                
+                const baseStr = partnerId + apiPath + timestamp;
+                const sign = crypto.createHmac('sha256', partnerKey).update(baseStr).digest('hex');
+                
+                const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}`;
+                const r = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shop_id: Number(shopId), refresh_token: settings.shopee_refresh_token, partner_id: Number(partnerId) })
+                });
+                return await r.json();
+            })();
+
+            try {
+                const data = await globalAny.__shopeeRefreshPromise;
+                
+                if (data.access_token) {
+                    await supabase.from('company_settings').update({
+                        shopee_access_token: data.access_token,
+                        shopee_refresh_token: data.refresh_token
+                    }).eq('id', settings.id);
+                    return res.status(200).json({ success: true, access_token: data.access_token });
+                } else {
+                    return res.status(400).json({ error: 'Falha ao renovar token', details: data });
+                }
+            } finally {
+                globalAny.__shopeeRefreshPromise = null;
             }
         }
 
@@ -116,6 +139,21 @@ export default async function handler(req: any, res: any) {
             let url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}&time_range_field=${time_range_field || 'create_time'}&time_from=${time_from}&time_to=${time_to}&page_size=${page_size || 50}`;
             if (cursor) url += `&cursor=${cursor}`;
             if (order_status) url += `&order_status=${order_status}`;
+
+            const r = await fetch(url);
+            const data = await r.json();
+            return res.status(200).json(data);
+        }
+
+        if (action === 'get_escrow_list') {
+            const { time_from, time_to, page_size = 50, page_no = 0 } = payload;
+            if (!time_from || !time_to) return res.status(400).json({ error: 'time_from e time_to são obrigatórios' });
+
+            const timestamp = Math.floor(Date.now() / 1000);
+            const apiPath = '/api/v2/payment/get_escrow_list';
+            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
+            
+            const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}&release_time_from=${time_from}&release_time_to=${time_to}&page_size=${page_size}&page_no=${page_no}`;
 
             const r = await fetch(url);
             const data = await r.json();
