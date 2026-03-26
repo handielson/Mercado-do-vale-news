@@ -826,6 +826,11 @@ export default function ShopeePage() {
                 <ShopeeOrdersTab isConnected={isConnected} />
             )}
 
+            {/* ── Tab: Financeiro ── */}
+            {tab === 'finance' && (
+                <ShopeeFinanceTab />
+            )}
+
             {/* ── Tab: Impressoras ── */}
             {tab === 'printers' && (
                 <ShopeePrintersTab />
