@@ -445,10 +445,12 @@ export default function ShopeePage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit overflow-x-auto">
                 {[
                     { id: 'config' as Tab, label: 'Configurações', icon: Key },
                     { id: 'products' as Tab, label: 'Produtos', icon: Package },
+                    { id: 'orders' as Tab, label: 'Pedidos', icon: ShoppingBag },
+                    { id: 'printers' as Tab, label: 'Impressoras', icon: Printer },
                 ].map(({ id, label, icon: Icon }) => (
                     <button key={id} onClick={() => setTab(id)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
