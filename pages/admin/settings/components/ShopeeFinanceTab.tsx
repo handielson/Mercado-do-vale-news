@@ -111,19 +111,31 @@ export default function ShopeeFinanceTab() {
     const [items, setItems] = useState<EscrowItem[]>([]);
     const [apiError, setApiError] = useState<string | null>(null);
     const [dateRange, setDateRange] = useState(30);
+    const [customFrom, setCustomFrom] = useState('');
+    const [customTo, setCustomTo] = useState('');
     const [progress, setProgress] = useState('');
     const [fromCache, setFromCache] = useState(false);
     const abortRef = useRef(false);
 
     const fetchFinance = async (retry = false) => {
+        // Resolve time range
+        let timeTo: number;
+        let timeFrom: number;
+        if (dateRange === 0) {
+            if (!customFrom || !customTo) return;
+            timeFrom = Math.floor(new Date(customFrom).getTime() / 1000);
+            timeTo = Math.floor(new Date(customTo + 'T23:59:59').getTime() / 1000);
+        } else {
+            timeTo = Math.floor(Date.now() / 1000);
+            timeFrom = timeTo - (dateRange * 24 * 60 * 60);
+        }
+
         setLoading(true);
         setApiError(null);
         abortRef.current = false;
 
         const cache = loadCache();
         const now = Date.now();
-        const timeTo = Math.floor(now / 1000);
-        const timeFrom = timeTo - (dateRange * 24 * 60 * 60);
         const freshCutoff = Math.floor((now - FRESH_THRESHOLD_MS) / 1000); // 30 days ago in unix
 
         const chunkSecs = CHUNK_DAYS * 24 * 60 * 60;
@@ -227,6 +239,13 @@ export default function ShopeeFinanceTab() {
         return () => { abortRef.current = true; };
     }, [dateRange]);
 
+    // Trigger custom range fetch when both dates are filled
+    useEffect(() => {
+        if (dateRange === 0 && customFrom && customTo && customFrom <= customTo) {
+            fetchFinance();
+        }
+    }, [customFrom, customTo]);
+
     const totalBruto = items.reduce((acc, i) => acc + i.buyer_total_amount, 0);
     const totalFrete = items.reduce((acc, i) => acc + i.shipping_fee, 0);
     const totalSemFrete = items.reduce((acc, i) => acc + i.product_value, 0);
@@ -261,7 +280,17 @@ export default function ShopeeFinanceTab() {
                         <option value={90}>Últimos 90 dias</option>
                         <option value={180}>Últimos 6 meses</option>
                         <option value={365}>Último ano (365 dias)</option>
+                        <option value={0}>📅 Período personalizado</option>
                     </select>
+                    {dateRange === 0 && (
+                        <div className="flex items-center gap-2">
+                            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} max={customTo || undefined}
+                                className="px-3 py-2 border border-slate-200 bg-white rounded-xl text-sm text-slate-700 outline-none" />
+                            <span className="text-slate-400 text-sm">até</span>
+                            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} min={customFrom || undefined}
+                                className="px-3 py-2 border border-slate-200 bg-white rounded-xl text-sm text-slate-700 outline-none" />
+                        </div>
+                    )}
                     {items.length > 0 && (
                         <button onClick={() => exportCSV(items, dateRange)} disabled={loading}
                             className="px-4 py-2 bg-green-50 text-green-700 rounded-xl text-sm font-bold hover:bg-green-100 transition-colors flex items-center gap-2">
