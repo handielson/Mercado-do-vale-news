@@ -24,7 +24,7 @@ interface CacheStore {
     fetchedRanges: Record<string, number>;       // value = fetchedAt (unix ms)
 }
 
-const CACHE_KEY = 'shopee_finance_v3';
+const CACHE_KEY = 'shopee_finance_v4';  // v4: added create_time field
 const TAX_CONFIG_KEY = 'shopee_tax_config';
 const FRESH_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days in ms
 const CHUNK_DAYS = 14;
@@ -148,17 +148,19 @@ async function safeRefreshToken() {
     return r.ok;
 }
 
-// Statuses relevantes para o financeiro
-const FINANCE_STATUSES = ['COMPLETED', 'CANCELLED', 'IN_CANCEL', 'IN_REFUND', 'REFUNDED'];
+// Statuses válidos na API Shopee para o financeiro
+const FINANCE_STATUSES = ['COMPLETED', 'CANCELLED', 'IN_CANCEL', 'IN_RETURN', 'REFUNDED'];
 
 async function fetchOrdersChunk(from: number, to: number): Promise<{ order_sn: string; create_time: number; order_status: string }[]> {
     const allOrders: { order_sn: string; create_time: number; order_status: string }[] = [];
     await Promise.all(FINANCE_STATUSES.map(async (status) => {
-        const res = await fetch(`/api/shopee-actions?action=get_order_list&time_from=${from}&time_to=${to}&page_size=50&order_status=${status}`);
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        const list = data.response?.order_list || [];
-        list.forEach((o: any) => allOrders.push({ order_sn: o.order_sn, create_time: o.create_time || 0, order_status: status }));
+        try {
+            const res = await fetch(`/api/shopee-actions?action=get_order_list&time_from=${from}&time_to=${to}&page_size=50&order_status=${status}`);
+            const data = await res.json();
+            if (data.error) return; // skip this status silently
+            const list = data.response?.order_list || [];
+            list.forEach((o: any) => allOrders.push({ order_sn: o.order_sn, create_time: o.create_time || 0, order_status: status }));
+        } catch { /* skip this status on network error */ }
     }));
     return allOrders;
 }
@@ -630,7 +632,7 @@ export default function ShopeeFinanceTab() {
                                             const dateStr = item.create_time
                                                 ? new Date(item.create_time * 1000).toLocaleDateString('pt-BR')
                                                 : '—';
-                                            const shopeeUrl = `https://seller.shopee.com.br/portal/sale/detail/${item.order_sn}`;
+                                            const shopeeUrl = `https://seller.shopee.com.br/portal/sale/detail?ordersn=${item.order_sn}`;
 
                                             const statusBadge = () => {
                                                 switch (item.order_status) {
