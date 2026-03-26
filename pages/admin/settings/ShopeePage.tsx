@@ -106,15 +106,24 @@ export default function ShopeePage() {
                 .from('shopee_products')
                 .select('*');
 
+            // Fetch raw Supabase products for instant price_cost retrieval (bypasses VPS sync delays)
+            const { data: supaProds } = await supabase
+                .from('products')
+                .select('id, price_cost, parent_id');
+
             const syncMap = new Map((shopeeRecords || []).map((r: any) => [r.product_id, r]));
+            const supaMap = new Map((supaProds || []).map((p: any) => [p.id, p]));
 
             const merged: ShopeeProduct[] = (localProds || []).map((p: any) => {
                 const sr = syncMap.get(String(p.id)) as any;
+                const sp = supaMap.get(String(p.id)) as any;
                 
-                // Puxa o custo real: se for 0 no pai, busca nas variações (filhos associados a esse parent_id)
-                let actualCost = p.price_cost || 0;
+                // Puxa o custo real diretamente do Supabase local (que é salvo pelo ModelsPage)
+                let actualCost = sp?.price_cost || p.price_cost || 0;
+                
+                // Se for 0 no pai, busca nas variações (filhos do Supabase)
                 if (!actualCost) {
-                    const variations = (localProds || []).filter((child: any) => child.parent_id === p.id);
+                    const variations = (supaProds || []).filter((child: any) => child.parent_id === p.id);
                     if (variations.length > 0) {
                         actualCost = Math.max(...variations.map((v: any) => v.price_cost || 0));
                     }
