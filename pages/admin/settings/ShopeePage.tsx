@@ -1194,10 +1194,19 @@ function ExpandedItemPanel({
             // Dynamic category attributes (INMETRO, ANATEL, etc.)
             const attrList = Object.entries(attrValues)
                 .filter(([, v]) => v?.trim())
-                .map(([id, val]) => ({
-                    attribute_id: parseInt(id),
-                    attribute_value_list: [{ original_value: val.trim() }],
-                }));
+                .map(([id, val]) => {
+                    const attrId = parseInt(id);
+                    const attrDef = attrs.find((a: any) => a.attribute_id === attrId);
+                    let valId = 0;
+                    if (attrDef && Array.isArray(attrDef.attribute_value_list)) {
+                        const opt = attrDef.attribute_value_list.find((o: any) => o.name === val.trim() || o.original_value_name === val.trim());
+                        if (opt && opt.value_id) valId = opt.value_id;
+                    }
+                    return {
+                        attribute_id: attrId,
+                        attribute_value_list: [{ value_id: valId, original_value_name: val.trim() }],
+                    };
+                });
             if (attrList.length > 0) payload.attribute_list = attrList;
 
             const promises: Promise<any>[] = [
