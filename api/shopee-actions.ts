@@ -19,11 +19,12 @@ function generateSign(partnerId: string, partnerKey: string, apiPath: string, ti
 }
 
 export default async function handler(req: any, res: any) {
-    if (req.method !== 'POST') {
+    if (req.method !== 'POST' && req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { action, payload } = req.body;
+    const action = req.method === 'GET' ? req.query.action : req.body.action;
+    const payload = req.method === 'GET' ? req.query : req.body.payload;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Buscar configurações da empresa primariamente pelo VPS
