@@ -1,5 +1,5 @@
 import { getCompanyData } from './companyService';
-import { supabase } from '../config/supabase';
+import { supabase } from './supabase';
 
 // API V2 Endpoint Base
 const SHOPEE_API_URL = 'https://partner.shopeemobile.com';

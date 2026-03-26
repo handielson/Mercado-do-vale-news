@@ -2,7 +2,7 @@ import { SaleWithItems } from '../types/sale';
 import { CompanySettings } from '../types/companySettings';
 import { companySettingsService } from '../services/companySettingsService';
 import { CoinBalance } from '../types/cashback';
-import { BenefitStatus } from './benefitService';
+
 
 import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
 

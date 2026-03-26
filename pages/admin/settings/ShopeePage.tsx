@@ -98,8 +98,8 @@ export default function ShopeePage() {
     const loadProducts = useCallback(async () => {
         setLoadingProducts(true);
         try {
-            // Fetch products from VPS (source of truth for catalog)
-            const localProds = await vpsApiService.getProducts({ limit: 500, status: 'all' });
+            // Fetch products from VPS (source of truth for catalog), bypassing 5-min cache to ensure Bling cost is fresh
+            const localProds = await vpsApiService.getProducts({ limit: 500, status: 'all', noCache: true });
 
             // Fetch Shopee sync records from Supabase (integration metadata)
             const { data: shopeeRecords } = await supabase
@@ -110,6 +110,16 @@ export default function ShopeePage() {
 
             const merged: ShopeeProduct[] = (localProds || []).map((p: any) => {
                 const sr = syncMap.get(String(p.id)) as any;
+                
+                // Puxa o custo real: se for 0 no pai, busca nas variações (filhos associados a esse parent_id)
+                let actualCost = p.price_cost || 0;
+                if (!actualCost) {
+                    const variations = (localProds || []).filter((child: any) => child.parent_id === p.id);
+                    if (variations.length > 0) {
+                        actualCost = Math.max(...variations.map((v: any) => v.price_cost || 0));
+                    }
+                }
+
                 return {
                     id: sr?.id || p.id,
                     product_id: String(p.id),
@@ -123,7 +133,7 @@ export default function ShopeePage() {
                     sku: p.sku,
                     images: p.images,
                     price_retail: p.price_retail,
-                    price_cost: p.price_cost,
+                    price_cost: actualCost,
                     category_slug: p.category_slug,
                 };
             });

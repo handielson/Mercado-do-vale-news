@@ -26,7 +26,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": [
+  "exclude": ["supabase", "test_*.mjs", 
     "pages/api/ai/generate-seo.ts",
     "scripts/create-test-inventory.ts",
     "check_api2.cjs",
