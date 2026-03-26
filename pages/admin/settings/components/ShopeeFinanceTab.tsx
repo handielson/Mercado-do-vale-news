@@ -12,9 +12,18 @@ interface EscrowItem {
 const fmt = (val: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+const CHUNK_DAYS = 14; // Shopee max is 15 days per request
+
 async function safeRefreshToken() {
     const r = await fetch('/api/shopee-actions?action=refresh_token');
     return r.ok;
+}
+
+async function fetchOrdersChunk(timeFrom: number, timeTo: number): Promise<{ order_sn: string }[]> {
+    const res = await fetch(`/api/shopee-actions?action=get_order_list&time_from=${timeFrom}&time_to=${timeTo}&page_size=50&order_status=COMPLETED`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data.response?.order_list || [];
 }
 
 export default function ShopeeFinanceTab() {
@@ -22,77 +31,85 @@ export default function ShopeeFinanceTab() {
     const [items, setItems] = useState<EscrowItem[]>([]);
     const [apiError, setApiError] = useState<string | null>(null);
     const [dateRange, setDateRange] = useState(30);
+    const [progress, setProgress] = useState('');
 
     const fetchFinance = async (retry = false) => {
         setLoading(true);
         setApiError(null);
         setItems([]);
+        setProgress('');
+
         try {
             const timeTo = Math.floor(Date.now() / 1000);
             const timeFrom = timeTo - (dateRange * 24 * 60 * 60);
+            const chunkSecs = CHUNK_DAYS * 24 * 60 * 60;
 
-            // 1. Buscar pedidos COMPLETED no período
-            const listRes = await fetch(`/api/shopee-actions?action=get_order_list&time_from=${timeFrom}&time_to=${timeTo}&page_size=50&order_status=COMPLETED`);
-            const listData = await listRes.json();
+            // Build time chunks to stay within the 15 day Shopee API limit
+            const chunks: { from: number; to: number }[] = [];
+            let cursor = timeFrom;
+            while (cursor < timeTo) {
+                const end = Math.min(cursor + chunkSecs, timeTo);
+                chunks.push({ from: cursor, to: end });
+                cursor = end;
+            }
 
-            if (listData.error === 'invalid_access_token' || listData.error === 'error_auth') {
-                if (!retry) {
-                    const ok = await safeRefreshToken();
-                    if (ok) return fetchFinance(true);
+            // Fetch all order SNs across all chunks
+            let allOrders: { order_sn: string }[] = [];
+            for (let i = 0; i < chunks.length; i++) {
+                setProgress(`Buscando pedidos... (${i + 1}/${chunks.length})`);
+                try {
+                    const chunk = await fetchOrdersChunk(chunks[i].from, chunks[i].to);
+                    allOrders = [...allOrders, ...chunk];
+                } catch (e: any) {
+                    if (e.message === 'invalid_access_token' || e.message === 'error_auth') {
+                        if (!retry) {
+                            const ok = await safeRefreshToken();
+                            if (ok) return fetchFinance(true);
+                        }
+                        setApiError('Sessão expirada. Vá em Configurações e vincule a loja novamente.');
+                        return;
+                    }
+                    throw e;
                 }
-                setApiError('Sessão expirada. Vá em Configurações e vincule a loja novamente.');
-                return;
             }
 
-            if (listData.error) {
-                setApiError(listData.message || listData.error);
-                return;
-            }
+            // Deduplicate
+            const unique = Array.from(new Map(allOrders.map(o => [o.order_sn, o])).values());
 
-            const orderList: { order_sn: string }[] = listData.response?.order_list || [];
-            if (orderList.length === 0) {
+            if (unique.length === 0) {
                 setItems([]);
                 return;
             }
 
-            // 2. Buscar escrow de cada pedido em paralelo (grupos de 5 pra não sobrecarregar)
+            // Fetch escrow for each order in parallel batches of 5
             const results: EscrowItem[] = [];
-            const chunks: typeof orderList[] = [];
-            for (let i = 0; i < orderList.length; i += 5) {
-                chunks.push(orderList.slice(i, i + 5));
-            }
-
-            for (const chunk of chunks) {
-                const promises = chunk.map(async (o) => {
+            for (let i = 0; i < unique.length; i += 5) {
+                const batch = unique.slice(i, i + 5);
+                setProgress(`Calculando financeiro... (${Math.min(i + 5, unique.length)}/${unique.length} pedidos)`);
+                const resolved = await Promise.all(batch.map(async (o) => {
                     try {
                         const r = await fetch(`/api/shopee-actions?action=get_escrow_detail&order_sn=${o.order_sn}`);
                         const d = await r.json();
                         const income = d.response?.order_income;
                         if (!income) return null;
-
                         const buyer_total = income.buyer_total_amount || 0;
                         const escrow = income.escrow_amount || 0;
-                        const fee = buyer_total - escrow;
-                        return { order_sn: o.order_sn, buyer_total_amount: buyer_total, escrow_amount: escrow, fee };
-                    } catch {
-                        return null;
-                    }
-                });
-                const resolved = await Promise.all(promises);
+                        return { order_sn: o.order_sn, buyer_total_amount: buyer_total, escrow_amount: escrow, fee: buyer_total - escrow };
+                    } catch { return null; }
+                }));
                 resolved.forEach(r => { if (r) results.push(r); });
             }
 
             setItems(results);
-        } catch {
-            setApiError('Erro de conexão ao buscar financeiro Shopee.');
+        } catch (e: any) {
+            setApiError(e.message || 'Erro de conexão ao buscar financeiro Shopee.');
         } finally {
             setLoading(false);
+            setProgress('');
         }
     };
 
-    useEffect(() => {
-        fetchFinance();
-    }, [dateRange]);
+    useEffect(() => { fetchFinance(); }, [dateRange]);
 
     const totalBruto = items.reduce((acc, i) => acc + i.buyer_total_amount, 0);
     const totalFees = items.reduce((acc, i) => acc + i.fee, 0);
@@ -100,7 +117,6 @@ export default function ShopeeFinanceTab() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -111,29 +127,21 @@ export default function ShopeeFinanceTab() {
                         Receitas e taxas dos pedidos concluídos nos últimos {dateRange} dias.
                     </p>
                 </div>
-
                 <div className="flex items-center gap-3">
-                    <select
-                        value={dateRange}
-                        onChange={(e) => setDateRange(Number(e.target.value))}
-                        className="px-4 py-2 border border-slate-200 bg-white rounded-xl text-sm font-medium text-slate-700 outline-none"
-                    >
+                    <select value={dateRange} onChange={(e) => setDateRange(Number(e.target.value))}
+                        className="px-4 py-2 border border-slate-200 bg-white rounded-xl text-sm font-medium text-slate-700 outline-none">
                         <option value={7}>Últimos 7 dias</option>
                         <option value={15}>Últimos 15 dias</option>
                         <option value={30}>Últimos 30 dias</option>
                         <option value={60}>Últimos 60 dias</option>
                     </select>
-                    <button
-                        onClick={() => fetchFinance()}
-                        disabled={loading}
-                        className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-2"
-                    >
+                    <button onClick={() => fetchFinance()} disabled={loading}
+                        className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors flex items-center gap-2">
                         <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
             </div>
 
-            {/* Error */}
             {apiError && (
                 <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3 text-red-700">
                     <AlertCircle className="w-5 h-5 shrink-0" />
@@ -141,7 +149,6 @@ export default function ShopeeFinanceTab() {
                 </div>
             )}
 
-            {/* Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-4">
@@ -155,7 +162,6 @@ export default function ShopeeFinanceTab() {
                         <Calendar className="w-3 h-3" /> {items.length} pedido(s) concluído(s)
                     </div>
                 </div>
-
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
@@ -166,7 +172,6 @@ export default function ShopeeFinanceTab() {
                     <div className="text-3xl font-black text-red-600">{fmt(totalFees)}</div>
                     <div className="text-xs text-slate-400 mt-2">Comissão + Serviço + Transação</div>
                 </div>
-
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
@@ -181,7 +186,6 @@ export default function ShopeeFinanceTab() {
                 </div>
             </div>
 
-            {/* Table */}
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
@@ -199,7 +203,7 @@ export default function ShopeeFinanceTab() {
                                 <tr>
                                     <td colSpan={5} className="py-12 text-center text-slate-500">
                                         <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                                        Buscando dados financeiros...
+                                        {progress || 'Buscando dados financeiros...'}
                                     </td>
                                 </tr>
                             ) : items.length === 0 && !apiError ? (
@@ -209,7 +213,7 @@ export default function ShopeeFinanceTab() {
                                     </td>
                                 </tr>
                             ) : (
-                                items.map((item) => (
+                                items.map(item => (
                                     <tr key={item.order_sn} className="hover:bg-slate-50 transition-colors">
                                         <td className="py-4 px-6 font-bold text-slate-800">#{item.order_sn}</td>
                                         <td className="py-4 px-6 text-right text-sm text-slate-700">{fmt(item.buyer_total_amount)}</td>

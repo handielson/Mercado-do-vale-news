@@ -225,6 +225,49 @@ export default async function handler(req: any, res: any) {
             return res.status(200).json(data);
         }
 
+        if (action === 'get_shipping_document') {
+            const { order_sn, shipping_document_type } = payload;
+            if (!order_sn) return res.status(400).json({ error: 'order_sn não fornecido' });
+
+            // Step 1: Get document info to grab the URL
+            const infoPath = '/api/v2/logistics/get_shipping_document_info';
+            const ts1 = Math.floor(Date.now() / 1000);
+            const infoSign = generateSign(partnerId, partnerKey, infoPath, ts1, accessToken, shopId);
+            const infoUrl = `${shopeeApiUrl}${infoPath}?partner_id=${partnerId}&timestamp=${ts1}&access_token=${accessToken}&shop_id=${shopId}&sign=${infoSign}`;
+
+            const infoRes = await fetch(infoUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_list: [{ order_sn, shipping_document_type: shipping_document_type || 'SHIPPING_LABEL' }] })
+            });
+            const infoData = await infoRes.json();
+            
+            // Step 2: Download the document
+            const docPath = '/api/v2/logistics/download_shipping_document';
+            const ts2 = Math.floor(Date.now() / 1000);
+            const docSign = generateSign(partnerId, partnerKey, docPath, ts2, accessToken, shopId);
+            const docApiUrl = `${shopeeApiUrl}${docPath}?partner_id=${partnerId}&timestamp=${ts2}&access_token=${accessToken}&shop_id=${shopId}&sign=${docSign}`;
+            
+            const docRes = await fetch(docApiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_list: [{ order_sn, shipping_document_type: shipping_document_type || 'SHIPPING_LABEL' }] })
+            });
+
+            // If response is PDF binary, pass it along
+            const contentType = docRes.headers.get('content-type') || '';
+            if (contentType.includes('application/pdf')) {
+                const pdfBuffer = await docRes.arrayBuffer();
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', `attachment; filename="etiqueta-${order_sn}.pdf"`);
+                return res.status(200).send(Buffer.from(pdfBuffer));
+            }
+            
+            // Otherwise return JSON (might contain URL or error)
+            const docData = await docRes.json();
+            return res.status(200).json({ info: infoData, doc: docData });
+        }
+
         if (action === 'ship_order') {
             const { order_sn } = payload;
             if (!order_sn) return res.status(400).json({ error: 'order_sn não fornecido' });

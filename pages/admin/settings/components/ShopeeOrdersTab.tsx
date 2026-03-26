@@ -225,6 +225,35 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
         toast.success(`Resumo copiado para a área de transferência!`);
     };
 
+    const handleDownloadLabel = async (orderSn: string) => {
+        toast.loading(`Baixando etiqueta do pedido #${orderSn}...`, { id: `label-${orderSn}` });
+        try {
+            const res = await fetch(`/api/shopee-actions?action=get_shipping_document&order_sn=${orderSn}`);
+            const contentType = res.headers.get('content-type') || '';
+
+            if (contentType.includes('application/pdf')) {
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `etiqueta-${orderSn}.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+                toast.success(`Etiqueta baixada com sucesso!`, { id: `label-${orderSn}` });
+            } else {
+                const data = await res.json();
+                if (data.error || data.doc?.error) {
+                    const errMsg = data.error || data.doc?.error || 'Etiqueta indisponível.';
+                    toast.error(`Etiqueta: ${errMsg}`, { id: `label-${orderSn}`, duration: 8000 });
+                } else {
+                    toast.error('A etiqueta ainda não está pronta. Verifique se a Nota Fiscal foi preenchida.', { id: `label-${orderSn}`, duration: 8000 });
+                }
+            }
+        } catch {
+            toast.error('Erro de conexão ao baixar etiqueta.', { id: `label-${orderSn}` });
+        }
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'UNPAID': return <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">Aguardando Pagamento</span>;
@@ -420,6 +449,14 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                                     <Calculator className="w-4 h-4 hidden" />
                                     🖨️ Imprimir Resumo
                                 </button>
+                                {(order.order_status === 'READY_TO_SHIP' || order.order_status === 'PROCESSED' || order.order_status === 'SHIPPED' || order.order_status === 'COMPLETED') && (
+                                    <button 
+                                        onClick={() => handleDownloadLabel(order.order_sn)}
+                                        className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                                    >
+                                        📥 Ver Etiqueta
+                                    </button>
+                                )}
                                 <button 
                                     onClick={() => handleTracking(order.order_sn)}
                                     disabled={loadingTracking[order.order_sn]}
