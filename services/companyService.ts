@@ -60,6 +60,8 @@ interface CompanySettingsRow {
     shopee_shop_id: string | null;
     shopee_access_token: string | null;
     shopee_refresh_token: string | null;
+    shopee_printer_thermal: string | null;
+    shopee_printer_a4: string | null;
 
     catalog_footer_text: string | null;
     maintenance_mode: boolean | null;
@@ -126,6 +128,8 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     shopee_shop_id: row.shopee_shop_id || '',
     shopee_access_token: row.shopee_access_token || '',
     shopee_refresh_token: row.shopee_refresh_token || '',
+    shopee_printer_thermal: row.shopee_printer_thermal || '',
+    shopee_printer_a4: row.shopee_printer_a4 || '',
 
     catalogFooterText: row.catalog_footer_text || '',
     maintenanceMode: row.maintenance_mode ?? false,
@@ -185,6 +189,8 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     shopee_shop_id: company.shopee_shop_id || null,
     shopee_access_token: company.shopee_access_token || null,
     shopee_refresh_token: company.shopee_refresh_token || null,
+    shopee_printer_thermal: company.shopee_printer_thermal || null,
+    shopee_printer_a4: company.shopee_printer_a4 || null,
 
     catalog_footer_text: company.catalogFooterText || null,
     maintenance_mode: company.maintenanceMode ?? null,
