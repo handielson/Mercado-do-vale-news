@@ -315,11 +315,15 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                                             <Truck className="w-4 h-4 text-orange-500" />
                                             Histórico de Rastreio
                                         </div>
-                                        {(trackingData[order.order_sn].tracking_number || order.tracking_no) && (
-                                            <span className="text-xs font-mono bg-white px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 shadow-sm">
-                                                {trackingData[order.order_sn].tracking_number || order.tracking_no}
-                                            </span>
-                                        )}
+                                        {(() => {
+                                            const tData = trackingData[order.order_sn] || {};
+                                            const finalTrackingNo = tData.tracking_number || tData.logistics_tracking_no || tData.first_mile_tracking_number || tData.last_mile_tracking_number || order.tracking_no;
+                                            return finalTrackingNo ? (
+                                                <span className="text-xs font-mono bg-white px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 shadow-sm flex items-center gap-1">
+                                                    {finalTrackingNo}
+                                                </span>
+                                            ) : null;
+                                        })()}
                                     </h4>
                                     <div className="space-y-3 relative before:absolute before:inset-0 before:ml-[11px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
                                         {(trackingData[order.order_sn].tracking_info || []).map((event: any, i: number) => (
