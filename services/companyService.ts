@@ -184,11 +184,13 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     synology_video_base_url: company.synologyVideoBaseUrl || null,
     synology_video_extension: company.synologyVideoExtension || null,
     
-    shopee_partner_id: company.shopee_partner_id || null,
-    shopee_partner_key: company.shopee_partner_key || null,
-    shopee_shop_id: company.shopee_shop_id || null,
-    shopee_access_token: company.shopee_access_token || null,
-    shopee_refresh_token: company.shopee_refresh_token || null,
+    // Protect sensitive/hidden fields from being overwritten if UI didn't load them
+    ...(company.shopee_partner_id ? { shopee_partner_id: company.shopee_partner_id } : {}),
+    ...(company.shopee_partner_key ? { shopee_partner_key: company.shopee_partner_key } : {}),
+    ...(company.shopee_shop_id ? { shopee_shop_id: company.shopee_shop_id } : {}),
+    ...(company.shopee_access_token ? { shopee_access_token: company.shopee_access_token } : {}),
+    ...(company.shopee_refresh_token ? { shopee_refresh_token: company.shopee_refresh_token } : {}),
+
     shopee_printer_thermal: company.shopee_printer_thermal || null,
     shopee_printer_a4: company.shopee_printer_a4 || null,
 
