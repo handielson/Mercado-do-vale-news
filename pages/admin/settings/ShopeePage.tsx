@@ -2,13 +2,15 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
-    Upload, Check, X, Loader2, Tag, Download, Calculator
+    Upload, Check, X, Loader2, Tag, Download, Calculator, ShoppingBag, Printer
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
 import { supabase } from '../../../services/supabase';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { Company } from '../../../types/company';
+import ShopeeOrdersTab from './components/ShopeeOrdersTab';
+import ShopeePrintersTab from './components/ShopeePrintersTab';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ShopeeProduct {
@@ -39,7 +41,7 @@ interface LocalProduct {
     category_slug: string;
 }
 
-type Tab = 'config' | 'products';
+type Tab = 'config' | 'products' | 'orders' | 'printers';
 type Filter = 'all' | 'synced' | 'not_synced' | 'inactive';
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -813,6 +815,16 @@ export default function ShopeePage() {
                         />
                     )}
                 </div>
+            )}
+
+            {/* ── Tab: Pedidos ── */}
+            {tab === 'orders' && (
+                <ShopeeOrdersTab isConnected={isConnected} />
+            )}
+
+            {/* ── Tab: Impressoras ── */}
+            {tab === 'printers' && (
+                <ShopeePrintersTab />
             )}
         </div>
     );

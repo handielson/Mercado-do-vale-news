@@ -72,6 +72,8 @@ export interface Company {
     shopee_shop_id?: string;
     shopee_access_token?: string;
     shopee_refresh_token?: string;
+    shopee_printer_thermal?: string;
+    shopee_printer_a4?: string;
 
     // Maintenance Mode
     maintenanceMode?: boolean;
@@ -124,6 +126,8 @@ export const defaultCompany: Company = {
     googleAnalyticsId: '',
     synologyVideoBaseUrl: '',
     synologyVideoExtension: '.mp4',
+    shopee_printer_thermal: '',
+    shopee_printer_a4: '',
     maintenanceMode: false,
     maintenanceMessage: 'Voltamos logo! Estamos realizando manutenções no servidor para melhorar sua experiência.',
     maintenanceBypassKey: 'liberado'

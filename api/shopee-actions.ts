@@ -57,17 +57,97 @@ export default async function handler(req: any, res: any) {
     const accessToken = settings.shopee_access_token;
 
     try {
+        const shopeeApiUrl = getShopeeBaseUrl(partnerId);
+
+        const payload = req.method === 'POST' ? req.body : req.query;
+
         if (action === 'get_shop_info') {
             const apiPath = '/api/v2/shop/get_shop_info';
             const timestamp = Math.floor(Date.now() / 1000);
-            // Generate Signature
             const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
-            const shopeeApiUrl = getShopeeBaseUrl(partnerId);
-
-            // Fetch
             const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}`;
-            
             const r = await fetch(url);
+            const data = await r.json();
+            return res.status(200).json(data);
+        }
+
+        if (action === 'get_order_list') {
+            let { time_range_field, time_from, time_to, page_size, cursor, order_status } = payload;
+            
+            if (!time_from) {
+                time_to = Math.floor(Date.now() / 1000);
+                time_from = time_to - (15 * 24 * 60 * 60);
+            }
+
+            const apiPath = '/api/v2/order/get_order_list';
+            const timestamp = Math.floor(Date.now() / 1000);
+            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
+
+            let url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}&time_range_field=${time_range_field || 'create_time'}&time_from=${time_from}&time_to=${time_to}&page_size=${page_size || 50}`;
+            if (cursor) url += `&cursor=${cursor}`;
+            if (order_status) url += `&order_status=${order_status}`;
+
+            const r = await fetch(url);
+            const data = await r.json();
+            return res.status(200).json(data);
+        }
+
+        if (action === 'get_order_detail') {
+            const { order_sn_list } = payload;
+            if (!order_sn_list) return res.status(400).json({ error: 'order_sn_list não fornecido' });
+
+            const apiPath = '/api/v2/order/get_order_detail';
+            const timestamp = Math.floor(Date.now() / 1000);
+            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
+
+            const snParam = Array.isArray(order_sn_list) ? order_sn_list.join(',') : order_sn_list;
+            const optionalFields = 'buyer_user_id,buyer_username,estimated_shipping_fee,recipient_address,actual_shipping_fee,goods_to_declare,note,note_update_time,item_list,pay_time,dropshipper,dropshipper_phone,split_up,buyer_cancel_reason,cancel_by,cancel_reason,actual_shipping_fee_confirmed,buyer_cpf_id,fulfillment_flag,pickup_done_time,package_list,shipping_carrier,payment_method,total_amount,invoice_data,checkout_shipping_carrier,reverse_shipping_fee,order_chargeable_weight_gram,edt,prescription_images,prescription_check_status';
+            
+            const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}&order_sn_list=${snParam}&response_optional_fields=${optionalFields}`;
+
+            const r = await fetch(url);
+            const data = await r.json();
+            return res.status(200).json(data);
+        }
+
+        if (action === 'get_tracking_info') {
+            const { order_sn } = payload;
+            if (!order_sn) return res.status(400).json({ error: 'order_sn não fornecido' });
+
+            const apiPath = '/api/v2/logistics/get_tracking_info';
+            const timestamp = Math.floor(Date.now() / 1000);
+            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
+            
+            const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}&order_sn=${order_sn}`;
+
+            const r = await fetch(url);
+            const data = await r.json();
+            return res.status(200).json(data);
+        }
+
+        if (action === 'ship_order') {
+            const { order_sn } = payload;
+            if (!order_sn) return res.status(400).json({ error: 'order_sn não fornecido' });
+            
+            // First we need to get shipping parameter to fulfill logistics properly
+            // But a simple ship_order for drop-off usually requires dropoff object.
+            // Let's implement standard ship_order
+            const apiPath = '/api/v2/logistics/ship_order';
+            const timestamp = Math.floor(Date.now() / 1000);
+            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
+            
+            const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}`;
+
+            const shipPayload = {
+                order_sn: order_sn,
+                dropoff: {} // Try simple dropoff
+            };
+
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(shipPayload)
+            });
             const data = await r.json();
             return res.status(200).json(data);
         }
@@ -114,7 +194,7 @@ export default async function handler(req: any, res: any) {
                     const ts = Math.floor(Date.now() / 1000);
                     const signImg = generateSign(partnerId, partnerKey, uploadPath, ts, accessToken, shopId);
                     
-                    const uploadUrl = `${SHOPEE_API_URL}${uploadPath}?partner_id=${partnerId}&timestamp=${ts}&access_token=${accessToken}&shop_id=${shopId}&sign=${signImg}`;
+                    const uploadUrl = `${shopeeApiUrl}${uploadPath}?partner_id=${partnerId}&timestamp=${ts}&access_token=${accessToken}&shop_id=${shopId}&sign=${signImg}`;
                     
                     const uploadRes = await fetch(uploadUrl, {
                         method: 'POST',
@@ -161,7 +241,7 @@ export default async function handler(req: any, res: any) {
             const addPath = '/api/v2/product/add_item';
             const addTs = Math.floor(Date.now() / 1000);
             const addSign = generateSign(partnerId, partnerKey, addPath, addTs, accessToken, shopId);
-            const addUrl = `${SHOPEE_API_URL}${addPath}?partner_id=${partnerId}&timestamp=${addTs}&access_token=${accessToken}&shop_id=${shopId}&sign=${addSign}`;
+            const addUrl = `${shopeeApiUrl}${addPath}?partner_id=${partnerId}&timestamp=${addTs}&access_token=${accessToken}&shop_id=${shopId}&sign=${addSign}`;
 
             const addRes = await fetch(addUrl, {
                 method: 'POST',
@@ -212,7 +292,7 @@ export default async function handler(req: any, res: any) {
             const path = '/api/v2/product/update_stock';
             const ts = Math.floor(Date.now() / 1000);
             const sign = generateSign(partnerId, partnerKey, path, ts, accessToken, shopId);
-            const url = `${SHOPEE_API_URL}${path}?partner_id=${partnerId}&timestamp=${ts}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}`;
+            const url = `${shopeeApiUrl}${path}?partner_id=${partnerId}&timestamp=${ts}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}`;
 
             const updateRes = await fetch(url, {
                 method: 'POST',
@@ -248,7 +328,7 @@ export default async function handler(req: any, res: any) {
             const path = '/api/v2/product/update_price';
             const ts = Math.floor(Date.now() / 1000);
             const sign = generateSign(partnerId, partnerKey, path, ts, accessToken, shopId);
-            const url = `${SHOPEE_API_URL}${path}?partner_id=${partnerId}&timestamp=${ts}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}`;
+            const url = `${shopeeApiUrl}${path}?partner_id=${partnerId}&timestamp=${ts}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}`;
 
             const updateRes = await fetch(url, {
                 method: 'POST',
