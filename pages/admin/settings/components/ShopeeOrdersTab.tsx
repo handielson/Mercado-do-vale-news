@@ -226,31 +226,71 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
     };
 
     const handleDownloadLabel = async (orderSn: string) => {
-        toast.loading(`Baixando etiqueta do pedido #${orderSn}...`, { id: `label-${orderSn}` });
+        toast.loading(`Buscando etiqueta do pedido #${orderSn}...`, { id: `label-${orderSn}` });
         try {
             const res = await fetch(`/api/shopee-actions?action=get_shipping_document&order_sn=${orderSn}`);
             const contentType = res.headers.get('content-type') || '';
 
             if (contentType.includes('application/pdf')) {
                 const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `etiqueta-${orderSn}.pdf`;
-                a.click();
-                URL.revokeObjectURL(url);
-                toast.success(`Etiqueta baixada com sucesso!`, { id: `label-${orderSn}` });
+                const pdfUrl = URL.createObjectURL(blob);
+
+                // Open label in a full-page HTML viewer so it prints at 100%
+                const viewerHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Etiqueta — #${orderSn}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #f1f5f9; font-family: sans-serif; }
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; background: #1e293b; color: white; height: 48px;
+    }
+    .toolbar span { font-size: 14px; font-weight: 600; }
+    .toolbar button {
+      padding: 7px 18px; background: #ea580c; color: white; border: none;
+      border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 13px;
+    }
+    .toolbar button:hover { background: #c2410c; }
+    .frame-wrap { width: 100%; height: calc(100vh - 48px); }
+    iframe { width: 100%; height: 100%; border: 0; }
+    @media print {
+      .toolbar { display: none !important; }
+      .frame-wrap { height: 100vh; }
+      html, body { background: white; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span>🏷️ Etiqueta de Envio — Pedido #${orderSn}</span>
+    <div style="display:flex;gap:10px">
+      <button onclick="window.print()">🖨️ Imprimir</button>
+    </div>
+  </div>
+  <div class="frame-wrap">
+    <iframe src="${pdfUrl}" type="application/pdf"></iframe>
+  </div>
+</body>
+</html>`;
+
+                const viewerBlob = new Blob([viewerHtml], { type: 'text/html' });
+                const viewerUrl = URL.createObjectURL(viewerBlob);
+                window.open(viewerUrl, '_blank');
+                toast.success('Etiqueta aberta! Clique em "Imprimir" na janela.', { id: `label-${orderSn}` });
             } else {
                 const data = await res.json();
-                if (data.error || data.doc?.error) {
-                    const errMsg = data.error || data.doc?.error || 'Etiqueta indisponível.';
+                const errMsg = data.error || data.doc?.error;
+                if (errMsg) {
                     toast.error(`Etiqueta: ${errMsg}`, { id: `label-${orderSn}`, duration: 8000 });
                 } else {
-                    toast.error('A etiqueta ainda não está pronta. Verifique se a Nota Fiscal foi preenchida.', { id: `label-${orderSn}`, duration: 8000 });
+                    toast.error('A etiqueta ainda não está pronta. Verifique se a Nota Fiscal foi preenchida na Shopee.', { id: `label-${orderSn}`, duration: 8000 });
                 }
             }
         } catch {
-            toast.error('Erro de conexão ao baixar etiqueta.', { id: `label-${orderSn}` });
+            toast.error('Erro de conexão ao buscar etiqueta.', { id: `label-${orderSn}` });
         }
     };
 
