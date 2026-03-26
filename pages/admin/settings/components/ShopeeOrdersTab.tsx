@@ -201,6 +201,30 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
         }
     };
 
+    const handleCopySummary = (order: any) => {
+        const tData = trackingData[order.order_sn] || {};
+        const finalTrackingNo = tData.tracking_number_explicit || tData.tracking_number || tData.logistics_tracking_no || tData.first_mile_tracking_number || tData.last_mile_tracking_number || order.tracking_no || 'Ainda não gerado';
+
+        const itemsText = (order.item_list || []).map((item: any) => {
+            const varText = item.model_name && item.model_name !== '' ? ` (Var: ${item.model_name})` : '';
+            return `- ${item.model_quantity_purchased}x ${item.item_name}${varText}`;
+        }).join('\n');
+
+        const dateStr = new Date(order.create_time * 1000).toLocaleString('pt-BR');
+
+        const message = `📦 *Resumo do Pedido Shopee*\n` +
+                        `*Pedido:* #${order.order_sn}\n` +
+                        `*Data:* ${dateStr}\n\n` +
+                        `🛍️ *Itens:*\n${itemsText}\n\n` +
+                        `💰 *Total:* R$ ${(order.total_amount || 0).toFixed(2)}\n\n` +
+                        `🚚 *Rastreio:* ${finalTrackingNo}\n` +
+                        `*Status:* ${order.order_status}\n\n` +
+                        `Obrigado por comprar conosco!`;
+
+        navigator.clipboard.writeText(message);
+        toast.success(`Resumo copiado para a área de transferência!`);
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'UNPAID': return <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">Aguardando Pagamento</span>;
@@ -384,10 +408,16 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                             {/* Actions */}
                             <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-2 justify-end">
                                 <button 
+                                    onClick={() => handleCopySummary(order)}
+                                    className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors flex items-center gap-2"
+                                >
+                                    📋 Copiar Resumo
+                                </button>
+                                <button 
                                     onClick={() => handlePrintLocal(order.order_sn)}
                                     className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors flex items-center gap-2"
                                 >
-                                    <Calculator className="w-4 h-4 hidden" /* hidden to keep import valid if unused but we can use printer icon instead. Let's rely on standard box or external link later, I will just render text */ />
+                                    <Calculator className="w-4 h-4 hidden" />
                                     🖨️ Imprimir Resumo
                                 </button>
                                 <button 
