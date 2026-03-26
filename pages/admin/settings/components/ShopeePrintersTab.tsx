@@ -45,11 +45,11 @@ export default function ShopeePrintersTab() {
         }
         toast.loading('Enviando página de teste do Windows...', { id: 'test-print' });
         try {
-            const res = await fetch(`http://localhost:8080/test-print?printer=${encodeURIComponent(printerName)}`);
+            const res = await fetch(`http://localhost:8081/test-print?printer=${encodeURIComponent(printerName)}`);
             if (!res.ok) throw new Error('Falha no comando de teste');
             toast.success(`Página de teste enviada para "${printerName}"!`, { id: 'test-print' });
         } catch (error: any) {
-            toast.error(`Verifique se o PM2 está rodando localmente (HTTP 8080). Erro: ${error.message}`, { id: 'test-print' });
+            toast.error(`Verifique se o servidor de impressoras está rodando (porta 8081). Erro: ${error.message}`, { id: 'test-print' });
         }
     };
 
