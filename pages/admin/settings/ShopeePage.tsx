@@ -1307,8 +1307,8 @@ function ExpandedItemPanel({
                             return (
                                 <div key={attr.attribute_id} className="flex flex-col gap-1">
                                     <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
-                                        {attr.attribute_name}
-                                        {attr.is_mandatory && <span className="text-red-400 text-[10px]">*</span>}
+                                        {attr.name}
+                                        {attr.mandatory && <span className="text-red-400 text-[10px]">*</span>}
                                     </label>
                                     {isEnum ? (
                                         <select
@@ -1317,7 +1317,7 @@ function ExpandedItemPanel({
                                             className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white">
                                             <option value="">— selecione —</option>
                                             {attr.attribute_value_list.map((v: any) => (
-                                                <option key={v.value_id} value={v.original_value}>{v.original_value}</option>
+                                                <option key={v.value_id} value={v.name}>{v.name}</option>
                                             ))}
                                         </select>
                                     ) : (
