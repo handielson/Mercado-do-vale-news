@@ -25,10 +25,103 @@ interface CacheStore {
 }
 
 const CACHE_KEY = 'shopee_finance_v3';
+const TAX_CONFIG_KEY = 'shopee_tax_config';
 const FRESH_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days in ms
 const CHUNK_DAYS = 14;
 const fmt = (val: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+const fmtPct = (val: number) =>
+    `${(val * 100).toFixed(2)}%`;
+
+// ─── Simples Nacional Engine ──────────────────────────────────────────────────
+
+interface SimplesAnexo { name: string; faixas: { limite: number; aliquota: number; deducao: number }[]; }
+
+const SIMPLES_ANEXOS: Record<string, SimplesAnexo> = {
+    I: {
+        name: 'Anexo I — Comércio',
+        faixas: [
+            { limite: 180000,   aliquota: 0.04,  deducao: 0       },
+            { limite: 360000,   aliquota: 0.073, deducao: 5940    },
+            { limite: 720000,   aliquota: 0.095, deducao: 13860   },
+            { limite: 1440000,  aliquota: 0.107, deducao: 22500   },
+            { limite: 1800000,  aliquota: 0.143, deducao: 87300   },
+            { limite: 3600000,  aliquota: 0.19,  deducao: 378000  },
+        ],
+    },
+    II: {
+        name: 'Anexo II — Indústria',
+        faixas: [
+            { limite: 180000,   aliquota: 0.045, deducao: 0       },
+            { limite: 360000,   aliquota: 0.078, deducao: 5940    },
+            { limite: 720000,   aliquota: 0.10,  deducao: 13860   },
+            { limite: 1440000,  aliquota: 0.112, deducao: 22500   },
+            { limite: 1800000,  aliquota: 0.147, deducao: 85500   },
+            { limite: 3600000,  aliquota: 0.30,  deducao: 720000  },
+        ],
+    },
+    III: {
+        name: 'Anexo III — Serviços (locação, creche, etc.)',
+        faixas: [
+            { limite: 180000,   aliquota: 0.06,  deducao: 0       },
+            { limite: 360000,   aliquota: 0.112, deducao: 9360    },
+            { limite: 720000,   aliquota: 0.135, deducao: 17640   },
+            { limite: 1440000,  aliquota: 0.16,  deducao: 35640   },
+            { limite: 1800000,  aliquota: 0.21,  deducao: 125640  },
+            { limite: 3600000,  aliquota: 0.33,  deducao: 648000  },
+        ],
+    },
+    IV: {
+        name: 'Anexo IV — Serviços (construção, vigilância, etc.)',
+        faixas: [
+            { limite: 180000,   aliquota: 0.045, deducao: 0       },
+            { limite: 360000,   aliquota: 0.09,  deducao: 8100    },
+            { limite: 720000,   aliquota: 0.102, deducao: 12420   },
+            { limite: 1440000,  aliquota: 0.14,  deducao: 39780   },
+            { limite: 1800000,  aliquota: 0.22,  deducao: 183780  },
+            { limite: 3600000,  aliquota: 0.33,  deducao: 828000  },
+        ],
+    },
+    V: {
+        name: 'Anexo V — Serviços (TI, publicidade, etc.)',
+        faixas: [
+            { limite: 180000,   aliquota: 0.155, deducao: 0       },
+            { limite: 360000,   aliquota: 0.18,  deducao: 4500    },
+            { limite: 720000,   aliquota: 0.195, deducao: 9900    },
+            { limite: 1440000,  aliquota: 0.205, deducao: 17100   },
+            { limite: 1800000,  aliquota: 0.23,  deducao: 62100   },
+            { limite: 3600000,  aliquota: 0.305, deducao: 540000  },
+        ],
+    },
+};
+
+interface TaxResult { faixa: number; aliquotaNominal: number; deducao: number; aliquotaEfetiva: number; }
+
+function calcSimples(rbt12: number, anexo: string): TaxResult | null {
+    if (!rbt12 || rbt12 <= 0) return null;
+    const tabela = SIMPLES_ANEXOS[anexo];
+    if (!tabela) return null;
+    const idx = tabela.faixas.findIndex(f => rbt12 <= f.limite);
+    const faixaIdx = idx === -1 ? tabela.faixas.length - 1 : idx;
+    const { aliquota, deducao } = tabela.faixas[faixaIdx];
+    const aliquotaEfetiva = (rbt12 * aliquota - deducao) / rbt12;
+    return { faixa: faixaIdx + 1, aliquotaNominal: aliquota, deducao, aliquotaEfetiva: Math.max(0, aliquotaEfetiva) };
+}
+
+interface TaxConfig { rbt12: number; anexo: string; baseCalculo: 'bruto' | 'semFrete'; }
+
+function loadTaxConfig(): TaxConfig {
+    try {
+        const raw = localStorage.getItem(TAX_CONFIG_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch { /* */ }
+    return { rbt12: 0, anexo: 'I', baseCalculo: 'bruto' };
+}
+
+function saveTaxConfig(cfg: TaxConfig) {
+    try { localStorage.setItem(TAX_CONFIG_KEY, JSON.stringify(cfg)); } catch { /* */ }
+}
+
 
 // ─── Cache helpers ────────────────────────────────────────────────────────────
 
@@ -125,6 +218,19 @@ export default function ShopeeFinanceTab() {
     const [progress, setProgress] = useState('');
     const [fromCache, setFromCache] = useState(false);
     const abortRef = useRef(false);
+    const [taxConfig, setTaxConfig] = useState<TaxConfig>(() => loadTaxConfig());
+    const [rbt12Input, setRbt12Input] = useState(() => loadTaxConfig().rbt12 > 0 ? loadTaxConfig().rbt12.toString() : '');
+    const [showTaxConfig, setShowTaxConfig] = useState(false);
+
+    const taxResult = calcSimples(taxConfig.rbt12, taxConfig.anexo);
+
+    const saveTax = (cfg: TaxConfig) => { setTaxConfig(cfg); saveTaxConfig(cfg); };
+
+    const calcOrderTax = (item: EscrowItem) => {
+        if (!taxResult) return 0;
+        const base = taxConfig.baseCalculo === 'bruto' ? item.buyer_total_amount : item.product_value;
+        return base * taxResult.aliquotaEfetiva;
+    };
 
     const fetchFinance = async (retry = false) => {
         // Resolve time range
@@ -260,6 +366,7 @@ export default function ShopeeFinanceTab() {
     const totalSemFrete = items.reduce((acc, i) => acc + i.product_value, 0);
     const totalFees = items.reduce((acc, i) => acc + i.fee, 0);
     const totalLiquido = items.reduce((acc, i) => acc + i.escrow_amount, 0);
+    const totalImposto = items.reduce((acc, i) => acc + calcOrderTax(i), 0);
 
     return (
         <div className="space-y-6">
@@ -326,8 +433,92 @@ export default function ShopeeFinanceTab() {
                 </div>
             )}
 
+            {/* Simples Nacional Config Panel */}
+            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-2xl overflow-hidden">
+                <button onClick={() => setShowTaxConfig(v => !v)}
+                    className="w-full flex items-center justify-between px-5 py-4 text-left">
+                    <div className="flex items-center gap-3">
+                        <span className="text-lg">🇧🇷</span>
+                        <div>
+                            <p className="text-sm font-bold text-indigo-800">Simples Nacional — Configuração de Imposto</p>
+                            {taxResult ? (
+                                <p className="text-xs text-indigo-600">
+                                    {SIMPLES_ANEXOS[taxConfig.anexo]?.name} · Faixa {taxResult.faixa}ª ·
+                                    Alíquota efetiva: <strong>{fmtPct(taxResult.aliquotaEfetiva)}</strong> ·
+                                    Base: {taxConfig.baseCalculo === 'bruto' ? 'Bruto total (com frete)' : 'Sem frete'}
+                                </p>
+                            ) : (
+                                <p className="text-xs text-indigo-500">Clique para configurar e ver o imposto estimado por pedido.</p>
+                            )}
+                        </div>
+                    </div>
+                    <span className="text-indigo-400 text-sm">{showTaxConfig ? '▲' : '▼'}</span>
+                </button>
+
+                {showTaxConfig && (
+                    <div className="px-5 pb-5 space-y-4 border-t border-indigo-200 pt-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            {/* RBT12 */}
+                            <div>
+                                <label className="block text-xs font-bold text-indigo-700 mb-1">
+                                    Receita Bruta 12 meses (RBT12)
+                                </label>
+                                <input type="number" placeholder="Ex: 360000"
+                                    value={rbt12Input}
+                                    onChange={e => setRbt12Input(e.target.value)}
+                                    onBlur={() => {
+                                        const val = parseFloat(rbt12Input.replace(',', '.')) || 0;
+                                        saveTax({ ...taxConfig, rbt12: val });
+                                    }}
+                                    className="w-full px-3 py-2 border border-indigo-200 bg-white rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-300"
+                                />
+                                <p className="text-xs text-indigo-400 mt-1">Faturamento total dos últimos 12 meses (R$)</p>
+                            </div>
+
+                            {/* Anexo */}
+                            <div>
+                                <label className="block text-xs font-bold text-indigo-700 mb-1">Anexo do Simples Nacional</label>
+                                <select value={taxConfig.anexo}
+                                    onChange={e => saveTax({ ...taxConfig, anexo: e.target.value })}
+                                    className="w-full px-3 py-2 border border-indigo-200 bg-white rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-300">
+                                    {Object.entries(SIMPLES_ANEXOS).map(([k, v]) => (
+                                        <option key={k} value={k}>{v.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Base de cálculo */}
+                            <div>
+                                <label className="block text-xs font-bold text-indigo-700 mb-1">Base de cálculo do imposto</label>
+                                <select value={taxConfig.baseCalculo}
+                                    onChange={e => saveTax({ ...taxConfig, baseCalculo: e.target.value as 'bruto' | 'semFrete' })}
+                                    className="w-full px-3 py-2 border border-indigo-200 bg-white rounded-xl text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-300">
+                                    <option value="bruto">Bruto total (com frete) — padrão Simples</option>
+                                    <option value="semFrete">Sem frete (somente produto)</option>
+                                </select>
+                                <p className="text-xs text-indigo-400 mt-1">
+                                    ⚠️ Pelo Simples Nacional, a base oficial inclui o frete.
+                                </p>
+                            </div>
+                        </div>
+
+                        {taxResult && (
+                            <div className="bg-white/70 rounded-xl px-4 py-3 border border-indigo-100 text-sm text-indigo-800">
+                                <span className="font-bold">📊 Resultado:</span> RBT12 de {fmt(taxConfig.rbt12)} →
+                                <strong> {SIMPLES_ANEXOS[taxConfig.anexo]?.name}</strong>,
+                                Faixa <strong>{taxResult.faixa}ª</strong>,
+                                Alíquota nominal <strong>{fmtPct(taxResult.aliquotaNominal)}</strong>,
+                                Dedução <strong>{fmt(taxResult.deducao)}</strong>,
+                                <span className="text-indigo-900"> → Alíquota efetiva: <strong className="text-lg">{fmtPct(taxResult.aliquotaEfetiva)}</strong></span>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${taxResult ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
+
                 {/* Vendas Brutas */}
                 <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-3 mb-3">
@@ -381,6 +572,22 @@ export default function ShopeeFinanceTab() {
                         ✓ Na Carteira
                     </div>
                 </div>
+
+                {/* Total Imposto Estimado */}
+                {taxResult && (
+                    <div className="bg-white rounded-2xl p-5 border-2 border-orange-200 shadow-sm">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center">
+                                <span className="text-base">🧾</span>
+                            </div>
+                            <h3 className="text-xs font-bold text-orange-700 uppercase tracking-wide">Imposto Estimado</h3>
+                        </div>
+                        <div className="text-2xl font-black text-orange-600">{fmt(totalImposto)}</div>
+                        <div className="text-xs text-orange-500 mt-1">
+                            {fmtPct(taxResult.aliquotaEfetiva)} · Simples Anexo {taxConfig.anexo}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Table */}
@@ -396,6 +603,7 @@ export default function ShopeeFinanceTab() {
                                 <th className="py-3 px-4 font-bold text-blue-700 text-right">Sem Frete ★</th>
                                 <th className="py-3 px-4 font-bold text-slate-600 text-right">Taxas</th>
                                 <th className="py-3 px-4 font-bold text-slate-600 text-right">Líquido</th>
+                                {taxResult && <th className="py-3 px-4 font-bold text-orange-600 text-right">Imposto 🧾</th>}
                                 <th className="py-3 px-4 font-bold text-slate-600 text-center">Status</th>
                             </tr>
                         </thead>
@@ -453,13 +661,18 @@ export default function ShopeeFinanceTab() {
                                                     <td className="py-3 px-4 text-right font-bold text-blue-700">{fmt(item.product_value)}</td>
                                                     <td className="py-3 px-4 text-right text-red-600 font-medium">{item.fee > 0 ? `-${fmt(item.fee)}` : '—'}</td>
                                                     <td className="py-3 px-4 text-right font-bold text-green-600">{item.escrow_amount > 0 ? fmt(item.escrow_amount) : '—'}</td>
+                                                    {taxResult && (
+                                                        <td className="py-3 px-4 text-right font-bold text-orange-600">
+                                                            {item.buyer_total_amount > 0 ? fmt(calcOrderTax(item)) : '—'}
+                                                        </td>
+                                                    )}
                                                     <td className="py-3 px-4 text-center">{statusBadge()}</td>
                                                 </tr>
                                             );
                                         })}
                                     {loading && (
                                         <tr>
-                                            <td colSpan={8} className="py-3 text-center text-slate-400 text-xs">
+                                            <td colSpan={taxResult ? 9 : 8} className="py-3 text-center text-slate-400 text-xs">
                                                 <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
                                                 {progress}
                                             </td>
