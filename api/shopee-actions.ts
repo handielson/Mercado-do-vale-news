@@ -115,14 +115,31 @@ export default async function handler(req: any, res: any) {
             const { order_sn } = payload;
             if (!order_sn) return res.status(400).json({ error: 'order_sn não fornecido' });
 
-            const apiPath = '/api/v2/logistics/get_tracking_info';
             const timestamp = Math.floor(Date.now() / 1000);
-            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
             
+            // Endpoint 1: History Events
+            const apiPath = '/api/v2/logistics/get_tracking_info';
+            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
             const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}&order_sn=${order_sn}`;
 
-            const r = await fetch(url);
-            const data = await r.json();
+            // Endpoint 2: Actual Tracking Number
+            const infoPath = '/api/v2/logistics/get_tracking_number';
+            const infoSign = generateSign(partnerId, partnerKey, infoPath, timestamp, accessToken, shopId);
+            const infoUrl = `${shopeeApiUrl}${infoPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${infoSign}&order_sn=${order_sn}`;
+
+            const [r1, r2] = await Promise.all([
+                fetch(url),
+                fetch(infoUrl)
+            ]);
+
+            const data = await r1.json();
+            const dataNumber = await r2.json();
+
+            // Mesclar o tracking_number real no objeto de resposta para o frontend
+            if (data.response && dataNumber.response) {
+                data.response.tracking_number_explicit = dataNumber.response.tracking_number || dataNumber.response.first_mile_tracking_number || dataNumber.response.logistics_tracking_no || "";
+            }
+
             return res.status(200).json(data);
         }
 

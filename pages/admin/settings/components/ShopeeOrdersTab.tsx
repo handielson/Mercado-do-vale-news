@@ -317,7 +317,7 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                                         </div>
                                         {(() => {
                                             const tData = trackingData[order.order_sn] || {};
-                                            const finalTrackingNo = tData.tracking_number || tData.logistics_tracking_no || tData.first_mile_tracking_number || tData.last_mile_tracking_number || order.tracking_no;
+                                            const finalTrackingNo = tData.tracking_number_explicit || tData.tracking_number || tData.logistics_tracking_no || tData.first_mile_tracking_number || tData.last_mile_tracking_number || order.tracking_no;
                                             return finalTrackingNo ? (
                                                 <span className="text-xs font-mono bg-white px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 shadow-sm flex items-center gap-1">
                                                     {finalTrackingNo}
