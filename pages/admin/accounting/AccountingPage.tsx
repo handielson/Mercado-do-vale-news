@@ -35,20 +35,27 @@ function calcSimples(rbt12: number, anexo: string): SimplesResult | null {
 
 // ─── Config persistence ───────────────────────────────────────────────────────
 
-const CONFIG_KEY = 'contabilidade_config_v1';
+const CONFIG_KEY = 'contabilidade_config_v2';
 interface AccountingConfig {
-    rbt12: number;
     anexo: string;
     dataInicio: string;   // "YYYY-MM-DD"
     diaCorte: number;     // 1–28, default 20
+    rbt12Override: number; // 0 = auto
 }
 function loadConfig(): AccountingConfig {
     try { const r = localStorage.getItem(CONFIG_KEY); if (r) return JSON.parse(r); } catch { /* */ }
     const now = new Date();
-    return { rbt12: 0, anexo: 'I', dataInicio: `${now.getFullYear() - 1}-01-01`, diaCorte: 20 };
+    return { anexo: 'I', dataInicio: `${now.getFullYear() - 1}-01-01`, diaCorte: 20, rbt12Override: 0 };
 }
 function saveConfig(c: AccountingConfig) {
     try { localStorage.setItem(CONFIG_KEY, JSON.stringify(c)); } catch { /* */ }
+}
+
+/** Returns the date 12 months ago in YYYY-MM-DD format */
+function twelveMonthsAgo(): string {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().split('T')[0];
 }
 
 // ─── Shopee cache reader ──────────────────────────────────────────────────────
@@ -117,7 +124,7 @@ interface MonthRow {
 export default function AccountingPage() {
     const [config, setConfig] = useState<AccountingConfig>(loadConfig);
     const [showConfig, setShowConfig] = useState(false);
-    const [rbt12Input, setRbt12Input] = useState(String(loadConfig().rbt12 || ''));
+    const [overrideInput, setOverrideInput] = useState(String(loadConfig().rbt12Override || ''));
 
     // NF-e state
     const [nfItems, setNfItems] = useState<BlingNfItem[]>([]);
@@ -127,7 +134,25 @@ export default function AccountingPage() {
     // Shopee
     const shopeeItems = useMemo(() => loadShopeeItems(), []);
 
-    const taxResult = useMemo(() => calcSimples(config.rbt12, config.anexo), [config.rbt12, config.anexo]);
+    // ── Auto RBT12: sum of last 12 months Shopee COMPLETED + NF-e
+    const rbt12Auto = useMemo(() => {
+        const cutoff = twelveMonthsAgo();
+        let total = 0;
+        for (const it of shopeeItems) {
+            if (it.order_status !== 'COMPLETED' || !it.create_time) continue;
+            const d = new Date(it.create_time * 1000).toISOString().split('T')[0];
+            if (d >= cutoff) total += it.product_value || 0;
+        }
+        for (const it of nfItems) {
+            if (it.dataEmissao >= cutoff) total += it.totalProdutos || 0;
+        }
+        return total;
+    }, [shopeeItems, nfItems]);
+
+    // Effective RBT12: manual override if set, otherwise auto
+    const rbt12Efetivo = config.rbt12Override > 0 ? config.rbt12Override : rbt12Auto;
+
+    const taxResult = useMemo(() => calcSimples(rbt12Efetivo, config.anexo), [rbt12Efetivo, config.anexo]);
 
     // ── Tab
     const [tab, setTab] = useState<'shopee' | 'fisica' | 'consolidado'>('consolidado');
@@ -262,14 +287,22 @@ export default function AccountingPage() {
                                 className="w-full px-3 py-2 border border-indigo-200 bg-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-300" />
                             <p className="text-xs text-indigo-400 mt-1">Padrão: dia 20 (prazo DAS Simples)</p>
                         </div>
-                        {/* RBT12 */}
+                        {/* RBT12 — auto-calculado */}
                         <div>
-                            <label className="block text-xs font-bold text-indigo-700 mb-1">RBT12 — Receita Bruta 12 meses</label>
-                            <input type="number" placeholder="Ex: 360000" value={rbt12Input}
-                                onChange={e => setRbt12Input(e.target.value)}
-                                onBlur={() => updateConfig({ rbt12: parseFloat(rbt12Input.replace(',', '.')) || 0 })}
+                            <label className="block text-xs font-bold text-indigo-700 mb-1">RBT12 — Calculado automaticamente</label>
+                            <div className="w-full px-3 py-2.5 bg-indigo-100/60 border border-indigo-200 rounded-xl text-sm font-bold text-indigo-800">
+                                {fmt(rbt12Auto)} <span className="font-normal text-indigo-500 text-xs">/ últimos 12 meses</span>
+                            </div>
+                            <p className="text-xs text-indigo-400 mt-1">Soma de Shopee + NF-e dos últimos 12 meses</p>
+                        </div>
+                        {/* Override manual opcional */}
+                        <div>
+                            <label className="block text-xs font-bold text-indigo-700 mb-1">Override manual do RBT12 <span className="font-normal text-indigo-400">(opcional)</span></label>
+                            <input type="number" placeholder={`Deixe vazio = usar ${fmt(rbt12Auto)}`} value={overrideInput}
+                                onChange={e => setOverrideInput(e.target.value)}
+                                onBlur={() => updateConfig({ rbt12Override: parseFloat(overrideInput.replace(',', '.')) || 0 })}
                                 className="w-full px-3 py-2 border border-indigo-200 bg-white rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-300" />
-                            <p className="text-xs text-indigo-400 mt-1">Faturamento total (todos os canais) últimos 12 meses</p>
+                            <p className="text-xs text-indigo-400 mt-1">{config.rbt12Override > 0 ? '⚠️ Override ativo — apague para usar automático' : 'Informe apenas se quiser substituir o valor calculado'}</p>
                         </div>
                         {/* Anexo */}
                         <div>
@@ -286,7 +319,8 @@ export default function AccountingPage() {
                     {taxResult && (
                         <div className="bg-white/80 rounded-xl px-4 py-3 border border-indigo-100 text-sm text-indigo-900">
                             <span className="font-bold">📊 Resultado:</span>{' '}
-                            RBT12 de <strong>{fmt(config.rbt12)}</strong> →
+                            RBT12 <span className="text-indigo-500 text-xs">{config.rbt12Override > 0 ? '(manual)' : '(automático)'}</span>{' '}
+                            <strong>{fmt(rbt12Efetivo)}</strong> →
                             Faixa <strong>{taxResult.faixa}ª</strong> do {SIMPLES_ANEXOS[config.anexo]?.name},
                             Alíquota nominal <strong>{fmtPct(taxResult.aliquotaNominal)}</strong>,
                             Dedução <strong>{fmt(taxResult.deducao)}</strong>{' '}
@@ -294,7 +328,7 @@ export default function AccountingPage() {
                         </div>
                     )}
                     {!taxResult && (
-                        <p className="text-xs text-indigo-400">⚠️ Informe o RBT12 para calcular a alíquota efetiva.</p>
+                        <p className="text-xs text-indigo-400">Aguardando dados para calcular o RBT12…</p>
                     )}
                 </div>
             )}
@@ -340,7 +374,7 @@ export default function AccountingPage() {
                     </div>
                     <div className="text-2xl font-black text-orange-600">{fmt(totals.imposto)}</div>
                     <div className="text-xs text-orange-400 mt-1">
-                        {taxResult ? fmtPct(taxResult.aliquotaEfetiva) + ' efetivo' : 'Configure o RBT12'}
+                        {taxResult ? fmtPct(taxResult.aliquotaEfetiva) + ' efetivo' : 'Aguardando dados…'}
                     </div>
                 </div>
             </div>
@@ -364,7 +398,7 @@ export default function AccountingPage() {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h2 className="font-bold text-slate-700">Resumo por Competência</h2>
-                        <span className="text-xs text-slate-400">Dia de corte: {config.diaCorte} · {taxResult ? `Alíquota: ${fmtPct(taxResult.aliquotaEfetiva)}` : 'Configure o RBT12'}</span>
+                        <span className="text-xs text-slate-400">Dia de corte: {config.diaCorte} · RBT12 {config.rbt12Override > 0 ? 'manual' : 'auto'}: {fmt(rbt12Efetivo)} · {taxResult ? `Alíquota: ${fmtPct(taxResult.aliquotaEfetiva)}` : 'Aguardando dados…'}</span>
                     </div>
                     {monthRows.length === 0 ? (
                         <div className="py-16 text-center text-slate-400">
