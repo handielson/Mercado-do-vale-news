@@ -1310,18 +1310,18 @@ function ExpandedItemPanel({
                             <div className="flex flex-wrap items-center gap-2">
                                 <div className="flex items-center gap-1.5">
                                     <label className="text-[10px] font-medium text-slate-500">Imposto (%)</label>
-                                    <input type="number" step="0.1" value={calcTaxes} onChange={e => setCalcTaxes(e.target.value)}
-                                        className="w-16 px-1.5 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-orange-500" />
+                                    <input type="text" inputMode="decimal" value={calcTaxes} onChange={e => setCalcTaxes(e.target.value.replace(/[^0-9.,]/g, ''))}
+                                        className="w-14 px-1.5 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-orange-500 text-center" />
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <label className="text-[10px] font-medium text-slate-500">Extras (R$)</label>
-                                    <input type="number" step="0.1" value={calcExtras} onChange={e => setCalcExtras(e.target.value)}
-                                        className="w-16 px-1.5 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-orange-500" />
+                                    <input type="text" inputMode="decimal" value={calcExtras} onChange={e => setCalcExtras(e.target.value.replace(/[^0-9.,]/g, ''))}
+                                        className="w-16 px-1.5 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-orange-500 text-center" />
                                 </div>
                                 <div className="flex items-center gap-1.5 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
                                     <label className="text-[10px] font-bold text-indigo-700">Meta Lucro (%)</label>
-                                    <input type="number" step="1" value={calcMargin} onChange={e => setCalcMargin(e.target.value)}
-                                        className="w-12 px-1 py-0.5 border border-indigo-200 rounded text-xs font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 bg-white" />
+                                    <input type="text" inputMode="decimal" value={calcMargin} onChange={e => setCalcMargin(e.target.value.replace(/[^0-9.,]/g, ''))}
+                                        className="w-12 px-1 py-0.5 border border-indigo-200 rounded text-xs font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 bg-white text-center" />
                                 </div>
                             </div>
                         </div>
@@ -1336,16 +1336,16 @@ function ExpandedItemPanel({
                             else if (val < 500) taxaFixa = 26;
                             else taxaFixa = 28;
                             
-                            const impostoReal = val * ((parseFloat(calcTaxes) || 0) / 100);
-                            const extraDespesas = parseFloat(calcExtras) || 0;
+                            const impostoReal = val * ((parseFloat(calcTaxes.replace(',', '.')) || 0) / 100);
+                            const extraDespesas = parseFloat(calcExtras.replace(',', '.')) || 0;
                             const custoProduto = (p.price_cost || 0) / 100;
                             
                             const liquidoShopee = val - comissao - taxaFixa; // Cai na conta
                             const lucroReal = liquidoShopee - custoProduto - impostoReal - extraDespesas;
 
                             // -- Calculate Suggested Price based on desired margin %
-                            const margemDec = (parseFloat(calcMargin) || 0) / 100;
-                            const impostoDec = (parseFloat(calcTaxes) || 0) / 100;
+                            const margemDec = (parseFloat(calcMargin.replace(',', '.')) || 0) / 100;
+                            const impostoDec = (parseFloat(calcTaxes.replace(',', '.')) || 0) / 100;
                             const denominator = 1 - 0.20 - impostoDec - margemDec;
                             
                             let precoSugerido = 0;
