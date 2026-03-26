@@ -61,6 +61,78 @@ function startLocalServer() {
                 res.writeHead(500, { 'Access-Control-Allow-Origin': '*' });
                 res.end("Instale npm i pdf-to-printer para ver a lista!");
             }
+        } else if (req.url.startsWith('/print-order')) {
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            const urlParams = new URLSearchParams(req.url.split('?')[1]);
+            const orderSn = urlParams.get('order_sn');
+            const docType = urlParams.get('type') || 'both'; // 'awb', 'summary', or 'both'
+            
+            if (!orderSn) {
+                res.writeHead(400);
+                return res.end('order_sn ausente');
+            }
+            
+            // Execute as a detached background promise to not block HTTP response
+            // We tell the UI it has started
+            res.writeHead(200);
+            res.end(`Comando de impressao enviado para o pedido ${orderSn}`);
+            
+            // Process print in background
+            setTimeout(async () => {
+                try {
+                    console.log(`[MANUAL PRINT] Disparado para ${orderSn} (tipo: ${docType})`);
+                    const ptp = require('pdf-to-printer');
+                    const settings = await getCompanySettings();
+                    const shopeeApiUrl = String(settings.shopee_partner_id).startsWith('10') ? 'https://partner.test-stable.shopeemobile.com' : 'https://partner.shopeemobile.com';
+                    
+                    const pathDoc = '/api/v2/logistics/download_shipping_document';
+                    const tsDoc = Math.floor(Date.now() / 1000);
+                    const signDoc = generateSign(settings.shopee_partner_id, settings.shopee_partner_key, pathDoc, tsDoc, settings.shopee_access_token, settings.shopee_shop_id);
+                    const urlDoc = `${shopeeApiUrl}${pathDoc}?partner_id=${settings.shopee_partner_id}&timestamp=${tsDoc}&access_token=${settings.shopee_access_token}&shop_id=${settings.shopee_shop_id}&sign=${signDoc}`;
+
+                    // Print AWB (Thermal)
+                    if ((docType === 'both' || docType === 'awb') && settings.shopee_printer_thermal) {
+                        try {
+                            const rDoc = await fetch(urlDoc, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "THERMAL_AIR_WAYBILL" })
+                            });
+                            if (rDoc.headers.get('content-type')?.includes('pdf')) {
+                                const pdfBuffer = await rDoc.arrayBuffer();
+                                const tempPdfPath = path.join(printedDir, `MANUAL_${orderSn}_awb.pdf`);
+                                fs.writeFileSync(tempPdfPath, Buffer.from(pdfBuffer));
+                                await ptp.print(tempPdfPath, { printer: settings.shopee_printer_thermal });
+                                console.log(`[MANUAL PRINT] Etiqueta Térmica enviada!`);
+                            }
+                        } catch(e) { console.error("Erro manual AWB:", e); }
+                    }
+
+                    // Print Summary (Thermal or A4 depending on what the user wants. The user asked to print the receipt/summary on the thermal printer or whatever is configured)
+                    // We will send the summary to the thermal printer if A4 is not configured or if they want it on thermal.
+                    // Wait, standard Shopee setup: A4 printer handles summary. Let's use A4 if it exists, otherwise fallback to thermal.
+                    const targetSummaryPrinter = settings.shopee_printer_a4 || settings.shopee_printer_thermal;
+                    
+                    if ((docType === 'both' || docType === 'summary') && targetSummaryPrinter) {
+                        try {
+                            const rPkg = await fetch(urlDoc, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "NORMAL_PORT_RECEIPT_RETURN" })
+                            });
+                            if (rPkg.headers.get('content-type')?.includes('pdf')) {
+                                const pdfPkgBuffer = await rPkg.arrayBuffer();
+                                const tempPkgPath = path.join(printedDir, `MANUAL_${orderSn}_packing.pdf`);
+                                fs.writeFileSync(tempPkgPath, Buffer.from(pdfPkgBuffer));
+                                await ptp.print(tempPkgPath, { printer: targetSummaryPrinter });
+                                console.log(`[MANUAL PRINT] Resumo enviado!`);
+                            }
+                        } catch(e) { console.error("Erro manual Resumo:", e); }
+                    }
+                } catch(err) {
+                    console.error("[MANUAL PRINT] Erro geral:", err);
+                }
+            }, 100);
         } else if (req.url.startsWith('/test-print')) {
             // Permitir requests do painel admin na web
             res.setHeader('Access-Control-Allow-Origin', '*');

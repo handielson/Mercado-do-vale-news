@@ -124,12 +124,23 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
             if (data.error) {
                 toast.error(`Erro Rastreio: ${data.error}`);
             } else {
-                setTrackingData(prev => ({ ...prev, [orderSn]: data.response?.tracking_info || [] }));
+                setTrackingData(prev => ({ ...prev, [orderSn]: data.response || null }));
             }
         } catch {
             toast.error('Erro de conexão ao buscar rastreio.');
         } finally {
             setLoadingTracking(prev => ({ ...prev, [orderSn]: false }));
+        }
+    };
+
+    const handlePrintLocal = async (orderSn: string) => {
+        toast.loading(`Disparando impressão local (Resumo/Etiqueta) para #${orderSn}...`, { id: `print-${orderSn}` });
+        try {
+            const res = await fetch(`http://localhost:8080/print-order?order_sn=${orderSn}&type=both`);
+            if (!res.ok) throw new Error();
+            toast.success(`Impressão de Resumo e Etiqueta enviada para as impressoras locais!`, { id: `print-${orderSn}` });
+        } catch {
+            toast.error(`Sem conexão com as impressoras. O painel no PC do caixa está rodando o PM2?`, { id: `print-${orderSn}` });
         }
     };
 
@@ -304,14 +315,14 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                                             <Truck className="w-4 h-4 text-orange-500" />
                                             Histórico de Rastreio
                                         </div>
-                                        {order.tracking_no && (
+                                        {(trackingData[order.order_sn].tracking_number || order.tracking_no) && (
                                             <span className="text-xs font-mono bg-white px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 shadow-sm">
-                                                {order.tracking_no}
+                                                {trackingData[order.order_sn].tracking_number || order.tracking_no}
                                             </span>
                                         )}
                                     </h4>
                                     <div className="space-y-3 relative before:absolute before:inset-0 before:ml-[11px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
-                                        {trackingData[order.order_sn].map((event: any, i: number) => (
+                                        {(trackingData[order.order_sn].tracking_info || []).map((event: any, i: number) => (
                                             <div key={i} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
                                                 <div className="flex items-center justify-center w-6 h-6 rounded-full border border-white bg-slate-300 group-[.is-active]:bg-orange-500 text-slate-500 group-[.is-active]:text-emerald-50 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
                                                     <div className="w-2 h-2 bg-white rounded-full"></div>
@@ -324,7 +335,7 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                                                 </div>
                                             </div>
                                         ))}
-                                        {trackingData[order.order_sn].length === 0 && (
+                                        {(!trackingData[order.order_sn].tracking_info || trackingData[order.order_sn].tracking_info.length === 0) && (
                                             <p className="text-xs text-slate-500 italic pl-8">Nenhum evento de rastreio encontrado.</p>
                                         )}
                                     </div>
@@ -333,6 +344,13 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
 
                             {/* Actions */}
                             <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-2 justify-end">
+                                <button 
+                                    onClick={() => handlePrintLocal(order.order_sn)}
+                                    className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors flex items-center gap-2"
+                                >
+                                    <Calculator className="w-4 h-4 hidden" /* hidden to keep import valid if unused but we can use printer icon instead. Let's rely on standard box or external link later, I will just render text */ />
+                                    🖨️ Imprimir Resumo
+                                </button>
                                 <button 
                                     onClick={() => handleTracking(order.order_sn)}
                                     disabled={loadingTracking[order.order_sn]}
