@@ -17,10 +17,29 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
     useEffect(() => {
         if (isConnected) {
             fetchOrders();
+            // Atualiza de fundo a cada 5 minutos
+            const interval = setInterval(() => fetchOrders(true), 5 * 60 * 1000);
+            return () => clearInterval(interval);
         }
     }, [isConnected, statusFilter]);
 
-    const fetchOrders = async () => {
+    const fetchOrders = async (forceRefresh = false) => {
+        const cacheKey = `shopee_orders_${statusFilter}`;
+        
+        if (!forceRefresh) {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                try {
+                    const parsed = JSON.parse(cached);
+                    // Usa o cache se tiver menos de 5 minutos
+                    if (Date.now() - parsed.timestamp < 5 * 60 * 1000) {
+                        setOrders(parsed.orders);
+                        return;
+                    }
+                } catch (e) {}
+            }
+        }
+
         setLoading(true);
         try {
             // Shopee allows max 15 days for create_time range. Let's get last 14 days.
@@ -46,6 +65,7 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
             
             if (orderList.length === 0) {
                 setOrders([]);
+                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), orders: [] }));
                 setLoading(false);
                 return;
             }
@@ -58,7 +78,9 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
             if (detailsData.error) {
                 toast.error(`Erro ao buscar detalhes: ${detailsData.error}`);
             } else {
-                setOrders(detailsData.response?.order_list || []);
+                const newOrders = detailsData.response?.order_list || [];
+                setOrders(newOrders);
+                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), orders: newOrders }));
             }
 
         } catch (error) {
@@ -165,7 +187,7 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                         <option value="CANCELLED">Cancelado</option>
                     </select>
                     <button 
-                        onClick={fetchOrders}
+                        onClick={() => fetchOrders(true)}
                         className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors"
                     >
                         Atualizar
@@ -253,9 +275,16 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                             {/* Tracking Details */}
                             {trackingData[order.order_sn] && (
                                 <div className="mt-4 pt-4 border-t border-slate-100 bg-slate-50 rounded-xl p-4">
-                                    <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                                        <Truck className="w-4 h-4 text-orange-500" />
-                                        Histórico de Rastreio
+                                    <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Truck className="w-4 h-4 text-orange-500" />
+                                            Histórico de Rastreio
+                                        </div>
+                                        {order.tracking_no && (
+                                            <span className="text-xs font-mono bg-white px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 shadow-sm">
+                                                {order.tracking_no}
+                                            </span>
+                                        )}
                                     </h4>
                                     <div className="space-y-3 relative before:absolute before:inset-0 before:ml-[11px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
                                         {trackingData[order.order_sn].map((event: any, i: number) => (
