@@ -1090,6 +1090,7 @@ function ExpandedItemPanel({
     // Calculator extra states
     const [calcTaxes, setCalcTaxes] = useState('0');
     const [calcExtras, setCalcExtras] = useState('0');
+    const [calcMargin, setCalcMargin] = useState('10');
 
     // Load current item data from Shopee on mount to pre-populate form
     useEffect(() => {
@@ -1306,7 +1307,7 @@ function ExpandedItemPanel({
                                 </div>
                             </div>
                             
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <div className="flex items-center gap-1.5">
                                     <label className="text-[10px] font-medium text-slate-500">Imposto (%)</label>
                                     <input type="number" step="0.1" value={calcTaxes} onChange={e => setCalcTaxes(e.target.value)}
@@ -1317,56 +1318,111 @@ function ExpandedItemPanel({
                                     <input type="number" step="0.1" value={calcExtras} onChange={e => setCalcExtras(e.target.value)}
                                         className="w-16 px-1.5 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-orange-500" />
                                 </div>
+                                <div className="flex items-center gap-1.5 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                                    <label className="text-[10px] font-bold text-indigo-700">Meta Lucro (%)</label>
+                                    <input type="number" step="1" value={calcMargin} onChange={e => setCalcMargin(e.target.value)}
+                                        className="w-12 px-1 py-0.5 border border-indigo-200 rounded text-xs font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 bg-white" />
+                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-white/60 p-2 rounded-lg border border-orange-100/50">
-                            {(() => {
-                                const val = parseFloat(form.price) || 0;
-                                const comissao = val * 0.20;
-                                let taxaFixa = 0;
-                                if (val < 80) taxaFixa = 4;
-                                else if (val < 100) taxaFixa = 16;
-                                else if (val < 200) taxaFixa = 20;
-                                else if (val < 500) taxaFixa = 26;
-                                else taxaFixa = 28;
-                                
-                                const impostoReal = val * ((parseFloat(calcTaxes) || 0) / 100);
-                                const extraDespesas = parseFloat(calcExtras) || 0;
-                                const custoProduto = (p.price_cost || 0) / 100;
-                                
-                                const liquidoShopee = val - comissao - taxaFixa; // Cai na conta
-                                const lucroReal = liquidoShopee - custoProduto - impostoReal - extraDespesas;
+                        {(() => {
+                            const val = parseFloat(form.price) || 0;
+                            const comissao = val * 0.20;
+                            let taxaFixa = 0;
+                            if (val < 80) taxaFixa = 4;
+                            else if (val < 100) taxaFixa = 16;
+                            else if (val < 200) taxaFixa = 20;
+                            else if (val < 500) taxaFixa = 26;
+                            else taxaFixa = 28;
+                            
+                            const impostoReal = val * ((parseFloat(calcTaxes) || 0) / 100);
+                            const extraDespesas = parseFloat(calcExtras) || 0;
+                            const custoProduto = (p.price_cost || 0) / 100;
+                            
+                            const liquidoShopee = val - comissao - taxaFixa; // Cai na conta
+                            const lucroReal = liquidoShopee - custoProduto - impostoReal - extraDespesas;
 
-                                return (
-                                    <div className="flex flex-wrap items-center justify-between xl:justify-start gap-4 text-xs font-medium text-slate-600">
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-red-500">- R$ {comissao.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(20%)</span></span>
-                                            <span className="text-red-500">- R$ {taxaFixa.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(Fixo)</span></span>
-                                        </div>
-                                        <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
-                                        
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] text-slate-400 uppercase">Recebível Shopee</span>
-                                            <span className={`text-sm font-bold ${liquidoShopee > 0 ? 'text-emerald-600' : 'text-slate-600'}`}>R$ {liquidoShopee.toFixed(2)}</span>
-                                        </div>
-                                        <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
-                                        
-                                        <div className="flex flex-col gap-0.5 text-[10px] items-end xl:items-start text-slate-500">
-                                            <span>Custo: <strong className="text-slate-700">R$ {custoProduto.toFixed(2)}</strong></span>
-                                            {impostoReal > 0 && <span>Imposto: <strong className="text-red-500">-R$ {impostoReal.toFixed(2)}</strong></span>}
-                                            {extraDespesas > 0 && <span>Extras: <strong className="text-red-500">-R$ {extraDespesas.toFixed(2)}</strong></span>}
-                                        </div>
-                                        <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
+                            // -- Calculate Suggested Price based on desired margin %
+                            const margemDec = (parseFloat(calcMargin) || 0) / 100;
+                            const impostoDec = (parseFloat(calcTaxes) || 0) / 100;
+                            const denominator = 1 - 0.20 - impostoDec - margemDec;
+                            
+                            let precoSugerido = 0;
+                            if (denominator > 0) {
+                                const brackets = [
+                                    { max: 79.99, taxa: 4 },
+                                    { max: 99.99, taxa: 16 },
+                                    { max: 199.99, taxa: 20 },
+                                    { max: 499.99, taxa: 26 },
+                                    { max: Infinity, taxa: 28 },
+                                ];
+                                for (const b of brackets) {
+                                    const pCalc = (custoProduto + extraDespesas + b.taxa) / denominator;
+                                    if (pCalc <= b.max) {
+                                        precoSugerido = pCalc;
+                                        break;
+                                    }
+                                }
+                                // Fallback se pCalc estourou todos os limites (muito improvável, mas garante safety na última taxa)
+                                if (!precoSugerido) precoSugerido = (custoProduto + extraDespesas + 28) / denominator;
+                            }
 
-                                        <div className="flex flex-col ml-auto xl:ml-0 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
-                                            <span className="text-[10px] text-blue-600/80 uppercase mb-0.5 font-bold">Lucro Real Final</span>
-                                            <span className={`text-base font-black ${lucroReal > 0 ? 'text-blue-700' : 'text-red-600'}`}>R$ {lucroReal.toFixed(2)}</span>
+                            return (
+                                <>
+                                    <div className="bg-white/60 p-2 rounded-lg border border-orange-100/50">
+                                        <div className="flex flex-wrap items-center justify-between xl:justify-start gap-4 text-xs font-medium text-slate-600">
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-red-500">- R$ {comissao.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(20%)</span></span>
+                                                <span className="text-red-500">- R$ {taxaFixa.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(Fixo)</span></span>
+                                            </div>
+                                            <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
+                                            
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-slate-400 uppercase">Recebível Shopee</span>
+                                                <span className={`text-sm font-bold ${liquidoShopee > 0 ? 'text-emerald-600' : 'text-slate-600'}`}>R$ {liquidoShopee.toFixed(2)}</span>
+                                            </div>
+                                            <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
+                                            
+                                            <div className="flex flex-col gap-0.5 text-[10px] items-end xl:items-start text-slate-500">
+                                                <span>Custo: <strong className="text-slate-700">R$ {custoProduto.toFixed(2)}</strong></span>
+                                                {impostoReal > 0 && <span>Imposto: <strong className="text-red-500">-R$ {impostoReal.toFixed(2)}</strong></span>}
+                                                {extraDespesas > 0 && <span>Extras: <strong className="text-red-500">-R$ {extraDespesas.toFixed(2)}</strong></span>}
+                                            </div>
+                                            <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
+
+                                            <div className="flex flex-col ml-auto xl:ml-0 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+                                                <span className="text-[10px] text-blue-600/80 uppercase mb-0.5 font-bold">Lucro Real Simul./Atual</span>
+                                                <span className={`text-base font-black ${lucroReal > 0 ? 'text-blue-700' : 'text-red-600'}`}>R$ {lucroReal.toFixed(2)}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                );
-                            })()}
-                        </div>
+                                    
+                                    {/* Box de Preço Sugerido */}
+                                    <div className="mt-1 flex items-center justify-between bg-indigo-50/80 p-2.5 rounded-lg border border-indigo-200">
+                                        <div className="flex items-center gap-2">
+                                            <Tag className="w-4 h-4 text-indigo-500" />
+                                            <div>
+                                                <p className="text-[11px] font-bold text-indigo-800">Preço Sugerido de Venda</p>
+                                                <p className="text-[9px] text-indigo-600/80 leading-tight">Calculado automaticamente para garantir {calcMargin}% líquidos na conta (margem inversamente extraída).</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-lg font-black text-indigo-700">
+                                                {precoSugerido > 0 ? `R$ ${precoSugerido.toFixed(2)}` : 'INVÁLIDO'}
+                                            </span>
+                                            <button 
+                                                onClick={() => setF('price', precoSugerido.toFixed(2))}
+                                                disabled={precoSugerido <= 0}
+                                                title="Aplicar preço sugerido ao produto"
+                                                className="px-2 py-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition disabled:opacity-50">
+                                                Aplicar Sugestão
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
                 )}
 
