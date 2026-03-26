@@ -1163,7 +1163,7 @@ function ExpandedItemPanel({
         fetch(`/api/shopee-catalog?action=attributes&category_id=${effectiveCategoryId}`)
             .then(r => r.json())
             .then((d) => {
-                const attrList = d.response?.list?.[0]?.attribute_list || [];
+                const attrList = d.response?.list?.[0]?.attribute_tree || [];
                 setAttrs(attrList);
             })
             .catch(() => {})
