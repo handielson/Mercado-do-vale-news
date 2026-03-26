@@ -57,6 +57,19 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
             const listRes = await fetch(url);
             const listData = await listRes.json();
 
+            if (listData.error === 'invalid_access_token' || listData.error === 'error_auth') {
+                toast.loading('Sessão expirada. Renovando token automaticamente...', { id: 'shopee-auth' });
+                const rRefresh = await fetch('/api/shopee-actions?action=refresh_token');
+                if (rRefresh.ok) {
+                    toast.success('Sessão renovada! Carregando pedidos...', { id: 'shopee-auth' });
+                    return fetchOrders(forceRefresh);
+                } else {
+                    toast.error('Token expirado há muito tempo. Por favor, conecte a loja novamente na aba Configurações.', { id: 'shopee-auth', duration: 10000 });
+                    setLoading(false);
+                    return;
+                }
+            }
+
             if (listData.error) {
                 toast.error(`Erro ao buscar pedidos: ${listData.error}`);
                 setLoading(false);
@@ -121,6 +134,17 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
         try {
             const res = await fetch(`/api/shopee-actions?action=get_tracking_info&order_sn=${orderSn}`);
             const data = await res.json();
+
+            if (data.error === 'invalid_access_token' || data.error === 'error_auth') {
+                toast.loading('Sessão expirada. Renovando token automaticamente...', { id: 'shopee-auth' });
+                const rRefresh = await fetch('/api/shopee-actions?action=refresh_token');
+                if (rRefresh.ok) {
+                    toast.success('Sessão renovada! Buscando rastreio...', { id: 'shopee-auth' });
+                    setLoadingTracking(prev => ({ ...prev, [orderSn]: false }));
+                    return handleTracking(orderSn);
+                }
+            }
+
             if (data.error) {
                 toast.error(`Erro Rastreio: ${data.error}`);
             } else {
@@ -154,6 +178,17 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
         try {
             const res = await fetch(`/api/shopee-actions?action=get_escrow_detail&order_sn=${orderSn}`);
             const data = await res.json();
+
+            if (data.error === 'invalid_access_token' || data.error === 'error_auth') {
+                toast.loading('Sessão expirada. Renovando token automaticamente...', { id: 'shopee-auth' });
+                const rRefresh = await fetch('/api/shopee-actions?action=refresh_token');
+                if (rRefresh.ok) {
+                    toast.success('Sessão renovada! Buscando finanças...', { id: 'shopee-auth' });
+                    setLoadingEscrow(prev => ({ ...prev, [orderSn]: false }));
+                    return handleEscrow(orderSn);
+                }
+            }
+
             if (data.error) {
                 toast.error(`Finanças indisponíveis: ${data.message || data.error}`);
             } else {

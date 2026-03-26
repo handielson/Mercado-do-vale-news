@@ -42,7 +42,7 @@ export default async function handler(req: any, res: any) {
     if (!settings?.shopee_access_token) {
         const { data } = await supabase
             .from('company_settings')
-            .select('shopee_partner_id, shopee_partner_key, shopee_shop_id, shopee_access_token')
+            .select('id, shopee_partner_id, shopee_partner_key, shopee_shop_id, shopee_access_token, shopee_refresh_token')
             .limit(1)
             .single();
         settings = data;
@@ -59,8 +59,37 @@ export default async function handler(req: any, res: any) {
 
     try {
         const shopeeApiUrl = getShopeeBaseUrl(partnerId);
-
         const payload = req.method === 'POST' ? req.body : req.query;
+
+        if (action === 'refresh_token') {
+            if (!settings?.shopee_refresh_token || !settings?.id) {
+                return res.status(400).json({ error: 'Falta refresh_token ou ID da empresa' });
+            }
+            const apiPath = '/api/v2/auth/access_token/get';
+            const timestamp = Math.floor(Date.now() / 1000);
+            
+            // For token API, sign base is just partnerId + path + timestamp
+            const baseStr = partnerId + apiPath + timestamp;
+            const sign = crypto.createHmac('sha256', partnerKey).update(baseStr).digest('hex');
+            
+            const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}`;
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shop_id: Number(shopId), refresh_token: settings.shopee_refresh_token, partner_id: Number(partnerId) })
+            });
+            const data = await r.json();
+            
+            if (data.access_token) {
+                await supabase.from('company_settings').update({
+                    shopee_access_token: data.access_token,
+                    shopee_refresh_token: data.refresh_token
+                }).eq('id', settings.id);
+                return res.status(200).json({ success: true, access_token: data.access_token });
+            } else {
+                return res.status(400).json({ error: 'Falha ao renovar token', details: data });
+            }
+        }
 
         if (action === 'get_shop_info') {
             const apiPath = '/api/v2/shop/get_shop_info';
