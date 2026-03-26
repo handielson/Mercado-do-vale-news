@@ -97,6 +97,39 @@ export default function ShopeePrintersTab() {
                         </div>
                     </div>
 
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-amber-900 text-sm">
+                        <Info className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+                        <div className="flex-1">
+                            <p className="font-bold mb-1 text-amber-800">⚠️ Atualização Necessária no PC do Caixa</p>
+                            <p className="mb-3 text-amber-700">
+                                Foram adicionadas as rotas de "Imprimir Teste" e "Impressão Manual". Para que funcionem, você precisa abrir o <strong>PowerShell</strong> no PC onde a impressora está ligada, entrar na pasta do projeto e rodar o script de atualização do Node:
+                            </p>
+                            <div className="bg-amber-900/5 p-3 rounded-lg border border-amber-200/50 font-mono text-xs text-amber-900 relative group">
+                                <code>git pull origin main<br/>pm2 restart shopee-auto-print<br/>pm2 save</code>
+                                <button 
+                                    onClick={() => {
+                                        navigator.clipboard.writeText('git pull origin main && pm2 restart shopee-auto-print && pm2 save');
+                                        toast.success('Comando copiado!');
+                                    }}
+                                    className="absolute top-2 right-2 p-1.5 bg-white text-slate-500 hover:text-amber-600 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Copiar Comando"
+                                >
+                                    <Save className="w-4 h-4" /> 
+                                    {/* Using Save icon as a placeholder since Copy isn't imported, but wait, I can just write "Copiar" */}
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        navigator.clipboard.writeText('git pull origin main && pm2 restart shopee-auto-print && pm2 save');
+                                        toast.success('Comando copiado!');
+                                    }}
+                                    className="absolute top-2 right-2 px-2 py-1 bg-white text-xs font-bold text-slate-600 hover:text-amber-600 rounded border border-amber-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                    Copiar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <div className="space-y-2">
