@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
-    Upload, Check, X, Loader2, Tag, Download, Calculator, ShoppingBag, Printer
+    Upload, Check, X, Loader2, Tag, Download, Calculator, ShoppingBag, Printer, DollarSign
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
