@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
-    Upload, Check, X, Loader2, Tag, Download
+    Upload, Check, X, Loader2, Tag, Download, Calculator
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
@@ -1271,9 +1271,59 @@ function ExpandedItemPanel({
                         <input type="text" value={form.item_name} onChange={e => setF('item_name', e.target.value)}
                             className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white" />
                     </div>
-                    {inp('SKU Shopee', 'item_sku', 'text', p.sku || '')}
-                    {inp('Preço (R$)', 'price', 'number', '0.00')}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-medium text-slate-500">SKU Shopee</label>
+                        <input type="text" value={form.item_sku} placeholder={p.sku || ''}
+                            onChange={e => setF('item_sku', e.target.value)}
+                            className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-medium text-slate-500">Preço (R$)</label>
+                        <input type="number" step="0.01" value={form.price} placeholder="0.00"
+                            onChange={e => setF('price', e.target.value)}
+                            className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white" />
+                    </div>
                 </div>
+
+                {/* ── Calculadora Shopee */}
+                {parseFloat(form.price) > 0 && (
+                    <div className="mb-4 bg-orange-50/50 border border-orange-100 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                                <Calculator className="w-4 h-4" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold text-orange-800">Simulador de Ganhos Shopee</p>
+                                <p className="text-[10px] text-orange-600/80">Comissão de 20% (Frete Grátis) + Taxa Fixa CNPJ</p>
+                            </div>
+                        </div>
+                        {(() => {
+                            const val = parseFloat(form.price) || 0;
+                            const comissao = val * 0.20;
+                            let taxaFixa = 0;
+                            if (val < 80) taxaFixa = 4;
+                            else if (val < 100) taxaFixa = 16;
+                            else if (val < 200) taxaFixa = 20;
+                            else if (val < 500) taxaFixa = 26;
+                            else taxaFixa = 28;
+                            const liquido = val - comissao - taxaFixa;
+
+                            return (
+                                <div className="flex items-center gap-4 text-xs font-medium text-slate-600">
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-red-500">- R$ {comissao.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(20%)</span></span>
+                                        <span className="text-red-500">- R$ {taxaFixa.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(Fixo)</span></span>
+                                    </div>
+                                    <div className="h-6 w-px bg-slate-200"></div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] text-slate-400 uppercase">Você recebe líquido</span>
+                                        <span className={`text-base font-bold ${liquido > 0 ? 'text-emerald-600' : 'text-red-600'}`}>R$ {liquido.toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </div>
+                )}
 
                 {/* ── Embalagem */}
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Embalagem & Logística</p>
