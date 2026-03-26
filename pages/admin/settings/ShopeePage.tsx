@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
@@ -1066,7 +1066,7 @@ function ExpandedItemPanel({
     const [attrs, setAttrs] = useState<any[]>([]);
     const [loadingAttrs, setLoadingAttrs] = useState(false);
     const [attrValues, setAttrValues] = useState<Record<number, string>>({});
-    const [effectiveCategoryId, setEffectiveCategoryId] = useState('');
+    const [effectiveCategoryId, setEffectiveCategoryId] = useState(p.shopee_category_id || '');
     const descRef = useRef<HTMLTextAreaElement>(null);
     const [form, setForm] = useState({
         item_name:      p.name || '',
