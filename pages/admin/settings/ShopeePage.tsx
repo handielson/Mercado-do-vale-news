@@ -1136,8 +1136,8 @@ function ExpandedItemPanel({
                     for (const attr of item.attribute_list) {
                         const v = attr.attribute_value_list?.[0];
                         if (!v) continue;
-                        // Always use original_attribute_value (text) to match select option values
-                        attrMap[attr.attribute_id] = v.original_attribute_value || '';
+                        // Always use original_value_name (text) to match select option values
+                        attrMap[attr.attribute_id] = v.original_value_name || '';
                     }
                     if (Object.keys(attrMap).length > 0) setAttrValues(attrMap);
                 }
