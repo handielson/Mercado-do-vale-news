@@ -435,11 +435,12 @@ export default async function handler(req: any, res: any) {
             // Diagnóstico: SELECT antes do UPDATE para identificar bling_id mismatch vs RLS
             const { data: found, error: selErr } = await supabase
                 .from('products')
-                .select('id, sku, bling_id, stock_quantity')
+                .select('id, sku, bling_id, stock_quantity, name')
                 .eq('bling_id', blingProductId);
 
             // Usa o UUID do produto encontrado para o UPDATE (contorna issue de tipo no bling_id)
             const productId = found?.[0]?.id;
+            const productName = found?.[0]?.name;
             if (!productId) {
                 return res.status(200).json({
                     ok: true,
@@ -452,13 +453,27 @@ export default async function handler(req: any, res: any) {
                 });
             }
 
+            const newStock = Math.max(0, Math.round(saldoFisicoTotal));
             const { data: rows, error } = await supabase
                 .from('products')
-                .update({ stock_quantity: Math.max(0, Math.round(saldoFisicoTotal)) })
+                .update({ stock_quantity: newStock })
                 .eq('id', productId)
-                .select('id, sku');
+                .select('id, sku, name');
 
             if (error) return res.status(200).json({ ok: false, error: error.message });
+
+            // Sync updated stock to VPS MySQL (fire-and-forget)
+            const vpsBase = 'https://api.xiaomipetrolina.com.br';
+            const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || '';
+            if (syncKey && productId) {
+                const updatePayload: any = { stock_quantity: newStock };
+                if (productName) updatePayload.name = productName;
+                fetch(`${vpsBase}/products/${productId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+                    body: JSON.stringify(updatePayload),
+                }).catch(e => console.warn('[webhook] VPS stock sync failed:', e));
+            }
 
             return res.status(200).json({
                 ok: true,
