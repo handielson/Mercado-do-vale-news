@@ -98,6 +98,7 @@ export const catalogService = {
                     // Apply visibility rules + multi-category filter client-side
                     let result = (vpsRaw as any[]).map((p: any) => ({
                         ...p,
+                        stock_quantity: p.stock !== undefined ? p.stock : p.stock_quantity,
                         category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
                     }));
 

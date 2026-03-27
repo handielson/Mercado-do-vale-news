@@ -5,8 +5,8 @@ import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { ProductStatus } from '../../utils/field-standards';
 import { cn } from '../../utils/cn';
-import { supabase } from '../../services/supabase';
 import { getModelImageWithCache } from '../../services/modelImageCache';
+import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
 
 interface ProductCardProps {
@@ -130,7 +130,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         return () => { isMounted = false; }
     }, [product.id, product.images, product.model_id, product.specs?.color]);
 
-    const coverImage = fetchedImages.length > 0 ? fetchedImages[0] : null;
+    const rawCoverImage = fetchedImages.length > 0 ? fetchedImages[0] : null;
+    const coverImage = getCacheBustedUrl(rawCoverImage, product.updated || product.created);
 
     // Format price from centavos to BRL
     const formatPrice = (centavos: number): string => {

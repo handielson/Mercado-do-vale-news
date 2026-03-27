@@ -865,6 +865,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 useCustomImages={useCustomImages}
                 onToggleCustomImages={setUseCustomImages}
                 hasDefaultImages={!!selectedModel?.id && !!selectedColor}
+                updatedAt={initialData?.updated || initialData?.created}
             />
 
             {/* VÍDEO DO PRODUTO */}

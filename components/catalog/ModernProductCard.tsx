@@ -18,6 +18,7 @@ import { CashbackBadge } from './CashbackBadge';
 import { getActivePromoPrice } from '@/utils/promoPrice';
 import { ProductRatingBadge } from './ProductRatingBadge';
 import { toTitleCase } from '@/utils/stringFormatters';
+import { getCacheBustedUrl } from '@/utils/cache-buster';
 
 // Utility to determine if a color is dark enough to need white text
 const isDarkColor = (colorHex: string) => {
@@ -256,7 +257,8 @@ export function ModernProductCard({
         return '/product-placeholder.png';
     };
 
-    const imageUrl = !imageError ? getImageUrl() : '/product-placeholder.png';
+    const rawImageUrl = !imageError ? getImageUrl() : '/product-placeholder.png';
+    const imageUrl = getCacheBustedUrl(rawImageUrl, product.updated || product.created);
 
     // Build memory badge (RAM/Storage)
     const memoryBadge = variants && variants.rams.length > 0 && variants.storages.length > 0
@@ -322,7 +324,8 @@ export function ModernProductCard({
             // Find product with this color in the selected variant
             const colorProduct = selectedVariant.products.find(p => p.specs?.color === color.name);
             if (colorProduct && Array.isArray(colorProduct.images) && colorProduct.images.length > 0) {
-                return colorProduct.images[0];
+                const imgUrl = typeof colorProduct.images[0] === 'string' ? colorProduct.images[0] : imageUrl;
+                return getCacheBustedUrl(imgUrl, colorProduct.updated || colorProduct.created);
             }
             return imageUrl; // Fallback to default image
         });

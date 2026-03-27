@@ -160,11 +160,11 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
     const handlePrintLocal = async (orderSn: string) => {
         toast.loading(`Disparando impressão local (Resumo/Etiqueta) para #${orderSn}...`, { id: `print-${orderSn}` });
         try {
-            const res = await fetch(`http://localhost:8080/print-order?order_sn=${orderSn}&type=both`);
+            const res = await fetch(`http://localhost:8081/print-order?order_sn=${orderSn}&type=both`);
             if (!res.ok) throw new Error();
             toast.success(`Impressão de Resumo e Etiqueta enviada para as impressoras locais!`, { id: `print-${orderSn}` });
         } catch {
-            toast.error(`Sem conexão com as impressoras. O painel no PC do caixa está rodando o PM2?`, { id: `print-${orderSn}` });
+            toast.error(`Sem conexão com as impressoras. O painel no PC está aberto?`, { id: `print-${orderSn}` });
         }
     };
 

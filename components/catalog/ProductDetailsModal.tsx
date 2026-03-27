@@ -7,6 +7,7 @@ import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiv
 import { supabase } from '@/services/supabase';
 import { customFieldsService, CustomField } from '@/services/custom-fields';
 import { ProductReviewsList } from './ProductReviewsList';
+import { getCacheBustedUrl } from '@/utils/cache-buster';
 
 interface ProductDetailsModalProps {
     product: CatalogProduct;
@@ -321,7 +322,7 @@ export function ProductDetailsModal({
                                 {product.images.map((imageUrl, index) => (
                                     <img
                                         key={index}
-                                        src={imageUrl}
+                                        src={getCacheBustedUrl(typeof imageUrl === 'string' ? imageUrl : '', product.updated || product.created)}
                                         alt={`${product.name} - ${index + 1}`}
                                         className="w-full h-48 object-contain rounded-lg border border-slate-200 bg-slate-50"
                                     />

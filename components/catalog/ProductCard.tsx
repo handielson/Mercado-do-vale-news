@@ -5,6 +5,7 @@ import type { CatalogProduct } from '@/types/catalog';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 import { toTitleCase } from '@/utils/stringFormatters';
+import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { CashbackBadge } from './CashbackBadge';
 
 interface ProductCardProps {
@@ -57,7 +58,8 @@ export function ProductCard({
         return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%233B82F6'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>${encodeURIComponent(brandName)}</text></svg>`;
     };
 
-    const imageUrl = !imageError ? getImageUrl() : `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%23EF4444'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>Sem Imagem</text></svg>`;
+    const rawImageUrl = !imageError ? getImageUrl() : `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%23EF4444'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>Sem Imagem</text></svg>`;
+    const imageUrl = getCacheBustedUrl(rawImageUrl, product.updated || product.created);
 
     const handleFavorite = (e: React.MouseEvent) => {
         e.preventDefault();

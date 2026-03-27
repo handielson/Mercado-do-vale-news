@@ -26,7 +26,7 @@ function mapVpsProduct(row: any): Product {
         price_retail: row.price_retail ?? undefined,
         price_reseller: row.price_reseller ?? undefined,
         price_wholesale: row.price_wholesale ?? undefined,
-        stock_quantity: row.stock_quantity || 0,
+        stock_quantity: row.stock !== undefined ? row.stock : (row.stock_quantity || 0),
         images: row.images || [],
         status: row.status || ProductStatus.ACTIVE,
         track_inventory: Boolean(row.track_inventory),

@@ -466,13 +466,30 @@ export default async function handler(req: any, res: any) {
             const vpsBase = 'https://api.xiaomipetrolina.com.br';
             const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || '';
             if (syncKey && productId) {
-                const updatePayload: any = { stock_quantity: newStock };
-                if (productName) updatePayload.name = productName;
+                // Fetch the existing product to prevent PUT from overwriting other fields with nulls
                 fetch(`${vpsBase}/products/${productId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
-                    body: JSON.stringify(updatePayload),
-                }).catch(e => console.warn('[webhook] VPS stock sync failed:', e));
+                    headers: { 'X-Sync-Key': syncKey }
+                })
+                .then(res => {
+                    if (!res.ok) throw new Error(`VPS GET returned ${res.status}`);
+                    return res.json();
+                })
+                .then(existingProduct => {
+                    // VPS might return the product directly or `{ product: ... }`
+                    const baseProduct = existingProduct?.product || existingProduct || {};
+                    const updatePayload: any = { ...baseProduct, stock_quantity: newStock };
+                    if (productName) updatePayload.name = productName;
+
+                    return fetch(`${vpsBase}/products/${productId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+                        body: JSON.stringify(updatePayload),
+                    });
+                })
+                .then(res => {
+                    if (!res.ok) throw new Error(`VPS PUT returned ${res.status}`);
+                })
+                .catch(e => console.warn('[webhook] VPS stock sync failed:', e));
             }
 
             return res.status(200).json({

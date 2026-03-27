@@ -39,13 +39,18 @@ export default async function handler(req: any, res: any) {
         console.error('Erro ao buscar do VPS:', e);
     }
 
+    let trueSupaId = settings.id; // Fallback
     if (!settings?.shopee_access_token) {
         const { data } = await supabase
             .from('company_settings')
             .select('id, shopee_partner_id, shopee_partner_key, shopee_shop_id, shopee_access_token, shopee_refresh_token')
             .limit(1)
             .single();
-        settings = data;
+        settings = { ...settings, ...data }; // The Supabase data columns
+        if (data?.id) {
+            trueSupaId = data.id; // Override with the REAL Supabase UUID!
+            settings.id = data.id; // Guarantee settings.id has the real id
+        }
     }
 
     if (!settings?.shopee_access_token || !settings?.shopee_shop_id) {

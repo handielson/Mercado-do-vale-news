@@ -1,5 +1,6 @@
 import React from 'react';
 import { Loader2, X, Upload } from 'lucide-react';
+import { getCacheBustedUrl } from '../../../utils/cache-buster';
 
 interface ProductImagesProps {
     imagePreviews: string[];
@@ -9,6 +10,7 @@ interface ProductImagesProps {
     useCustomImages?: boolean;
     onToggleCustomImages?: (value: boolean) => void;
     hasDefaultImages?: boolean;
+    updatedAt?: string | Date | null;
 }
 
 const MAX_IMAGES = 5;
@@ -20,7 +22,8 @@ export function ProductImages({
     removeImage,
     useCustomImages = false,
     onToggleCustomImages,
-    hasDefaultImages = false
+    hasDefaultImages = false,
+    updatedAt
 }: ProductImagesProps) {
     const canAddMore = imagePreviews.length < MAX_IMAGES;
     const remainingSlots = MAX_IMAGES - imagePreviews.length;
@@ -68,7 +71,7 @@ export function ProductImages({
                 {imagePreviews.map((src, index) => (
                     <div key={index} className="relative aspect-square group">
                         <img
-                            src={src}
+                            src={getCacheBustedUrl(src, updatedAt)}
                             alt={`Imagem ${index + 1}`}
                             className="w-full h-full object-cover rounded-lg border border-slate-200"
                         />
