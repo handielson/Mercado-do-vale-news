@@ -152,6 +152,7 @@ export const PublicProductPage: React.FC = () => {
                                 sku: vpsRichData.sku || data.sku,
                                 images: vpsRichData.images || data.images,
                                 video_url: vpsRichData.video_url || data.video_url,
+                                updated_at: vpsRichData.updated_at || data.updated_at,
                                 // model_id: protege para não perder o vínculo com o modelo (que contém brand, specs etc.)
                                 model_id: vpsRichData.model_id || data.model_id,
                             };

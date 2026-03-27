@@ -287,7 +287,7 @@ export function ProductImageBankPage() {
             const syncImagesToSupabase = async (sku: string, urls: string[]) => {
                 const { error } = await supabase
                     .from('products')
-                    .update({ images: urls })
+                    .update({ images: urls, updated_at: new Date().toISOString() })
                     .eq('sku', sku);
                 if (error) {
                     console.error(`[ImageBank] Supabase sync failed for SKU ${sku}:`, error);
@@ -366,7 +366,7 @@ export function ProductImageBankPage() {
             }
             
             // Sempre faz o fallback/sync obrigatório pro Supabase
-            const { error: sbErr } = await supabase.from('products').update({ images: urls }).eq('sku', sku);
+            const { error: sbErr } = await supabase.from('products').update({ images: urls, updated_at: new Date().toISOString() }).eq('sku', sku);
             if (sbErr) {
                 console.error(`[ImageBank] Supabase inline sync failed for ${sku}:`, sbErr);
                 toast.error(`Erro ao salvar imagens no produto: ${sbErr.message}`);
@@ -393,7 +393,7 @@ export function ProductImageBankPage() {
                 .map(i => i.url);
 
             await vpsApiService.updateProductImagesBySku(img.sku, remainingUrls).catch(() => 0);
-            await supabase.from('products').update({ images: remainingUrls }).eq('sku', img.sku);
+            await supabase.from('products').update({ images: remainingUrls, updated_at: new Date().toISOString() }).eq('sku', img.sku);
 
             toast.success('Imagem removida e produto sincronizado');
         } catch (err: any) {
@@ -463,7 +463,7 @@ export function ProductImageBankPage() {
                 // Sempre faz Sync Supabase
                 const { error: sbSyncErr } = await supabase
                     .from('products')
-                    .update({ images: urls })
+                    .update({ images: urls, updated_at: new Date().toISOString() })
                     .eq('sku', matchedSku);
                 if (sbSyncErr) {
                     console.error(`[Sync] Supabase failed for ${matchedSku}:`, sbSyncErr);
