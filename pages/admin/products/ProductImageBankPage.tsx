@@ -382,8 +382,20 @@ export function ProductImageBankPage() {
         if (!confirm(`Excluir "${img.filename}"?`)) return;
         try {
             await deleteImageFromBank(img.path);
-            toast.success('Imagem removida');
-            setBankImages(prev => prev.filter(i => i.path !== img.path));
+            
+            const newBankImages = bankImages.filter(i => i.path !== img.path);
+            setBankImages(newBankImages);
+
+            // Sincronização automática pós-exclusão para remover a foto 404 do banco
+            const remainingUrls = newBankImages
+                .filter(i => i.sku === img.sku)
+                .sort((a, b) => a.order - b.order)
+                .map(i => i.url);
+
+            await vpsApiService.updateProductImagesBySku(img.sku, remainingUrls).catch(() => 0);
+            await supabase.from('products').update({ images: remainingUrls }).eq('sku', img.sku);
+
+            toast.success('Imagem removida e produto sincronizado');
         } catch (err: any) {
             toast.error(`Erro: ${err.message}`);
         }
