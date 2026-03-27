@@ -21,7 +21,7 @@ import { companySettingsService } from '@/services/companySettingsService';
 import type { CompanySettings } from '@/types/companySettings';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { shippingService } from '@/services/shippingService';
-
+import { getCacheBustedUrl } from '@/utils/cache-buster';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -756,7 +756,7 @@ export const PublicProductPage: React.FC = () => {
                                 )
                             ) : selectedImage && selectedImage !== 'VIDEO' ? (
                                 <img
-                                    src={selectedImage}
+                                    src={getCacheBustedUrl(selectedImage, product.updated_at || product.created_at)}
                                     alt={product.meta_title || toTitleCase(product.name)}
                                     className="w-full h-full object-contain"
                                 />
@@ -783,7 +783,7 @@ export const PublicProductPage: React.FC = () => {
                                         onClick={() => setSelectedImage(img)}
                                         className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden ${selectedImage === img ? 'border-blue-600' : 'border-slate-200 hover:border-slate-300'}`}
                                     >
-                                        <img src={img} alt={`${product.meta_title || toTitleCase(product.name)} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
+                                        <img src={getCacheBustedUrl(img, product.updated_at || product.created_at)} alt={`${product.meta_title || toTitleCase(product.name)} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
                                     </button>
                                 ))}
                             </div>
