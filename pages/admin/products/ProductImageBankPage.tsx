@@ -486,7 +486,7 @@ export function ProductImageBankPage() {
     };
 
     const grouped = groupBySku(bankImages);
-    const skuList = Object.keys(grouped).sort((a, b) => {
+    let skuList = Object.keys(grouped).sort((a, b) => {
         const idxA = recentUploads.indexOf(a);
         const idxB = recentUploads.indexOf(b);
         if (idxA !== -1 && idxB !== -1) return idxA - idxB;
@@ -501,6 +501,15 @@ export function ProductImageBankPage() {
 
         return a.localeCompare(b);
     });
+
+    // Filtro unificado: Se houver texto no gerador de nomes, filtra a lista de SKUs
+    if (genSku.trim().length > 0) {
+        const query = genSku.trim().toLowerCase();
+        skuList = skuList.filter(sku => 
+            sku.toLowerCase().includes(query) || 
+            (dbSkus.find(s => s.sku === sku)?.name?.toLowerCase() || '').includes(query)
+        );
+    }
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
@@ -883,7 +892,16 @@ export function ProductImageBankPage() {
                 {/* Sub-seção: SKUs sem fotos */}
                 {(() => {
                     const skuSet = new Set(skuList);
-                    const allWithoutImages = dbSkus.filter(s => !skuSet.has(s.sku) && !s.hasImages);
+                    let allWithoutImages = dbSkus.filter(s => !skuSet.has(s.sku) && !s.hasImages);
+                    
+                    if (genSku.trim().length > 0) {
+                        const query = genSku.trim().toLowerCase();
+                        allWithoutImages = allWithoutImages.filter(s => 
+                            s.sku.toLowerCase().includes(query) || 
+                            s.name.toLowerCase().includes(query)
+                        );
+                    }
+
                     const skusWithoutImages = onlyInStock
                         ? allWithoutImages.filter(s => s.stock_quantity == null || s.stock_quantity > 0)
                         : allWithoutImages;
