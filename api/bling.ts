@@ -477,7 +477,7 @@ export default async function handler(req: any, res: any) {
                 .then(existingProduct => {
                     // VPS might return the product directly or `{ product: ... }`
                     const baseProduct = existingProduct?.product || existingProduct || {};
-                    const updatePayload: any = { ...baseProduct, stock_quantity: newStock };
+                    const updatePayload: any = { ...baseProduct, stock_quantity: newStock, stock: newStock };
                     if (productName) updatePayload.name = productName;
 
                     return fetch(`${vpsBase}/products/${productId}`, {

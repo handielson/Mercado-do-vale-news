@@ -86,6 +86,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     .update({ stock_quantity: realStock })
                     .eq('id', product.id);
                 if (error) throw error;
+                
+                // Forçar o sync na VPS (se houver configuração)
+                try {
+                    const { vpsApiService } = await import('../../services/vpsApiService');
+                    await vpsApiService.updateProduct(product.id, { stock: realStock, stock_quantity: realStock });
+                } catch(e) { /* ignore VPS error on UI */ }
+
                 setCurrentStock(realStock);
                 toast.success(`Estoque sincronizado: ${realStock} un.`);
             } else {
