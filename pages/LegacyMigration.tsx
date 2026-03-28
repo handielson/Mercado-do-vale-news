@@ -1,496 +1,569 @@
 /**
  * Página de Migração de Dados - Legacy System
  * 
- * Esta página permite visualizar e migrar dados do sistema antigo
- * para o novo sistema.
+ * Permite visualizar clientes do sistema antigo (MV-Gestão),
+ * pré-visualizar os dados transformados, editar se necessário
+ * e importar 1 por 1 ou todos de uma vez para o novo sistema.
  */
 
-import React, { useState, useEffect } from 'react'
-import { legacyAPI, LegacyCustomer, LegacyProduct, LegacySale } from '../services/legacyAPI'
-import { Database, Users, Package, ShoppingCart, RefreshCw, Download } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { legacyAPI, LegacyCustomer } from '../services/legacyAPI'
+import { Database, Users, RefreshCw, Search, Filter, Zap, X, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
-import { CustomerDetailsModal } from '../components/migration/CustomerDetailsModal'
 import { CustomerMigrationTable, CustomerMigrationStatus } from '../components/migration/CustomerMigrationTable'
+import { CustomerMigrateModal, MigratedCustomerData } from '../components/migration/CustomerMigrateModal'
 import { supabase } from '../services/supabase'
+import { welcomeMessageService, buildMessage, buildWhatsAppUrl, getDefaultPassword } from '../services/welcomeMessageService'
+import { getWhatsAppSettings } from '../services/whatsappSettingsService'
+
+type FilterStatus = 'all' | 'new' | 'partial' | 'migrated' | 'error'
+
+// ─── Helper: Transforma dados legado → payload do Supabase ────────────────────
+
+function mapCustomerType(type: string, wholesaleStatus?: string): 'retail' | 'wholesale' | 'resale' {
+    if (wholesaleStatus === 'APPROVED') return 'wholesale'
+    const t = (type || '').toLowerCase()
+    if (t === 'atacado' || t === 'wholesale') return 'wholesale'
+    if (t === 'revenda' || t === 'resale') return 'resale'
+    return 'retail'
+}
+
+function buildPayload(customer: LegacyCustomer, companyId: string) {
+    const cpf = (customer.cpf || customer.cpf_cnpj || '').replace(/\D/g, '')
+    const addr = {
+        street: customer.address?.street || customer.address_street || '',
+        number: customer.address?.number || customer.address_number || '',
+        complement: customer.address?.complement || customer.address_complement || '',
+        neighborhood: customer.address?.neighborhood || customer.address_neighborhood || '',
+        city: customer.address?.city || customer.address_city || '',
+        state: customer.address?.state || customer.address_state || '',
+        zipCode: customer.address?.zipCode || customer.address_zip_code || '',
+    }
+    const hasAddress = addr.city || addr.street || addr.zipCode
+
+    return {
+        company_id: companyId,
+        name: (customer.name || '').trim(),
+        cpf_cnpj: cpf,
+        phone: (customer.whatsapp || customer.phone || '').replace(/\D/g, '') || null,
+        email: customer.email || null,
+        birth_date: customer.birth_date || null,
+        customer_type: mapCustomerType(customer.type, customer.wholesale_status),
+        instagram: customer.social_media?.instagram || null,
+        is_active: true,
+        address: hasAddress ? addr : null,
+    }
+}
+
+// ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function LegacyMigrationPage() {
     const [loading, setLoading] = useState(false)
-    const [stats, setStats] = useState<any>(null)
+    const [migrating, setMigrating] = useState(false)
     const [customersWithStatus, setCustomersWithStatus] = useState<CustomerMigrationStatus[]>([])
-    const [products, setProducts] = useState<LegacyProduct[]>([])
-    const [sales, setSales] = useState<LegacySale[]>([])
-    const [activeTab, setActiveTab] = useState<'stats' | 'customers' | 'products' | 'sales'>('stats')
-    const [selectedCustomer, setSelectedCustomer] = useState<LegacyCustomer | null>(null)
+    const [search, setSearch] = useState('')
+    const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
+    const [previewCustomer, setPreviewCustomer] = useState<{ customer: LegacyCustomer; isMigrated: boolean } | null>(null)
 
-    // Carregar estatísticas
-    const loadStats = async () => {
-        setLoading(true)
-        try {
-            const data = await legacyAPI.getStats()
-            setStats(data)
-        } catch (error) {
-            console.error('Erro ao carregar estatísticas:', error)
-            alert('Erro ao carregar estatísticas')
-        } finally {
-            setLoading(false)
-        }
-    }
+    // Estado da migração em lote
+    const [batchProgress, setBatchProgress] = useState<{
+        total: number
+        done: number
+        errors: number
+        running: boolean
+    } | null>(null)
+    const abortRef = useRef(false)
 
-    // Carregar clientes e verificar status de migração
+    // ── Carregar e verificar clientes ─────────────────────────────────────────
+
     const loadCustomers = async () => {
         setLoading(true)
         try {
-            // Buscar clientes do sistema antigo
             const legacyCustomers = await legacyAPI.getCustomers()
 
-            // Buscar todos os CPFs já migrados no Supabase
             const { data: existingCustomers, error } = await supabase
                 .from('customers')
-                .select('cpf_cnpj, phone, email, address')
+                .select('cpf_cnpj, phone, email, address, birth_date')
 
-            if (error) {
-                console.error('Erro ao verificar duplicados:', error)
-                toast.error('Erro ao verificar clientes existentes')
-            }
+            if (error) console.error('Erro ao verificar existentes:', error)
 
-            // Criar mapa de CPFs existentes
-            const existingCPFs = new Map(
+            const existingMap = new Map(
                 (existingCustomers || []).map(c => [c.cpf_cnpj, c])
             )
 
-            // Verificar status de cada cliente
-            const customersWithStatus: CustomerMigrationStatus[] = legacyCustomers.map(customer => {
-                const existing = existingCPFs.get(customer.cpf)
+            const statuses: CustomerMigrationStatus[] = legacyCustomers.map(customer => {
+                const cpf = (customer.cpf || customer.cpf_cnpj || '').replace(/\D/g, '')
 
-                if (!existing) {
-                    return {
-                        customer,
-                        status: 'new' as const
-                    }
+                if (!cpf || (cpf.length !== 11 && cpf.length !== 14)) {
+                    return { customer, status: 'error' as const, errorMessage: 'Sem CPF/CNPJ válido' }
                 }
 
-                // Verificar se tem campos faltando
+                const existing = existingMap.get(cpf)
+
+                if (!existing) return { customer, status: 'new' as const }
+
                 const missingFields: string[] = []
-                if (!existing.phone && customer.whatsapp) missingFields.push('phone')
+                if (!existing.phone && customer.whatsapp) missingFields.push('telefone')
                 if (!existing.email && customer.email) missingFields.push('email')
-                if (!existing.address && customer.address) missingFields.push('address')
+                if (!existing.address && (customer.address || customer.address_street)) missingFields.push('endereço')
+                if (!existing.birth_date && customer.birth_date) missingFields.push('nascimento')
 
                 if (missingFields.length > 0) {
-                    return {
-                        customer,
-                        status: 'partial' as const,
-                        missingFields
-                    }
+                    return { customer, status: 'partial' as const, missingFields }
                 }
 
-                return {
-                    customer,
-                    status: 'migrated' as const
-                }
+                return { customer, status: 'migrated' as const }
             })
 
-            setCustomersWithStatus(customersWithStatus)
+            setCustomersWithStatus(statuses)
         } catch (error) {
             console.error('Erro ao carregar clientes:', error)
-            toast.error('Erro ao carregar clientes')
+            toast.error('Erro ao carregar clientes do sistema legado')
         } finally {
             setLoading(false)
         }
     }
 
-    // Carregar produtos
-    const loadProducts = async () => {
-        setLoading(true)
-        try {
-            const data = await legacyAPI.getProducts({ limit: 100 })
-            setProducts(data)
-        } catch (error) {
-            console.error('Erro ao carregar produtos:', error)
-            alert('Erro ao carregar produtos')
-        } finally {
-            setLoading(false)
-        }
-    }
+    useEffect(() => { loadCustomers() }, [])
 
-    // Carregar vendas
-    const loadSales = async () => {
-        setLoading(true)
-        try {
-            const data = await legacyAPI.getSales({ limit: 50 })
-            setSales(data)
-        } catch (error) {
-            console.error('Erro ao carregar vendas:', error)
-            alert('Erro ao carregar vendas')
-        } finally {
-            setLoading(false)
-        }
-    }
+    // ── Migrar / Atualizar cliente individual ─────────────────────────────────
 
-    // Migrar cliente individual para Supabase
-    const migrateCustomer = async (customer: LegacyCustomer) => {
+    const handleMigrate = async (legacy: LegacyCustomer, edited: MigratedCustomerData) => {
+        setMigrating(true)
         try {
-            setLoading(true)
+            const companyId = await getCompanyId()
+            if (!companyId) return
 
-            // Buscar company_id
-            const { data: company, error: companyError } = await supabase
-                .from('companies')
+            const cleanCpf = edited.cpf_cnpj.replace(/\D/g, '')
+            const { data: existing } = await supabase
+                .from('customers')
                 .select('id')
-                .eq('slug', 'mercado-do-vale')
-                .single()
+                .eq('cpf_cnpj', cleanCpf)
+                .maybeSingle()
 
-            if (companyError || !company) {
-                toast.error('Erro ao buscar empresa')
-                return
-            }
-
-            // Transformar dados do formato legacy para o formato atual
-            const customerData: any = {
-                company_id: company.id,
-                name: customer.name,
-                cpf_cnpj: customer.cpf,
-                email: customer.email || null,
-                phone: customer.whatsapp || null,
-                customer_type: customer.wholesale_status === 'APPROVED' ? 'wholesale' : 'retail',
+            const payload: any = {
+                company_id: companyId,
+                name: edited.name.trim(),
+                cpf_cnpj: cleanCpf,
+                phone: edited.phone || null,
+                email: edited.email || null,
+                birth_date: edited.birth_date || null,
+                customer_type: edited.customer_type,
+                instagram: edited.instagram || null,
+                admin_notes: edited.admin_notes || null,
                 is_active: true,
             }
 
-            // Adicionar endereço como JSONB se existir
-            if (customer.address) {
-                customerData.address = {
-                    street: customer.address.street || '',
-                    number: customer.address.number || '',
-                    complement: customer.address.complement || '',
-                    neighborhood: customer.address.neighborhood || '',
-                    city: customer.address.city || '',
-                    state: customer.address.state || '',
-                    zipCode: customer.address.zipCode || ''
-                }
+            const addr = edited.address
+            if (addr.city || addr.street || addr.zipCode) {
+                payload.address = addr
             }
 
-            // Inserir no Supabase
-            const { error: insertError } = await supabase
-                .from('customers')
-                .insert(customerData)
+            const { error: dbError } = existing
+                ? await supabase.from('customers').update({ ...payload, company_id: undefined }).eq('id', existing.id)
+                : await supabase.from('customers').insert(payload)
 
-            if (insertError) {
-                console.error('Erro ao migrar:', insertError)
-                toast.error(`Erro: ${insertError.message}`)
-                return
-            }
+            if (dbError) { toast.error(`Erro: ${dbError.message}`); return }
 
-            toast.success(`Cliente "${customer.name}" migrado com sucesso!`)
-
-            // Recarregar lista para atualizar status
-            await loadCustomers()
-        } catch (error: any) {
-            console.error('Erro ao migrar cliente:', error)
-            toast.error(`Erro: ${error.message || 'Falha na migração'}`)
+            toast.success(`✅ "${edited.name}" importado!`)
+            setPreviewCustomer(null)
+            setCustomersWithStatus(prev =>
+                prev.map(item =>
+                    item.customer.id === legacy.id
+                        ? { ...item, status: 'migrated', missingFields: undefined }
+                        : item
+                )
+            )
+        } catch (err: any) {
+            toast.error(`Erro: ${err.message}`)
         } finally {
-            setLoading(false)
+            setMigrating(false)
         }
     }
 
-    // Atualizar cliente parcial (campos faltantes)
-    const updateCustomer = async (customer: LegacyCustomer) => {
-        try {
-            setLoading(true)
+    // ── Criar conta auth + enviar WhatsApp de boas-vindas ─────────────────────
 
-            // Preparar dados para atualização (apenas campos não-nulos)
-            const updateData: any = {}
+    const sendWelcomeWhatsApp = async (
+        customer: LegacyCustomer,
+        cpfDigits: string,
+        template: string,
+        whatsappSettings: any
+    ) => {
+        const phone = (customer.whatsapp || customer.phone || '').replace(/\D/g, '')
+        if (!phone) return
 
-            if (customer.whatsapp) updateData.phone = customer.whatsapp
-            if (customer.email) updateData.email = customer.email
-            if (customer.address) {
-                updateData.address = {
-                    street: customer.address.street || '',
-                    number: customer.address.number || '',
-                    complement: customer.address.complement || '',
-                    neighborhood: customer.address.neighborhood || '',
-                    city: customer.address.city || '',
-                    state: customer.address.state || '',
-                    zipCode: customer.address.zipCode || ''
-                }
+        // Monta objeto Customer mínimo para o buildMessage
+        const customerObj: any = {
+            name: customer.name,
+            cpf_cnpj: cpfDigits,
+            phone,
+            referral_code: customer.referral_code || '',
+        }
+
+        const message = buildMessage(template, customerObj)
+
+        // Tenta enviar via Evolution API (se configurada e ativa)
+        if (whatsappSettings?.api_url && whatsappSettings?.api_key && whatsappSettings?.is_active) {
+            try {
+                await fetch(`${whatsappSettings.api_url}/message/sendText/${whatsappSettings.instance_name}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': whatsappSettings.api_key,
+                    },
+                    body: JSON.stringify({
+                        number: phone.startsWith('55') ? phone : `55${phone}`,
+                        text: message,
+                    }),
+                })
+            } catch (e) {
+                console.warn('Falha ao enviar WhatsApp via Evolution API:', e)
+            }
+        }
+        // Se não tiver Evolution API configurada, a mensagem fica disponível para envio manual
+    }
+
+    // ── Migrar TODOS em lote ──────────────────────────────────────────────────
+
+    const handleMigrateAll = async () => {
+        const toMigrate = customersWithStatus.filter(c => c.status === 'new' || c.status === 'partial')
+        if (toMigrate.length === 0) { toast.info('Nenhum cliente novo para migrar'); return }
+
+        const confirmed = window.confirm(
+            `Migrar ${toMigrate.length} clientes automaticamente?\n\nOs dados serão importados com os valores do sistema antigo. Clientes com CPF inválido serão ignorados.`
+        )
+        if (!confirmed) return
+
+        const companyId = await getCompanyId()
+        if (!companyId) return
+
+        // Buscar CPFs já existentes para não reinserir
+        const { data: existingRows } = await supabase
+            .from('customers')
+            .select('cpf_cnpj')
+
+        const existingCpfs = new Set((existingRows || []).map(r => r.cpf_cnpj))
+
+        abortRef.current = false
+        setBatchProgress({ total: toMigrate.length, done: 0, errors: 0, running: true })
+
+        // Carregar template de boas-vindas e config do WhatsApp uma única vez
+        const [welcomeTemplate, whatsappCfg] = await Promise.all([
+            welcomeMessageService.getTemplate(),
+            getWhatsAppSettings(),
+        ])
+
+
+        let done = 0
+        let errors = 0
+
+        // Processar em lotes de 20
+        const BATCH_SIZE = 20
+        for (let i = 0; i < toMigrate.length; i += BATCH_SIZE) {
+            if (abortRef.current) break
+
+            const batch = toMigrate.slice(i, i + BATCH_SIZE)
+            const payloads = batch
+                .map(item => {
+                    const cpf = (item.customer.cpf || item.customer.cpf_cnpj || '').replace(/\D/g, '')
+                    if (!cpf || (cpf.length !== 11 && cpf.length !== 14)) return null
+                    return buildPayload(item.customer, companyId)
+                })
+                .filter(Boolean) as any[]
+
+            if (payloads.length === 0) {
+                errors += batch.length
+                done += batch.length
+                setBatchProgress({ total: toMigrate.length, done, errors, running: true })
+                continue
             }
 
-            // Atualizar no Supabase
+            // Filtrar os que já existem no banco
+            const newPayloads = payloads.filter((p: any) => !existingCpfs.has(p.cpf_cnpj))
+            const alreadyMigrated = payloads.length - newPayloads.length
+
+            if (newPayloads.length === 0) {
+                done += alreadyMigrated
+                setBatchProgress({ total: toMigrate.length, done, errors, running: true })
+                // Atualizar status visual dos já migrados
+                const cpfs = new Set(payloads.map((p: any) => p.cpf_cnpj))
+                setCustomersWithStatus(prev => prev.map(item => {
+                    const cpf = (item.customer.cpf || item.customer.cpf_cnpj || '').replace(/\D/g, '')
+                    return cpfs.has(cpf) ? { ...item, status: 'migrated' as const } : item
+                }))
+                continue
+            }
+
             const { error } = await supabase
                 .from('customers')
-                .update(updateData)
-                .eq('cpf_cnpj', customer.cpf)
+                .insert(newPayloads)
 
             if (error) {
-                console.error('Erro ao atualizar:', error)
-                toast.error(`Erro: ${error.message}`)
-                return
+                console.error('Erro no lote:', error)
+                errors += newPayloads.length
+                done += alreadyMigrated
+            } else {
+                done += newPayloads.length + alreadyMigrated
+
+                // Atualizar status local
+                const migratedCpfs = new Set(newPayloads.map((p: any) => p.cpf_cnpj))
+                setCustomersWithStatus(prev =>
+                    prev.map(item => {
+                        const cpf = (item.customer.cpf || item.customer.cpf_cnpj || '').replace(/\D/g, '')
+                        if (migratedCpfs.has(cpf)) {
+                            return { ...item, status: 'migrated' as const, missingFields: undefined }
+                        }
+                        return item
+                    })
+                )
+
+                // Criar conta auth + enviar WhatsApp para cada novo cliente
+                for (const item of batch) {
+                    const cpfDigits = (item.customer.cpf || item.customer.cpf_cnpj || '').replace(/\D/g, '')
+                    if (!cpfDigits || !migratedCpfs.has(cpfDigits)) continue
+
+                    const placeholderEmail = `${cpfDigits}@cliente.mercadodovale.com.br`
+                    const tempPassword = getDefaultPassword(cpfDigits)
+
+                    try {
+                        // Cria conta auth (ignora silenciosamente se já existir)
+                        const { data: authData } = await supabase.auth.admin
+                            ? (supabase as any).auth.admin.createUser({
+                                email: placeholderEmail,
+                                password: tempPassword,
+                                email_confirm: true,
+                              })
+                            : { data: null }
+
+                        // Fallback: signUp normal (sem confirmação de email)
+                        if (!authData?.user) {
+                            const { data: signUpData } = await supabase.auth.signUp({
+                                email: placeholderEmail,
+                                password: tempPassword,
+                                options: { data: { name: item.customer.name, cpf_cnpj: cpfDigits } }
+                            })
+                            if (signUpData?.user) {
+                                await supabase.from('customers')
+                                    .update({ user_id: signUpData.user.id })
+                                    .eq('cpf_cnpj', cpfDigits)
+                            }
+                        } else if (authData.user) {
+                            await supabase.from('customers')
+                                .update({ user_id: authData.user.id })
+                                .eq('cpf_cnpj', cpfDigits)
+                        }
+                    } catch (authErr) {
+                        console.warn('Erro ao criar conta auth para', cpfDigits, authErr)
+                    }
+
+                    // Enviar WhatsApp
+                    await sendWelcomeWhatsApp(item.customer, cpfDigits, welcomeTemplate, whatsappCfg)
+                }
             }
 
-            toast.success(`Cliente "${customer.name}" atualizado com sucesso!`)
+            setBatchProgress({ total: toMigrate.length, done, errors, running: true })
 
-            // Recarregar lista para atualizar status
-            await loadCustomers()
-        } catch (error: any) {
-            console.error('Erro ao atualizar cliente:', error)
-            toast.error(`Erro: ${error.message || 'Falha na atualização'}`)
-        } finally {
-            setLoading(false)
+            // Pequena pausa entre lotes
+            await new Promise(r => setTimeout(r, 300))
+        }
+
+        setBatchProgress(prev => prev ? { ...prev, running: false } : null)
+
+        if (abortRef.current) {
+            toast.warning(`Migração cancelada. ${done} migrados, ${errors} erros.`)
+        } else {
+            toast.success(`✅ Migração concluída! ${done} migrados, ${errors} com problema.`)
         }
     }
 
-    // Carregar dados iniciais
-    useEffect(() => {
-        loadStats()
-    }, [])
-
-    // Exportar dados para JSON
-    const exportToJSON = (data: any, filename: string) => {
-        const json = JSON.stringify(data, null, 2)
-        const blob = new Blob([json], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = filename
-        a.click()
-        URL.revokeObjectURL(url)
+    async function getCompanyId(): Promise<string | null> {
+        const { data: company, error } = await supabase
+            .from('companies')
+            .select('id')
+            .eq('slug', 'mercado-do-vale')
+            .single()
+        if (error || !company) { toast.error('Empresa não encontrada'); return null }
+        return company.id
     }
 
+    // ── Filtro e busca ────────────────────────────────────────────────────────
+
+    const filtered = customersWithStatus.filter(item => {
+        const matchSearch = !search ||
+            item.customer.name?.toLowerCase().includes(search.toLowerCase()) ||
+            (item.customer.cpf || '').includes(search) ||
+            (item.customer.email || '').toLowerCase().includes(search.toLowerCase())
+        const matchFilter = filterStatus === 'all' || item.status === filterStatus
+        return matchSearch && matchFilter
+    })
+
+    const total = customersWithStatus.length
+    const countNew = customersWithStatus.filter(c => c.status === 'new' || c.status === 'partial').length
+
+    // ── Render ────────────────────────────────────────────────────────────────
+
     return (
-        <div className="p-6">
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                    <Database size={32} />
-                    Migração de Dados - Sistema Antigo
-                </h1>
-                <p className="text-gray-600 mt-2">
-                    Visualize e migre dados do sistema antigo (MV-Gestão) para o novo sistema
-                </p>
-            </div>
-
-            {/* Tabs */}
-            <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex gap-6">
-                    <button
-                        onClick={() => setActiveTab('stats')}
-                        className={`pb-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'stats'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
-                    >
-                        <Database className="inline mr-2" size={18} />
-                        Estatísticas
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('customers')}
-                        className={`pb-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'customers'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
-                    >
-                        <Users className="inline mr-2" size={18} />
-                        Clientes
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('products')}
-                        className={`pb-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'products'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
-                    >
-                        <Package className="inline mr-2" size={18} />
-                        Produtos
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('sales')}
-                        className={`pb-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'sales'
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
-                    >
-                        <ShoppingCart className="inline mr-2" size={18} />
-                        Vendas
-                    </button>
-                </nav>
-            </div>
-
-            {/* Content */}
-            <div className="bg-white rounded-lg shadow p-6">
-                {/* Estatísticas Tab */}
-                {activeTab === 'stats' && (
+        <div className="p-6 max-w-7xl mx-auto space-y-6">
+            {/* Cabeçalho */}
+            <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="bg-blue-100 p-3 rounded-xl">
+                        <Database size={24} className="text-blue-600" />
+                    </div>
                     <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-semibold">Estatísticas Gerais</h2>
+                        <h1 className="text-2xl font-bold text-gray-900">Migração de Clientes</h1>
+                        <p className="text-sm text-gray-500">
+                            Sistema Antigo → Mercado do Vale New
+                            {total > 0 && ` · ${total} clientes encontrados`}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex gap-2">
+                    {countNew > 0 && !batchProgress?.running && (
+                        <button
+                            onClick={handleMigrateAll}
+                            disabled={loading}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 text-sm font-medium transition-colors"
+                        >
+                            <Zap size={16} />
+                            Migrar Todos ({countNew})
+                        </button>
+                    )}
+                    <button
+                        onClick={loadCustomers}
+                        disabled={loading || batchProgress?.running}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 text-sm font-medium transition-colors"
+                    >
+                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                        {loading ? 'Carregando...' : 'Recarregar Lista'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Barra de progresso da migração em lote */}
+            {batchProgress && (
+                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <Zap size={18} className="text-green-600" />
+                            <span className="font-semibold text-gray-800">
+                                {batchProgress.running ? 'Migrando clientes...' : 'Migração concluída!'}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm text-gray-500">
+                                {batchProgress.done} / {batchProgress.total}
+                            </span>
+                            {batchProgress.running ? (
+                                <button
+                                    onClick={() => { abortRef.current = true }}
+                                    className="flex items-center gap-1 px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs hover:bg-red-200"
+                                >
+                                    <X size={12} /> Cancelar
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => setBatchProgress(null)}
+                                    className="px-3 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs hover:bg-gray-200"
+                                >
+                                    Fechar
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-3">
+                        <div
+                            className={`h-3 rounded-full transition-all duration-300 ${batchProgress.running ? 'bg-blue-500' : 'bg-green-500'}`}
+                            style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }}
+                        />
+                    </div>
+                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                        <span className="text-green-600 font-medium">✅ {batchProgress.done - batchProgress.errors} migrados</span>
+                        {batchProgress.errors > 0 && (
+                            <span className="text-red-500 font-medium">❌ {batchProgress.errors} com erro</span>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Instruções */}
+            {!batchProgress && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+                    <Users size={18} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-blue-700">
+                        <strong>Como funciona:</strong> Use <span className="font-semibold">"Migrar Todos"</span> para importar em lote automaticamente,
+                        ou clique em <span className="font-semibold">"Preview & Importar"</span> linha a linha para revisar antes.
+                        Clientes já migrados aparecem com ✅.
+                    </div>
+                </div>
+            )}
+
+            {/* Filtros e busca */}
+            {total > 0 && (
+                <div className="flex flex-wrap gap-3 items-center">
+                    <div className="relative flex-1 min-w-[200px]">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar por nome, CPF ou email..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Filter size={15} className="text-gray-400" />
+                        {(['all', 'new', 'partial', 'migrated', 'error'] as FilterStatus[]).map(f => (
                             <button
-                                onClick={loadStats}
-                                disabled={loading}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                key={f}
+                                onClick={() => setFilterStatus(f)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterStatus === f
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    }`}
                             >
-                                <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                                Atualizar
+                                {{ all: 'Todos', new: 'Novos', partial: 'Incompletos', migrated: 'Migrados', error: 'Erros' }[f]}
                             </button>
-                        </div>
-                        {stats && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="bg-blue-50 p-4 rounded-lg">
-                                    <p className="text-sm text-blue-600 font-medium">Total de Clientes</p>
-                                    <p className="text-3xl font-bold text-blue-900">{stats.total_customers || 0}</p>
-                                </div>
-                                <div className="bg-green-50 p-4 rounded-lg">
-                                    <p className="text-sm text-green-600 font-medium">Total de Produtos</p>
-                                    <p className="text-3xl font-bold text-green-900">{stats.total_products || 0}</p>
-                                </div>
-                                <div className="bg-purple-50 p-4 rounded-lg">
-                                    <p className="text-sm text-purple-600 font-medium">Total de Vendas</p>
-                                    <p className="text-3xl font-bold text-purple-900">{stats.total_sales || 0}</p>
-                                </div>
-                            </div>
-                        )}
+                        ))}
                     </div>
-                )}
+                </div>
+            )}
 
-                {/* Clientes Tab */}
-                {activeTab === 'customers' && (
-                    <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-semibold">Clientes ({customersWithStatus.length})</h2>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => exportToJSON(customersWithStatus.map(c => c.customer), 'customers.json')}
-                                    disabled={customersWithStatus.length === 0}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                                >
-                                    <Download size={18} />
-                                    Exportar JSON
-                                </button>
-                                <button
-                                    onClick={loadCustomers}
-                                    disabled={loading}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                                    Carregar
-                                </button>
-                            </div>
-                        </div>
-                        {customersWithStatus.length > 0 && (
-                            <CustomerMigrationTable
-                                customers={customersWithStatus}
-                                onViewDetails={setSelectedCustomer}
-                                onMigrate={migrateCustomer}
-                                onUpdate={updateCustomer}
-                            />
-                        )}
-                    </div>
-                )}
+            {/* Tabela */}
+            {loading && total === 0 ? (
+                <div className="text-center py-16 text-gray-400">
+                    <RefreshCw size={32} className="animate-spin mx-auto mb-3 text-blue-400" />
+                    <p className="text-sm">Carregando clientes do sistema antigo...</p>
+                </div>
+            ) : total === 0 ? (
+                <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-xl border border-gray-200">
+                    <Users size={40} className="mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">Nenhum cliente encontrado</p>
+                    <p className="text-sm mt-1">Clique em "Recarregar Lista" para buscar os dados do sistema antigo</p>
+                </div>
+            ) : (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                    <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                        <Users size={18} className="text-gray-500" />
+                        Clientes ({filtered.length}{filtered.length !== total ? ` de ${total}` : ''})
+                    </h2>
+                    <CustomerMigrationTable
+                        customers={filtered}
+                        onOpenPreview={(customer, isMigrated) =>
+                            setPreviewCustomer({ customer, isMigrated: isMigrated ?? false })
+                        }
+                    />
+                </div>
+            )}
 
-                {/* Produtos Tab */}
-                {activeTab === 'products' && (
-                    <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-semibold">Produtos ({products.length})</h2>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => exportToJSON(products, 'products.json')}
-                                    disabled={products.length === 0}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                                >
-                                    <Download size={18} />
-                                    Exportar JSON
-                                </button>
-                                <button
-                                    onClick={loadProducts}
-                                    disabled={loading}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                                    Carregar
-                                </button>
-                            </div>
-                        </div>
-                        {products.length > 0 && (
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Nome</th>
-                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Código</th>
-                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Preço</th>
-                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Estoque</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {products.slice(0, 50).map(product => (
-                                            <tr key={product.id} className="hover:bg-gray-50">
-                                                <td className="px-4 py-2 text-sm">{product.name}</td>
-                                                <td className="px-4 py-2 text-sm font-mono">{product.code}</td>
-                                                <td className="px-4 py-2 text-sm">R$ {product.price.toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-sm">{product.stock}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Vendas Tab */}
-                {activeTab === 'sales' && (
-                    <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-semibold">Vendas ({sales.length})</h2>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => exportToJSON(sales, 'sales.json')}
-                                    disabled={sales.length === 0}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                                >
-                                    <Download size={18} />
-                                    Exportar JSON
-                                </button>
-                                <button
-                                    onClick={loadSales}
-                                    disabled={loading}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                                    Carregar
-                                </button>
-                            </div>
-                        </div>
-                        {sales.length > 0 && (
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Data</th>
-                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Cliente</th>
-                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Total</th>
-                                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {sales.slice(0, 50).map(sale => (
-                                            <tr key={sale.id} className="hover:bg-gray-50">
-                                                <td className="px-4 py-2 text-sm">{new Date(sale.created_at).toLocaleDateString()}</td>
-                                                <td className="px-4 py-2 text-sm">{sale.customer_id}</td>
-                                                <td className="px-4 py-2 text-sm">R$ {sale.total.toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-sm">{sale.status}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* Modal de Detalhes do Cliente */}
-            {selectedCustomer && (
-                <CustomerDetailsModal
-                    customer={selectedCustomer}
-                    onClose={() => setSelectedCustomer(null)}
-                    onConfirm={migrateCustomer}
-                    loading={loading}
+            {/* Modal de preview/edição individual */}
+            {previewCustomer && (
+                <CustomerMigrateModal
+                    customer={previewCustomer.customer}
+                    isMigrated={previewCustomer.isMigrated}
+                    onClose={() => setPreviewCustomer(null)}
+                    onConfirm={handleMigrate}
+                    loading={migrating}
                 />
             )}
         </div>

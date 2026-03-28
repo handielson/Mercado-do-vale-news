@@ -17,6 +17,7 @@ export interface AuthContextType {
     signInWithGoogle: () => Promise<void>
     signInWithFacebook: () => Promise<void>
     signInWithEmail: (email: string, password: string) => Promise<void>
+    signInWithCpf: (cpf: string, password: string) => Promise<void>
 
     // Account creation/activation
     checkCPF: (cpf: string) => Promise<Customer | null>

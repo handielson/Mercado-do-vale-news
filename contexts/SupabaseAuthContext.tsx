@@ -223,6 +223,22 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
     }
 
+    // Sign in with CPF + password (uses placeholder email internally)
+    const signInWithCpf = async (cpf: string, password: string) => {
+        const digits = cpf.replace(/\D/g, '')
+        if (!digits) throw new Error('CPF inválido')
+        const email = `${digits}@cliente.mercadodovale.com.br`
+        try {
+            const { error } = await supabase.auth.signInWithPassword({ email, password })
+            if (error) throw new Error('CPF ou senha incorretos')
+            toast.success('Login realizado com sucesso!')
+        } catch (error: any) {
+            toast.error(error.message || 'CPF ou senha incorretos')
+            throw error
+        }
+    }
+
+
     // Activate existing customer account
     const activateAccount = async (data: ActivateAccountData) => {
         try {
@@ -464,6 +480,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             signInWithGoogle,
             signInWithFacebook,
             signInWithEmail,
+            signInWithCpf,
             checkCPF,
             activateAccount,
             createAccount,
