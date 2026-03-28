@@ -165,6 +165,40 @@ export default function LegacyMigrationPage() {
 
             if (dbError) { toast.error(`Erro: ${dbError.message}`); return }
 
+            // Cria a conta no Supabase Auth para a migração individual e atualiza user_id
+            const placeholderEmail = `${cleanCpf}@cliente.mercadodovale.com.br`
+            const tempPassword = getDefaultPassword(cleanCpf)
+            try {
+                const { data: authData } = await supabase.auth.admin
+                    ? (supabase as any).auth.admin.createUser({ email: placeholderEmail, password: tempPassword, email_confirm: true })
+                    : { data: null }
+
+                if (!authData?.user) {
+                    const { data: signUpData } = await supabase.auth.signUp({
+                        email: placeholderEmail, password: tempPassword,
+                        options: { data: { name: edited.name.trim(), cpf_cnpj: cleanCpf } }
+                    })
+                    if (signUpData?.user) {
+                        await supabase.from('customers').update({ user_id: signUpData.user.id }).eq('cpf_cnpj', cleanCpf)
+                    }
+                } else if (authData.user) {
+                    await supabase.from('customers').update({ user_id: authData.user.id }).eq('cpf_cnpj', cleanCpf)
+                }
+            } catch (authErr) {
+                console.warn('Erro ao criar conta auth individual', authErr)
+            }
+
+            // Tenta enviar o WhatsApp de boas-vindas
+            try {
+                const [welcomeTemplate, whatsappCfg] = await Promise.all([
+                    welcomeMessageService.getTemplate(),
+                    getWhatsAppSettings(),
+                ])
+                await sendWelcomeWhatsApp(legacy, cleanCpf, welcomeTemplate, whatsappCfg)
+            } catch (zapErr) {
+                console.warn('Erro ao enviar zap individual', zapErr)
+            }
+
             toast.success(`✅ "${edited.name}" importado!`)
             setPreviewCustomer(null)
             setCustomersWithStatus(prev =>
@@ -400,6 +434,55 @@ export default function LegacyMigrationPage() {
     const total = customersWithStatus.length
     const countNew = customersWithStatus.filter(c => c.status === 'new' || c.status === 'partial').length
 
+    // ── Resincronizar Logins Faltantes ────────────────────────────────────────
+
+    const handleSyncAuth = async () => {
+        const confirmed = window.confirm(
+            "Sincronizar Logins?\n\nIsso vai tentar criar a senha (os 5 primeiros números do CPF) para TODOS os clientes que foram importados, mas que por um bug ficaram sem a conta no sistema de login.\n(Mensagens no WhatsApp NÃO serão reenviadas para evitar spam.)"
+        )
+        if (!confirmed) return
+
+        setLoading(true)
+        let count = 0
+        try {
+            const migrated = customersWithStatus.filter(c => c.status === 'migrated')
+            for (const item of migrated) {
+                const cpfDigits = (item.customer.cpf || item.customer.cpf_cnpj || '').replace(/\D/g, '')
+                if (!cpfDigits) continue
+
+                const placeholderEmail = `${cpfDigits}@cliente.mercadodovale.com.br`
+                const tempPassword = getDefaultPassword(cpfDigits)
+
+                try {
+                    const { data: authData } = await supabase.auth.admin
+                        ? (supabase as any).auth.admin.createUser({ email: placeholderEmail, password: tempPassword, email_confirm: true })
+                        : { data: null }
+
+                    if (!authData?.user) {
+                        const { data: signUpData } = await supabase.auth.signUp({
+                            email: placeholderEmail, password: tempPassword,
+                            options: { data: { name: item.customer.name, cpf_cnpj: cpfDigits } }
+                        })
+                        if (signUpData?.user) {
+                            await supabase.from('customers').update({ user_id: signUpData.user.id }).eq('cpf_cnpj', cpfDigits)
+                            count++
+                        }
+                    } else if (authData.user) {
+                        await supabase.from('customers').update({ user_id: authData.user.id }).eq('cpf_cnpj', cpfDigits)
+                        count++
+                    }
+                } catch (e) {
+                    // silently ignore if it already exists
+                }
+            }
+            toast.success(`✅ Sincronização concluída! ${count} novas contas de login criadas/vinculadas.`)
+        } catch (e: any) {
+            toast.error(`Erro: ${e.message}`)
+        } finally {
+            setLoading(false)
+        }
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     return (
@@ -419,6 +502,15 @@ export default function LegacyMigrationPage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    <button
+                        onClick={handleSyncAuth}
+                        disabled={loading || batchProgress?.running}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 text-sm font-medium transition-colors"
+                        title="Corrige o bug das contas não criadas para quem já foi importado"
+                    >
+                        <Zap size={16} />
+                        Sincronizar Logins
+                    </button>
                     {countNew > 0 && !batchProgress?.running && (
                         <button
                             onClick={handleMigrateAll}
