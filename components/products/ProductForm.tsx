@@ -573,12 +573,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         // Auto-generate SKU if empty — baseado no modelo+config para ser consistente
                         if (!data.sku || data.sku.trim() === '') {
                             const brandPrefix = data.brand?.substring(0, 2).toUpperCase() || 'XX';
-                            const modelPrefix = model.name.replace(/\s+/g, '').substring(0, 5).toUpperCase();
+                            const modelPrefix = model.name.replace(/\s+/g, '').toUpperCase();
                             const colorPart = data.specs?.color ? `-${data.specs.color.substring(0, 2).toUpperCase()}` : '';
                             const ramPart = data.specs?.ram ? `-${String(data.specs.ram).replace(/\s+/g, '')}` : '';
                             const storagePart = data.specs?.storage ? `-${String(data.specs.storage).replace(/\s+/g, '')}` : '';
                             mergedData.sku = `${brandPrefix}-${modelPrefix}${colorPart}${ramPart}${storagePart}`;
-                            console.log('✅ Auto-generated SKU:', mergedData.sku);
+                            console.log('✅ Auto-generated base SKU:', mergedData.sku);
                         }
                     }
                 } catch (error) {
@@ -698,6 +698,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     }
                 }
                 await onSubmit(mergedData);
+                toast.success('Produto cadastrado com sucesso!');
+                onBatchComplete?.();
             }
 
             // 2. Calcular preço médio se for novo produto com variação

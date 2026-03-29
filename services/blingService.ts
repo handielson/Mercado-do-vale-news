@@ -159,12 +159,27 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         // Filho > Pai (ambos usam data.midia.imagens.internas)
         const extractImagens = (d: any): any[] => {
             const internas = d?.midia?.imagens?.internas || [];
-            const externas = d?.midia?.imagens?.imagensURL || [];
+            const externas = d?.midia?.imagens?.externas || d?.midia?.imagens?.imagensURL || [];
             return [...internas, ...externas];
         };
 
         let imagens: any[] = extractImagens(data);
         if (!imagens.length) imagens = extractImagens(parentData);
+        if (!imagens.length && parentId) {
+            try {
+                const varRes = await fetch(`/api/bling?resource=product-detail&id=${parentId}&variacoes=1`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
+                });
+                if (varRes.ok) {
+                    const varData = await varRes.json();
+                    const variationsList = Array.isArray(varData) ? varData : varData.data || [];
+                    const specificVar = variationsList.find((v: any) => v.id === data.id);
+                    if (specificVar) imagens = extractImagens(specificVar);
+                }
+            } catch (err) {
+                console.error('[Bling API] Error fetching variation image fallback:', err);
+            }
+        }
 
         const variacaoNomeDetalhe = data.variacao?.nome;
 
@@ -594,7 +609,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         bling_parent_id: parentId ?? null,
         // Básico
         name: nomeLimpo,
-        sku: item.codigo || null,
+        sku: item.codigo && !['PCS', 'UN', 'PC', 'CX'].includes(item.codigo.toUpperCase()) ? item.codigo : null,
         ean: item.gtin || null,
         alternative_eans: item.gtin ? [item.gtin] : [],
         brand: typeof item.marca === 'object' ? item.marca?.nome || null : item.marca || null,
@@ -624,8 +639,10 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         // Specs (variação: color, size...)
         specs,
         // Mídia
-
-        images: firstImg ? [firstImg] : [],
+        images: imagens
+            .slice(0, 5)
+            .map((img: any) => img?.link || img?.url || (typeof img === 'string' ? img : null))
+            .filter(Boolean),
         // Modelo padrão (quando selecionado na importação)
         ...(modelId ? { model_id: modelId } : {}),
         // Defaults
@@ -1125,16 +1142,25 @@ export async function importBlingProducts(
             row.model_id = finalModelId || null;
 
 
-            // Fetch e Compress da imagem principal antes do Upsert
+            // Fetch e Compress de todas as imagens antes do Upsert (limite de 5 foi aplicado no mapBlingToDb)
             if (row.images && row.images.length > 0) {
-                const imgUrl = row.images[0];
-                if (imgUrl && imgUrl.startsWith('http')) {
-                    operation = 'download de imagem';
-                    const base64 = await fetchAndCompressImage(imgUrl);
-                    if (base64) {
-                        row.images = [base64];
+                operation = 'download de imagens';
+                const processedImages: string[] = [];
+                for (const imgUrl of row.images) {
+                    if (imgUrl && imgUrl.startsWith('http')) {
+                        const base64 = await fetchAndCompressImage(imgUrl);
+                        if (base64) {
+                            processedImages.push(base64);
+                        } else {
+                            // Se falhar o download/compressão, mantém a URL original para que o front ainda tente renderizar
+                            processedImages.push(imgUrl);
+                        }
+                    } else if (imgUrl) {
+                        // Já é base64 ou URL local
+                        processedImages.push(imgUrl);
                     }
                 }
+                row.images = processedImages;
             }
 
             // Extrai _color_id auxiliar antes de enviar para o banco
@@ -1370,23 +1396,29 @@ export async function reimportModelProductsFromBling(modelId: string): Promise<n
         
         // Verifica e extrai imagens
         const imagens = detail.midia?.imagens?.internas || detail.imagens || [];
-        const firstImgUrl = imagens[0]?.link || imagens[0]?.url || (typeof imagens[0] === 'string' ? imagens[0] : null);
+        const extractedUrls = imagens.slice(0, 5).map((img: any) => img?.link || img?.url || (typeof img === 'string' ? img : null)).filter(Boolean);
 
-        if (firstImgUrl && firstImgUrl.startsWith('http')) {
-            const base64 = await fetchAndCompressImage(firstImgUrl);
-            if (base64) {
-                updateData.images = [base64];
+        if (extractedUrls.length > 0) {
+            const processedImages = [];
+            for (const imgUrl of extractedUrls) {
+                if (imgUrl && imgUrl.startsWith('http')) {
+                    const base64 = await fetchAndCompressImage(imgUrl);
+                    processedImages.push(base64 || imgUrl);
+                } else {
+                    processedImages.push(imgUrl);
+                }
+            }
+            if (processedImages.length > 0) {
+                updateData.images = processedImages;
                 
-                // Também atualiza a galeria compartilhada da cor, se houver
+                // Também atualiza a galeria compartilhada da cor da PRIMEIRA foto se houver
                 const colorId = resolveColorId(p.specs?.color);
-                if (colorId && modelId) {
+                if (colorId && modelId && processedImages[0]) {
                     try {
-                        // Fazemos um upsert seguro garantindo que a base64 esteja lá. 
-                        // Idealmente preservaria caso tenha outras, mas o reimport assume a do Bling.
                         await modelColorImagesService.upsert({
                             model_id: modelId,
                             color_id: colorId,
-                            images: [base64]
+                            images: processedImages
                         });
                     } catch (e) { console.error('Erro ao resincronizar cor-imagem no reimport', e); }
                 }

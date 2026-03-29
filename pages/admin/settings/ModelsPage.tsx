@@ -624,15 +624,19 @@ export function ModelsPage() {
                             {filtered.length} de {models.length} modelo{models.length !== 1 ? 's' : ''}
                         </span>
                         
-                        {selectedModelIds.size > 0 && (
-                            <button
-                                onClick={() => setSeoModalOpen(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-lg text-xs font-bold transition-colors animate-in fade-in"
-                            >
-                                <Sparkles size={14} />
-                                SEO em Massa ({selectedModelIds.size})
-                            </button>
-                        )}
+                        <button
+                            onClick={() => selectedModelIds.size > 0 && setSeoModalOpen(true)}
+                            disabled={selectedModelIds.size === 0}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                selectedModelIds.size > 0
+                                    ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 cursor-pointer animate-in fade-in'
+                                    : 'bg-slate-100 text-slate-400 opacity-70 cursor-not-allowed'
+                            }`}
+                            title={selectedModelIds.size === 0 ? "Selecione modelos na tabela abaixo para preencher o SEO em massa" : "Gerar SEO para os modelos selecionados"}
+                        >
+                            <Sparkles size={14} />
+                            SEO em Massa {selectedModelIds.size > 0 ? `(${selectedModelIds.size})` : ''}
+                        </button>
                     </div>
                 </div>
             </div>

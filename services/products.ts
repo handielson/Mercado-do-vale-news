@@ -68,6 +68,7 @@ function transformFromDB(row: any): Product {
         exclude_from_seo: Boolean(row.exclude_from_seo),
         meta_title: row.meta_title || undefined,
         meta_description: row.meta_description || undefined,
+        kits: row.kits || [],
         created: row.created_at,
         updated: row.updated_at,
     };
@@ -118,14 +119,6 @@ async function create(input: ProductInput): Promise<Product> {
         throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
     }
 
-    // SKU uniqueness check via VPS
-    if (input.sku) {
-        const existing = await vpsApiService.getProducts({ sku: input.sku, status: 'all', noCache: true });
-        if (existing && existing.length > 0) {
-            throw new Error(`SKU "${input.sku}" já está em uso pelo produto "${existing[0].name}". Cada produto deve ter um SKU único.`);
-        }
-    }
-
     // Fetch model via Supabase (models table não está na VPS)
     const { data: modelData, error: modelError } = await supabase
         .from('models')
@@ -138,6 +131,39 @@ async function create(input: ProductInput): Promise<Product> {
     const category_id = modelData.category_id || input.category_id;
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
+
+    // Categorias de produtos físicos serializados onde múltiplos itens podem compartilhar o mesmo SKU
+    let isSerializedCategory = false;
+    if (category_id) {
+        const { data: catData } = await supabase.from('categories').select('name').eq('id', category_id).single();
+        if (catData && ['CELULAR', 'SMARTPHONE', 'TABLET', 'RECEPTOR'].some(kw => catData.name.toUpperCase().includes(kw))) {
+            isSerializedCategory = true;
+        }
+    }
+
+    // SKU uniqueness check — busca exata no Supabase (fonte da verdade)
+    // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
+    const UNIT_CODES = ['PCS', 'UN', 'PC', 'CX'];
+    if (input.sku && !UNIT_CODES.includes(input.sku.toUpperCase())) {
+        const { data: skuConflict } = await supabase
+            .from('products')
+            .select('id, name, sku')
+            .ilike('sku', input.sku)  // case-insensitive, mas busca o valor EXATO
+            .limit(5);
+
+        // Filtra correspondência exata (ilike pode retornar substrings em alguns dialetos)
+        const exactMatch = (skuConflict || []).filter(
+            (p: any) => p.sku?.toLowerCase() === input.sku!.toLowerCase()
+        );
+
+        if (exactMatch.length > 0) {
+            if (isSerializedCategory) {
+                console.warn(`[WARNING] SKU "${input.sku}" já existe (produto "${exactMatch[0].name}"). Cadastro permitido (categoria serializada).`);
+            } else {
+                throw new Error(`SKU "${input.sku}" já está em uso pelo produto "${exactMatch[0].name}". Cada produto deve ter um SKU único.`);
+            }
+        }
+    }
 
     let finalVideoUrl = input.video_url || null;
     if (!finalVideoUrl && modelData.template_values?.has_video && input.sku) {
@@ -192,6 +218,7 @@ async function create(input: ProductInput): Promise<Product> {
         shopee_item_id: input.shopee_item_id || null,
         video_url: finalVideoUrl,
         slug: input.slug || null,
+        kits: input.kits && input.kits.length > 0 ? input.kits : null,
     };
 
     const result = await vpsApiService.createProduct(payload);
@@ -202,6 +229,7 @@ async function create(input: ProductInput): Promise<Product> {
     try {
         const supPayload = {
             id: payload.id,
+            company_id: payload.company_id,  // obrigatório — NOT NULL no Supabase
             model_id: payload.model_id,
             parent_id: payload.parent_id,
             brand: payload.brand,
@@ -209,7 +237,7 @@ async function create(input: ProductInput): Promise<Product> {
             name: payload.name,
             sku: payload.sku,
             description: payload.description,
-            eans: payload.alternative_eans || [],
+            alternative_eans: payload.alternative_eans || [],
             specs: payload.specs,
             price_cost: payload.price_cost,
             price_retail: payload.price_retail,
@@ -235,6 +263,7 @@ async function create(input: ProductInput): Promise<Product> {
             shopee_item_id: payload.shopee_item_id,
             video_url: payload.video_url,
             slug: payload.slug,
+            kits: payload.kits || null,
             updated_at: new Date().toISOString(),
         };
         const { error: supaErr } = await supabase.from('products').upsert(supPayload);
@@ -252,15 +281,6 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
     }
 
-    // SKU uniqueness check via VPS
-    if (input.sku) {
-        const existing = await vpsApiService.getProducts({ sku: input.sku, status: 'all', noCache: true });
-        if (existing && existing.some((p: any) => p.id !== id)) {
-            const conflict = existing.find((p: any) => p.id !== id);
-            throw new Error(`SKU "${input.sku}" já está em uso pelo produto "${conflict.name}". Cada produto deve ter um SKU único.`);
-        }
-    }
-
     // Fetch model via Supabase (models não estão na VPS)
     const { data: modelData, error: modelError } = await supabase
         .from('models')
@@ -273,6 +293,40 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     const category_id = modelData.category_id || input.category_id;
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
+
+    // Categorias de produtos físicos serializados onde múltiplos itens podem compartilhar o mesmo SKU
+    let isSerializedCategory = false;
+    if (category_id) {
+        const { data: catData } = await supabase.from('categories').select('name').eq('id', category_id).single();
+        if (catData && ['CELULAR', 'SMARTPHONE', 'TABLET', 'RECEPTOR'].some(kw => catData.name.toUpperCase().includes(kw))) {
+            isSerializedCategory = true;
+        }
+    }
+
+    // SKU uniqueness check — busca exata no Supabase (fonte da verdade), excluindo o próprio produto editado
+    // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
+    const UNIT_CODES = ['PCS', 'UN', 'PC', 'CX'];
+    if (input.sku && !UNIT_CODES.includes(input.sku.toUpperCase())) {
+        const { data: skuConflict } = await supabase
+            .from('products')
+            .select('id, name, sku')
+            .ilike('sku', input.sku)
+            .neq('id', id)  // exclui o produto que está sendo editado
+            .limit(5);
+
+        const exactMatch = (skuConflict || []).filter(
+            (p: any) => p.sku?.toLowerCase() === input.sku!.toLowerCase()
+        );
+
+        if (exactMatch.length > 0) {
+            const conflict = exactMatch[0];
+            if (isSerializedCategory) {
+                console.warn(`[WARNING] SKU "${input.sku}" já existe (produto "${conflict.name}"). Atualização permitida (categoria serializada).`);
+            } else {
+                throw new Error(`SKU "${input.sku}" já está em uso pelo produto "${conflict.name}". Cada produto deve ter um SKU único.`);
+            }
+        }
+    }
 
     let finalVideoUrl = input.video_url || null;
     if (!finalVideoUrl && modelData.template_values?.has_video && input.sku) {
@@ -327,6 +381,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         shopee_item_id: input.shopee_item_id || null,
         video_url: finalVideoUrl,
         slug: input.slug || null,
+        kits: input.kits && input.kits.length > 0 ? input.kits : null,
     };
 
     // Pegamos o oldProduct ANTES de atualizar para comparar preços e estoques
@@ -341,6 +396,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     // --- DUAL WRITE SUPABASE ---
     try {
         const supPayload = {
+            company_id: payload.company_id,  // obrigatório — NOT NULL no Supabase
             model_id: payload.model_id,
             parent_id: payload.parent_id,
             brand: payload.brand,
@@ -348,7 +404,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             name: payload.name,
             sku: payload.sku,
             description: payload.description,
-            eans: payload.alternative_eans || [],
+            alternative_eans: payload.alternative_eans || [],
             specs: payload.specs,
             price_cost: payload.price_cost,
             price_retail: payload.price_retail,
@@ -374,6 +430,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
             shopee_item_id: payload.shopee_item_id,
             video_url: payload.video_url,
             slug: payload.slug,
+            kits: payload.kits || null,
             updated_at: new Date().toISOString(),
         };
         const { error: supaErr } = await supabase.from('products').upsert({ id, ...supPayload });
@@ -419,10 +476,13 @@ async function update(id: string, input: ProductInput): Promise<Product> {
 }
 
 async function deleteProduct(id: string): Promise<void> {
+    // Tenta deletar da VPS (não-bloqueante: falha silenciosa com warning)
     const ok = await vpsApiService.deleteProduct(id);
-    if (!ok) throw new Error(`Failed to delete product from VPS`);
+    if (!ok) {
+        console.warn(`[productService] Delete na VPS falhou para id=${id}. Continuando com remoção local.`);
+    }
 
-    // --- DUAL WRITE SUPABASE ---
+    // --- DUAL WRITE SUPABASE (sempre executa) ---
     try {
         await supabase.from('products').delete().eq('id', id);
     } catch (e) {

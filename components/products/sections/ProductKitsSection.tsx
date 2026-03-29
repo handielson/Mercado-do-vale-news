@@ -27,7 +27,7 @@ export function ProductKitsSection({ control, register, errors, watch, setValue 
                 </h3>
                 <button
                     type="button"
-                    onClick={() => append({ quantity: 2, price: 0, name: '' })}
+                    onClick={() => append({ quantity: 2, price: 0, price_wholesale: 0, price_reseller: 0, name: '' })}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
                 >
                     <Plus size={16} />
@@ -46,43 +46,61 @@ export function ProductKitsSection({ control, register, errors, watch, setValue 
             ) : (
                 <div className="space-y-4">
                     {fields.map((field, index) => (
-                        <div key={field.id} className="flex flex-col md:flex-row gap-4 p-5 bg-slate-50 border border-slate-200 rounded-xl relative hover:border-blue-300 transition-colors">
-                            <div className="flex-1">
-                                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nome do Kit</label>
-                                <input
-                                    {...register(`kits.${index}.name`)}
-                                    placeholder="Ex: Kit Revendedor 5x"
-                                    className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                                />
-                            </div>
-                            <div className="w-full md:w-32">
-                                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Qtd *</label>
-                                <input
-                                    type="number"
-                                    min="2"
-                                    {...register(`kits.${index}.quantity`, { valueAsNumber: true })}
-                                    className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-mono"
-                                />
-                                {errors?.kits?.[index]?.quantity && (
-                                    <p className="text-xs text-red-600 mt-1">{errors.kits[index]?.quantity?.message}</p>
-                                )}
-                            </div>
-                            <div className="flex-1">
-                                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Preço Total do Kit *</label>
-                                <CurrencyInput
-                                    value={watch(`kits.${index}.price`)}
-                                    onChange={(val) => setValue(`kits.${index}.price`, val, { shouldValidate: true, shouldDirty: true })}
-                                    className="w-full bg-white font-mono text-lg"
-                                />
-                                {errors?.kits?.[index]?.price && (
-                                    <p className="text-xs text-red-600 mt-1">{errors.kits[index]?.price?.message}</p>
-                                )}
+                        <div key={field.id} className="relative p-5 bg-slate-50 border border-slate-200 rounded-xl hover:border-blue-300 transition-colors">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                                <div className="md:col-span-4">
+                                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nome do Kit</label>
+                                    <input
+                                        {...register(`kits.${index}.name`)}
+                                        placeholder="Ex: Kit Revendedor 5x"
+                                        className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Qtd *</label>
+                                    <input
+                                        type="number"
+                                        min="2"
+                                        {...register(`kits.${index}.quantity`, { valueAsNumber: true })}
+                                        className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-mono"
+                                    />
+                                    {errors?.kits?.[index]?.quantity && (
+                                        <p className="text-xs text-red-600 mt-1">{errors.kits[index]?.quantity?.message}</p>
+                                    )}
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Total Varejo *</label>
+                                    <CurrencyInput
+                                        value={watch(`kits.${index}.price`)}
+                                        onChange={(val) => setValue(`kits.${index}.price`, val, { shouldValidate: true, shouldDirty: true })}
+                                        className="w-full bg-white font-mono text-base"
+                                    />
+                                    {errors?.kits?.[index]?.price && (
+                                        <p className="text-xs text-red-600 mt-1">{errors.kits[index]?.price?.message}</p>
+                                    )}
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Total Atacado</label>
+                                    <CurrencyInput
+                                        value={watch(`kits.${index}.price_wholesale`)}
+                                        onChange={(val) => setValue(`kits.${index}.price_wholesale`, val, { shouldValidate: true, shouldDirty: true })}
+                                        className="w-full bg-white font-mono text-base"
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Total Revenda</label>
+                                    <CurrencyInput
+                                        value={watch(`kits.${index}.price_reseller`)}
+                                        onChange={(val) => setValue(`kits.${index}.price_reseller`, val, { shouldValidate: true, shouldDirty: true })}
+                                        className="w-full bg-white font-mono text-base"
+                                    />
+                                </div>
                             </div>
                             
                             <button
                                 type="button"
                                 onClick={() => remove(index)}
-                                className="absolute -top-3 -right-3 md:relative md:top-0 md:right-0 md:mt-7 text-red-500 hover:bg-red-100 p-2.5 rounded-lg transition-colors bg-white border border-red-100 shadow-sm md:border-transparent md:shadow-none md:bg-transparent"
+                                className="absolute -top-3 -right-3 text-red-500 hover:bg-red-100 p-2 rounded-full transition-colors bg-white border border-red-200 shadow-sm"
                                 title="Remover Kit"
                             >
                                 <Trash2 size={18} />

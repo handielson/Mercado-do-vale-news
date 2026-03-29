@@ -4,7 +4,10 @@
  * Substitui chamadas ao Supabase gradualmente conforme as tabelas migram.
  */
 
-const VPS_BASE = 'https://api.xiaomipetrolina.com.br';
+const VPS_BASE = import.meta.env.DEV
+    ? '/vps-proxy'
+    : (import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+
 const VPS_KEY = import.meta.env.VITE_VPS_SYNC_KEY;
 
 function buildHeaders(extra?: Record<string, string>): HeadersInit {

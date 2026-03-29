@@ -30,14 +30,16 @@ export function BulkSeoModal({ isOpen, onClose, models, brands, onSuccess }: Bul
     // Gera o prompt de listagem
     const promptText = `Atue como um Especialista em SEO de E-commerce. O usuário irá enviar uma lista de modelos de produtos. Para cada um, gere um JSON contendo os dados de SEO focados na intenção de busca transacional.
 
-RETORNE APENAS UM ARRAY DE OBJETOS JSON, LIGADO PELO \`id\` DO MODELO.
-NENHUM OUTRO TEXTO OU MARKDOWN (NÃO ENVIE \`\`\`json). O retorno tem que ser perfeitamente parseável por JSON.parse().
+CRÍTICO (VERIFICAÇÃO OBRIGATÓRIA ANTES DE RESPONDER):
+1. RETORNE EXATAMENTE UM ARRAY JSON. NENHUM OUTRO TEXTO (SEM \`\`\`json).
+2. Na chave "description", JAMAIS use quebras de linha (Enter). Deixe o texto contínuo numa única linha e use <br><br> para separar parágrafos.
+3. JAMAIS use aspas duplas (") DENTRO dos textos. Se precisar destacar uma palavra, use aspas simples ('). Isso é vital para não quebrar a sintaxe JSON.
 
 Modelo do Array:
 [
   {
     "id": "UUID-DO-MODELO",
-    "description": "Uma descrição comercial persuasiva (HTML Básico permitido como <b>, <br> <p>) destacando benefícios e diferenciais do aparelho/produto. Foco em conversão. Ao menos 3 parágrafos.",
+    "description": "Uma descrição comercial persuasiva numa única linha (HTML Básico permitido como <b>, <br><br>). Nunca use Enter aqui. Use aspas simples 'se precisar'.",
     "slug": "url-amigavel-do-produto",
     "meta_title": "Título SEO atrativo com intenção de compra (Máx 60 caracteres)",
     "meta_description": "Meta descrição contendo gatilhos mentais e CTA (Máx 160 caracteres)",
@@ -66,7 +68,33 @@ Marca: ${getBrandName(m.brand_id)}`).join('\n\n')}
 
         try {
             setSaving(true);
-            const parsedArray = JSON.parse(jsonInput.replace(/```json/g, '').replace(/```/g, '').trim());
+            
+            // Tratamento extremo de segurança para consertar vícios de formatação das IAs
+            let rawStr = jsonInput.replace(/```json/gi, '').replace(/```/g, '').trim();
+            
+            // Função para remover QUEBRAS DE LINHA (Enters) apenas quando estiver DENTRO de uma String no JSON.
+            let inString = false;
+            let escapeNext = false;
+            let safeJsonString = '';
+            for (let i = 0; i < rawStr.length; i++) {
+                const char = rawStr[i];
+                if (escapeNext) {
+                    safeJsonString += char;
+                    escapeNext = false;
+                } else if (char === '\\') {
+                    safeJsonString += char;
+                    escapeNext = true;
+                } else if (char === '"') {
+                    inString = !inString;
+                    safeJsonString += char;
+                } else if (inString && (char === '\n' || char === '\r')) {
+                    safeJsonString += ' '; // Converte novas linhas proibidas (Enters na string) em espaços seguros
+                } else {
+                    safeJsonString += char; // Mantém todo o resto intacto (incluindo chaves e colchetes)
+                }
+            }
+
+            const parsedArray = JSON.parse(safeJsonString);
 
             if (!Array.isArray(parsedArray)) {
                 throw new Error('O JSON retornado não é um array válido.');

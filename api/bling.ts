@@ -136,9 +136,22 @@ export default async function handler(req: any, res: any) {
             let stock_quantity = 0;
             if (stockRes.ok) {
                 const stockData = await stockRes.json();
-                for (const item of (stockData.data || [])) stock_quantity += item.saldoFisico ?? 0;
+                for (const item of (stockData.data || [])) {
+                    const stockVal = item.saldoFisicoTotal ?? item.saldoFisico ?? item.saldoVirtualTotal ?? item.saldoVirtual ?? 0;
+                    stock_quantity += parseFloat(String(stockVal)) || 0;
+                }
+            } else {
+                const errText = await stockRes.text();
+                console.error('[Bling API] Error fetching stock:', stockRes.status, errText);
             }
-            return res.status(200).json({ ...produto, stock_quantity });
+            
+            // Variation Fallback: If stock is 0, fallback to produto.estoque
+            if (stock_quantity === 0 && produto?.estoque) {
+                const fallbackStock = produto.estoque.saldoFisicoTotal ?? produto.estoque.saldoFisico ?? produto.estoque.saldoVirtualTotal ?? produto.estoque.saldoVirtual ?? 0;
+                stock_quantity = parseFloat(String(fallbackStock)) || 0;
+            }
+
+            return res.status(200).json({ ...produto, stock_quantity: Number(stock_quantity) });
         } catch (err: any) {
             return res.status(500).json({ error: 'network_error', message: err.message });
         }
@@ -247,14 +260,12 @@ export default async function handler(req: any, res: any) {
         try {
             let url = `https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`;
             
-            // Forward idsProdutos[] array if present
-            if (req.query['idsProdutos[]']) {
-                const ids = Array.isArray(req.query['idsProdutos[]']) 
-                    ? req.query['idsProdutos[]'] 
-                    : [req.query['idsProdutos[]']];
-                
-                const idsQuery = ids.map(id => `idsProdutos[]=${id}`).join('&');
-                url = `https://api.bling.com.br/Api/v3/estoques/saldos?${idsQuery}`;
+            // Forward idsProdutos[] array if present (support both express parsing variants)
+            const idsParam = req.query['idsProdutos[]'] || req.query.idsProdutos;
+            if (idsParam) {
+                const ids = Array.isArray(idsParam) ? idsParam : [idsParam];
+                const idsQuery = ids.map((id: any) => `idsProdutos[]=${id}`).join('&');
+                url = `https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100&${idsQuery}`;
             }
 
             const blingRes = await fetch(url, {

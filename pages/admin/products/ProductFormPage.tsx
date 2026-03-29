@@ -77,8 +77,8 @@ export const ProductFormPage: React.FC = () => {
                 navigate('/admin/products');
             } else {
                 // Create new product (pode ser chamado várias vezes no batch)
+                // Navegação controlada pelo ProductForm via onBatchComplete
                 await productService.create(data);
-                // Navegação controlada pelo ProductForm após concluir o batch
             }
         } catch (error) {
             console.error('Error saving product:', error);

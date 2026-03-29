@@ -64,6 +64,8 @@ export const productSchema = z.object({
     kits: z.array(z.object({
         quantity: z.coerce.number().int().min(2, 'A quantidade do kit deve ser pelo menos 2'),
         price: z.coerce.number().min(0, 'O preço do kit não pode ser negativo'),
+        price_wholesale: z.coerce.number().min(0).optional(),
+        price_reseller: z.coerce.number().min(0).optional(),
         name: z.string().optional()
     })).optional().default([]),
 

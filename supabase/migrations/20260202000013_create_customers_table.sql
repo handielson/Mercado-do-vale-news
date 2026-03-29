@@ -42,6 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_customers_is_active ON customers(is_active);
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Users can only see customers from their company
+DROP POLICY IF EXISTS customers_select_policy ON customers;
 CREATE POLICY customers_select_policy ON customers
     FOR SELECT
     USING (
@@ -52,6 +53,7 @@ CREATE POLICY customers_select_policy ON customers
     );
 
 -- Policy: Users can insert customers to their company
+DROP POLICY IF EXISTS customers_insert_policy ON customers;
 CREATE POLICY customers_insert_policy ON customers
     FOR INSERT
     WITH CHECK (
@@ -62,6 +64,7 @@ CREATE POLICY customers_insert_policy ON customers
     );
 
 -- Policy: Users can update customers from their company
+DROP POLICY IF EXISTS customers_update_policy ON customers;
 CREATE POLICY customers_update_policy ON customers
     FOR UPDATE
     USING (
@@ -72,6 +75,7 @@ CREATE POLICY customers_update_policy ON customers
     );
 
 -- Policy: Users can delete customers from their company
+DROP POLICY IF EXISTS customers_delete_policy ON customers;
 CREATE POLICY customers_delete_policy ON customers
     FOR DELETE
     USING (

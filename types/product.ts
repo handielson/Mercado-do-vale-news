@@ -38,7 +38,9 @@ export interface ProductDimensions {
  */
 export interface ProductKit {
     quantity: number;
-    price: number; // Price in centavos for the TOTAL kit
+    price: number; // For retail
+    price_wholesale?: number;
+    price_reseller?: number;
     name?: string; // Optional name like "Caixa com 5"
 }
 

@@ -1,0 +1,16 @@
+"🚨 TUTORIAL MESTRE DE IMPORTAÇÃO (LEIA COM ATENÇÃO ANTES DE PREENCHER) 🚨",,,,,,,,
+"REGRA 1: Validação Estrita. As colunas [category] e [brand] precisam ter palavras IDÊNTICAS às cadastradas no seu painel.",,,,,,,,
+"REGRA 2: Formato de Preços. Use apenas números e PONTO para centavos. Exemplo: 4500.00 (nunca R$ 4.500,00).",,,,,,,,
+"REGRA 3: Condição. A coluna [condition] deve conter apenas: Novo, Seminovo ou Vitrine.",,,,,,,,
+"REGRA 4: A linha 11 abaixo contém os nomes técnicos (name, category...) NUNCA APAGUE OU TRADUZA ELA.",,,,,,,,
+,,,,,,,,
+"--- GLOSSÁRIO DAS COLUNAS ---",,,,,,,,
+"name: Nome Comercial (Ex: iPhone 13) | category: Categoria (Ex: Smartphone) | brand: Marca (Ex: Apple)",,,,,,,,
+"price_retail: Varejo Final | price_reseller: Preço Revenda | price_wholesale: Preço Atacado Mínimo",,,,,,,,
+"warranty_days: Total de dias de garantia | description: Texto opcional sobre a ficha técnica",,,,,,,,
+,,,,,,,,
+name,category,brand,condition,price_retail,price_reseller,price_wholesale,warranty_days,description
+"iPhone 13","Smartphone","Apple","Novo",4000.00,3800.00,3700.00,365,"Aparelho lacrado com 1 ano de garantia Apple."
+"Galaxy S23","Smartphone","Samsung","Seminovo",3500.00,3300.00,3100.00,90,"Aparelho estado de novo, sem marcas de uso."
+"PlayStation 5","Console","Sony","Vitrine",4200.00,3900.00,3800.00,90,"Sem caixa original mas estado impecável."
+"AirPods Pro 2","Acessório","Apple","Novo",1800.00,1650.00,1500.00,180,""

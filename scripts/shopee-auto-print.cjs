@@ -73,16 +73,34 @@ function startLocalServer() {
         }
 
         if (req.url === '/') {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
-            res.end(`
-                <html>
-                    <head><title>Impressoras Shopee</title></head>
-                    <body style="font-family: sans-serif; padding: 2rem;">
-                        <h2>Servidor de Impressão Ativo.</h2>
-                        <p>A listagem automática foi desativada no seu PC Lenovo por incompatibilidade do Windows com a sua versão de driver PDF atual. Não se preocupe, o painel vai imprimir normalmente.</p>
-                    </body>
-                </html>
-            `);
+            const ptp = require('pdf-to-printer');
+            ptp.getPrinters().then(printers => {
+                const list = printers.map(p => `<li>${p.deviceId || p.name || p}</li>`).join('');
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+                res.end(`
+                    <html>
+                        <head><title>Impressoras Shopee</title></head>
+                        <body style="font-family: sans-serif; padding: 2rem;">
+                            <h2>Servidor de Impressão Ativo.</h2>
+                            <p><strong>Status:</strong> Pronto para receber solicitações da nuvem.</p>
+                            <h3>Impressoras detectadas nesta máquina:</h3>
+                            <ul>${list}</ul>
+                        </body>
+                    </html>
+                `);
+            }).catch(err => {
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+                res.end(`
+                    <html>
+                        <head><title>Impressoras Shopee</title></head>
+                        <body style="font-family: sans-serif; padding: 2rem;">
+                            <h2>Servidor de Impressão Ativo.</h2>
+                            <p>A listagem automática foi desativada temporariamente por uma incompatibilidade do Windows com os drivers locais.</p>
+                            <p><strong>Não se preocupe:</strong> Os comandos de impressão direta definidos no painel continuarão operando normalmente.</p>
+                        </body>
+                    </html>
+                `);
+            });
         } else if (req.url.startsWith('/print-order')) {
             const urlParams = new URLSearchParams(req.url.split('?')[1]);
             const orderSn = urlParams.get('order_sn');

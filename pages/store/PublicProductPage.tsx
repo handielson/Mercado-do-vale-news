@@ -949,7 +949,20 @@ export const PublicProductPage: React.FC = () => {
                                             <Layers size={16} className="text-blue-600" />
                                             Compre mais, pague menos
                                         </h4>
+                                        {/* Derivar label da unidade base a partir dos nomes dos kits */}
+                                        {(() => {
+                                            const singularMap: Record<string, string> = {
+                                                'meses': 'mês', 'semanas': 'semana', 'anos': 'ano',
+                                                'dias': 'dia', 'horas': 'hora', 'unidades': 'unidade', 'itens': 'item',
+                                            };
+                                            const firstNamed = product.kits?.find((k: any) => k.name && /^\d+\s+\w+/.test(k.name.trim()));
+                                            const match = firstNamed?.name?.trim().match(/^\d+\s+(.+)$/);
+                                            const baseUnitLabel = match
+                                                ? `1 ${singularMap[match[1].toLowerCase()] ?? match[1].replace(/s$/i, '')}`
+                                                : '1 Unidade';
+                                            return (
                                         <div className="flex flex-col gap-2">
+
                                             <button
                                                 onClick={() => setSelectedKitQuantity(1)}
                                                 className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all ${
@@ -962,7 +975,7 @@ export const PublicProductPage: React.FC = () => {
                                                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedKitQuantity === 1 ? 'border-blue-600' : 'border-slate-300'}`}>
                                                         {selectedKitQuantity === 1 && <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
                                                     </div>
-                                                    <span className="font-medium text-slate-800">1 Unidade</span>
+                                                    <span className="font-medium text-slate-800">{baseUnitLabel}</span>
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="font-bold text-slate-900">R$ {baseDiscountedPrice.toFixed(2).replace('.', ',')}</div>
@@ -997,7 +1010,7 @@ export const PublicProductPage: React.FC = () => {
                                                                     {selectedKitQuantity === kit.quantity && <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
                                                                 </div>
                                                                 <div className="text-left">
-                                                                    <span className="font-bold text-blue-900">Kit com {kit.quantity} Unidades</span>
+                                                                    <span className="font-bold text-blue-900">{kit.name || `Kit com ${kit.quantity} Unidades`}</span>
                                                                     <div className="text-xs text-blue-600 font-medium">R$ {unitPriceDisplay} cada</div>
                                                                 </div>
                                                             </div>
@@ -1009,6 +1022,8 @@ export const PublicProductPage: React.FC = () => {
                                                 );
                                             })}
                                         </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
 

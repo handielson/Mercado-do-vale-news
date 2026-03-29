@@ -4,7 +4,9 @@
  * Escrita: sync fire-and-forget após writes no Supabase (autenticado com X-Sync-Key).
  */
 
-const VPS_BASE_URL = 'https://api.xiaomipetrolina.com.br';
+const VPS_BASE_URL = (import.meta as any).env?.DEV
+    ? '/vps-proxy'
+    : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 5 * 60 * 1000;
@@ -65,11 +67,16 @@ class VpsApiService {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), WRITE_TIMEOUT_MS);
+      const hasBody = body != null;
       const res = await fetch(`${VPS_BASE_URL}${path}`, {
         method,
         signal: controller.signal,
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Sync-Key': SYNC_KEY },
-        body: body != null ? JSON.stringify(body) : undefined,
+        headers: {
+          ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+          Accept: 'application/json',
+          'X-Sync-Key': SYNC_KEY,
+        },
+        body: hasBody ? JSON.stringify(body) : undefined,
       });
       clearTimeout(timer);
       return res.ok;

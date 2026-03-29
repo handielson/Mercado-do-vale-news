@@ -190,7 +190,7 @@ ON products USING gin(to_tsvector('portuguese',
 
 -- Index for featured products
 CREATE INDEX IF NOT EXISTS idx_products_featured 
-ON products(featured, created) 
+ON products(featured, created_at) 
 WHERE featured = TRUE;
 
 -- ============================================================================
@@ -211,10 +211,10 @@ SELECT
   featured,
   is_new,
   views_count,
-  created
+  created_at
 FROM products
 WHERE status = 'active'
-ORDER BY featured DESC, created DESC;
+ORDER BY featured DESC, created_at DESC;
 
 -- Index on materialized view
 CREATE INDEX IF NOT EXISTS idx_catalog_products_category 

@@ -11,7 +11,13 @@ export default defineConfig({
         target: 'https://mercado-do-vale-news.vercel.app',
         changeOrigin: true,
         secure: false,
-      }
+      },
+      '/vps-proxy': {
+        target: 'https://api.xiaomipetrolina.com.br',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/vps-proxy/, ''),
+      },
     }
   },
   plugins: [react()],

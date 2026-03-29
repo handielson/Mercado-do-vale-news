@@ -8,6 +8,7 @@ import { cn } from '../../utils/cn';
 import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
+import { supabase } from '../../services/supabase';
 
 interface ProductCardProps {
     product: Product;
@@ -78,7 +79,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             if (!res.ok) throw new Error('Falha ao consultar Bling');
             const data = await res.json();
             
-            const realStock = typeof data.stock_quantity === 'number' ? data.stock_quantity : 0;
+            // stock_quantity vem do /estoques/saldos. Se 0, fallback p/ data.estoque
+            let parsedStock = Number(data.stock_quantity);
+            if ((!parsedStock || parsedStock === 0) && data.estoque) {
+                const est = data.estoque;
+                parsedStock = est.saldoFisicoTotal ?? est.saldoFisico ?? est.saldoVirtualTotal ?? est.saldoVirtual ?? 0;
+                parsedStock = parseFloat(String(parsedStock)) || 0;
+                console.log('[ProductCard] Usando fallback estoque:', parsedStock, data.estoque);
+            }
+            const realStock = !isNaN(parsedStock) ? parsedStock : 0;
             
             if (realStock !== currentStock) {
                 const { error } = await supabase
@@ -87,11 +96,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     .eq('id', product.id);
                 if (error) throw error;
                 
-                // Forçar o sync na VPS (se houver configuração)
+                // Sincroniza stock na VPS: busca o produto completo e faz PUT com merge
+                // (PUT na VPS é replace completo — enviar só stock_quantity zerava os outros campos)
                 try {
                     const { vpsApiService } = await import('../../services/vpsApiService');
-                    await vpsApiService.updateProduct(product.id, { stock: realStock, stock_quantity: realStock });
-                } catch(e) { /* ignore VPS error on UI */ }
+                    const currentVpsProduct = await vpsApiService.getProductById(product.id, true);
+                    if (currentVpsProduct) {
+                        await vpsApiService.updateProduct(product.id, {
+                            ...currentVpsProduct,
+                            stock_quantity: realStock,
+                        });
+                    }
+                } catch(e) { console.warn('[ProductCard] VPS stock update failed:', e); }
 
                 setCurrentStock(realStock);
                 toast.success(`Estoque sincronizado: ${realStock} un.`);
