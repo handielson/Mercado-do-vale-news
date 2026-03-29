@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingBag, Package, RefreshCw, Receipt } from 'lucide-react';
 import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
-import { getSales } from '../../../services/saleService';
-import { getOrders } from '../../../services/orderService';
+import { getSales, deleteSale } from '../../../services/saleService';
+import { getOrders, cancelOrder } from '../../../services/orderService';
 import { supabase } from '../../../services/supabase';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { SaleWithItems } from '../../../types/sale';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { getCoinBalance } from '../../../services/cashbackService';
 import { benefitService } from '../../../services/benefitService';
+import { toast } from 'sonner';
 
 const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v / 100);
@@ -23,6 +24,36 @@ export const PurchaseHistoryTab: React.FC = () => {
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
     const [loading, setLoading] = useState(true);
     const [printingReceiptId, setPrintingReceiptId] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleClearPhantomOrders = async () => {
+        if (!confirm('ATENÇÃO: Isso apagará PARA SEMPRE todas as compras exibidas abaixo do banco de dados (Ação para limpar dados de teste). Tem certeza?')) return;
+        
+        setIsDeleting(true);
+        try {
+            // Separa os IDs de vendas do PDV e pedidos online
+            const onlineIds = sales.filter(s => (s as any).payment_methods?.[0]?.method !== undefined && !s.id.includes('-pdv-')).map(s => s.id); // Lógica simples de separação
+            
+            // Delete online orders directly
+            for (const id of onlineIds) {
+                await supabase.from('orders').delete().eq('id', id);
+            }
+            
+            // Delete PDV sales
+            const pdvIds = sales.filter(s => !onlineIds.includes(s.id)).map(s => s.id);
+            for (const id of pdvIds) {
+                await deleteSale(id);
+            }
+
+            toast.success('Histórico de teste apagado do banco de dados!');
+            setSales([]);
+        } catch (e: any) {
+            console.error(e);
+            toast.error('Erro ao apagar pedidos: ' + e.message);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
 
     const handlePrintReceipt = async (sale: SaleWithItems) => {
         setPrintingReceiptId(sale.id);
@@ -132,6 +163,27 @@ export const PurchaseHistoryTab: React.FC = () => {
             <p className="text-slate-600 mb-6">
                 Acompanhe todas as suas compras realizadas
             </p>
+
+            {/* Painel de DEBUG/Limpeza de Dados Fantasmas */}
+            {sales.length > 0 && customer?.id && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                        <h4 className="text-red-800 font-bold text-sm">🛠️ Modo Desenvolvedor: Dados Fantasmas?</h4>
+                        <p className="text-red-600 text-xs mt-1 leading-relaxed">
+                            O sistema encontrou estes pedidos atrelados ao seu UUID <code>{customer.id}</code>.<br/>
+                            Se você não fez essas compras, elas foram importadas do WooCommerce ou PDV antigo como teste.<br/>
+                            Você pode resetar o histórico deste CPF agora mesmo.
+                        </p>
+                    </div>
+                    <button 
+                        onClick={handleClearPhantomOrders}
+                        disabled={isDeleting}
+                        className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                    >
+                        {isDeleting ? 'Apagando...' : 'Limpar Dados Fantasmas'}
+                    </button>
+                </div>
+            )}
 
             {sales.length === 0 ? (
                 <div className="text-center py-12">

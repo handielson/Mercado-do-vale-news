@@ -438,12 +438,25 @@ export default function LegacyMigrationPage() {
 
     const handleSyncAuth = async () => {
         const confirmed = window.confirm(
-            "Sincronizar Logins?\n\nIsso vai tentar criar a senha (os 5 primeiros números do CPF) para TODOS os clientes que foram importados, mas que por um bug ficaram sem a conta no sistema de login.\n(Mensagens no WhatsApp NÃO serão reenviadas para evitar spam.)"
+            "Sincronizar Logins?\n\nIsso vai criar a senha (os 5 primeiros números do CPF) para TODOS os clientes que foram importados, usando os privilégios de Admin."
         )
         if (!confirmed) return
 
+        const adminKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+        if (!adminKey) {
+            toast.error("ALERTA: A chave VITE_SUPABASE_SERVICE_ROLE_KEY não está no seu .env.local! Renomeie a chave e reinicie o servidor.");
+            return;
+        }
+
+        // Cliente especial que tem permissão para ignorar o Rate Limit de criação de contas:
+        const supabaseAdmin = (await import('@supabase/supabase-js')).createClient(
+            import.meta.env.VITE_SUPABASE_URL,
+            adminKey
+        );
+
         setLoading(true)
         let count = 0
+        let erros = 0
         try {
             const migrated = customersWithStatus.filter(c => c.status === 'migrated')
             for (const item of migrated) {
@@ -454,30 +467,45 @@ export default function LegacyMigrationPage() {
                 const tempPassword = getDefaultPassword(cpfDigits)
 
                 try {
-                    const { data: authData } = await supabase.auth.admin
-                        ? (supabase as any).auth.admin.createUser({ email: placeholderEmail, password: tempPassword, email_confirm: true })
-                        : { data: null }
+                    // Tenta criar pela rota Admin que ignora Rate Limits
+                    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+                        email: placeholderEmail,
+                        password: tempPassword,
+                        email_confirm: true,
+                        user_metadata: { name: item.customer.name, cpf_cnpj: cpfDigits }
+                    });
 
-                    if (!authData?.user) {
-                        const { data: signUpData } = await supabase.auth.signUp({
-                            email: placeholderEmail, password: tempPassword,
-                            options: { data: { name: item.customer.name, cpf_cnpj: cpfDigits } }
-                        })
-                        if (signUpData?.user) {
-                            await supabase.from('customers').update({ user_id: signUpData.user.id }).eq('cpf_cnpj', cpfDigits)
-                            count++
+                    if (error) {
+                        if (error.status === 422 || error.message.includes("already registered") || error.message.includes("already exists")) {
+                            // A conta já estava criada! Vamos apenas garantir que o ID dela conecte na tabela `customers`
+                            const { data: searchUser } = await supabaseAdmin.auth.admin.listUsers();
+                            const matched = searchUser?.users?.find(u => u.email === placeholderEmail);
+                            if (matched) {
+                                await supabaseAdmin.from('customers').update({ user_id: matched.id }).eq('cpf_cnpj', cpfDigits);
+                            }
+                        } else {
+                            console.error("Erro da API Admin:", error);
+                            erros++;
                         }
-                    } else if (authData.user) {
-                        await supabase.from('customers').update({ user_id: authData.user.id }).eq('cpf_cnpj', cpfDigits)
-                        count++
+                    } else if (data?.user) {
+                        // Sucesso total, conta criada!
+                        await supabaseAdmin.from('customers').update({ user_id: data.user.id }).eq('cpf_cnpj', cpfDigits);
+                        count++;
                     }
                 } catch (e) {
-                    // silently ignore if it already exists
+                    console.error("Falha silenciosa:", e);
+                    erros++;
                 }
             }
-            toast.success(`✅ Sincronização concluída! ${count} novas contas de login criadas/vinculadas.`)
+            if (count > 0) {
+                toast.success(`✅ Sincronização concluída! ${count} novas contas ativadas.`);
+            } else if (erros > 0) {
+                toast.error(`Sincronização rodou, mas ${erros} contas deram problema. Olhe o console (F12)`);
+            } else {
+                toast.info(`Nenhuma conta nova precisou ser criada (todas já existiam ou CPFs inválidos).`);
+            }
         } catch (e: any) {
-            toast.error(`Erro: ${e.message}`)
+            toast.error(`Erro crítico no processo: ${e.message}`)
         } finally {
             setLoading(false)
         }

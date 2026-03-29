@@ -533,7 +533,26 @@ function SettingsTab() {
 
                 <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
                     <h3 className="font-semibold text-slate-800">💸 Resgate</h3>
-                    {field('Moedas para R$ 1,00', 'coins_to_brl_rate', 'Ex: 100 = 100 moedas equivalem a R$ 1,00')}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Valor de cada Moeda (R$)</label>
+                        <input
+                            type="number"
+                            min={0.0001}
+                            step="any"
+                            defaultValue={settings ? parseFloat((1 / settings.coins_to_brl_rate).toFixed(4)) : 0}
+                            onBlur={e => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val) && val > 0) {
+                                    setSettings(s => s ? { ...s, coins_to_brl_rate: Math.round(1 / val) } : s);
+                                } else {
+                                    // revert visual em caso de erro
+                                    e.target.value = settings ? parseFloat((1 / settings.coins_to_brl_rate).toFixed(4)).toString() : '0';
+                                }
+                            }}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-sm font-medium text-blue-700 bg-blue-50/50"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">Ex: 0.01 = 1 centavo, 0.005 = meio centavo</p>
+                    </div>
                     {field('Desconto máximo (%)', 'max_redeem_percent', 'Máx % do pedido pago com moedas (ex: 20)')}
                     {field('Mínimo para resgatar (moedas)', 'min_coins_to_redeem', 'Saldo mínimo exigido para resgatar')}
                 </div>
@@ -718,25 +737,31 @@ function TransactionsTab() {
 function ManualAdjustTab() {
     const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState('');
-    const [amount, setAmount] = useState(0);
+    const [amountStr, setAmountStr] = useState('');
+    const [brlStr, setBrlStr] = useState('');
     const [reason, setReason] = useState('');
     const [saving, setSaving] = useState(false);
+    const [rate, setRate] = useState(100);
 
     useEffect(() => {
         customerService.list().then(data =>
             setCustomers(data.map(c => ({ id: c.id, name: c.name })))
         );
+        getCashbackSettings().then(s => { if (s) setRate(s.coins_to_brl_rate); });
     }, []);
 
     const handleAdjust = async (sign: 1 | -1) => {
+        const finalCoins = parseInt(amountStr);
         if (!selectedCustomer) return toast.error('Selecione um cliente');
-        if (!amount || amount <= 0) return toast.error('Informe uma quantidade válida');
+        if (isNaN(finalCoins) || finalCoins <= 0) return toast.error('Informe uma quantidade válida');
         if (!reason.trim()) return toast.error('Informe o motivo');
+        
         setSaving(true);
         try {
-            await adminAdjustCoins(selectedCustomer, sign * amount, reason);
-            toast.success(`${sign > 0 ? '+' : '-'}${amount} moedas ${sign > 0 ? 'adicionadas' : 'removidas'}!`);
-            setAmount(0);
+            await adminAdjustCoins(selectedCustomer, sign * finalCoins, reason);
+            toast.success(`${sign > 0 ? '+' : '-'}${finalCoins} moedas ${sign > 0 ? 'adicionadas' : 'removidas'}!`);
+            setAmountStr('');
+            setBrlStr('');
             setReason('');
         } catch (e: any) {
             toast.error(e.message);
@@ -759,16 +784,43 @@ function ManualAdjustTab() {
                     {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
             </div>
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Quantidade de Moedas</label>
-                <input
-                    type="number"
-                    min={1}
-                    value={amount}
-                    onChange={e => setAmount(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                />
+            
+            <div className="flex gap-4">
+                <div className="flex-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Moedas Brutas</label>
+                    <input
+                        type="number"
+                        min={1}
+                        value={amountStr}
+                        onChange={e => {
+                            setAmountStr(e.target.value);
+                            const num = parseInt(e.target.value);
+                            if (!isNaN(num)) setBrlStr((num / rate).toFixed(2));
+                            else setBrlStr('');
+                        }}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                    />
+                </div>
+                <div className="flex-center self-end pb-3 text-slate-400 font-medium">OU</div>
+                <div className="flex-1">
+                    <label className="block text-sm font-medium text-green-700 mb-1">Base em Real (R$)</label>
+                    <input
+                        type="number"
+                        min={0.01}
+                        step="any"
+                        placeholder="Ex: 50.00"
+                        value={brlStr}
+                        onChange={e => {
+                            setBrlStr(e.target.value);
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) setAmountStr(Math.round(val * rate).toString());
+                            else setAmountStr('');
+                        }}
+                        className="w-full px-3 py-2 border border-green-200 bg-green-50 text-green-800 rounded-lg text-sm focus:outline-none focus:border-green-500"
+                    />
+                </div>
             </div>
+
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Motivo</label>
                 <input
@@ -782,14 +834,14 @@ function ManualAdjustTab() {
             <div className="flex gap-3">
                 <button
                     onClick={() => handleAdjust(1)}
-                    disabled={saving}
+                    disabled={saving || !amountStr}
                     className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors disabled:opacity-50"
                 >
                     <Plus className="w-4 h-4" /> Adicionar
                 </button>
                 <button
                     onClick={() => handleAdjust(-1)}
-                    disabled={saving}
+                    disabled={saving || !amountStr}
                     className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors disabled:opacity-50"
                 >
                     <Minus className="w-4 h-4" /> Remover

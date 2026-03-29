@@ -164,6 +164,7 @@ export interface OrderFilters {
     start_date?: string;
     end_date?: string;
     search?: string;  // nome ou telefone do cliente
+    customer_id?: string;
 }
 
 // ─── Resultado de pagamento do gateway ──────────────────────────────────────

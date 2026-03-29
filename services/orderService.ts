@@ -324,6 +324,7 @@ export async function getOrders(filters?: OrderFilters): Promise<OrderWithItems[
         .select('*')
         .order('created_at', { ascending: false });
 
+    if (filters?.customer_id) query = query.eq('customer_id', filters.customer_id);
     if (filters?.status) query = query.eq('status', filters.status);
     if (filters?.payment_status) query = query.eq('payment_status', filters.payment_status);
     if (filters?.payment_method) query = query.eq('payment_method', filters.payment_method);

@@ -415,7 +415,7 @@ export default async function handler(req: any, res: any) {
             }
 
             // ── Evento de ESTOQUE (stock_quantity) ──────────────────────────────
-            if (!event.startsWith('stock.')) {
+            if (!event.startsWith('stock.') && !event.startsWith('virtual_stock.')) {
                 return res.status(200).json({ ok: true, ignored: true, reason: 'unhandled_event', event });
             }
 
@@ -423,7 +423,7 @@ export default async function handler(req: any, res: any) {
             // Identifica o produto pelo id (inteiro, conforme documentação)
             const blingProductId: number | undefined = payload?.data?.produto?.id;
             // saldoFisicoTotal = saldo total somando todos os depósitos (campo correto)
-            const saldoFisicoTotal: number | undefined = payload?.data?.saldoFisicoTotal;
+            const saldoFisicoTotal: number | undefined = payload?.data?.saldoFisicoTotal ?? payload?.data?.saldoVirtualTotal;
 
             if (blingProductId === undefined) {
                 return res.status(200).json({ ok: true, ignored: true, reason: 'missing_produto_id' });
