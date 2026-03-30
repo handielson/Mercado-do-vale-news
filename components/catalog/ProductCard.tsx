@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Share2, ShoppingCart } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
@@ -27,6 +27,7 @@ export function ProductCard({
 }: ProductCardProps) {
     const [imageError, setImageError] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+    const [selectedKitQty, setSelectedKitQty] = useState<number>(1);
     const navigate = useNavigate();
 
     // Get customer context for pricing
@@ -35,11 +36,57 @@ export function ProductCard({
     // Calcular preço com desconto usando tipo de cliente efetivo
     const effectivePrice = getEffectivePrice(product, customer);
     const originalPrice = effectivePrice / 100;
-    const discountedPrice = product.discount_percentage
+    const baseDiscountedPrice = product.discount_percentage
         ? originalPrice * (1 - product.discount_percentage / 100)
         : originalPrice;
 
     const hasDiscount = product.discount_percentage && product.discount_percentage > 0;
+
+    // Kit: calcula preço e economia baseado na opção selecionada
+    const hasKits = Array.isArray(product.kits) && product.kits.length > 0;
+    const sortedKits = hasKits
+        ? [...product.kits!].sort((a, b) => a.quantity - b.quantity)
+        : [];
+    const selectedKit = hasKits && selectedKitQty > 1
+        ? sortedKits.find(k => k.quantity === selectedKitQty) ?? null
+        : null;
+    const discountedPrice = selectedKit
+        ? selectedKit.price / 100
+        : baseDiscountedPrice;
+    const kitSavings = selectedKit
+        ? (baseDiscountedPrice * selectedKit.quantity) - (selectedKit.price / 100)
+        : 0;
+
+    // Deriva label singular a partir do nome do kit (ex: "3 meses" → "mês")
+    const deriveSingularUnit = useCallback((name?: string): string => {
+        if (!name) return 'un';
+        const m = name.trim().match(/^\d+\s+(\w+)/i);
+        if (!m) return 'un';
+        const unit = m[1].toLowerCase();
+        const singular: Record<string, string> = {
+            meses: 'mês', mês: 'mês', semanas: 'semana', dias: 'dia',
+            anos: 'ano', unidades: 'un', un: 'un',
+        };
+        return singular[unit] ?? unit;
+    }, []);
+
+    const kitUnitLabel = hasKits && sortedKits[0]?.name
+        ? deriveSingularUnit(sortedKits[0].name)
+        : 'un';
+
+    // Label do botão de carrinho
+    const cartBtnLabel = (() => {
+        if (!selectedKit) return 'Adicionar ao Carrinho';
+        const kitLabel = selectedKit.name || `${selectedKit.quantity} ${kitUnitLabel === 'un' ? 'un' : `${kitUnitLabel}es`}`;
+        return `Adicionar ${kitLabel}`;
+    })();
+
+    // Handler de clique no cart (passa a quantity do kit selecionado)
+    const handleAddToCartWithKit = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onAddToCart?.(product);
+    }, [onAddToCart, product]);
 
     // Imagem com fallback
     const getImageUrl = () => {
@@ -281,17 +328,105 @@ export function ProductCard({
                     <p className="text-sm text-slate-600">{product.brand}</p>
                 </div>
 
+                {/* Seletor de Kits — aparece somente se o produto tem kits configurados */}
+                {hasKits && (
+                    <div className="mb-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Escolha seu plano</p>
+                        <div className="flex gap-1.5">
+                            {/* Opção base: 1 unidade */}
+                            <button
+                                onClick={e => { e.stopPropagation(); setSelectedKitQty(1); }}
+                                className={`flex-1 relative flex flex-col items-center rounded-xl border py-2 px-1 transition-all ${
+                                    selectedKitQty === 1
+                                        ? 'border-blue-500 bg-blue-50 shadow-sm shadow-blue-100'
+                                        : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
+                                }`}
+                            >
+                                <span className={`text-xs font-bold leading-tight ${
+                                    selectedKitQty === 1 ? 'text-blue-700' : 'text-slate-700'
+                                }`}>
+                                    1 {kitUnitLabel}
+                                </span>
+                                <span className={`text-[9px] mt-0.5 ${
+                                    selectedKitQty === 1 ? 'text-blue-500' : 'text-slate-400'
+                                }`}>
+                                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(baseDiscountedPrice)}
+                                </span>
+                            </button>
+
+                            {/* Opções de kit */}
+                            {sortedKits.map((kit, idx) => {
+                                const isSelected = selectedKitQty === kit.quantity;
+                                const isPopular = idx === Math.floor(sortedKits.length / 2) - (sortedKits.length % 2 === 0 ? 0 : 0) && sortedKits.length > 1;
+                                const isBestPrice = idx === sortedKits.length - 1 && sortedKits.length > 1;
+                                const kitUnitPrice = (kit.price / 100) / kit.quantity;
+                                const kitName = kit.name || `${kit.quantity} ${kitUnitLabel}${
+                                    kit.quantity > 1 && !['mês','dia','ano','semana'].includes(kitUnitLabel) ? 's' : ''
+                                }`;
+                                return (
+                                    <button
+                                        key={kit.quantity}
+                                        onClick={e => { e.stopPropagation(); setSelectedKitQty(kit.quantity); }}
+                                        className={`flex-1 relative flex flex-col items-center rounded-xl border py-2 px-1 transition-all ${
+                                            isSelected && !isBestPrice
+                                                ? 'border-blue-500 bg-blue-50 shadow-sm shadow-blue-100'
+                                                : isSelected && isBestPrice
+                                                ? 'border-emerald-500 bg-emerald-50 shadow-sm shadow-emerald-100'
+                                                : isBestPrice
+                                                ? 'border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50/50'
+                                                : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
+                                        }`}
+                                    >
+                                        {/* Super badge */}
+                                        {isPopular && !isBestPrice && (
+                                            <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                                Popular
+                                            </span>
+                                        )}
+                                        {isBestPrice && (
+                                            <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                                Melhor preço
+                                            </span>
+                                        )}
+                                        <span className={`text-xs font-bold leading-tight ${
+                                            isSelected && isBestPrice ? 'text-emerald-700'
+                                            : isSelected ? 'text-blue-700'
+                                            : 'text-slate-700'
+                                        }`}>
+                                            {kitName}
+                                        </span>
+                                        <span className={`text-[9px] mt-0.5 ${
+                                            isSelected && isBestPrice ? 'text-emerald-500'
+                                            : isSelected ? 'text-blue-500'
+                                            : 'text-slate-400'
+                                        }`}>
+                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(kitUnitPrice)}/{kitUnitLabel}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* Preço */}
                 <div className="mb-3">
-                    {hasDiscount && (
+                    {hasDiscount && !selectedKit && (
                         <p className="text-sm text-slate-500 line-through mb-1">
                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(originalPrice)}
                         </p>
                     )}
-                    <p className="text-2xl font-bold text-blue-600">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(discountedPrice)}
-                    </p>
-                    {hasDiscount && (
+                    <div className="flex items-end gap-2">
+                        <p className="text-2xl font-bold text-blue-600">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(discountedPrice)}
+                        </p>
+                        {selectedKit && kitSavings > 0 && (
+                            <p className="text-xs text-emerald-600 font-semibold mb-0.5">
+                                Economize {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(kitSavings)}
+                            </p>
+                        )}
+                    </div>
+                    {hasDiscount && !selectedKit && (
                         <p className="text-xs text-green-600 font-semibold mt-1">
                             Economize {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(originalPrice - discountedPrice)}
                         </p>
@@ -301,15 +436,19 @@ export function ProductCard({
                 {/* Botão de ação */}
                 {onAddToCart && (
                     <button
-                        onClick={handleAddToCart}
+                        onClick={handleAddToCartWithKit}
                         disabled={product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0}
-                        className={`w-full py-2.5 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0
-                            ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                            : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md active:scale-95'
-                            }`}
+                        className={`w-full py-2.5 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                            product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0
+                                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md active:scale-95'
+                        }`}
                     >
                         <ShoppingCart className="w-4 h-4" />
-                        {product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0 ? 'Esgotado' : 'Adicionar ao Carrinho'}
+                        {product.track_inventory !== false && product.stock_quantity !== undefined && product.stock_quantity <= 0
+                            ? 'Esgotado'
+                            : cartBtnLabel
+                        }
                     </button>
                 )}
             </div>
