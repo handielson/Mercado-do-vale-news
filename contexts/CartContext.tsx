@@ -7,6 +7,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { toast } from 'sonner';
 import type { CatalogProduct } from '@/types/catalog';
+import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { getEffectivePrice } from '../hooks/useEffectiveCustomerType';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +73,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const { customer } = useSupabaseAuth();
+
     const calculateUnitPrice = (product: CatalogProduct, quantity: number): number => {
         // 1. Verifica Kits / Preço por Volume
         if (product.kits && product.kits.length > 0) {
@@ -83,7 +87,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             }
         }
 
-        // 2. Verifica Promoção
+        // 2. Verifica Promoção de Data
         const now = new Date();
         const isPromoActive =
             product.price_promo &&
@@ -93,8 +97,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
         if (isPromoActive) return product.price_promo as number;
 
-        // 3. Preço Varejo / Padrão (já trazido com regras do usuario pelo Backend/Hooks)
-        return product.price_retail;
+        // 3. Preço Fixo (Baseado no tipo de cliente - retornado em centavos)
+        const effectivePriceCents = getEffectivePrice(product, customer);
+
+        // Se houver porcentagem de desconto (usado principalmente em combos)
+        if (product.discount_percentage) {
+             const discounted = effectivePriceCents * (1 - product.discount_percentage / 100);
+             return Math.round(discounted);
+        }
+
+        return effectivePriceCents;
     };
 
     const addItem = (product: CatalogProduct, quantity = 1) => {

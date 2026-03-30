@@ -136,6 +136,22 @@ export const PublicProductPage: React.FC = () => {
                 data = supaResult.data;
                 error = supaResult.error;
 
+                // Tenta fallback na VPS caso não ache no Supabase (ex: combos criados recentemente)
+                if (!data && slug) {
+                    try {
+                        const vpsFallback = isUuid 
+                            ? await vpsApiService.getProductById(slug, true)
+                            : await vpsApiService.getProductBySlug(slug);
+
+                        if (vpsFallback && !vpsFallback.error && vpsFallback.status !== 'inactive') {
+                            data = vpsFallback;
+                            error = null;
+                        }
+                    } catch (err) {
+                        console.warn('[PublicProductPage] VPS Fallback failed:', err);
+                    }
+                }
+
                 // Após termos os dados base relacionais, buscamos estoques e preços AO VIVO da VPS
                 if (data && data.id) {
                     try {
@@ -155,6 +171,10 @@ export const PublicProductPage: React.FC = () => {
                                 updated_at: vpsRichData.updated_at || data.updated_at,
                                 // model_id: protege para não perder o vínculo com o modelo (que contém brand, specs etc.)
                                 model_id: vpsRichData.model_id || data.model_id,
+                                // Protege textos ricos do Supabase de serem apagados por retornos vazios da VPS
+                                description: data.description || vpsRichData.description,
+                                technical_specifications: data.technical_specifications || vpsRichData.technical_specifications,
+                                specs: data.specs || vpsRichData.specs,
                             };
                         }
                     } catch (e) {
@@ -262,7 +282,11 @@ export const PublicProductPage: React.FC = () => {
 
                 setProduct(formattedProduct as unknown as CatalogProduct);
 
-                if (data.images && data.images.length > 0) {
+                setProduct(formattedProduct as unknown as CatalogProduct);
+
+                if (data.is_combo && data.tags?.includes('mosaic_combo') && data.images && data.images.length > 1) {
+                    setSelectedImage('MOSAIC');
+                } else if (data.images && data.images.length > 0) {
                     setSelectedImage(data.images[0]);
                 }
 
@@ -755,7 +779,15 @@ export const PublicProductPage: React.FC = () => {
                                         )}
                                     </div>
                                 )
-                            ) : selectedImage && selectedImage !== 'VIDEO' ? (
+                            ) : selectedImage === 'MOSAIC' && product.images ? (
+                                <div className={`w-full h-full grid gap-2 p-2 ${product.images.length === 2 ? 'grid-cols-2' : product.images.length === 3 ? 'grid-cols-2 grid-rows-2' : 'grid-cols-2 grid-rows-2'}`}>
+                                    {product.images.slice(0, 4).map((img, i) => (
+                                        <div key={i} className={`relative bg-white rounded-lg border border-slate-100 flex items-center justify-center p-2 overflow-hidden shadow-sm ${product.images!.length === 3 && i === 0 ? 'row-span-2' : ''}`}>
+                                            <img src={getCacheBustedUrl(img, product.updated_at || product.created_at)} alt={`Combo Item ${i+1}`} className="w-full h-full object-contain hover:scale-110 transition-transform duration-500" />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : selectedImage && selectedImage !== 'VIDEO' && selectedImage !== 'MOSAIC' ? (
                                 <img
                                     src={getCacheBustedUrl(selectedImage, product.updated_at || product.created_at)}
                                     alt={product.meta_title || toTitleCase(product.name)}
@@ -765,7 +797,7 @@ export const PublicProductPage: React.FC = () => {
                                 <div className="text-slate-400 font-medium">Sem imagem</div>
                             )}
                         </div>
-                        {((product.images && product.images.length > 1) || effectiveVideoUrl) && (
+                        {((product.images && product.images.length > 1) || effectiveVideoUrl || (product.is_combo && product.tags?.includes('mosaic_combo'))) && (
                             <div className="flex gap-3 overflow-x-auto pb-2">
                                 {effectiveVideoUrl && (
                                     <button
@@ -775,6 +807,17 @@ export const PublicProductPage: React.FC = () => {
                                         <div className="text-blue-600 flex flex-col items-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                                             <span className="text-[10px] font-bold mt-1 tracking-wider uppercase">Vídeo</span>
+                                        </div>
+                                    </button>
+                                )}
+                                {product.is_combo && product.tags?.includes('mosaic_combo') && product.images && product.images.length > 1 && (
+                                    <button
+                                        onClick={() => setSelectedImage('MOSAIC')}
+                                        className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden flex items-center justify-center ${selectedImage === 'MOSAIC' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                                    >
+                                        <div className="text-blue-600 flex flex-col items-center">
+                                            <Layers size={24} />
+                                            <span className="text-[10px] font-bold mt-1 tracking-wider uppercase">Kit</span>
                                         </div>
                                     </button>
                                 )}
@@ -801,13 +844,17 @@ export const PublicProductPage: React.FC = () => {
                                 <span>
                                     SKU: <span className="font-mono">{product.sku || '—'}</span>
                                 </span>
-                                <span className="text-slate-300">|</span>
-                                <span>
-                                    Marca:{' '}
-                                    <span>
-                                        {typeof product.brand === 'string' && product.brand ? product.brand : '—'}
-                                    </span>
-                                </span>
+                                {!(product as any).is_combo && (
+                                    <>
+                                        <span className="text-slate-300">|</span>
+                                        <span>
+                                            Marca:{' '}
+                                            <span>
+                                                {typeof product.brand === 'string' && product.brand ? product.brand : '—'}
+                                            </span>
+                                        </span>
+                                    </>
+                                )}
                                 <span className="text-slate-300">|</span>
                                 <div className="flex items-center gap-1.5 border-r border-slate-300 pr-4 mr-0" title="Compartilhar">
                                     <span className="text-sm font-medium">Compartilhar:</span>
@@ -1028,21 +1075,81 @@ export const PublicProductPage: React.FC = () => {
                                 )}
 
                                 {Boolean((product as unknown as any)?.is_combo) && comboChildren && comboChildren.length > 0 && (
-                                    <div className="mt-4 pt-4 border-t border-slate-100">
-                                        <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                                            <Package size={16} className="text-teal-600" />
-                                            O que vem neste Kit:
+                                    <div className="mt-8 pt-6 border-t border-slate-100">
+                                        <h4 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
+                                            <Package size={20} className="text-blue-600" />
+                                            O que vem neste Combo:
                                         </h4>
-                                        <div className="space-y-2">
-                                            {comboChildren.map((item, idx) => (
-                                                <div key={idx} className="flex items-center justify-between text-sm bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-teal-700 w-6 text-center">{item.quantity}x</span>
-                                                        <span className="text-slate-700 font-medium">{item.name}</span>
+                                        <div className="space-y-3">
+                                            {comboChildren.map((item, idx) => {
+                                                const itemPrice = typeof item.promotional_price === 'number' && item.promotional_price > 0 
+                                                    ? item.promotional_price 
+                                                    : (item.price || item.price_retail || 0);
+                                                const priceReais = (itemPrice / 100).toFixed(2).replace('.', ',');
+                                                
+                                                // Extract brand dynamically if string exists
+                                                const brandName = typeof item.brand === 'string' ? item.brand : item.brand?.name;
+                                                const displayName = brandName ? `${item.name} - ${brandName}` : item.name;
+
+                                                return (
+                                                <div key={idx} className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                                                    <div className="flex items-start gap-3 sm:gap-4">
+                                                        <div className="bg-slate-100 text-slate-700 font-black text-sm px-3 py-1.5 rounded-lg border border-slate-200 mt-0.5">
+                                                            {item.quantity}x
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-slate-800 font-medium leading-snug">{displayName}</span>
+                                                            {item.sku && (
+                                                                <span className="text-slate-400 text-xs mt-1">
+                                                                    SKU: <span className="font-mono bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-500">{item.sku}</span>
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
+                                                    {itemPrice > 0 && (
+                                                        <div className="text-right pl-4 flex-shrink-0">
+                                                            <span className="text-slate-400 text-[11px] uppercase font-bold tracking-wider block mb-0.5">Separado</span>
+                                                            <span className="text-slate-700 font-bold text-sm">R$ {priceReais}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
+
+                                        {/* Total e Desconto do Combo */}
+                                        {(() => {
+                                            const indivTotalCents = comboChildren.reduce((acc, item) => {
+                                                const p = typeof item.promotional_price === 'number' && item.promotional_price > 0 
+                                                    ? item.promotional_price 
+                                                    : (item.price || item.price_retail || 0);
+                                                return acc + (p * (item.quantity || 1));
+                                            }, 0);
+                                            const indivTotalReais = indivTotalCents / 100;
+                                            const comboPriceReais = baseDiscountedPrice;
+                                            const discountReais = indivTotalReais - comboPriceReais;
+
+                                            if (discountReais > 0 && indivTotalReais > 0) {
+                                                return (
+                                                    <div className="mt-5 p-5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-100/50 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                                                        <div>
+                                                            <p className="text-sm text-emerald-800/80 font-medium flex items-center gap-2">
+                                                                Comprando separados: 
+                                                                <span className="line-through decoration-emerald-800/30">R$ {indivTotalReais.toFixed(2).replace('.', ',')}</span>
+                                                            </p>
+                                                            <p className="text-base font-extrabold text-emerald-950 mt-1">
+                                                                Saindo por: R$ {comboPriceReais.toFixed(2).replace('.', ',')}
+                                                            </p>
+                                                        </div>
+                                                        <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-600/20 flex flex-col items-center leading-tight min-w-[140px]">
+                                                            <span className="text-emerald-100 text-[10px] uppercase tracking-wider">Você Economiza</span>
+                                                            <span className="text-lg">R$ {discountReais.toFixed(2).replace('.', ',')}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
                                     </div>
                                 )}
 
@@ -1121,7 +1228,7 @@ export const PublicProductPage: React.FC = () => {
                 </div>
 
                 {/* ── Seção full-width: Descrição + Especificações ── */}
-                {(product.description || (product.specs && Object.keys(product.specs).length > 0)) && (
+                {(product.description || (product as any).technical_specifications || (product.specs && Object.keys(product.specs).length > 0)) && (
                     <div className="mt-10 space-y-8">
 
                         {/* Descrição Longa */}
@@ -1133,6 +1240,19 @@ export const PublicProductPage: React.FC = () => {
                                 <div
                                     className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed"
                                     dangerouslySetInnerHTML={{ __html: product.description }}
+                                />
+                            </div>
+                        )}
+
+                        {/* Especificações Técnicas Longas */}
+                        {(product as any).technical_specifications && (
+                            <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+                                <h3 className="text-xl font-bold text-slate-900 mb-5 pb-3 border-b border-slate-100">
+                                    Ficha Técnica
+                                </h3>
+                                <div
+                                    className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed"
+                                    dangerouslySetInnerHTML={{ __html: (product as any).technical_specifications }}
                                 />
                             </div>
                         )}

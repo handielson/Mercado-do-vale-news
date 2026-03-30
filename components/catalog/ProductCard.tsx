@@ -138,15 +138,25 @@ export function ProductCard({
                 <div className="flex gap-4">
                     {/* Imagem */}
                     <div
-                        className="relative w-32 h-32 flex-shrink-0 cursor-pointer"
+                        className="relative w-32 h-32 flex-shrink-0 cursor-pointer overflow-hidden bg-white"
                         onClick={handleTitleClick}
                     >
-                        <img
-                            src={imageUrl}
-                            alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
-                            onError={() => setImageError(true)}
-                            className="w-full h-full object-cover rounded-lg"
-                        />
+                        {product.is_combo && product.tags?.includes('mosaic_combo') && Array.isArray(product.images) && product.images.length > 1 ? (
+                            <div className={`w-full h-full grid gap-0.5 ${product.images.length === 2 ? 'grid-cols-2' : 'grid-cols-2 grid-rows-2'}`}>
+                                {product.images.slice(0, 4).map((img, i) => (
+                                    <div key={i} className={`relative bg-white overflow-hidden ${product.images!.length === 3 && i === 0 ? 'row-span-2' : ''}`}>
+                                        <img src={getCacheBustedUrl(img, product.updated || product.created)} className="w-full h-full object-contain p-0.5" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <img
+                                src={imageUrl}
+                                alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
+                                onError={() => setImageError(true)}
+                                className="w-full h-full object-cover rounded-lg"
+                            />
+                        )}
                         {/* Badges */}
                         <div className="absolute top-2 left-2 flex flex-col gap-1">
                             {product.featured && (
@@ -237,13 +247,23 @@ export function ProductCard({
                 className="relative aspect-[4/3] overflow-hidden bg-slate-100 cursor-pointer"
                 onClick={handleTitleClick}
             >
-                <img
-                    src={imageUrl}
-                    alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
-                    onError={() => setImageError(true)}
-                    className={`w-full h-full object-cover transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
-                        }`}
-                />
+                {product.is_combo && product.tags?.includes('mosaic_combo') && Array.isArray(product.images) && product.images.length > 1 ? (
+                    <div className={`w-full h-full grid gap-0.5 bg-white ${product.images.length === 2 ? 'grid-cols-2' : 'grid-cols-2 grid-rows-2'}`}>
+                        {product.images.slice(0, 4).map((img, i) => (
+                            <div key={i} className={`relative bg-white overflow-hidden border border-slate-50 ${product.images!.length === 3 && i === 0 ? 'row-span-2' : ''}`}>
+                                <img src={getCacheBustedUrl(img, product.updated || product.created)} className={`w-full h-full object-contain p-1 transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'}`} />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <img
+                        src={imageUrl}
+                        alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
+                        onError={() => setImageError(true)}
+                        className={`w-full h-full object-cover transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
+                            }`}
+                    />
+                )}
 
                 {/* Badges */}
                 <div className="absolute top-3 left-3 flex flex-col gap-2">
