@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check, GitCompare, ShoppingBag } from 'lucide-react';
 
@@ -57,6 +57,9 @@ export function ModernProductCard({
     const [showQuoteModal, setShowQuoteModal] = useState(false);
     const [installment10x, setInstallment10x] = useState<string>('');
     const [installment12x, setInstallment12x] = useState<string>('');
+    const [selectedKitQty, setSelectedKitQty] = useState<number>(1);
+    const [variantsExpanded, setVariantsExpanded] = useState(false);
+    const [colorsExpandedVariants, setColorsExpandedVariants] = useState<Set<number>>(new Set());
     const navigate = useNavigate();
     // Selected variant state (defaults to first variant)
     const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
@@ -157,7 +160,7 @@ export function ModernProductCard({
             return;
         }
 
-        addToCartContext(currentProduct);
+        addToCartContext(currentProduct, selectedKitQty);
         setAddedToCart(true);
         setTimeout(() => setAddedToCart(false), 2000);
     };
@@ -365,7 +368,55 @@ export function ModernProductCard({
         ? selectedVariant.products[0]
         : currentProduct;
 
-    const effectivePriceReais = (getEffectivePrice(productForDisplay, customer) || 0) / 100;
+    // --- LOGICA DOS KITS ---
+    const originalPriceCents = getEffectivePrice(productForDisplay, customer) || product.price_retail;
+    const baseDiscountedPriceCents = productForDisplay.discount_percentage
+        ? originalPriceCents * (1 - productForDisplay.discount_percentage / 100)
+        : originalPriceCents;
+
+
+    const hasKits = Array.isArray(productForDisplay.kits) && productForDisplay.kits.length > 0;
+    const sortedKits = hasKits
+        ? [...(productForDisplay.kits as import('@/types/catalog').ProductKit[])].sort((a, b) => a.quantity - b.quantity)
+        : [];
+        
+    const selectedKit = hasKits && selectedKitQty > 1
+        ? sortedKits.find(k => k.quantity === selectedKitQty) ?? null
+        : null;
+        
+    const discountedPriceCents = selectedKit
+        ? selectedKit.price
+        : baseDiscountedPriceCents;
+        
+    const kitSavingsCents = selectedKit
+        ? (baseDiscountedPriceCents * selectedKit.quantity) - selectedKit.price
+        : 0;
+
+    const deriveSingularUnit = useCallback((name?: string): string => {
+        if (!name) return 'un';
+        const m = name.trim().match(/^\d+\s+(\w+)/i);
+        if (!m) return 'un';
+        const unit = m[1].toLowerCase();
+        const singular: Record<string, string> = {
+            meses: 'mês', mês: 'mês', semanas: 'semana', dias: 'dia',
+            anos: 'ano', unidades: 'un', un: 'un',
+        };
+        return singular[unit] ?? unit;
+    }, []);
+
+    const kitUnitLabel = hasKits && sortedKits[0]?.name
+        ? deriveSingularUnit(sortedKits[0].name)
+        : 'un';
+
+    // Label do botão de carrinho
+    const cartBtnLabel = (() => {
+        if (!hasKits) return isAdmin ? 'Orçar' : 'Comprar';
+        if (!selectedKit) return isAdmin ? 'Orçar 1 ' + kitUnitLabel : 'Adicionar 1 ' + kitUnitLabel;
+        const kitLabel = selectedKit.name || `${selectedKit.quantity} ${kitUnitLabel === 'un' ? 'un' : `${kitUnitLabel}es`}`;
+        return isAdmin ? `Orçar ${kitLabel}` : `Adicionar ${kitLabel}`;
+    })();
+
+    const effectivePriceReais = discountedPriceCents / 100;
 
     return (
         <>
@@ -392,8 +443,8 @@ export function ModernProductCard({
                         {productForDisplay.brand && (
                             <p className="text-[10px] text-slate-400 mt-0.5">{productForDisplay.brand}</p>
                         )}
-                        <p className="text-xs font-bold text-slate-800 mt-1">
-                            {formatPrice(getEffectivePrice(productForDisplay, customer))}
+                        <p className={`text-xs font-bold mt-1 ${getActivePromoPrice(product) !== null || selectedKit ? 'text-red-500' : 'text-slate-800'}`}>
+                            {formatPrice(discountedPriceCents)}
                         </p>
                     </div>
                     {/* Botão */}
@@ -571,121 +622,169 @@ export function ModernProductCard({
                     {/* Variant Selector (RAM/Storage/Colors) - NOVO */}
                     {productGroup && productGroup.variants && (productGroup.variants.length > 1 || (productGroup.variants[0] && productGroup.variants[0].colors.length > 1)) ? (
                         <div className="space-y-2">
-                            <div className="space-y-1.5">
-                                {productGroup.variants.map((variant, idx) => {
-                                    const installment = variantInstallments.get(idx);
-
-                                    // Check if THIS specific variant (exact RAM + Storage) is in cart
-                                    // AND the current color matches the cart item's color.
-                                    const isSelectedVariant = selectedVariantIndex === idx;
-                                    const variantInCart = isAdmin && isSelectedVariant && currentColorIndex !== -1 && cartItems.some(item => {
-                                        const colorName = variant.colors[currentColorIndex]?.name;
-                                        // A variant item is in the cart if its ID matches any product in this variant group
-                                        // that has the currently selected color.
-                                        return variant.products.some(vp => 
-                                            vp.id === item.product.id && 
-                                            vp.specs?.color === colorName
-                                        );
-                                    });
-
-                                    return (
-                                        <div
-                                            key={idx}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setSelectedVariantIndex(idx);
-                                                // DON'T reset color if clicking same variant!
-                                                if (selectedVariantIndex !== idx) {
-                                                    const newVariant = productGroup.variants[idx];
-                                                    // Auto-select if the new variant only has 1 color
-                                                    setCurrentColorIndex(newVariant && newVariant.colors.length === 1 ? 0 : -1);
-                                                }
-                                            }}
-                                            className={`w-full p-2 sm:p-2.5 rounded-xl border transition-all text-left relative cursor-pointer
-                                                ${isSelectedVariant
-                                                    ? variantInCart
-                                                        ? 'border-green-300 bg-green-50/30'
-                                                        : 'border-blue-300 bg-blue-50/20 shadow-sm ring-1 ring-blue-300/50'
-                                                    : variantInCart
-                                                        ? 'border-green-200 bg-green-50/20'
-                                                        : 'border-slate-100 bg-slate-50/50 hover:border-slate-300'
-                                                }`}
-                                        >
-                                            {/* Cart indicator badge */}
-                                            {variantInCart && (
-                                                <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
-                                                    <Check className="w-2.5 h-2.5 text-white" />
-                                                </div>
-                                            )}
-
-                                            <div className="flex justify-between items-start mb-0.5">
-                                                <div className="flex flex-col">
-                                                    <span className={`font-medium text-[10px] sm:text-xs ${variantInCart ? 'text-green-700' : 'text-slate-700'}`}>
-                                                        {variant.ram !== 'no-ram' || variant.storage !== 'no-storage'
-                                                            ? `${variant.ram}/${variant.storage}`
-                                                            : variant.colors.length > 1
-                                                                ? `${variant.colors.length} Cores`
-                                                                : variant.colors[0]?.name || 'Padrão'
-                                                        }
-                                                    </span>
-                                                    {/* Mostrar a cor selecionada em texto se for a variante ativa */}
-                                                    {isSelectedVariant && variant.colors.length > 0 && (
-                                                        <span className={`text-[9px] sm:text-[10px] mt-0.5 ${currentColorIndex !== -1 ? 'text-blue-500' : 'text-slate-400 animate-pulse'}`}>
-                                                            {currentColorIndex !== -1 ? variant.colors[currentColorIndex]?.name : 'Escolha a cor'}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="text-right">
-                                                    {/* Preço riscado se houver promo ativa */}
-                                                    {variant.products[0] && getActivePromoPrice(variant.products[0]) !== null && (
-                                                        <div className="text-[9px] sm:text-[10px] text-slate-400 line-through">
-                                                            {formatPrice(variant.products[0].price_retail)}
-                                                        </div>
-                                                    )}
-                                                    <div className={`text-xs sm:text-sm font-semibold tracking-tight ${variantInCart ? 'text-green-600' : getActivePromoPrice(variant.products[0] ?? product) !== null ? 'text-red-500' : 'text-slate-900'}`}>
-                                                        {formatPrice(variant.products[0] ? getEffectivePrice(variant.products[0], customer) : variant.priceRange.min)}
-                                                    </div>
-                                                    {installment && effectiveCustomerType !== 'wholesale' && (
-                                                        <div className="text-[9px] sm:text-[10px] text-slate-500">
-                                                            12x de {installment}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            {/* Color indicators & selectors */}
-                                            <div className={`flex flex-wrap gap-1 mt-1 pt-1.5 border-t transition-opacity duration-200 
-                                                ${isSelectedVariant ? 'border-slate-100 opacity-100' : 'border-transparent opacity-50'}
-                                            `}>
-                                                {variant.colors.map((color, colorIdx) => {
-                                                    const isSelectedColor = isSelectedVariant && currentColorIndex === colorIdx;
-                                                    return (
-                                                        <div
-                                                            key={color.name}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setSelectedVariantIndex(idx);
-                                                                setUserInteractedWithColor(true);
-                                                                setCurrentColorIndex(colorIdx);
-                                                            }}
-                                                            className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-all cursor-pointer flex items-center justify-center
-                                                                ${isSelectedColor
-                                                                    ? 'border-blue-400 scale-110 shadow-sm ring-2 ring-blue-100 z-10'
-                                                                    : 'border-slate-200 hover:scale-110'}
-                                                            `}
-                                                            style={{ backgroundColor: color.hex }}
-                                                            title={color.name}
-                                                        >
-                                                            {isSelectedColor && (
-                                                                <Check className={`w-2.5 h-2.5 ${isDarkColor(color.hex) ? 'text-white' : 'text-slate-800'}`} />
-                                                            )}
-                                                        </div>
+                            {/* Limit variants to 2 by default, expand on click */}
+                            {(() => {
+                                const VARIANTS_LIMIT = 2;
+                                const allVariants = productGroup.variants;
+                                const hasMoreVariants = allVariants.length > VARIANTS_LIMIT;
+                                const visibleVariants = variantsExpanded ? allVariants : allVariants.slice(0, VARIANTS_LIMIT);
+                                return (
+                                    <>
+                                        <div className="space-y-1.5">
+                                            {visibleVariants.map((variant, idx) => {
+                                                const installment = variantInstallments.get(idx);
+                                                const isSelectedVariant = selectedVariantIndex === idx;
+                                                const variantInCart = isAdmin && isSelectedVariant && currentColorIndex !== -1 && cartItems.some(item => {
+                                                    const colorName = variant.colors[currentColorIndex]?.name;
+                                                    return variant.products.some(vp =>
+                                                        vp.id === item.product.id &&
+                                                        vp.specs?.color === colorName
                                                     );
-                                                })}
-                                            </div>
+                                                });
+
+                                                return (
+                                                    <div
+                                                        key={idx}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedVariantIndex(idx);
+                                                            if (selectedVariantIndex !== idx) {
+                                                                const newVariant = productGroup.variants[idx];
+                                                                setCurrentColorIndex(newVariant && newVariant.colors.length === 1 ? 0 : -1);
+                                                            }
+                                                        }}
+                                                        className={`w-full p-2 sm:p-2.5 rounded-xl border transition-all text-left relative cursor-pointer
+                                                            ${isSelectedVariant
+                                                                ? variantInCart
+                                                                    ? 'border-green-300 bg-green-50/30'
+                                                                    : 'border-blue-300 bg-blue-50/20 shadow-sm ring-1 ring-blue-300/50'
+                                                                : variantInCart
+                                                                    ? 'border-green-200 bg-green-50/20'
+                                                                    : 'border-slate-100 bg-slate-50/50 hover:border-slate-300'
+                                                            }`}
+                                                    >
+                                                        {variantInCart && (
+                                                            <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center shadow-sm">
+                                                                <Check className="w-2.5 h-2.5 text-white" />
+                                                            </div>
+                                                        )}
+                                                        <div className="flex justify-between items-start mb-0.5">
+                                                            <div className="flex flex-col">
+                                                                <span className={`font-medium text-[10px] sm:text-xs ${variantInCart ? 'text-green-700' : 'text-slate-700'}`}>
+                                                                    {variant.ram !== 'no-ram' || variant.storage !== 'no-storage'
+                                                                        ? `${variant.ram}/${variant.storage}`
+                                                                        : variant.colors.length > 1
+                                                                            ? `${variant.colors.length} Cores`
+                                                                            : variant.colors[0]?.name || 'Padrão'
+                                                                    }
+                                                                </span>
+                                                                {isSelectedVariant && variant.colors.length > 0 && (
+                                                                    <span className={`text-[9px] sm:text-[10px] mt-0.5 ${currentColorIndex !== -1 ? 'text-blue-500' : 'text-slate-400 animate-pulse'}`}>
+                                                                        {currentColorIndex !== -1 ? variant.colors[currentColorIndex]?.name : 'Escolha a cor'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-right">
+                                                                {variant.products[0] && getActivePromoPrice(variant.products[0]) !== null && (
+                                                                    <div className="text-[9px] sm:text-[10px] text-slate-400 line-through">
+                                                                        {formatPrice(variant.products[0].price_retail)}
+                                                                    </div>
+                                                                )}
+                                                                <div className={`text-xs sm:text-sm font-semibold tracking-tight ${variantInCart ? 'text-green-600' : getActivePromoPrice(variant.products[0] ?? product) !== null ? 'text-red-500' : 'text-slate-900'}`}>
+                                                                    {formatPrice(variant.products[0] ? getEffectivePrice(variant.products[0], customer) : variant.priceRange.min)}
+                                                                </div>
+                                                                {installment && effectiveCustomerType !== 'wholesale' && (
+                                                                    <div className="text-[9px] sm:text-[10px] text-slate-500">
+                                                                        12x de {installment}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {/* Color chips — alphabetical, limited to 3, expandable */}
+                                                        {(() => {
+                                                            const COLORS_LIMIT = 3;
+                                                            // Sort alphabetically and preserve original index for state
+                                                            const sortedColors = [...variant.colors]
+                                                                .map((c, origIdx) => ({ ...c, origIdx }))
+                                                                .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+                                                            const isColorsExpanded = colorsExpandedVariants.has(idx);
+                                                            const hasMoreColors = sortedColors.length > COLORS_LIMIT;
+                                                            const visibleColors = isColorsExpanded ? sortedColors : sortedColors.slice(0, COLORS_LIMIT);
+                                                            const toggleColors = (e: React.MouseEvent) => {
+                                                                e.stopPropagation();
+                                                                setColorsExpandedVariants(prev => {
+                                                                    const next = new Set(prev);
+                                                                    if (next.has(idx)) next.delete(idx); else next.add(idx);
+                                                                    return next;
+                                                                });
+                                                            };
+                                                            return (
+                                                                <div className={`flex flex-wrap gap-1 mt-1.5 pt-1.5 border-t transition-opacity duration-200
+                                                                    ${isSelectedVariant ? 'border-slate-100 opacity-100' : 'border-transparent opacity-50'}
+                                                                `}>
+                                                                    {visibleColors.map(color => {
+                                                                        const isSelectedColor = isSelectedVariant && currentColorIndex === color.origIdx;
+                                                                        return (
+                                                                            <button
+                                                                                key={color.name}
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setSelectedVariantIndex(idx);
+                                                                                    setUserInteractedWithColor(true);
+                                                                                    setCurrentColorIndex(color.origIdx);
+                                                                                }}
+                                                                                className={`px-2 py-0.5 rounded-full border text-[9px] sm:text-[10px] font-medium transition-all cursor-pointer
+                                                                                    ${isSelectedColor
+                                                                                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                                                                                        : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50'}
+                                                                                `}
+                                                                            >
+                                                                                {color.name}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                    {hasMoreColors && (
+                                                                        <button
+                                                                            onClick={toggleColors}
+                                                                            className="px-2 py-0.5 rounded-full border border-dashed border-blue-300 text-[9px] sm:text-[10px] font-medium text-blue-500 hover:bg-blue-50 transition-all flex items-center gap-0.5"
+                                                                        >
+                                                                            {isColorsExpanded
+                                                                                ? 'Ver menos'
+                                                                                : `+${sortedColors.length - COLORS_LIMIT} opções`}
+                                                                            <ChevronRight className={`w-2.5 h-2.5 transition-transform duration-150 ${isColorsExpanded ? 'rotate-90' : '-rotate-90'}`} />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                        {/* Selected color label */}
+                                                        {isSelectedVariant && currentColorIndex !== -1 && variant.colors[currentColorIndex] && (
+                                                            <p className="text-[9px] text-blue-500 mt-1">
+                                                                Cor: <span className="font-semibold">{variant.colors[currentColorIndex].name}</span>
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                    );
-                                })}
-                            </div>
+
+                                        {/* Expand / Collapse button */}
+                                        {hasMoreVariants && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setVariantsExpanded(v => !v); }}
+                                                className="w-full flex items-center justify-center gap-1 py-1.5 px-2 rounded-xl border border-dashed border-slate-200 text-[10px] sm:text-[11px] font-medium text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50 transition-all"
+                                            >
+                                                <ChevronRight
+                                                    className={`w-3 h-3 transition-transform duration-200 ${variantsExpanded ? 'rotate-90' : '-rotate-90'}`}
+                                                />
+                                                {variantsExpanded
+                                                    ? 'Ver menos'
+                                                    : `+${allVariants.length - VARIANTS_LIMIT} opções`}
+                                            </button>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </div>
                     ) : (
                         // Fallback: Show individual product specs when no productGroup
@@ -705,14 +804,22 @@ export function ModernProductCard({
                                         </span>
                                     )}
                                     <div className="text-right">
-                                        {/* Preço riscado se promo ativa (fallback individual) */}
-                                        {getActivePromoPrice(product) !== null && (
-                                            <div className="text-[9px] sm:text-[10px] text-slate-400 line-through">
-                                                {formatPrice(product.price_retail)}
+                                        {/* Preço riscado se promo ativa OR se tem kit selecionado (fallback individual) */}
+                                        {(getActivePromoPrice(product) !== null || selectedKit) && (
+                                            <div className="text-[9px] sm:text-[10px] text-slate-400 font-medium tracking-tight flex items-center flex-wrap gap-1">
+                                                <span className="line-through">{formatPrice(originalPriceCents * selectedKitQty)}</span>
+                                                {selectedKit && (
+                                                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1 py-0.5 rounded shadow-sm inline-block leading-none">
+                                                        Economize {formatPrice(kitSavingsCents)}
+                                                    </span>
+                                                )}
+                                                {!selectedKit && (product.discount_percentage ?? 0) > 0 && (
+                                                    <span className="text-emerald-500 font-bold inline-block leading-none">-{product.discount_percentage}%</span>
+                                                )}
                                             </div>
                                         )}
-                                        <div className={`text-xs sm:text-sm font-semibold tracking-tight ${getActivePromoPrice(product) !== null ? 'text-red-500' : 'text-slate-900'}`}>
-                                            {formatPrice(getEffectivePrice(product, customer))}
+                                        <div className={`text-xs sm:text-sm font-semibold tracking-tight ${getActivePromoPrice(product) !== null || selectedKit ? 'text-red-500' : 'text-slate-900'}`}>
+                                            {formatPrice(discountedPriceCents)}
                                         </div>
                                         {installment12x && effectiveCustomerType !== 'wholesale' && (
                                             <div className="text-[9px] sm:text-[10px] text-slate-500">
@@ -753,6 +860,88 @@ export function ModernProductCard({
                         </div>
                     )}
 
+                    {/* Seletor de Kits (apenas grid, renderizado antes dos botões de ação) */}
+                    {hasKits && (
+                        <div className="mt-3 mb-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Escolha seu plano</p>
+                            <div className="flex gap-1.5 flex-wrap">
+                                {/* Opção base: 1 unidade */}
+                                <button
+                                    onClick={e => { e.stopPropagation(); setSelectedKitQty(1); }}
+                                    className={`flex-1 min-w-[30%] relative flex flex-col items-center justify-center rounded-xl border py-2 px-1 transition-all ${
+                                        selectedKitQty === 1
+                                            ? 'border-blue-500 bg-blue-50 shadow-sm shadow-blue-100'
+                                            : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
+                                    }`}
+                                >
+                                    <span className={`text-xs font-bold leading-tight ${
+                                        selectedKitQty === 1 ? 'text-blue-700' : 'text-slate-700'
+                                    }`}>
+                                        1 {kitUnitLabel}
+                                    </span>
+                                    <span className={`text-[9px] mt-0.5 ${
+                                        selectedKitQty === 1 ? 'text-blue-500' : 'text-slate-400'
+                                    }`}>
+                                        {formatPrice(baseDiscountedPriceCents)}
+                                    </span>
+                                </button>
+
+                                {/* Opções de kit */}
+                                {sortedKits.map((kit, idx) => {
+                                    const isSelected = selectedKitQty === kit.quantity;
+                                    const isPopular = idx === Math.floor(sortedKits.length / 2) - (sortedKits.length % 2 === 0 ? 0 : 0) && sortedKits.length > 1;
+                                    const isBestPrice = idx === sortedKits.length - 1 && sortedKits.length > 1;
+
+                                    const kitUnitPriceCents = kit.price / kit.quantity;
+                                    const kitName = kit.name || `${kit.quantity} ${kitUnitLabel}${
+                                        kit.quantity > 1 && !['mês','dia','ano','semana'].includes(kitUnitLabel) ? 's' : ''
+                                    }`;
+                                    return (
+                                        <button
+                                            key={kit.quantity}
+                                            onClick={e => { e.stopPropagation(); setSelectedKitQty(kit.quantity); }}
+                                            className={`flex-1 min-w-[30%] relative flex flex-col items-center justify-center rounded-xl border py-2 px-1 transition-all ${
+                                                isSelected && !isBestPrice
+                                                    ? 'border-blue-500 bg-blue-50 shadow-sm shadow-blue-100'
+                                                    : isSelected && isBestPrice
+                                                    ? 'border-emerald-500 bg-emerald-50 shadow-sm shadow-emerald-100'
+                                                    : isBestPrice
+                                                    ? 'border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50/50'
+                                                    : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
+                                            }`}
+                                        >
+                                            {/* Super badges */}
+                                            {isPopular && !isBestPrice && (
+                                                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                                    Popular
+                                                </span>
+                                            )}
+                                            {isBestPrice && (
+                                                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                                    Melhor preço
+                                                </span>
+                                            )}
+                                            <span className={`text-[11px] font-bold leading-tight ${
+                                                isSelected && isBestPrice ? 'text-emerald-700'
+                                                : isSelected ? 'text-blue-700'
+                                                : 'text-slate-700'
+                                            }`}>
+                                                {kitName}
+                                            </span>
+                                            <span className={`text-[9px] mt-0.5 ${
+                                                isSelected && isBestPrice ? 'text-emerald-500'
+                                                : isSelected ? 'text-blue-500'
+                                                : 'text-slate-400'
+                                            }`}>
+                                                {formatPrice(kitUnitPriceCents)}/{kitUnitLabel}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     {/* CTA Buttons */}
                     <div className="space-y-1.5 sm:space-y-2 pt-1">
                         {/* Botão principal: Admin → Orçar | Cliente → Adicionar ao Carrinho */}
@@ -773,7 +962,7 @@ export function ModernProductCard({
                                 ) : (isInCart || addedToCart) ? (
                                     <><Check className="w-3.5 h-3.5" />Adicionado</>
                                 ) : (
-                                    <><ShoppingCart className="w-3.5 h-3.5" />Orçar</>
+                                    <><ShoppingCart className="w-3.5 h-3.5" />{cartBtnLabel}</>
                                 )}
                             </button>
                         ) : (
@@ -793,7 +982,7 @@ export function ModernProductCard({
                                 ) : addedToCart ? (
                                     <><Check className="w-3.5 h-3.5" />Adicionado</>
                                 ) : (
-                                    <><ShoppingBag className="w-3.5 h-3.5" />Comprar</>
+                                    <><ShoppingBag className="w-3.5 h-3.5" />{cartBtnLabel}</>
                                 )}
                             </button>
                         )}

@@ -16,21 +16,6 @@ interface ProductCardProps {
     onDelete?: (product: Product) => void;
 }
 
-const productImagesCache = new Map<string, string[]>();
-
-const getProductImagesWithCache = async (productId: string): Promise<string[]> => {
-    if (productImagesCache.has(productId)) {
-        return productImagesCache.get(productId)!;
-    }
-    try {
-        const { data } = await supabase.from('products').select('images').eq('id', productId).single();
-        const images = data?.images || [];
-        productImagesCache.set(productId, images);
-        return images;
-    } catch {
-        return [];
-    }
-};
 
 /**
  * ProductCard Component
@@ -122,35 +107,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
-    // Lazy load individual product images (since useProducts fetches with compact:true which strips images)
+    // Resolve cover image: VPS now returns images directly (no compact mode).
+    // Only lazy-load model image as fallback when product has no custom images.
     useEffect(() => {
-        if (product.images && product.images.length > 0) {
+        if (Array.isArray(product.images) && product.images.length > 0) {
             setFetchedImages(product.images);
             return;
         }
-
+        // Fallback: model image for products without custom images
+        if (!product.model_id) return;
         let isMounted = true;
-        
-        const loadImages = async () => {
-            // 1. Try to fetch the product's own images from Supabase
-            const ownImages = await getProductImagesWithCache(product.id);
-            if (isMounted && ownImages.length > 0) {
-                setFetchedImages(ownImages);
-                return;
-            }
-
-            // 2. Fallback to model image if product has no specific images
-            if (product.model_id) {
-                const imageUrl = await getModelImageWithCache(product.model_id, product.specs?.color);
-                if (isMounted && imageUrl) {
-                    setFetchedImages([imageUrl]);
-                }
-            }
-        };
-
-        loadImages();
-        
-        return () => { isMounted = false; }
+        getModelImageWithCache(product.model_id, product.specs?.color)
+            .then(imageUrl => { if (isMounted && imageUrl) setFetchedImages([imageUrl]); });
+        return () => { isMounted = false; };
     }, [product.id, product.images, product.model_id, product.specs?.color]);
 
     const rawCoverImage = fetchedImages.length > 0 ? fetchedImages[0] : null;

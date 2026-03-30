@@ -239,7 +239,7 @@ export const ProductCombosPage: React.FC = () => {
   const filteredProductsToSelect = useMemo(() => {
     if (!childSearchTerm) return [];
     const term = childSearchTerm.toLowerCase();
-    return allProducts.filter(p => p.name?.toLowerCase().includes(term) || p.sku?.toLowerCase().includes(term)).slice(0, 10);
+    return allProducts.filter(p => p.name?.toLowerCase().includes(term) || p.sku?.toLowerCase().includes(term)).slice(0, 20);
   }, [allProducts, childSearchTerm]);
 
   return (
@@ -311,7 +311,7 @@ export const ProductCombosPage: React.FC = () => {
                     <td className="p-4 font-medium text-slate-800">{combo.name}</td>
                     <td className="p-4 text-slate-500 text-sm whitespace-nowrap">{combo.sku || '-'}</td>
                     <td className="p-4 text-right font-medium text-teal-700">
-                      {formatCurrency(combo.price_retail / 100)}
+                      {formatCurrency(combo.price_retail)}
                     </td>
                     <td className="p-4 text-right text-sm text-slate-500">
                       {combo.combo_discount_value ? (combo.combo_discount_type === 'percentage' ? `${combo.combo_discount_value}%` : formatCurrency(combo.combo_discount_value)) : '-'}
@@ -409,7 +409,7 @@ export const ProductCombosPage: React.FC = () => {
                               <p className="text-xs text-slate-500">{p.sku}</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-semibold text-teal-700">{formatCurrency(p.price_retail / 100)}</p>
+                              <p className="text-sm font-semibold text-teal-700">{formatCurrency(p.price_retail)}</p>
                               <p className="text-xs text-slate-400">Estoque: {p.stock_quantity}</p>
                             </div>
                           </div>
@@ -426,7 +426,7 @@ export const ProductCombosPage: React.FC = () => {
                       <div key={child.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
                         <div className="flex-1">
                           <p className="font-semibold text-sm text-slate-800">{child.name}</p>
-                          <p className="text-xs text-slate-500">{child.sku} • {formatCurrency((child.price_retail || 0) / 100)}</p>
+                          <p className="text-xs text-slate-500">{child.sku} • {formatCurrency(child.price_retail || 0)}</p>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-2">
@@ -499,7 +499,7 @@ export const ProductCombosPage: React.FC = () => {
                       onChange={e => setEditingCombo({ ...editingCombo, price_cost: parseInt(e.target.value) || 0 })}
                       className="w-full p-2 border border-slate-300 rounded text-sm font-medium"
                     />
-                    <p className="text-xs text-slate-400 mt-1">{formatCurrency(editingCombo.price_cost / 100)}</p>
+                    <p className="text-xs text-slate-400 mt-1">{formatCurrency(editingCombo.price_cost)}</p>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-teal-600 uppercase mb-1">Varejo (Centavos)</label>
@@ -509,7 +509,7 @@ export const ProductCombosPage: React.FC = () => {
                       onChange={e => setEditingCombo({ ...editingCombo, price_retail: parseInt(e.target.value) || 0 })}
                       className="w-full p-2 border border-green-300 bg-green-50 rounded text-sm font-bold text-green-800"
                     />
-                    <p className="text-xs text-teal-600 mt-1">{formatCurrency(editingCombo.price_retail / 100)}</p>
+                    <p className="text-xs text-teal-600 mt-1">{formatCurrency(editingCombo.price_retail)}</p>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Revenda (Centavos)</label>
@@ -519,7 +519,7 @@ export const ProductCombosPage: React.FC = () => {
                       onChange={e => setEditingCombo({ ...editingCombo, price_reseller: parseInt(e.target.value) || 0 })}
                       className="w-full p-2 border border-slate-300 rounded text-sm font-medium"
                     />
-                    <p className="text-xs text-slate-400 mt-1">{formatCurrency(editingCombo.price_reseller / 100)}</p>
+                    <p className="text-xs text-slate-400 mt-1">{formatCurrency(editingCombo.price_reseller)}</p>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Atacado (Centavos)</label>
@@ -529,7 +529,7 @@ export const ProductCombosPage: React.FC = () => {
                       onChange={e => setEditingCombo({ ...editingCombo, price_wholesale: parseInt(e.target.value) || 0 })}
                       className="w-full p-2 border border-slate-300 rounded text-sm font-medium"
                     />
-                    <p className="text-xs text-slate-400 mt-1">{formatCurrency(editingCombo.price_wholesale / 100)}</p>
+                    <p className="text-xs text-slate-400 mt-1">{formatCurrency(editingCombo.price_wholesale)}</p>
                   </div>
                 </div>
               </div>

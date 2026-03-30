@@ -27,7 +27,15 @@ function mapVpsProduct(row: any): Product {
         price_reseller: row.price_reseller ?? undefined,
         price_wholesale: row.price_wholesale ?? undefined,
         stock_quantity: row.stock !== undefined ? row.stock : (row.stock_quantity || 0),
-        images: row.images || [],
+        images: (() => {
+            const imgs = row.images;
+            if (!imgs) return [];
+            if (Array.isArray(imgs)) return imgs;
+            if (typeof imgs === 'string') {
+                try { return JSON.parse(imgs) as string[]; } catch { return []; }
+            }
+            return [];
+        })(),
         status: row.status || ProductStatus.ACTIVE,
         track_inventory: Boolean(row.track_inventory),
         is_gift: Boolean(row.is_gift),
@@ -124,7 +132,7 @@ export const useProducts = () => {
 
             // VPS MySQL primeiro (rápido, sem images base64) — fallback Supabase
             let data: Product[];
-            const vpsData = await vpsApiService.getProducts({ status: 'all', limit: 2000, compact: true });
+            const vpsData = await vpsApiService.getProducts({ status: 'all', limit: 2000 });
             if (vpsData) {
                 data = vpsData.map(mapVpsProduct);
                 console.log(`[useProducts] VPS: ${data.length} produtos`);
