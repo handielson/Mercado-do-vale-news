@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposta Visual — Card com Kits</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0f172a;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 48px;
+    padding: 40px 20px;
+  }
+
+  h1 { color: #94a3b8; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; font-weight: 600; }
+
+  /* ─── Layout comparativo ─── */
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    max-width: 720px;
+    width: 100%;
+  }
+
+  .col-label {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 14px;
+  }
+  .col-label.before { color: #475569; }
+  .col-label.after  { color: #3b82f6; }
+
+  /* ─── Card Base ─── */
+  .card {
+    background: #1e293b;
+    border-radius: 20px;
+    border: 1px solid #334155;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  }
+
+  /* ─── Imagem ─── */
+  .card-image {
+    position: relative;
+    background: linear-gradient(135deg, #0ea5e9 0%, #1e3a5f 50%, #0f172a 100%);
+    height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .card-image::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 30% 50%, rgba(14,165,233,0.3), transparent 60%);
+  }
+  .product-icon {
+    font-size: 64px;
+    filter: drop-shadow(0 0 20px rgba(14,165,233,0.5));
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Badges */
+  .badge-hot {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: linear-gradient(135deg, #f97316, #ef4444);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 99px;
+    letter-spacing: 0.5px;
+    z-index: 2;
+  }
+
+  /* ─── Conteúdo ─── */
+  .card-body { padding: 16px; }
+
+  .product-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 2px;
+    line-height: 1.3;
+  }
+  .product-sub {
+    font-size: 11px;
+    color: #64748b;
+    margin-bottom: 14px;
+  }
+
+  /* ─── BEFORE: Preço simples ─── */
+  .price-simple {
+    margin-bottom: 14px;
+  }
+  .price-simple .price-main {
+    font-size: 26px;
+    font-weight: 800;
+    color: #3b82f6;
+  }
+  .price-simple .price-installment {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  /* ─── AFTER: Kit Selector ─── */
+  .kit-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #64748b;
+    margin-bottom: 8px;
+  }
+
+  .kit-options {
+    display: flex;
+    gap: 7px;
+    margin-bottom: 14px;
+  }
+
+  .kit-option {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1.5px solid #334155;
+    border-radius: 12px;
+    padding: 8px 4px 7px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    background: transparent;
+  }
+  .kit-option:hover {
+    border-color: #3b82f6;
+    background: rgba(59,130,246,0.05);
+  }
+  .kit-option.selected {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(14,165,233,0.08));
+    box-shadow: 0 0 0 1px #3b82f6, 0 4px 16px rgba(59,130,246,0.2);
+  }
+  .kit-option.best-price {
+    border-color: #10b981;
+  }
+  .kit-option.best-price:hover, .kit-option.best-price.selected {
+    border-color: #10b981;
+    background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.06));
+    box-shadow: 0 0 0 1px #10b981, 0 4px 16px rgba(16,185,129,0.2);
+  }
+
+  /* Super badge acima do card */
+  .kit-super-badge {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: 99px;
+    white-space: nowrap;
+  }
+  .kit-super-badge.popular {
+    background: #f97316;
+    color: white;
+  }
+  .kit-super-badge.best {
+    background: #10b981;
+    color: white;
+  }
+
+  .kit-qty {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f1f5f9;
+    line-height: 1.1;
+  }
+  .kit-option.selected .kit-qty { color: #60a5fa; }
+  .kit-option.best-price.selected .kit-qty { color: #4ade80; }
+
+  .kit-unit-price {
+    font-size: 9px;
+    color: #475569;
+    margin-top: 2px;
+  }
+  .kit-option.selected .kit-unit-price { color: #93c5fd; }
+  .kit-option.best-price.selected .kit-unit-price { color: #6ee7b7; }
+
+  /* ─── Preço com kit ─── */
+  .price-kit {
+    margin-bottom: 14px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+  }
+  .price-kit .price-main {
+    font-size: 28px;
+    font-weight: 800;
+    color: #3b82f6;
+    line-height: 1;
+  }
+  .price-kit .price-savings {
+    font-size: 11px;
+    color: #4ade80;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  /* ─── Botão ─── */
+  .btn-cart {
+    width: 100%;
+    padding: 11px;
+    border-radius: 12px;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    transition: all 0.18s ease;
+  }
+  .btn-cart.before-btn {
+    background: #3b82f6;
+    color: white;
+  }
+  .btn-cart.before-btn:hover {
+    background: #2563eb;
+  }
+  .btn-cart.after-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    box-shadow: 0 4px 14px rgba(59,130,246,0.35);
+  }
+  .btn-cart.after-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(59,130,246,0.45);
+  }
+
+  /* ─── Helper annotation ─── */
+  .annotation {
+    margin-top: 32px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    padding: 20px 24px;
+    max-width: 720px;
+    width: 100%;
+  }
+  .annotation h3 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #3b82f6;
+    margin-bottom: 12px;
+  }
+  .annotation ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .annotation li {
+    font-size: 12px;
+    color: #94a3b8;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .annotation li span.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3b82f6;
+    flex-shrink: 0;
+    margin-top: 5px;
+  }
+
+  /* Interatividade real */
+  .kit-option { user-select: none; }
+</style>
+</head>
+<body>
+
+<h1>Proposta Visual — Card com Seletor de Kits</h1>
+
+<div class="comparison">
+  <!-- ANTES -->
+  <div>
+    <div class="col-label before">Antes (atual)</div>
+    <div class="card">
+      <div class="card-image">
+        <span class="badge-hot">🔥 Mais Vendido</span>
+        <div class="product-icon">📺</div>
+      </div>
+      <div class="card-body">
+        <p class="product-name">Mensalidade de Servidor</p>
+        <p class="product-sub">Servidor Alternativo</p>
+
+        <div class="price-simple">
+          <div class="price-main">R$ 15,00</div>
+          <div class="price-installment">12x de R$ 1,25</div>
+        </div>
+
+        <button class="btn-cart before-btn">
+          🛒 Adicionar ao Carrinho
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEPOIS -->
+  <div>
+    <div class="col-label after">Depois (proposta)</div>
+    <div class="card">
+      <div class="card-image">
+        <span class="badge-hot">🔥 Mais Vendido</span>
+        <div class="product-icon">📺</div>
+      </div>
+      <div class="card-body">
+        <p class="product-name">Mensalidade de Servidor</p>
+        <p class="product-sub">Servidor Alternativo</p>
+
+        <p class="kit-label">Escolha seu plano</p>
+
+        <div class="kit-options" id="kitOptions">
+          <!-- 1 Mês -->
+          <div class="kit-option" data-qty="1" data-price="1500" data-savings="">
+            <span class="kit-qty">1 Mês</span>
+            <span class="kit-unit-price">R$ 15/mês</span>
+          </div>
+
+          <!-- 3 Meses (popular) -->
+          <div class="kit-option selected" data-qty="3" data-price="4000" data-savings="Economize R$ 5">
+            <span class="kit-super-badge popular">Popular</span>
+            <span class="kit-qty">3 Meses</span>
+            <span class="kit-unit-price">R$ 13,33/mês</span>
+          </div>
+
+          <!-- 6 Meses (melhor preço) -->
+          <div class="kit-option best-price" data-qty="6" data-price="7500" data-savings="Economize R$ 15">
+            <span class="kit-super-badge best">Melhor preço</span>
+            <span class="kit-qty">6 Meses</span>
+            <span class="kit-unit-price">R$ 12,50/mês</span>
+          </div>
+        </div>
+
+        <div class="price-kit">
+          <div class="price-main" id="kitPrice">R$ 40,00</div>
+          <div class="price-savings" id="kitSavings">Economize R$ 5</div>
+        </div>
+
+        <button class="btn-cart after-btn" id="cartBtn">
+          🛒 Adicionar 3 Meses
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Anotações técnicas -->
+<div class="annotation">
+  <h3>📋 Notas de implementação</h3>
+  <ul>
+    <li><span class="dot"></span>O seletor aparece <strong>somente</strong> quando <code>product.kits && product.kits.length > 0</code></li>
+    <li><span class="dot"></span>Kits sem nome mostram "X Mês" ou "X Meses" baseado na quantity (lógica já existente no PublicProductPage)</li>
+    <li><span class="dot"></span>O botão de carrinho atualiza o label com a opção selecionada ("Adicionar 3 Meses")</li>
+    <li><span class="dot"></span>A economia é calculada como: <code>(price_retail * qty) - kit.price</code></li>
+    <li><span class="dot"></span>Badge "Popular" = kit do meio; Badge "Melhor preço" = kit com maior qty</li>
+    <li><span class="dot"></span>Clicar no card/botão sem selecionar kit usa a opção default (1 unidade)</li>
+  </ul>
+</div>
+
+<script>
+  const options = document.querySelectorAll('.kit-option');
+  const priceEl = document.getElementById('kitPrice');
+  const savingsEl = document.getElementById('kitSavings');
+  const cartBtn = document.getElementById('cartBtn');
+
+  options.forEach(opt => {
+    opt.addEventListener('click', () => {
+      options.forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+
+      const price = parseInt(opt.dataset.price) / 100;
+      const savings = opt.dataset.savings;
+      const qty = opt.dataset.qty;
+      const unit = qty == 1 ? 'Mês' : 'Meses';
+
+      priceEl.textContent = `R$ ${price.toFixed(2).replace('.', ',')}`;
+      savingsEl.textContent = savings || '';
+      savingsEl.style.display = savings ? 'block' : 'none';
+      cartBtn.textContent = `🛒 Adicionar ${qty} ${unit}`;
+    });
+  });
+</script>
+
+</body>
+</html>
