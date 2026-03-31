@@ -109,7 +109,18 @@ class VpsApiService {
     if (params?.model_id)  qs.set('model_id',    params.model_id);
     if (params?.noCache)   qs.set('_t',          String(Date.now()));
     const query = qs.toString() ? `?${qs.toString()}` : '';
-    return this.fetchSafe<any[]>(`/products${query}`, params?.noCache);
+    // [DEBUG] Explicit log for search requests
+    if (params?.search) {
+      console.log(`[vpsApiService] getProducts sending search query: "${query}"`);
+    }
+
+    const result = await this.fetchSafe<any[]>(`/products${query}`, params?.noCache);
+    
+    if (params?.search) {
+      console.log(`[vpsApiService] getProducts returned ${result ? result.length : 0} items for search: "${params.search}"`);
+    }
+
+    return result;
   }
 
   /** Atualiza o array de imagens de um produto pelo SKU (image bank sync).

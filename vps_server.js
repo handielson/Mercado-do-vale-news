@@ -191,7 +191,15 @@ fastify.get('/products', async (req, reply) => {
   sql += ' ORDER BY name ASC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
+  if (search || status === 'all') { // Log explicitly what we are about to query
+    console.log(`[VPS GET /products] search="${search || ''}", status="${status || ''}", SQL: ${sql}`);
+  }
+
   const [rows] = await pool.query(sql, params);
+  
+  if (search || status === 'all') {
+    console.log(`[VPS GET /products] Returned ${rows.length} rows for search="${search || ''}"`);
+  }
 
   const result = rows.map(r => ({
     ...r,
