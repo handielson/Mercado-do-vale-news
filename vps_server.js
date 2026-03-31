@@ -177,7 +177,7 @@ fastify.get('/products', async (req, reply) => {
   // status=all: retorna todos os status (admin)
 
   if (category)           { sql += ' AND category_id = ?';   params.push(category); }
-  if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
+  if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ? OR slug LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
   if (req.query.parent_id){ sql += ' AND parent_id = ?';     params.push(req.query.parent_id); }
   if (req.query.sku)      { sql += ' AND sku = ?';           params.push(req.query.sku); }
   if (req.query.ean)      { sql += ' AND (ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?)))'; params.push(req.query.ean, req.query.ean); }
@@ -1754,11 +1754,11 @@ fastify.delete('/customers/:id/favorites/:productId', async (req, reply) => {
   }
 });
 
-// ─── Public: Video existence check ──────────────────────────────────────────
-// GET /public/check-video?sku=PI153D
+// ─── Video existence check ───────────────────────────────────────────────────
+// GET /check-video?sku=PI153D
 // Verifica se existe um vídeo no Synology NAS para o SKU informado.
-// Necessário pois HEAD direto ao Synology pode ter CORS block no navegador.
-fastify.get('/public/check-video', async (req, reply) => {
+// Rota sem prefixo /public/ para evitar conflito com regras Nginx/CDN.
+fastify.get('/check-video', async (req, reply) => {
   reply.header('Cache-Control', 'public, max-age=300');
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required', exists: false });

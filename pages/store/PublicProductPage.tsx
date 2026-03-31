@@ -78,7 +78,7 @@ export const PublicProductPage: React.FC = () => {
             // 3. Verifica via VPS (evita bloqueio CORS do HEAD direto ao Synology)
             try {
                 const VPS_BASE = import.meta.env.VITE_VPS_API_URL || 'https://api.xiaomipetrolina.com.br';
-                const resp = await fetch(`${VPS_BASE}/public/check-video?sku=${encodeURIComponent(product.sku.trim())}`, { cache: 'no-store' });
+                const resp = await fetch(`${VPS_BASE}/check-video?sku=${encodeURIComponent(product.sku.trim())}`, { cache: 'no-store' });
                 if (!cancelled && resp.ok) {
                     const json = await resp.json();
                     setEffectiveVideoUrl(json.exists ? json.url : null);
