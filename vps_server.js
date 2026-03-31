@@ -177,7 +177,7 @@ fastify.get('/products', async (req, reply) => {
   // status=all: retorna todos os status (admin)
 
   if (category)           { sql += ' AND category_id = ?';   params.push(category); }
-  if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+  if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
   if (req.query.parent_id){ sql += ' AND parent_id = ?';     params.push(req.query.parent_id); }
   if (req.query.sku)      { sql += ' AND sku = ?';           params.push(req.query.sku); }
   if (req.query.ean)      { sql += ' AND (ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?)))'; params.push(req.query.ean, req.query.ean); }
