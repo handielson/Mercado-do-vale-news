@@ -202,8 +202,10 @@ fastify.get('/products', async (req, reply) => {
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
   }));
 
-  // Sem cache para admin (status=all), cache leve para pública
-  if (status === 'all') {
+  // Sem cache para admin (status=all) ou buscas dinâmicas (search)
+  // search requests NUNCA devem ser cacheados pelo CDN, pois o resultado
+  // varia por query e o cache stale causaria resultados vazios persistentes.
+  if (status === 'all' || search) {
     reply.header('Cache-Control', 'no-store');
   } else {
     reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
