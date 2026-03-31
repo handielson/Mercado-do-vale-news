@@ -97,6 +97,7 @@ import { MySQLExplorerPage } from '../pages/admin/settings/MySQLExplorerPage';
 import { SynologyFilesPage } from '../pages/admin/settings/SynologyFilesPage';
 import AccountingPage from '../pages/admin/accounting/AccountingPage';
 import { DataImportExportPage } from '../pages/admin/import/DataImportExportPage';
+import { FavoritesRankingReport } from '../pages/admin/reports/FavoritesRankingReport';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -1019,6 +1020,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><OnlineOrdersPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/relatorios/favoritos",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><FavoritesRankingReport /></AdminLayout>
       </ProtectedRoute>
     )
   },
