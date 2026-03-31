@@ -1511,21 +1511,53 @@ async function synoApiGet(apiPath) {
 }
 
 
-// GET /public/check-video?sku=SKU — retorna URL do proxy de vídeo (sem verificar existência para evitar throttling no Synology)
+// Cache de existência de vídeos: Map<sku, { exists, url, cachedAt }>
+const videoExistenceCache = new Map();
+const VIDEO_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutos
+
+// GET /public/check-video?sku=SKU — verifica existência via HEAD no CDN de vídeos
 fastify.get('/public/check-video', async (req, reply) => {
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required' });
-  if (!SYNO_USER || !SYNO_PASS) return reply.send({ exists: false });
 
   const cleanSku = sku.trim().replace(/\s+/g, '');
   const [rows] = await pool.query('SELECT synology_video_extension FROM company_settings LIMIT 1').catch(() => [[]]);
   const ext = rows?.[0]?.synology_video_extension || '.mp4';
   const fileName = `${cleanSku}${ext}`;
-  const VPS_PUBLIC = process.env.VPS_PUBLIC_URL || 'https://api.xiaomipetrolina.com.br';
 
-  // Retorna URL otimisticamente — o browser trata onError se o arquivo não existir
-  return reply.send({ exists: true, url: `${VPS_PUBLIC}/video/${encodeURIComponent(fileName)}` });
+  // Retorna do cache se ainda válido
+  const cached = videoExistenceCache.get(cleanSku);
+  if (cached && (Date.now() - cached.cachedAt) < VIDEO_CACHE_TTL_MS) {
+    return reply.send({ exists: cached.exists, ...(cached.url ? { url: cached.url } : {}) });
+  }
+
+  const VPS_PUBLIC = process.env.VPS_PUBLIC_URL || 'https://api.xiaomipetrolina.com.br';
+  const cdnBase = 'https://videos.mercadodovale.com.br';
+  const cdnUrl = `${cdnBase}/${encodeURIComponent(fileName)}`;
+  const proxyUrl = `${VPS_PUBLIC}/video/${encodeURIComponent(fileName)}`;
+
+  // Verifica existência via HEAD no CDN (sem Synology DSM)
+  const exists = await new Promise((resolve) => {
+    const https = require('https');
+    const r = https.request(cdnUrl, { method: 'HEAD', timeout: 8000 }, (res) => {
+      resolve(res.statusCode >= 200 && res.statusCode < 400);
+    });
+    r.on('error', () => resolve(null));
+    r.on('timeout', () => { r.destroy(); resolve(null); });
+    r.end();
+  });
+
+  // Se o CDN não respondeu: fallback otimista (mostra botão como antes)
+  if (exists === null) {
+    console.error('[check-video] CDN timeout/error for', fileName, '- returning optimistic');
+    return reply.send({ exists: true, url: proxyUrl });
+  }
+
+  const url = exists ? cdnUrl : null;
+  videoExistenceCache.set(cleanSku, { exists, url, cachedAt: Date.now() });
+  return reply.send({ exists, ...(url ? { url } : {}) });
 });
+
 
 
 // GET /video/:filename — streaming proxy de vídeo do Synology (sem depender do CDN quebrado)

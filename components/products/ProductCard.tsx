@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { Edit, Package, Trash2, Printer, Power, PowerOff, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Edit, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Video, VideoOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { ProductStatus } from '../../utils/field-standards';
@@ -28,6 +28,75 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [currentStock, setCurrentStock] = useState<number | undefined>(product.stock_quantity);
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+
+    // Video checking and uploading state
+    const [videoInfo, setVideoInfo] = useState<{ exists: boolean; url: string | null; checking: boolean }>({ exists: false, url: null, checking: true });
+    const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+    const videoInputRef = useRef<HTMLInputElement>(null);
+
+    // Check video
+    useEffect(() => {
+        if (!product.sku) {
+            setVideoInfo({ exists: false, url: null, checking: false });
+            return;
+        }
+        let isMounted = true;
+        
+        const VPS_BASE = import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+        
+        fetch(`${VPS_BASE}/public/check-video?sku=${product.sku}`)
+            .then(res => res.json())
+            .then(data => {
+                if (isMounted) {
+                    setVideoInfo({ exists: Boolean(data.exists), url: data.url, checking: false });
+                }
+            })
+            .catch(() => {
+                if (isMounted) setVideoInfo({ exists: false, url: null, checking: false });
+            });
+            
+        return () => { isMounted = false; };
+    }, [product.sku]);
+
+    // Handle Upload video
+    const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !product.sku) return;
+
+        // Reset input value to allow uploading the same file again if it fails
+        e.target.value = '';
+
+        const VPS_BASE = import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+        const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
+        
+        setIsUploadingVideo(true);
+        try {
+            const formData = new FormData();
+            const ext = file.name.split('.').pop()?.toLowerCase() || 'mp4';
+            const fileName = `${product.sku.toUpperCase()}.${ext}`;
+            const renamedFile = new File([file], fileName, { type: file.type });
+            formData.append('file', renamedFile);
+
+            const res = await fetch(`${VPS_BASE}/synology/upload?folder=videos`, {
+                method: 'POST',
+                headers: { 'X-Sync-Key': SYNC_KEY },
+                body: formData,
+            });
+
+            if (!res.ok) {
+                const errJson = await res.json().catch(() => ({}));
+                throw new Error(errJson.error || 'Erro no upload para a VPS');
+            }
+
+            const data = await res.json();
+            toast.success(`Upload iniciado: ${data.name}`);
+            setVideoInfo({ exists: true, url: data.url, checking: false });
+        } catch (error: any) {
+            toast.error(`Falha ao iniciar upload: ${error.message}`);
+        } finally {
+            setIsUploadingVideo(false);
+        }
+    };
 
     // Update internal state if props change
     useEffect(() => {
@@ -232,6 +301,50 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         ) : null}
                     </div>
                     <div className="flex items-center gap-1">
+                        {/* Hidden Input for Video Upload */}
+                        <input 
+                            type="file" 
+                            accept="video/mp4,video/quicktime,video/*"
+                            ref={videoInputRef}
+                            className="hidden"
+                            onChange={handleVideoUpload}
+                        />
+
+                        {/* Video Status Action */}
+                        {product.sku && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (videoInfo.checking) return;
+                                    if (videoInfo.exists && videoInfo.url) {
+                                        window.open(videoInfo.url, '_blank');
+                                    } else {
+                                        videoInputRef.current?.click();
+                                    }
+                                }}
+                                disabled={videoInfo.checking || isUploadingVideo}
+                                className={cn(
+                                    "p-1.5 rounded-lg transition-colors group",
+                                    (videoInfo.checking || isUploadingVideo) ? "opacity-50 cursor-wait" :
+                                    videoInfo.exists ? "hover:bg-blue-50" : "hover:bg-slate-100"
+                                )}
+                                title={
+                                    videoInfo.checking ? "Verificando status de vídeo..." :
+                                    isUploadingVideo ? "Sincronizando envio de vídeo..." :
+                                    videoInfo.exists ? "Produto possui vídeo. Ver clipe." :
+                                    "Produto sem vídeo. Clique para anexar."
+                                }
+                            >
+                                {isUploadingVideo || videoInfo.checking ? (
+                                    <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                                ) : videoInfo.exists ? (
+                                    <Video className="w-4 h-4 text-blue-500 group-hover:text-blue-700" />
+                                ) : (
+                                    <VideoOff className="w-4 h-4 text-slate-300 group-hover:text-amber-500" />
+                                )}
+                            </button>
+                        )}
+
                         {product.bling_id && (
                             <button
                                 onClick={handleSyncStock}
