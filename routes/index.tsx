@@ -96,6 +96,7 @@ import { VpsStatusPage } from '../pages/admin/settings/VpsStatusPage';
 import { MySQLExplorerPage } from '../pages/admin/settings/MySQLExplorerPage';
 import { SynologyFilesPage } from '../pages/admin/settings/SynologyFilesPage';
 import AccountingPage from '../pages/admin/accounting/AccountingPage';
+import { DataImportExportPage } from '../pages/admin/import/DataImportExportPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -420,6 +421,15 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><AccountingPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+
+  {
+    path: "/admin/import",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><DataImportExportPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

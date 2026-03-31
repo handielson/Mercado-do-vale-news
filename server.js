@@ -169,6 +169,16 @@ fastify.get('/products', async (req, reply) => {
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
   const params = [];
 
+  if (req.query.sku) {
+    sql += ' AND sku = ?';
+    params.push(req.query.sku);
+  }
+  
+  if (req.query.ean) {
+    sql += ' AND (ean = ? OR JSON_CONTAINS(alternative_eans, CAST(? AS JSON), "$"))';
+    params.push(req.query.ean, JSON.stringify(req.query.ean));
+  }
+
   if (status && status !== 'all') { sql += ' AND status = ?'; params.push(status); }
   else if (!status)               { sql += ' AND status = ?'; params.push('active'); }
 
@@ -249,6 +259,30 @@ fastify.get('/products/:id', async (req, reply) => {
     custom_fields: typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields) : r.custom_fields,
     kits:          typeof r.kits === 'string'          ? JSON.parse(r.kits)          : r.kits,
   };
+});
+
+fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { id } = req.params;
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Remove referências se ele for combo parent de algo (na verdade, se deletarmos o parent as combos associadas somem/ficam orfãs, melhor apagar)
+    await conn.query(`DELETE FROM product_combos WHERE combo_product_id = ? OR child_product_id = ?`, [id, id]);
+    
+    // Apaga o produto
+    const [result] = await conn.query(`DELETE FROM products WHERE id = ?`, [id]);
+    
+    await conn.commit();
+    return { ok: true, deleted: result.affectedRows > 0 };
+  } catch (err) {
+    await conn.rollback();
+    reply.status(500);
+    return { ok: false, error: err.message };
+  } finally {
+    conn.release();
+  }
 });
 
 fastify.get('/products/:id/combo', async (req, reply) => {
@@ -384,11 +418,26 @@ fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, repl
 fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, reply) => {
   const { sku, images } = req.body || {};
   if (!sku || !images) return reply.code(400).send({ error: 'sku and images required' });
-  await pool.query(
+  const [result] = await pool.query(
     'UPDATE products SET images=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
     [JSON.stringify(images), sku]
   );
-  return { ok: true };
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
+// Update description by SKU (used by description sync)
+fastify.patch('/products/description', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { sku, description, specs } = req.body || {};
+  if (!sku) return reply.code(400).send({ error: 'sku required' });
+  const [result] = await pool.query(
+    'UPDATE products SET description=?, specs=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    [
+      description ?? null,
+      specs ? JSON.stringify(specs) : '{}',
+      sku
+    ]
+  );
+  return { ok: true, affectedRows: result.affectedRows };
 });
 
 // ─── Combos (write) ─────────────────────────────────────────────────────────
@@ -787,6 +836,76 @@ fastify.get('/schema/table/:name', { preHandler: requireSyncKey }, async (req, r
   const [columns] = await pool.query('DESCRIBE ??', [req.params.name]);
   return columns.map(c => ({ field: c.Field, type: c.Type, null: c.Null, key: c.Key, default: c.Default }));
 });
+// ─── Diagnóstico de Qualidade de Dados ──────────────────────────────────────
+fastify.get('/admin/diagnostics', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [[totals]] = await pool.query(`
+    SELECT
+      COUNT(*)                                                            AS total,
+      SUM(status = 'active')                                             AS active,
+      SUM(images IS NULL OR images = '[]' OR images = 'null' OR images = '') AS sem_imagem,
+      SUM(images IS NOT NULL AND images != '[]' AND images != 'null' AND images != ''
+          AND JSON_LENGTH(images) > 0
+          AND JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) LIKE 'data:%')  AS imagem_base64,
+      SUM(images IS NOT NULL AND images != '[]' AND images != 'null' AND images != ''
+          AND JSON_LENGTH(images) > 0
+          AND JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) LIKE 'http%')   AS imagem_url,
+      SUM(description IS NULL OR TRIM(description) = '')                 AS sem_descricao,
+      SUM(technical_specifications IS NULL OR TRIM(technical_specifications) = '') AS sem_specs,
+      SUM(price_retail IS NULL OR price_retail = 0)                     AS sem_preco,
+      SUM(bling_id IS NOT NULL AND bling_id != '')                      AS tem_bling_id
+    FROM products
+  `);
+
+  // Amostra: 1 produto com imagem base64 para confirmar o formato
+  const [sampleBase64] = await pool.query(`
+    SELECT id, sku, name,
+      LEFT(JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')), 80) AS img_preview
+    FROM products
+    WHERE images IS NOT NULL AND images != '[]'
+      AND JSON_LENGTH(images) > 0
+      AND JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) LIKE 'data:%'
+    LIMIT 3
+  `);
+
+  // Amostra: 1 produto com imagem URL para confirmar o formato
+  const [sampleUrl] = await pool.query(`
+    SELECT id, sku, name,
+      JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS img_preview
+    FROM products
+    WHERE images IS NOT NULL AND images != '[]'
+      AND JSON_LENGTH(images) > 0
+      AND JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) LIKE 'http%'
+    LIMIT 3
+  `);
+
+  // Amostra: produto sem imagem
+  const [sampleSemImagem] = await pool.query(`
+    SELECT id, sku, name, images
+    FROM products
+    WHERE images IS NULL OR images = '[]' OR images = 'null' OR images = ''
+    LIMIT 3
+  `);
+
+  return {
+    summary: {
+      total:          Number(totals.total),
+      active:         Number(totals.active),
+      sem_imagem:     Number(totals.sem_imagem),
+      imagem_base64:  Number(totals.imagem_base64),
+      imagem_url:     Number(totals.imagem_url),
+      sem_descricao:  Number(totals.sem_descricao),
+      sem_specs:      Number(totals.sem_specs),
+      sem_preco:      Number(totals.sem_preco),
+      tem_bling_id:   Number(totals.tem_bling_id),
+    },
+    amostras: {
+      com_base64:   sampleBase64,
+      com_url:      sampleUrl,
+      sem_imagem:   sampleSemImagem,
+    }
+  };
+});
+
 // ─── Catalog Settings ──────────────────────────────────────────────────────
 fastify.get('/catalog-settings', async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM catalog_settings LIMIT 1');

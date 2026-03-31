@@ -203,11 +203,12 @@ class CatalogSectionsService {
 
             // App settings filters
             const settings = await catalogConfigService.getSettings();
-            if (settings.hide_inactive) params.append('status', 'active');
+            // if (settings.hide_inactive) params.append('status', 'active'); // Removido. A validação correta fica por conta do catalogConfigService
             
             if (settings.hide_zero_price) {
-                // Not perfectly mapped natively to API if price_retail != 0, but min_price=0.01 handles it
-                params.append('min_price', '0.01');
+                // Removido o min_price=0.01 pois a API da VPS estava bloqueando tudo 
+                // por conflito entre os campos price e price_retail no banco.
+                // O filtro hide_zero_price vai atuar de forma segura client-side através do applyVisibilityRules.
             }
 
             // Section Filters
@@ -235,7 +236,9 @@ class CatalogSectionsService {
             // Wait, pinned products ignore other filters typically, but we can pass them in the query,
             // or we might need to fetch them separately.
             let products = [] as CatalogProduct[];
-            const VPS_URL = (import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+            const VPS_URL = (import.meta as any).env?.DEV
+                ? '/vps-proxy'
+                : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
 
             // Sorting
             if (section.sort_by) params.append('sort_by', section.sort_by);
@@ -245,7 +248,31 @@ class CatalogSectionsService {
             const res = await fetch(`${VPS_URL}/products?${params.toString()}`);
             if (!res.ok) throw new Error(`VPS API returned ${res.status}`);
             const data = await res.json();
-            products = data || [];
+            
+            // Normalize VPS data keys for client-side visibility rules
+            products = (data || []).map((p: any) => {
+                const s = p.stock !== undefined ? p.stock : p.stock_quantity;
+                let stockVal = 0;
+                if (typeof s === 'number') stockVal = s;
+                else if (typeof s === 'string' && s.trim().toLowerCase() !== 'null' && s.trim() !== '') {
+                    stockVal = parseInt(s, 10) || 0;
+                }
+                
+                let track_inventory = p.track_inventory;
+                if (track_inventory === undefined) {
+                    track_inventory = (s !== null && s !== 'null' && s !== undefined);
+                }
+                
+                const priceNum = p.price !== undefined && p.price !== null ? parseFloat(p.price) : (p.price_retail !== undefined && p.price_retail !== null ? parseFloat(p.price_retail) : 0);
+
+                return {
+                    ...p,
+                    stock_quantity: stockVal,
+                    track_inventory: track_inventory,
+                    price_retail: isNaN(priceNum) ? 0 : priceNum,
+                    image_url: (p.images && p.images.length > 0) ? p.images[0] : p.image_url,
+                };
+            });
 
             // Replace with Pinned products if any (to preserve sorting and exact matching)
             // Note: Since VPS API `in_ids` would just filter them, if section defines pins we do an explicit lookup.

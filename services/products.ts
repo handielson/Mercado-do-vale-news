@@ -141,17 +141,13 @@ async function create(input: ProductInput): Promise<Product> {
         }
     }
 
-    // SKU uniqueness check — busca exata no Supabase (fonte da verdade)
+    // SKU uniqueness check — busca exata na VPS (fonte da verdade)
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
     const UNIT_CODES = ['PCS', 'UN', 'PC', 'CX'];
     if (input.sku && !UNIT_CODES.includes(input.sku.toUpperCase())) {
-        const { data: skuConflict } = await supabase
-            .from('products')
-            .select('id, name, sku')
-            .ilike('sku', input.sku)  // case-insensitive, mas busca o valor EXATO
-            .limit(5);
-
-        // Filtra correspondência exata (ilike pode retornar substrings em alguns dialetos)
+        const skuConflict = await vpsApiService.getProducts({ sku: input.sku, limit: 1 });
+        
+        // Filtra correspondência exata para segurança (ilike pode retornar substrings em alguns BDs)
         const exactMatch = (skuConflict || []).filter(
             (p: any) => p.sku?.toLowerCase() === input.sku!.toLowerCase()
         );
@@ -193,7 +189,7 @@ async function create(input: ProductInput): Promise<Product> {
         description: input.description || null,
         ean: input.eans?.[0] || null,
         alternative_eans: input.eans || [],
-        specs: input.specs || {},
+        specs: { ...(modelData.template_values || {}), ...(input.specs || {}) },
         price_cost: input.price_cost,
         price_retail: input.price_retail,
         price_reseller: input.price_reseller,
@@ -223,54 +219,6 @@ async function create(input: ProductInput): Promise<Product> {
 
     const result = await vpsApiService.createProduct(payload);
     if (result.errors.length > 0) throw new Error(`Failed to create product: ${result.errors[0].error}`);
-
-    // --- DUAL WRITE SUPABASE ---
-    // Build a sanitized payload matching the Supabase products table schema
-    try {
-        const supPayload = {
-            id: payload.id,
-            company_id: payload.company_id,  // obrigatório — NOT NULL no Supabase
-            model_id: payload.model_id,
-            parent_id: payload.parent_id,
-            brand: payload.brand,
-            category_id: payload.category_id,
-            name: payload.name,
-            sku: payload.sku,
-            description: payload.description,
-            alternative_eans: payload.alternative_eans || [],
-            specs: payload.specs,
-            price_cost: payload.price_cost,
-            price_retail: payload.price_retail,
-            price_reseller: payload.price_reseller,
-            price_wholesale: payload.price_wholesale,
-            images: payload.images,
-            ncm: payload.ncm,
-            cest: payload.cest,
-            origin: payload.origin,
-            weight_kg: payload.weight_kg,
-            dimensions: payload.dimensions,
-            stock_quantity: payload.stock_quantity,
-            status: payload.status,
-            track_inventory: Boolean(payload.track_inventory),
-            is_gift: Boolean(payload.is_gift),
-            warranty_type: payload.warranty_type,
-            warranty_template_id: payload.warranty_template_id,
-            price_promo: payload.price_promo,
-            promo_start: payload.promo_start,
-            promo_end: payload.promo_end,
-            bling_id: payload.bling_id,
-            bling_parent_id: payload.bling_parent_id,
-            shopee_item_id: payload.shopee_item_id,
-            video_url: payload.video_url,
-            slug: payload.slug,
-            kits: payload.kits || null,
-            updated_at: new Date().toISOString(),
-        };
-        const { error: supaErr } = await supabase.from('products').upsert(supPayload);
-        if (supaErr) console.warn('[productService] Failed to dual-write create to Supabase:', supaErr);
-    } catch (e) {
-        console.warn('[productService] Exception dual-writing to Supabase:', e);
-    }
 
     return transformFromDB(payload);
 }
@@ -303,19 +251,14 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         }
     }
 
-    // SKU uniqueness check — busca exata no Supabase (fonte da verdade), excluindo o próprio produto editado
+    // SKU uniqueness check — busca exata na VPS (fonte da verdade), excluindo o próprio produto editado
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
     const UNIT_CODES = ['PCS', 'UN', 'PC', 'CX'];
     if (input.sku && !UNIT_CODES.includes(input.sku.toUpperCase())) {
-        const { data: skuConflict } = await supabase
-            .from('products')
-            .select('id, name, sku')
-            .ilike('sku', input.sku)
-            .neq('id', id)  // exclui o produto que está sendo editado
-            .limit(5);
+        const skuConflict = await vpsApiService.getProducts({ sku: input.sku, limit: 5 });
 
         const exactMatch = (skuConflict || []).filter(
-            (p: any) => p.sku?.toLowerCase() === input.sku!.toLowerCase()
+            (p: any) => p.sku?.toLowerCase() === input.sku!.toLowerCase() && p.id !== id
         );
 
         if (exactMatch.length > 0) {
@@ -356,7 +299,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         description: input.description || null,
         ean: input.eans?.[0] || null,
         alternative_eans: input.eans || [],
-        specs: input.specs || {},
+        specs: { ...(modelData.template_values || {}), ...(input.specs || {}) },
         price_cost: input.price_cost,
         price_retail: input.price_retail,
         price_reseller: input.price_reseller,
@@ -392,52 +335,6 @@ async function update(id: string, input: ProductInput): Promise<Product> {
 
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);
-
-    // --- DUAL WRITE SUPABASE ---
-    try {
-        const supPayload = {
-            company_id: payload.company_id,  // obrigatório — NOT NULL no Supabase
-            model_id: payload.model_id,
-            parent_id: payload.parent_id,
-            brand: payload.brand,
-            category_id: payload.category_id,
-            name: payload.name,
-            sku: payload.sku,
-            description: payload.description,
-            alternative_eans: payload.alternative_eans || [],
-            specs: payload.specs,
-            price_cost: payload.price_cost,
-            price_retail: payload.price_retail,
-            price_reseller: payload.price_reseller,
-            price_wholesale: payload.price_wholesale,
-            images: payload.images,
-            ncm: payload.ncm,
-            cest: payload.cest,
-            origin: payload.origin,
-            weight_kg: payload.weight_kg,
-            dimensions: payload.dimensions,
-            stock_quantity: payload.stock_quantity,
-            status: payload.status,
-            track_inventory: Boolean(payload.track_inventory),
-            is_gift: Boolean(payload.is_gift),
-            warranty_type: payload.warranty_type,
-            warranty_template_id: payload.warranty_template_id,
-            price_promo: payload.price_promo,
-            promo_start: payload.promo_start,
-            promo_end: payload.promo_end,
-            bling_id: payload.bling_id,
-            bling_parent_id: payload.bling_parent_id,
-            shopee_item_id: payload.shopee_item_id,
-            video_url: payload.video_url,
-            slug: payload.slug,
-            kits: payload.kits || null,
-            updated_at: new Date().toISOString(),
-        };
-        const { error: supaErr } = await supabase.from('products').upsert({ id, ...supPayload });
-        if (supaErr) console.warn('[productService] Failed to dual-write update to Supabase:', supaErr);
-    } catch (e) {
-        console.warn('[productService] Exception dual-writing to Supabase:', e);
-    }
 
     // Log price change (usa Supabase — tabela price_history não está na VPS)
     try {
@@ -476,17 +373,9 @@ async function update(id: string, input: ProductInput): Promise<Product> {
 }
 
 async function deleteProduct(id: string): Promise<void> {
-    // Tenta deletar da VPS (não-bloqueante: falha silenciosa com warning)
     const ok = await vpsApiService.deleteProduct(id);
     if (!ok) {
-        console.warn(`[productService] Delete na VPS falhou para id=${id}. Continuando com remoção local.`);
-    }
-
-    // --- DUAL WRITE SUPABASE (sempre executa) ---
-    try {
-        await supabase.from('products').delete().eq('id', id);
-    } catch (e) {
-        console.warn('[productService] Exception dual-writing delete to Supabase:', e);
+        throw new Error(`Delete na VPS falhou para id=${id}. Operação cancelada.`);
     }
 }
 

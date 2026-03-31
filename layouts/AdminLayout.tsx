@@ -87,6 +87,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/settings/mysql', icon: <Database size={18} />, label: 'MySQL Explorer', keywords: 'banco dados query sql tables' },
         { to: '/admin/settings/synology-cdn', icon: <Server size={18} />, label: 'CDN Synology', keywords: 'arquivos imagens videos upload nas' },
         { to: '/admin/settings/roadmap', icon: <Rocket size={18} />, label: 'Roadmap & Docs', keywords: 'futuro documentacao novidades' },
+        { to: '/admin/import', icon: <HardDrive size={18} />, label: 'Importação & Sync VPS', keywords: 'importar sincronizar vps preco estoque planilha supabase' },
         { to: '/admin/migration', icon: <Database size={18} />, label: 'Migração', keywords: 'supabase vps transferir' },
         { to: '/test-tabs', icon: <Tags size={18} />, label: '🧪 Teste de Abas', keywords: 'dev teste' },
       ]

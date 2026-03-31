@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { Download, RefreshCw, AlertTriangle, CheckCircle, Info, Link as LinkIcon, FileSpreadsheet, Database, Users, Box, HardDriveUpload, Upload } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Download, RefreshCw, AlertTriangle, CheckCircle, CheckCircle2, Info, Link as LinkIcon, FileSpreadsheet, Database, Users, Box, HardDriveUpload, Upload, ServerCog, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CategorySelect } from '../../../components/products/CategorySelect';
 import { DataSyncService } from '../../../services/dataSyncService';
+import { supabase } from '../../../services/supabase';
+import { vpsApiService } from '../../../services/vpsApiService';
 
 // Definindo abas/tipos de importação que teremos na central
-type ImportTab = 'modelos' | 'clientes' | 'produtos' | 'vendas';
+type ImportTab = 'modelos' | 'clientes' | 'produtos' | 'vendas' | 'vps-sync';
 
 export const DataImportExportPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ImportTab>('modelos');
@@ -14,6 +16,120 @@ export const DataImportExportPage: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [syncResults, setSyncResults] = useState<{ processed: number, inserted: number, updated: number, errors: string[] } | null>(null);
+
+  // VPS Sync state
+  const [isVpsSyncing, setIsVpsSyncing] = useState(false);
+  const [vpsSyncProgress, setVpsSyncProgress] = useState(0);
+  const [vpsSyncTotal, setVpsSyncTotal] = useState(0);
+  const [vpsSyncDone, setVpsSyncDone] = useState(0);
+  const vpsSyncAbort = useRef(false);
+
+  const handleVpsSync = async () => {
+    setIsVpsSyncing(true);
+    setVpsSyncProgress(0);
+    setVpsSyncTotal(0);
+    setVpsSyncDone(0);
+    vpsSyncAbort.current = false;
+
+    try {
+      // ── Etapa 1: Carregar produtos existentes da VPS para preservar imagens e outros dados ──
+      toast.loading('Carregando dados da VPS...', { id: 'vps-sync' });
+
+      // compact=true retorna a primeira imagem como URL (não base64), evitando payload enorme
+      const vpsProducts = await vpsApiService.getProducts({ status: 'all', limit: 2000, compact: true, noCache: true });
+      const vpsMap = new Map<string, any>();
+      if (Array.isArray(vpsProducts)) {
+        for (const vp of vpsProducts) vpsMap.set(vp.id, vp);
+      }
+
+      // ── Etapa 2: Ler do Supabase em páginas e mergear com dados da VPS ──
+      toast.loading(`VPS carregada (${vpsMap.size} produtos). Sincronizando preços e estoque...`, { id: 'vps-sync' });
+
+      const PAGE_SIZE = 50;
+      let page = 0;
+      let total = 0;
+      let done = 0;
+      let hasMore = true;
+
+      while (hasMore && !vpsSyncAbort.current) {
+        const from = page * PAGE_SIZE;
+        const to   = from + PAGE_SIZE - 1;
+
+        const { data: sbProducts, error, count } = await supabase
+          .from('products')
+          .select(
+            'id, name, sku, ean, status, category_id, ' +
+            'price_retail, price_reseller, price_wholesale, price_cost, ' +
+            'stock_quantity, track_inventory',
+            page === 0 ? { count: 'exact' } : undefined
+          )
+          .range(from, to);
+
+        if (error) {
+          toast.dismiss('vps-sync');
+          toast.error(`Erro ao ler Supabase: ${error.message}`);
+          break;
+        }
+        if (!sbProducts || sbProducts.length === 0) break;
+
+        if (page === 0 && count != null) {
+          total = count;
+          setVpsSyncTotal(total);
+        }
+
+        // Merge: todos os campos da VPS são preservados; apenas price/stock/status vêm do Supabase
+        const mergedRows = sbProducts.map((p: any) => {
+          const existing = vpsMap.get(p.id) ?? {};
+          return {
+            // Preserva TUDO da VPS (imagens, description, slug, kits, specs, etc.)
+            ...existing,
+            // Sobrescreve somente com dados do Supabase (fonte de verdade para preço/estoque)
+            id:             p.id,
+            name:           p.name        || existing.name,
+            sku:            p.sku         || existing.sku,
+            ean:            p.ean         || existing.ean        || null,
+            status:         p.status      || existing.status     || 'active',
+            category_id:    p.category_id || existing.category_id|| null,
+            price_retail:   p.price_retail,
+            price_reseller: p.price_reseller,
+            price_wholesale: p.price_wholesale,
+            price_cost:     p.price_cost,
+            stock_quantity: p.stock_quantity ?? 0,
+            track_inventory: p.track_inventory ?? true,
+            // Imagens: usa apenas URLs da VPS (filtra base64 se houver)
+            images: (() => {
+              const vpsImgs = Array.isArray(existing.images)
+                ? existing.images.filter((u: string) => u?.startsWith('http'))
+                : [];
+              return vpsImgs.length > 0 ? vpsImgs : (existing.images ?? null);
+            })(),
+          };
+        });
+
+        await vpsApiService.bulkSyncPricesStock(mergedRows);
+
+        done += sbProducts.length;
+        setVpsSyncDone(done);
+        setVpsSyncProgress(total > 0 ? Math.round((done / total) * 100) : 0);
+
+        hasMore = sbProducts.length === PAGE_SIZE;
+        page++;
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      toast.dismiss('vps-sync');
+      if (!vpsSyncAbort.current) {
+        toast.success(`VPS sincronizada! ${done} produtos atualizados.`);
+      } else {
+        toast.warning('Sincronização interrompida pelo usuário.');
+      }
+    } catch (err: any) {
+      toast.dismiss('vps-sync');
+      toast.error(err.message || 'Falha ao sincronizar com VPS.');
+    } finally {
+      setIsVpsSyncing(false);
+    }
+  };
 
   // Download Dinâmico do Template CSV
   const handleDownloadTemplate = async () => {
@@ -132,6 +248,17 @@ export const DataImportExportPage: React.FC = () => {
         >
           <HardDriveUpload className="w-4 h-4" />
           Histórico Vendas (Em breve)
+        </button>
+        <button
+          onClick={() => setActiveTab('vps-sync')}
+          className={`px-5 py-3 rounded-t-xl font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
+            activeTab === 'vps-sync'
+              ? 'bg-emerald-50 text-emerald-700 border-b-2 border-emerald-600'
+              : 'text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          <ServerCog className="w-4 h-4" />
+          Sync VPS
         </button>
       </div>
 
@@ -271,6 +398,75 @@ export const DataImportExportPage: React.FC = () => {
                   <span>Linhas com divergência são totalmente ignoradas pelo sistema.</span>
                 </li>
               </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SYNC VPS */}
+      {activeTab === 'vps-sync' && (
+        <div className="max-w-2xl mx-auto animate-in slide-in-from-bottom-2">
+          <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center">
+                <ServerCog className="w-7 h-7 text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Sincronizar Preços &amp; Estoque → VPS</h2>
+                <p className="text-sm text-slate-500 mt-1">Copia todos os dados do Supabase (fonte de verdade) para o banco MySQL da VPS.</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-sm text-amber-900 flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <span>Esta operação atualiza <strong>todos os produtos</strong> na VPS com os preços e estoques do Supabase. Execute quando os produtos aparecerem como "R$ 0,00" ou "Esgotado" na vitrine.</span>
+            </div>
+
+            {isVpsSyncing && (
+              <div className="mb-6">
+                <div className="flex justify-between text-sm text-slate-600 mb-2">
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                    Sincronizando... {vpsSyncDone} de {vpsSyncTotal} produtos
+                  </span>
+                  <span className="font-semibold text-emerald-700">{vpsSyncProgress}%</span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-emerald-500 to-teal-500 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${vpsSyncProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {!isVpsSyncing && vpsSyncDone > 0 && (
+              <div className="mb-6 flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                <div>
+                  <p className="font-semibold text-emerald-800">Sincronização concluída!</p>
+                  <p className="text-sm text-emerald-700">{vpsSyncDone} produtos sincronizados com a VPS.</p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleVpsSync}
+                disabled={isVpsSyncing}
+                className="flex-1 flex justify-center items-center gap-2 px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+              >
+                {isVpsSyncing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ServerCog className="w-5 h-5" />}
+                {isVpsSyncing ? 'Sincronizando...' : 'Iniciar Sincronização'}
+              </button>
+              {isVpsSyncing && (
+                <button
+                  onClick={() => { vpsSyncAbort.current = true; }}
+                  className="px-4 py-4 bg-rose-100 text-rose-700 font-medium rounded-xl hover:bg-rose-200 transition-colors"
+                >
+                  Cancelar
+                </button>
+              )}
             </div>
           </div>
         </div>

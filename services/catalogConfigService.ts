@@ -150,13 +150,15 @@ class CatalogConfigService {
     applyVisibilityRules(products: any[], settings: CatalogSettings): any[] {
         return products.filter(product => {
             // Regra: Ocultar inativos
-            // Nota: O status no banco é "active", não "DISPONÍVEL"
-            if (settings.hide_inactive && product.status !== 'active') {
-                return false;
+            if (settings.hide_inactive) {
+                const s = String(product.status || '').toLowerCase();
+                if (s && s !== 'active' && s !== 'ativo' && s !== 'disponível' && s !== 'disponivel') {
+                    return false;
+                }
             }
 
-            // Regra: Ocultar sem estoque
-            if (settings.hide_out_of_stock && (product.stock_quantity || 0) <= 0) {
+            // Regra: Ocultar sem estoque (ignoramos a regra se o produto não rastrear estoque)
+            if (settings.hide_out_of_stock && product.track_inventory !== false && (product.stock_quantity || 0) <= 0) {
                 return false;
             }
 
@@ -165,8 +167,8 @@ class CatalogConfigService {
                 return false;
             }
 
-            // Regra: Estoque mínimo
-            if ((product.stock_quantity || 0) < (settings.min_stock_to_show || 0)) {
+            // Regra: Estoque mínimo (ignoramos a regra se o produto não rastrear estoque)
+            if (product.track_inventory !== false && (product.stock_quantity || 0) < (settings.min_stock_to_show || 0)) {
                 return false;
             }
 

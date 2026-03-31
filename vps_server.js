@@ -409,6 +409,18 @@ fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, re
   return { ok: true, affectedRows: result.affectedRows };
 });
 
+// Update description + technical_specifications by SKU (used by description sync)
+fastify.patch('/products/description', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { sku, description, technical_specifications } = req.body || {};
+  if (!sku) return reply.code(400).send({ error: 'sku required' });
+  const [result] = await pool.query(
+    'UPDATE products SET description=?, technical_specifications=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    [description ?? null, technical_specifications ?? null, sku]
+  );
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
+
 fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, reply) => {
   const { exclude_from_seo } = req.body;
   await pool.query(

@@ -59,6 +59,10 @@ function CatalogContent() {
     const initialSearchQuery = searchParams.get('search') ?? '';
     const initialCategory = searchParams.get('categoria') ?? undefined;
 
+    // bypassCache fixo: nunca muda após a primeira renderização, evitando reload quando auth carrega
+    // Usuários ADMIN que precisam bypassar cache devem recarregar a página manualmente
+    const bypassCache = false;
+
     const {
         products,
         loading,
@@ -77,7 +81,7 @@ function CatalogContent() {
         pageSize: 150, // Alto, pois ao agrupar os cards, 150 produtos brutos podem virar apenas 10 ou 15 cards únicos
         initialSearchQuery,
         initialCategory,
-        bypassCache: customer?.customer_type === 'ADMIN'
+        bypassCache
     });
 
     const productsPerPage = catalogSettings?.products_per_page || 12;

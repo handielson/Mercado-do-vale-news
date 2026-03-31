@@ -786,6 +786,76 @@ export default async function handler(req: any, res: any) {
         }
     }
 
-    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce' });
+    // ─── SYNC-PRICES-VPS: lê preços/estoque do Supabase e sincroniza para VPS ─
+    // Chamado em páginas pelo admin: ?resource=sync-prices-vps&page=0 (50 produtos por chamada)
+    if (resource === 'sync-prices-vps') {
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        try {
+            const srKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+                || process.env.SUPABASE_SERVICE_ROLE_KEY
+                || supabaseKey;
+            const supabase = createClient(supabaseUrl, srKey);
+            const vpsBase = 'https://api.xiaomipetrolina.com.br';
+            const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || '';
+            if (!syncKey) return res.status(500).json({ error: 'VPS_SYNC_KEY not configured' });
+
+            const pageSize = 50;
+            const page = parseInt(String(req.query.page || req.body?.page || 0), 10);
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            // Lê dados do Supabase (fonte de verdade para preço/estoque)
+            const { data: products, error: supErr, count } = await supabase
+                .from('products')
+                .select('id, name, sku, status, category_id, price_retail, price_reseller, price_wholesale, price_cost, stock_quantity, track_inventory, is_combo', { count: 'exact' })
+                .range(from, to);
+
+            if (supErr) return res.status(500).json({ error: supErr.message });
+            if (!products || products.length === 0) {
+                return res.status(200).json({ ok: true, synced: 0, total: count ?? 0, hasMore: false, nextPage: null });
+            }
+
+            // Envia para VPS em batch — sem imagens para evitar 413
+            const vpsRows = products.map((p: any) => ({
+                id: p.id,
+                name: p.name,
+                sku: p.sku,
+                status: p.status === 'active' ? 'active' : p.status,
+                category_id: p.category_id,
+                price_retail: p.price_retail,   // em centavos, igual ao Supabase
+                price_reseller: p.price_reseller,
+                price_wholesale: p.price_wholesale,
+                price_cost: p.price_cost,
+                stock_quantity: p.stock_quantity ?? 0,
+                track_inventory: p.track_inventory ?? true,
+                is_combo: p.is_combo ?? false,
+            }));
+
+            const batchRes = await fetch(`${vpsBase}/products/batch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+                body: JSON.stringify(vpsRows),
+                signal: AbortSignal.timeout(25000),
+            });
+
+            const batchJson = batchRes.ok ? await batchRes.json() : { upserted: 0 };
+            const hasMore = from + products.length < (count ?? 0);
+
+            return res.status(200).json({
+                ok: batchRes.ok,
+                synced: batchJson.upserted ?? products.length,
+                page,
+                total: count ?? 0,
+                hasMore,
+                nextPage: hasMore ? page + 1 : null,
+                vpsStatus: batchRes.status,
+            });
+        } catch (err: any) {
+            return res.status(500).json({ error: err.message });
+        }
+    }
+
+    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|sync-prices-vps' });
 }
+
 

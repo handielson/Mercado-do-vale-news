@@ -99,7 +99,15 @@ export const ProductCombosPage: React.FC = () => {
   const openEditComboModal = async (combo: any) => {
     const toastId = toast.loading('Carregando itens do combo...');
     try {
-      const children = await vpsApiService.getComboChildren(combo.id);
+      const [children, supaResult] = await Promise.all([
+        vpsApiService.getComboChildren(combo.id),
+        supabase.from('products').select('description, technical_specifications').eq('id', combo.id).maybeSingle()
+      ]);
+
+      // Prioriza description do Supabase (fonte primária), fallback para a VPS
+      const savedDescription = supaResult.data?.description || combo.description || '';
+      const savedTechSpecs = supaResult.data?.technical_specifications || combo.technical_specifications || '';
+
       setEditingCombo({
         ...combo,
         combo_discount_type: combo.combo_discount_type || 'percentage',
@@ -112,7 +120,9 @@ export const ProductCombosPage: React.FC = () => {
           price_retail: c.price_retail,
           stock_quantity: c.stock_quantity
         })) || [],
-        tags: combo.tags || []
+        tags: combo.tags || [],
+        description: savedDescription,
+        technical_specifications: savedTechSpecs,
       });
       setImageStyle(combo.tags?.includes('mosaic_combo') ? 'mosaic' : 'auto');
       setIsModalOpen(true);
@@ -141,16 +151,27 @@ export const ProductCombosPage: React.FC = () => {
       let mergedSpecs = '';
       let autoImages: string[] = [];
 
-      // Buscando dados Ricos (Descrições) diretamente do Supabase local!
-      const { data: fullProductData } = await supabase
-        .from('products')
-        .select('*')
-        .in('id', editingCombo.combo_children.map(c => c.id));
+      // Buscando dados enriquecidos diretamente da VPS (já pré-carregados no allProducts e vpsApiService)
+      for (const c of editingCombo.combo_children) {
+        let prodData = allProducts.find(p => p.id === c.id);
 
-      const getProdData = (id: string) => fullProductData?.find(p => p.id === id);
+        let effectiveDesc = prodData?.description || '';
+        let effectiveSpecs = prodData?.technical_specifications || prodData?.specs?.technical_specifications || '';
 
-      editingCombo.combo_children.forEach((c, index) => {
-        const prodData = getProdData(c.id);
+        // Se o cache allProducts da tela de Combo não tiver descrição rica, faz um fetch leve por id na VPS
+        if (!effectiveDesc && !effectiveSpecs) {
+            try {
+                const vpsRich = await vpsApiService.getProductById(c.id);
+                if (vpsRich && !vpsRich.error) {
+                    prodData = { ...(prodData || {}), ...vpsRich, name: vpsRich.name || c.name };
+                    if (!effectiveDesc) effectiveDesc = vpsRich.description || '';
+                    if (!effectiveSpecs) effectiveSpecs = vpsRich.technical_specifications || '';
+                }
+            } catch(e) {
+                console.warn('Falha ao buscar dados ricos da VPS para', c.id);
+            }
+        }
+
         if (prodData) {
           total_weight_kg += (prodData.weight_kg || 0) * c.quantity;
           if (prodData.dimensions) {
@@ -159,30 +180,37 @@ export const ProductCombosPage: React.FC = () => {
             total_depth = Math.max(total_depth, prodData.dimensions.depth_cm || 0);
           }
           
-          if (prodData.description) {
-            mergedDescription += (index > 0 ? '<hr class="my-6 border-slate-200" />' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">${c.quantity}x ${prodData.name}</h4><div>${prodData.description}</div>`;
+          if (effectiveDesc) {
+            mergedDescription += (mergedDescription ? '<hr class="my-6 border-slate-200">' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">${c.quantity}x ${prodData.name}</h4><div>${effectiveDesc}</div>`;
           }
-          if (prodData.technical_specifications) {
-            mergedSpecs += (index > 0 ? '<hr class="my-6 border-slate-200" />' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">Especificações: ${prodData.name}</h4><div>${prodData.technical_specifications}</div>`;
+          if (effectiveSpecs) {
+            mergedSpecs += (mergedSpecs ? '<hr class="my-6 border-slate-200">' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">Especificações: ${prodData.name}</h4><div>${effectiveSpecs}</div>`;
           }
           
-          // Fallback parsing safe for Supabase text array
+          // Imagens diretamente da VPS
           let parsedImages = prodData.images;
           if (typeof parsedImages === 'string') {
               try { parsedImages = JSON.parse(parsedImages); } catch { parsedImages = []; }
           }
           if (!Array.isArray(parsedImages)) parsedImages = [];
+
+          const urlImages = parsedImages.filter((img: string) => typeof img === 'string' && !img.startsWith('data:'));
+          const firstImage = urlImages.length > 0 ? urlImages[0] : parsedImages[0];
           
-          if (parsedImages.length > 0) {
-            autoImages.push(parsedImages[0]);
+          if (firstImage) {
+            autoImages.push(firstImage);
           }
         }
-      });
+      }
 
-      // Maintain existing images if editing and manual, else override
+      // Mantém imagens existentes do combo se auto-galeria não encontrar nenhuma
       let finalImages = editingCombo.images || [];
       if (!editingCombo.id || imageStyle === 'auto' || imageStyle === 'mosaic') {
-        finalImages = imageStyle === 'manual' ? [] : autoImages;
+        if (imageStyle === 'manual') {
+          finalImages = [];
+        } else if (autoImages.length > 0) {
+          finalImages = autoImages; 
+        }
       }
 
       let currentTags = editingCombo.tags || [];
@@ -192,12 +220,16 @@ export const ProductCombosPage: React.FC = () => {
         currentTags = currentTags.filter(t => t !== 'mosaic_combo');
       }
 
+      // Usa descrição manual se preenchida; senão usa a auto-gerada dos filhos
+      const finalDescription = editingCombo.description?.trim() || mergedDescription;
+      const finalTechSpecs = editingCombo.technical_specifications?.trim() || mergedSpecs;
+
       const payload = {
         ...editingCombo,
         is_combo: true,
         slug: editingCombo.slug || generateSlug(editingCombo.name),
-        description: mergedDescription,
-        technical_specifications: mergedSpecs,
+        description: finalDescription,
+        technical_specifications: finalTechSpecs,
         images: finalImages,
         tags: currentTags,
         weight_kg: total_weight_kg || 0.3,
@@ -208,29 +240,11 @@ export const ProductCombosPage: React.FC = () => {
         }
       };
 
-      const supaPayload = {
-        name: payload.name,
-        slug: payload.slug,
-        is_combo: true,
-        status: payload.status,
-        description: payload.description,
-        technical_specifications: payload.technical_specifications,
-        images: payload.images,
-        tags: payload.tags,
-        weight_kg: payload.weight_kg,
-        dimensions: payload.dimensions,
-        price: payload.price_retail, 
-      };
-
       let res;
       if (editingCombo.id) {
-        await supabase.from('products').update(supaPayload).eq('id', editingCombo.id);
         res = await vpsApiService.updateCombo(editingCombo.id, payload);
       } else {
         res = await vpsApiService.createCombo(payload);
-        if (res && res.ok && res.id) {
-            await supabase.from('products').insert({ ...supaPayload, id: res.id });
-        }
       }
 
       if (res && res.ok) {
@@ -489,6 +503,21 @@ export const ProductCombosPage: React.FC = () => {
                     <p className="text-xs text-slate-500 mt-1">Sem imagens automáticas. Você subirá uma arte pronta depois pelo banco de imagens.</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Descrição Manual */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-slate-700">Descrição do Produto (Vitrine)</label>
+                  <span className="text-xs text-slate-400">Deixe em branco para gerar automaticamente dos itens ao salvar</span>
+                </div>
+                <textarea
+                  rows={5}
+                  value={editingCombo.description || ''}
+                  onChange={e => setEditingCombo({ ...editingCombo, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm font-mono resize-y"
+                  placeholder="Descreva o combo... ou deixe em branco para gerar automaticamente."
+                />
               </div>
 
               {/* Composition */}

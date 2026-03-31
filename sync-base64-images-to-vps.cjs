@@ -6,7 +6,8 @@
  * Uso: node sync-base64-images-to-vps.cjs
  */
 
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: require('path').join(__dirname, '.env.local') });
+
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY;

@@ -239,6 +239,40 @@ class VpsApiService {
     return allOk;
   }
 
+  /** Envia apenas preço + estoque (sem imagens) em lotes de 50 — evita 413 e é muito mais rápido */
+  async bulkSyncPricesStock(products: any[]): Promise<{ ok: boolean; sent: number }> {
+    if (!products?.length) return { ok: true, sent: 0 };
+    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return { ok: false, sent: 0 }; }
+    this.invalidateProductCache();
+
+    const CHUNK = 50;
+    let sent = 0;
+    let allOk = true;
+
+    for (let i = 0; i < products.length; i += CHUNK) {
+      const chunk = products.slice(i, i + CHUNK);
+      try {
+        const res = await fetch(`${VPS_BASE_URL}/products/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+          body: JSON.stringify(chunk),
+          signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+        });
+        if (res.ok) {
+          sent += chunk.length;
+        } else {
+          allOk = false;
+          console.warn(`[vpsApiService] bulkSyncPricesStock chunk ${i / CHUNK} → HTTP ${res.status}`);
+        }
+      } catch (err) {
+        allOk = false;
+        console.warn('[vpsApiService] bulkSyncPricesStock error:', err);
+      }
+    }
+
+    return { ok: allOk, sent };
+  }
+
   async updateProduct(id: string, data: any): Promise<boolean> {
     this.cache.delete(`/products/${id}`);
     this.invalidateProductCache();

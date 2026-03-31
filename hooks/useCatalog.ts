@@ -132,20 +132,16 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 total: response.total
             });
 
-            // Aplicar regras de visibilidade
-            const filteredProducts = applyVisibilityRules(response.products);
-
-            console.log('[useCatalog] After visibility rules:', {
-                originalCount: response.products.length,
-                filteredCount: filteredProducts.length
-            });
+            // catalogService já aplica as regras de visibilidade em ambos os caminhos (VPS e Supabase).
+            // NÃO reaplicar aqui para evitar dupla filtragem que elimina produtos válidos.
+            console.log('[useCatalog] Products ready (visibility already applied by catalogService):', response.products.length);
 
             if (reset) {
-                setProducts(filteredProducts);
+                setProducts(response.products);
                 setPage(1);
                 pageRef.current = 1;
             } else {
-                setProducts((prev) => [...prev, ...filteredProducts]);
+                setProducts((prev) => [...prev, ...response.products]);
             }
 
             setHasMore(response.hasMore);

@@ -120,367 +120,157 @@ export const PublicProductPage: React.FC = () => {
                 let error: any = null;
                 const { vpsApiService } = await import('@/services/vpsApiService');
 
-                // Busca inicial no Supabase (Resolve relações como Nome da Marca e Nome da Categoria)
-                let query = supabase
-                    .from('products')
-                    .select('*, brand:brands(name), category:categories(name, config)')
-                    .eq('status', 'active');
-
+                // 1. Busca Direta do Produto na VPS
                 if (isUuid) {
-                    query = query.eq('id', slug);
+                    data = await vpsApiService.getProductById(slug, true);
                 } else {
-                    query = query.ilike('slug', slug); // Ignora Case Sensitive
+                    data = await vpsApiService.getProductBySlug(slug);
                 }
 
-                const supaResult = await query.maybeSingle();
-                data = supaResult.data;
-                error = supaResult.error;
-
-                // Tenta fallback na VPS caso não ache no Supabase (ex: combos criados recentemente)
-                if (!data && slug) {
-                    try {
-                        const vpsFallback = isUuid 
-                            ? await vpsApiService.getProductById(slug, true)
-                            : await vpsApiService.getProductBySlug(slug);
-
-                        if (vpsFallback && !vpsFallback.error && vpsFallback.status !== 'inactive') {
-                            data = vpsFallback;
-                            error = null;
-                        }
-                    } catch (err) {
-                        console.warn('[PublicProductPage] VPS Fallback failed:', err);
-                    }
-                }
-
-                // Após termos os dados base relacionais, buscamos estoques e preços AO VIVO da VPS
-                if (data && data.id) {
-                    try {
-                        const vpsRichData = await vpsApiService.getProductById(data.id);
-                        if (vpsRichData && !vpsRichData.error) {
-                            // Mescla dando preferência à VPS (dados vitais), mas protegendo campos do Supabase
-                            // que podem vir como null da VPS quando não sincronizados ainda.
-                            data = {
-                                ...data,
-                                ...vpsRichData,
-                                category: data.category,
-                                // Prefere brand do Supabase (JOIN object {name}), mas usa da VPS como fallback (string)
-                                brand: data.brand || vpsRichData.brand,
-                                sku: vpsRichData.sku || data.sku,
-                                images: vpsRichData.images || data.images,
-                                video_url: vpsRichData.video_url || data.video_url,
-                                updated_at: vpsRichData.updated_at || data.updated_at,
-                                // model_id: protege para não perder o vínculo com o modelo (que contém brand, specs etc.)
-                                model_id: vpsRichData.model_id || data.model_id,
-                                // Protege textos ricos do Supabase de serem apagados por retornos vazios da VPS
-                                description: data.description || vpsRichData.description,
-                                technical_specifications: data.technical_specifications || vpsRichData.technical_specifications,
-                                specs: data.specs || vpsRichData.specs,
-                            };
-                        }
-                    } catch (e) {
-                        console.warn('[PublicProductPage] Failed to enrich from VPS by ID:', e);
-                    }
-                }
-
-                // NOTA: O endpoint /products?sku= da VPS não filtra exatamente por SKU,
-                // por isso o fallback por SKU foi removido para evitar mostrar dados do produto errado.
-
-                if (!data || error) {
-                    console.error('Produto não encontrado:', error);
+                if (!data || data.error || data.status === 'inactive') {
+                    console.error('Produto não encontrado ou inativo na VPS:', slug);
                     toast.error('Produto não encontrado');
                     navigate('/');
                     return;
                 }
 
-                // Check VPS for SEO Blacklist strictly (avoids needing Supabase column)
-                try {
-                    const { vpsApiService } = await import('@/services/vpsApiService');
-                    const vpsData = await vpsApiService.getProductById(data.id);
-                    if (vpsData) {
-                        data.exclude_from_seo = Boolean(vpsData.exclude_from_seo);
-                        if (vpsData.is_combo) {
-                            data.is_combo = true;
-                            const children = await vpsApiService.getComboChildren(data.id);
-                            setComboChildren(children || []);
-                        }
-                    }
-                } catch (v_err) {
-                    console.warn("Failed to check VPS SEO flag or Combo state:", v_err);
-                }
-
-                let modelData: Record<string, any> = {};
-                let modelRootDescription = '';
-                let modelBrandName = '';
-                // Valores padrão de specs vindos do template do modelo
-                let modelSpecDefaults: Record<string, any> = {};
-
-                if (data.model_id) {
-                    const { data: mData } = await supabase
-                        .from('models')
-                        .select('description, template_values, brand:brands(name)')
-                        .eq('id', data.model_id)
-                        .maybeSingle();
-
-                    if (mData) {
-                        modelRootDescription = mData.description || '';
-                        if (mData.template_values) {
-                            modelData = mData.template_values;
-                            // Salvar todos os campos do template como specs, exceto logísticos e SEO nativos
-                            const ignoredKeys = ['weight_kg', 'dimensions.width_cm', 'dimensions.height_cm', 'dimensions.depth_cm', 'slug', 'meta_title', 'meta_description', 'keywords'];
-                            Object.entries(mData.template_values).forEach(([k, v]) => {
-                                if (!ignoredKeys.includes(k)) {
-                                    const cleanKey = k.replace(/^specs\./, ''); // remove se existir prefixo antigo
-                                    modelSpecDefaults[cleanKey] = v;
-                                }
-                            });
-                        }
-                        modelBrandName = (mData.brand as any)?.name || '';
-                    }
-                }
-
-                // Format it perfectly as CatalogProduct
-                const categoryRaw = (data.category as any);
-                // Salvar config da categoria para render dinâmico das specs
-                if (categoryRaw?.config) setCategoryConfig(categoryRaw.config);
-
-                // --- Segurança de Parsing ---
+                // Normaliza arrays JSON caso a stringificação tenha vazado
                 let parsedImages = data.images;
-                if (typeof data.images === 'string') {
-                    try { parsedImages = JSON.parse(data.images); } catch { parsedImages = []; }
+                if (typeof parsedImages === 'string') {
+                    try { parsedImages = JSON.parse(parsedImages); } catch { parsedImages = []; }
                 }
                 if (!Array.isArray(parsedImages)) parsedImages = [];
                 data.images = parsedImages;
 
                 let parsedSpecs = data.specs;
-                if (typeof data.specs === 'string') {
-                    try { parsedSpecs = JSON.parse(data.specs); } catch { parsedSpecs = {}; }
+                if (typeof parsedSpecs === 'string') {
+                    try { parsedSpecs = JSON.parse(parsedSpecs); } catch { parsedSpecs = {}; }
                 }
                 data.specs = parsedSpecs || {};
-                // -----------------------------
 
-                // Merge: template defaults + product specs + logistics fallbacks
-                const mergedSpecs = {
-                    ...(modelSpecDefaults),
-                    ...(data.specs),
-                    // Logística: valor do produto se existir, senão do template do modelo
-                    weight_kg: data.weight_kg ?? modelData['weight_kg'],
-                    width_cm: data.width_cm ?? modelData['dimensions.width_cm'],
-                    height_cm: data.height_cm ?? modelData['dimensions.height_cm'],
-                    depth_cm: data.depth_cm ?? modelData['dimensions.depth_cm'],
-                };
+                // Trata Combos e busca Filhos via VPS
+                data.exclude_from_seo = Boolean(data.exclude_from_seo);
+                if (data.is_combo) {
+                    const children = await vpsApiService.getComboChildren(data.id);
+                    setComboChildren(children || []);
+                    
+                    // Auto-generate combo description from children if empty
+                    if (!data.description && children && children.length > 0) {
+                        let mergedDesc = '';
+                        let mergedSpecs = '';
+                        
+                        // Busca a descrição rica de cada item do combo diretamente da VPS
+                        for (const child of children) {
+                            try {
+                                const childData = await vpsApiService.getProductById(child.id);
+                                if (childData && !childData.error) {
+                                    const cDesc = childData.description || '';
+                                    const cSpecs = childData.technical_specifications || (childData.specs && childData.specs.technical_specifications ? childData.specs.technical_specifications : '');
+                                    
+                                    if (cDesc) {
+                                        mergedDesc += (mergedDesc ? '<br><hr class="my-6 border-slate-200">' : '') + `<div style="margin:20px 0;"><h4 style="color:#000; font-weight:bold; margin-bottom:10px;">Item: ${child.name}</h4>${cDesc}</div>`;
+                                    }
+                                    if (cSpecs) {
+                                        mergedSpecs += (mergedSpecs ? '<br><hr class="my-6 border-slate-200">' : '') + `<div style="margin:20px 0;"><h4 style="color:#000; font-weight:bold; margin-bottom:10px;">Ficha Técnica - ${child.name}</h4>${cSpecs}</div>`;
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('[PublicProductPage] Failed to fetch child for combo auto-description', child.id);
+                            }
+                        }
 
+                        if (mergedDesc) data.description = mergedDesc;
+                        if (mergedSpecs && !data.technical_specifications) data.technical_specifications = mergedSpecs;
+                    }
+                }
+                
+                // Categoria e Config (Mantemos chamada supérflua apenas para pegar configs locais de render das tags, categorias em breve vao pra vps tb)
+                if (data.category_id) {
+                    const { data: catData } = await supabase.from('categories').select('name, config').eq('id', data.category_id).maybeSingle();
+                    if (catData) {
+                        data.category = catData.name;
+                        if (catData.config) setCategoryConfig(catData.config);
+                    }
+                }
+                
                 const formattedProduct = {
-                    ...data,
-                    specs: mergedSpecs,
-                    brand: data.brand?.name || modelBrandName || data.brand || '',
-                    category: categoryRaw?.name || data.category_id,
-                    description: modelData.description || modelRootDescription || data.description,
-                    meta_title: modelData.meta_title || data.meta_title,
-                    meta_description: modelData.meta_description || data.meta_description,
-                    keywords: modelData.keywords || data.keywords,
+                    ...data, 
+                    // Garante que o frontend ache que tem uma string de marca
+                    brand: typeof data.brand === 'object' ? data.brand?.name : (data.brand || ''),
                 };
-
+                
                 setProduct(formattedProduct as unknown as CatalogProduct);
 
-                setProduct(formattedProduct as unknown as CatalogProduct);
-
-                if (data.is_combo && data.tags?.includes('mosaic_combo') && data.images && data.images.length > 1) {
+                if (data.is_combo && data.tags?.includes('mosaic_combo') && data.images.length > 1) {
                     setSelectedImage('MOSAIC');
-                } else if (data.images && data.images.length > 0) {
+                } else if (data.images.length > 0) {
                     setSelectedImage(data.images[0]);
                 }
-
-                // Função auxiliar global para produtos
-                const enrichProductsWithModels = async (productList: any[]) => {
-                    try {
-                        if (!productList || productList.length === 0) return productList;
-                        
-                        const modelIds = Array.from(new Set(productList.map(p => p.model_id).filter(Boolean)));
-                        if (modelIds.length === 0) return productList.map(p => {
-                            // Sanitização de fallback básica mesmo sem modelo
-                            let tempImages = p.images;
-                            if (typeof tempImages === 'string') { try { tempImages = JSON.parse(tempImages); } catch { tempImages = []; } }
-                            if (!Array.isArray(tempImages)) tempImages = [];
-                            
-                            let tempSpecs = p.specs;
-                            if (typeof tempSpecs === 'string') { try { tempSpecs = JSON.parse(tempSpecs); } catch { tempSpecs = {}; } }
-                            
-                            return { ...p, images: tempImages, specs: tempSpecs || {} };
-                        });
-
-                        const { data: modelsData, error } = await supabase
-                            .from('models')
-                            .select('id, description, template_values, brand:brands(name)')
-                            .in('id', modelIds as string[]);
-
-                        if (error || !modelsData) return productList;
-
-                        const modelsMap = modelsData.reduce((acc, m) => {
-                            acc[m.id] = m;
-                            return acc;
-                        }, {} as Record<string, any>);
-
-                        return productList.map(p => {
-                            let tempImages = p.images;
-                            if (typeof tempImages === 'string') { try { tempImages = JSON.parse(tempImages); } catch { tempImages = []; } }
-                            if (!Array.isArray(tempImages)) tempImages = [];
-                            
-                            let tempSpecs = p.specs;
-                            if (typeof tempSpecs === 'string') { try { tempSpecs = JSON.parse(tempSpecs); } catch { tempSpecs = {}; } }
-                            
-                            if (!p.model_id || !modelsMap[p.model_id]) return { ...p, images: tempImages, specs: tempSpecs || {} };
-                            
-                            const mData = modelsMap[p.model_id];
-                            const mTemplate = mData.template_values || {};
-                            const mergedSpecs = { ...mTemplate, ...(tempSpecs || {}) };
-                            const mergedBrand = typeof p.brand === 'object' ? p.brand?.name : p.brand;
-                            const modelBrand = typeof mData.brand === 'object' ? mData.brand?.name : mData.brand;
-                            
-                            return {
-                                ...p,
-                                specs: mergedSpecs,
-                                images: tempImages,
-                                description: mTemplate.description || mData.description || p.description,
-                                meta_title: mTemplate.meta_title || p.meta_title,
-                                meta_description: mTemplate.meta_description || p.meta_description,
-                                keywords: mTemplate.keywords || p.keywords,
-                                brand: mergedBrand || modelBrand || ''
-                            };
-                        });
-                    } catch (err) {
-                        console.error('Error enriching products with models:', err);
-                        return productList;
+                
+                // -- Siblings (Variantes do mesmo modelo) via VPS --
+                if (data.model_id) {
+                    const sibs = await vpsApiService.getProducts({ model_id: data.model_id, status: 'active', limit: 50 });
+                    if (sibs) {
+                        const cleanSibs = sibs.map(s => {
+                            let imgs = s.images;
+                            if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
+                            if (!Array.isArray(imgs)) imgs = [];
+                            return { ...s, images: imgs };
+                        }).filter(s => s.id !== data.id);
+                        setSiblings(cleanSibs as unknown as CatalogProduct[]);
                     }
-                };
-
-                // Buscar irmãos (variantes)
-                const modelVal = data.model_id || data.model;
-                if (modelVal) {
-                    let sibQuery = supabase
-                        .from('products')
-                        .select('*, brand:brands(name), category:categories(name)')
-                        .eq('status', 'active');
-
-                    if (data.model_id) {
-                        sibQuery = sibQuery.eq('model_id', data.model_id);
-                    } else {
-                        sibQuery = sibQuery.eq('model', data.model);
-                    }
-
-                    const { data: sibs } = await sibQuery;
-
-                    if (sibs && sibs.length > 0) {
-                        const enrichedSibs = await enrichProductsWithModels(sibs);
-                        setSiblings(enrichedSibs as unknown as CatalogProduct[]);
-                    }
+                } else if (data.parent_id) {
+                    const sibs = await vpsApiService.getProducts({ parent_id: data.parent_id, status: 'active', limit: 50 });
+                     if (sibs) {
+                        const cleanSibs = sibs.map(s => {
+                            let imgs = s.images;
+                            if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
+                            if (!Array.isArray(imgs)) imgs = [];
+                            return { ...s, images: imgs };
+                        }).filter(s => s.id !== data.id);
+                        setSiblings(cleanSibs as unknown as CatalogProduct[]);
+                     }
                 }
 
-                // Buscar produtos relacionados (mesma categoria, max 4)
+                // -- Relacionados (Mesma categoria) via VPS --
                 if (data.category_id) {
-                    const { data: related } = await supabase
-                        .from('products')
-                        .select('*, brand:brands(name), category:categories(name)')
-                        .eq('status', 'active')
-                        .eq('category_id', data.category_id)
-                        .neq('id', data.id)
-                        .limit(4);
-
+                    const related = await vpsApiService.getProducts({ category: data.category_id, status: 'active', limit: 5 });
                     if (related) {
-                        const enrichedRelated = await enrichProductsWithModels(related);
-                        const formattedRelated = enrichedRelated.map(rel => ({
-                            ...rel,
-                            category: (rel.category as any)?.name || rel.category_id,
-                            brand: typeof rel.brand === 'object' ? (rel.brand as any)?.name : rel.brand
-                        }));
-                        setRelatedProducts(formattedRelated as unknown as CatalogProduct[]);
+                        const cleanRelated = related.map(s => {
+                            let imgs = s.images;
+                            if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
+                            if (!Array.isArray(imgs)) imgs = [];
+                            return { ...s, images: imgs };
+                        }).filter(s => s.id !== data.id).slice(0, 4);
+                        setRelatedProducts(cleanRelated as unknown as CatalogProduct[]);
                     }
                 }
 
-                // Buscar Cross-Sell (produtos de OUTRAS categorias que compartilhem alguma Spec/Tag do produto atual)
-                if (Object.keys(mergedSpecs).length > 0) {
-                    const orConditions: string[] = [];
-                    
-                    // Lista de características muito genéricas que não servem para cruzar vendas (ex: dois itens pretos não significam que conversem)
-                    const BLOCKED_CROSS_SELL_KEYS = new Set([
-                        'color', 'cor', 'storage', 'armazenamento', 'ram', 'memory', 'memoria',
-                        'weight_kg', 'peso_g', 'peso_kg', 'peso', 'width_cm', 'largura', 'height_cm', 'altura',
-                        'depth_cm', 'profundidade', 'tamanho', 'size', 'wifi', 'bluetooth', 'nfc',
-                        'versao', 'version', 'ano', 'year', 'garantia', 'warranty', 'voltagem', 'voltage',
-                        'condicao', 'condition', 'estado', 'status', 'tipo', 'type', 'modelo', 'model', 
-                        'marca', 'brand', 'bateria', 'battery_mah', 'battery_health', 'display', 'tela'
-                    ]);
-
-                    // Dá prioridade total se o lojista criou um campo customizado explícito para isso
-                    const explicitTags = mergedSpecs['tags_venda'] || mergedSpecs['cross_sell_tags'] || mergedSpecs['tags'];
-                    
-                    if (explicitTags) {
-                        // Usa apenas as tags explícitas
-                        const tagList = Array.isArray(explicitTags) ? explicitTags : [explicitTags];
-                        tagList.forEach(item => {
-                            if (typeof item === 'string' && item.trim().length > 2) {
-                                const cleanVal = item.trim().replace(/"/g, '');
-                                // O produto alvo pode ter a tag na mesma chave ou como valor genérico nas specs
-                                orConditions.push(`specs->>tags_venda.eq."${cleanVal}"`);
-                                orConditions.push(`specs->>cross_sell_tags.eq."${cleanVal}"`);
-                                orConditions.push(`specs->>tags.eq."${cleanVal}"`);
-                            }
-                        });
-                    } else {
-                        // Lógica automática: cruza todas as especificações técnicas, exceto as genéricas
-                        Object.entries(mergedSpecs).forEach(([k, v]) => {
-                            if (BLOCKED_CROSS_SELL_KEYS.has(k.toLowerCase())) return;
-
-                            // Função auxiliar para injetar condição
-                            const injectCondition = (val: any) => {
-                                if (typeof val === 'string' && val.trim().length > 2 && val.trim().toLowerCase() !== 'sim' && val.trim().toLowerCase() !== 'não') {
-                                    const cleanVal = val.trim().replace(/"/g, '');
-                                    orConditions.push(`specs->>${k}.ilike."%${cleanVal}%"`); 
-                                } else if (typeof val === 'number' && val > 0) {
-                                    orConditions.push(`specs->>${k}.eq.${val}`);
-                                }
-                            };
-
-                            if (Array.isArray(v)) {
-                                v.forEach(item => injectCondition(item));
-                            } else {
-                                injectCondition(v);
-                            }
-                        });
-                    }
-
-                    // Construção dinâmica de tags via OR match (specs->>campo.eq.Valor)
-                    if (orConditions.length > 0) {
-                        const orString = orConditions.join(',');
-                        
-                        let csQuery = supabase
-                            .from('products')
-                            .select('*, brand:brands(name), category:categories(name)')
-                            .eq('status', 'active')
-                            .neq('id', data.id)
-                            .or(orString)
-                            .limit(4);
-
-                        // Garante que o cross-sell é apenas de produtos de categorias *diferentes*
-                        if (data.category_id) {
-                            csQuery = csQuery.neq('category_id', data.category_id);
-                        }
-
-                        const { data: crossSellResult, error: csError } = await csQuery;
-                        
-                        if (!csError && crossSellResult && crossSellResult.length > 0) {
-                            const enrichedCrossSell = await enrichProductsWithModels(crossSellResult);
-                            const formattedCrossSell = enrichedCrossSell.map(rel => ({
-                                ...rel,
-                                category: (rel.category as any)?.name || rel.category_id,
-                                brand: typeof rel.brand === 'object' ? (rel.brand as any)?.name : rel.brand
-                            }));
-                            setCrossSellProducts(formattedCrossSell as unknown as CatalogProduct[]);
+                // -- Cross-sells (Recomendações Dinâmicas baseada na primeira tag) via VPS --
+                const explicitTags = data.specs['tags_venda'] || data.specs['cross_sell_tags'] || data.specs['tags'];
+                if (explicitTags) {
+                    const tagList = Array.isArray(explicitTags) ? explicitTags : [explicitTags];
+                    // Tenta achar qualquer tag com string minima e limpa
+                    const firstTag = tagList.find(t => typeof t === 'string' && t.trim().length > 2);
+                    if (firstTag) {
+                        const crossSells = await vpsApiService.getProducts({ search: firstTag.trim(), status: 'active', limit: 8 });
+                        if (crossSells) {
+                            const cleanCross = crossSells.map(s => {
+                                let imgs = s.images;
+                                if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
+                                if (!Array.isArray(imgs)) imgs = [];
+                                return { ...s, images: imgs };
+                            })
+                            // Evita sugerir os que já são relacionados da msm categoria
+                            .filter(s => s.id !== data.id && s.category_id !== data.category_id)
+                            .slice(0, 4);
+                            
+                            setCrossSellProducts(cleanCross as unknown as CatalogProduct[]);
                         }
                     }
                 }
-
             } catch (err) {
-                console.error(err);
+                console.error('[PublicProductPage] Error fetching product:', err);
                 navigate('/');
             } finally {
                 setLoading(false);
