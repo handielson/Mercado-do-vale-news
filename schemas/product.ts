@@ -51,6 +51,9 @@ export const productSchema = z.object({
     // Gift Product Flag
     is_gift: z.boolean().optional().default(false),
 
+    // Virtual Product Flag
+    is_virtual: z.boolean().optional().default(false),
+
     // Combo Product Fields
     is_combo: z.boolean().optional().default(false),
     combo_discount_type: z.enum(['percentage', 'fixed']).nullable().optional(),
@@ -124,7 +127,7 @@ export const productSchema = z.object({
             if (val === null || val === undefined || Number.isNaN(val) || val === 0) return undefined;
             return val;
         })
-    }).optional(),
+    }).nullable().optional(),
 
     // Inventory Control
     track_inventory: z.boolean().default(true),
@@ -154,6 +157,10 @@ export const productSchema = z.object({
     (data) => {
         // If tracking inventory and NOT a combo, stock_quantity is required.
         // Combos calculate their stock dynamically on the backend based on child stocks.
+        // Virtual products do not need stock tracking.
+        if (data.is_virtual) {
+            return true;
+        }
         if (data.track_inventory === true && !data.is_combo && (data.stock_quantity === undefined || data.stock_quantity === null)) {
             return false;
         }

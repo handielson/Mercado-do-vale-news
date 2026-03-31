@@ -291,6 +291,28 @@ export function ProductFormNew({
                             </div>
                         </div>
                     </button>
+                    
+                    <button
+                        type="button"
+                        onClick={() => setValue('is_virtual', !watch('is_virtual'))}
+                        className={`col-span-2 p-4 rounded-lg border-2 transition-all flex items-center justify-between ${watch('is_virtual')
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-slate-200 hover:border-purple-300'
+                            }`}
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="text-2xl">☁️</div>
+                            <div className="text-left">
+                                <div className="font-semibold">PRODUTO VIRTUAL (Mensalidade / Serviço)</div>
+                                <div className="text-xs text-slate-600 mt-1">
+                                    Remove validação de frete, peso e controle de estoque
+                                </div>
+                            </div>
+                        </div>
+                        <div className={`w-12 h-6 rounded-full transition-colors ${watch('is_virtual') ? 'bg-purple-500' : 'bg-slate-300'} relative`}>
+                            <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${watch('is_virtual') ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                        </div>
+                    </button>
                 </div>
             </div>
 

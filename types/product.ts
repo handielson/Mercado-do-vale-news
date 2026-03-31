@@ -99,6 +99,9 @@ export interface Product {
     // Gift Product (Brinde)
     is_gift?: boolean;             // If true, applies automatic full discount in POS
 
+    // Virtual Product
+    is_virtual?: boolean;          // Se true, representa um serviço mensalidade, sem estoque e envio
+
     // Warranty Configuration
     warranty_type: WarrantyType;   // Type of warranty: brand, category, or custom
     warranty_template_id?: string; // Warranty template ID (only used when warranty_type = 'custom')
@@ -186,6 +189,7 @@ export interface ProductInput {
     track_inventory: boolean;
     stock_quantity?: number;
     is_gift?: boolean;
+    is_virtual?: boolean;
     warranty_type?: WarrantyType;
     warranty_template_id?: string;
     // SEO Fields (AI-Generated)

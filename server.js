@@ -150,7 +150,7 @@ fastify.get('/products', async (req, reply) => {
        price_promo, promo_start, promo_end,
        is_combo, combo_discount_type, combo_discount_value,
        (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
-       track_inventory, is_gift,
+       track_inventory, is_gift, is_virtual,
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, bling_id, bling_parent_id, video_url,
@@ -160,7 +160,7 @@ fastify.get('/products', async (req, reply) => {
        price_promo, promo_start, promo_end,
        is_combo, combo_discount_type, combo_discount_value,
        (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
-       track_inventory, is_gift,
+       track_inventory, is_gift, is_virtual,
        warranty_type, warranty_template_id,
        images, status, parent_id, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, kits, created_at, updated_at`;
@@ -236,6 +236,9 @@ fastify.get('/products', async (req, reply) => {
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    is_virtual:       r.is_virtual === 1,
+    is_gift:          r.is_gift === 1,
+    track_inventory:  r.track_inventory === 1,
   }));
 
   reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
@@ -258,6 +261,9 @@ fastify.get('/products/:id', async (req, reply) => {
     specs:         typeof r.specs === 'string'         ? JSON.parse(r.specs)         : r.specs,
     custom_fields: typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields) : r.custom_fields,
     kits:          typeof r.kits === 'string'          ? JSON.parse(r.kits)          : r.kits,
+    is_virtual:    r.is_virtual === 1,
+    is_gift:       r.is_gift === 1,
+    track_inventory: r.track_inventory === 1,
   };
 });
 
@@ -321,9 +327,9 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           stock_quantity, status, category_id, brand, model_id,
           images, specs, custom_fields, dimensions, weight_kg,
           ncm, cest, origin, bling_id, bling_parent_id, parent_id,
-          video_url, track_inventory, is_gift,
+          video_url, track_inventory, is_gift, is_virtual,
           warranty_type, warranty_template_id, company_id, kits
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=VALUES(name), slug=VALUES(slug), sku=VALUES(sku),
           ean=VALUES(ean), alternative_eans=VALUES(alternative_eans),
@@ -341,6 +347,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           bling_id=VALUES(bling_id), bling_parent_id=VALUES(bling_parent_id),
           parent_id=VALUES(parent_id), video_url=VALUES(video_url),
           track_inventory=VALUES(track_inventory), is_gift=VALUES(is_gift),
+          is_virtual=VALUES(is_virtual),
           warranty_type=VALUES(warranty_type),
           warranty_template_id=VALUES(warranty_template_id),
           kits=VALUES(kits),
@@ -358,7 +365,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.ncm || null, p.cest || null, p.origin || null,
           p.bling_id || null, p.bling_parent_id || null, p.parent_id || null,
           p.video_url || null,
-          p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
+          p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0, p.is_virtual ? 1 : 0,
           p.warranty_type || 'brand', p.warranty_template_id || null,
           p.company_id || null, jsonStr(p.kits),
         ]
@@ -383,7 +390,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       stock_quantity=?, status=?, category_id=?, brand=?, model_id=?,
       images=?, specs=?, custom_fields=?, dimensions=?, weight_kg=?,
       ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?,
-      video_url=?, track_inventory=?, is_gift=?,
+      video_url=?, track_inventory=?, is_gift=?, is_virtual=?,
       warranty_type=?, warranty_template_id=?, kits=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
@@ -400,7 +407,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.ncm || null, p.cest || null, p.origin || null,
       p.bling_id || null, p.bling_parent_id || null, p.parent_id || null,
       p.video_url || null,
-      p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
+      p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0, p.is_virtual ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
       req.params.id,
     ]
@@ -408,11 +415,6 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
   return { ok: true };
 });
 
-// Delete product (and children)
-fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
-  await pool.query(`DELETE FROM products WHERE id=? OR parent_id=?`, [req.params.id, req.params.id]);
-  return { ok: true };
-});
 
 // Update images by SKU (used by image bank sync)
 fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, reply) => {

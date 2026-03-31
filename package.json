@@ -23,6 +23,7 @@
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.344.0",
+    "mysql2": "^3.20.0",
     "pg": "^8.19.0",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
