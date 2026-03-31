@@ -421,6 +421,29 @@ fastify.patch('/products/description', { preHandler: requireSyncKey }, async (re
   return { ok: true, affectedRows: result.affectedRows };
 });
 
+// Update stock_quantity by SKU (used by Bling webhook — estoque event)
+fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { sku, stock_quantity } = req.body || {};
+  if (!sku) return reply.code(400).send({ error: 'sku required' });
+  if (stock_quantity === undefined || stock_quantity === null) return reply.code(400).send({ error: 'stock_quantity required' });
+  const [result] = await pool.query(
+    'UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    [Math.max(0, parseInt(stock_quantity, 10) || 0), sku]
+  );
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
+// Update product name by SKU (used by Bling webhook — produto event)
+fastify.patch('/products/name', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { sku, name } = req.body || {};
+  if (!sku || !name) return reply.code(400).send({ error: 'sku and name required' });
+  const [result] = await pool.query(
+    'UPDATE products SET name=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    [name, sku]
+  );
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
 
 fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, reply) => {
   const { exclude_from_seo } = req.body;
