@@ -31,8 +31,13 @@ export function SearchBar({
         onSearch('');
     }, [onSearch]);
 
+    // Sync value if initialValue changes externally (like when clearing via URL)
+    useEffect(() => {
+        setValue(initialValue);
+    }, [initialValue]);
+
     return (
-        <div className="relative">
+        <form onSubmit={(e) => e.preventDefault()} className="relative block w-full">
             <div
                 className={`relative flex items-center transition-all duration-300 border ${isFocused
                     ? 'ring-4 ring-blue-500/10 border-blue-400 bg-white shadow-md'
@@ -61,6 +66,7 @@ export function SearchBar({
                 {/* Botão de limpar */}
                 {value && (
                     <button
+                        type="button"
                         onClick={handleClear}
                         className="absolute right-3 p-1.5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
                         aria-label="Limpar busca"
@@ -69,6 +75,6 @@ export function SearchBar({
                     </button>
                 )}
             </div>
-        </div>
+        </form>
     );
 }

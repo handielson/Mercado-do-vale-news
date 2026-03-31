@@ -13,6 +13,7 @@ import { RecuperarSenhaPage } from '../pages/auth/RecuperarSenhaPage';
 import { RedefinirSenhaPage } from '../pages/auth/RedefinirSenhaPage';
 import { CustomerCatalogPage } from '../pages/customer/CustomerCatalogPage';
 import { CustomerProfilePage } from '../pages/customer/CustomerProfilePage';
+import { CustomerFavoritesPage } from '../pages/customer/CustomerFavoritesPage';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { SupabaseProtectedRoute } from '../components/SupabaseProtectedRoute';
 import { ClientTypes } from '../utils/field-standards';
@@ -365,6 +366,11 @@ export const router = createBrowserRouter([
   {
     path: "/perfil",
     element: <CustomerProfilePage />
+  },
+  // Customer Favorites
+  {
+    path: "/favoritos",
+    element: <CartProvider><CustomerFavoritesPage /></CartProvider>
   },
   // Regulamento Moedas do Vale (página pública)
   {

@@ -68,7 +68,7 @@ function normalizeRAMAndStorage(ram?: string, storage?: string): { ram: string; 
  * Uses model_id (UUID FK) as primary key — reliable and unique per model.
  * Falls back to brand + model name for products without model_id.
  */
-function generateGroupKey(product: CatalogProduct): string {
+export function generateGroupKey(product: CatalogProduct): string {
     // Use model_id (UUID) as the grouping key — most reliable
     if (product.model_id) return product.model_id;
 

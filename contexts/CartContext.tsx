@@ -82,7 +82,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         
         const timeoutId = setTimeout(() => {
             const payload = items.map(i => ({ product_id: i.product.id, quantity: i.quantity }));
-            vpsApiService.syncCart(customer.id, payload).catch(console.error);
+            vpsApiService.syncCart(customer.id, payload).catch(() => {
+                // Silencioso: endpoint /cart/sync pode não existir ainda na VPS
+            });
         }, 1500); // 1.5s debounce
 
         return () => clearTimeout(timeoutId);

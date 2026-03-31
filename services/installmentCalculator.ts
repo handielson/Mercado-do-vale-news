@@ -20,8 +20,15 @@ export async function calculateInstallments(
 ): Promise<InstallmentPlan[]> {
     const plans: InstallmentPlan[] = [];
 
-    // Get payment fees from database
-    const fees = await paymentFeesService.list();
+    // Get payment fees from database — falha silenciosa se a VPS estiver indisponível
+    let fees: Awaited<ReturnType<typeof paymentFeesService.list>> = [];
+    try {
+        fees = await paymentFeesService.list();
+    } catch {
+        // VPS indisponível ou endpoint inexistente — retorna só à vista sem taxas
+        plans.push({ installments: 1, value: priceInCents, total: priceInCents, label: 'À VISTA (PIX)', highlighted: true });
+        return plans;
+    }
 
     // PIX (à vista - canal presencial 1x)
     const pixFee = fees.find(f => f.channel === 'presencial' && f.installments === 1);

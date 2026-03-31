@@ -18,6 +18,7 @@ import { getCashbackSettings } from '@/services/cashbackService';
 import type { CashbackSettings } from '@/types/cashback';
 import { paymentFeesService, PaymentFee } from '@/services/payment-fees';
 import { companySettingsService } from '@/services/companySettingsService';
+import { generateGroupKey } from '@/services/productGrouping';
 import type { CompanySettings } from '@/types/companySettings';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { shippingService } from '@/services/shippingService';
@@ -120,12 +121,32 @@ export const PublicProductPage: React.FC = () => {
                 let error: any = null;
                 const { vpsApiService } = await import('@/services/vpsApiService');
 
-                // 1. Busca Direta do Produto na VPS
+                // 1. Busca Direta do Produto na VPS (com 1 retry para evitar falsos positivos por latência)
                 if (isUuid) {
                     data = await vpsApiService.getProductById(slug, true);
                 } else {
                     data = await vpsApiService.getProductBySlug(slug);
                 }
+
+
+                // Fallback: se by-slug ainda não encontrou, tentar busca por search
+                // (cobre produtos que existem na VPS mas não têm o campo slug preenchido)
+                if (!data || data.error) {
+                    try {
+                        const searchResults = await vpsApiService.getProducts({ search: slug, status: 'active', limit: 5 });
+                        if (searchResults && searchResults.length > 0) {
+                            // Prioriza match exato de slug, depois sku, depois primeiro resultado
+                            const exactMatch = searchResults.find(p =>
+                                p.slug === slug || p.sku?.toLowerCase() === slug.toLowerCase()
+                            );
+                            data = exactMatch || searchResults[0];
+                        }
+                    } catch (e) {
+                         // Ignorar erros de rede na VPS
+                    }
+                }
+
+
 
                 if (!data || data.error || data.status === 'inactive') {
                     console.error('Produto não encontrado ou inativo na VPS:', slug);
@@ -220,8 +241,8 @@ export const PublicProductPage: React.FC = () => {
                             if (!Array.isArray(imgs)) imgs = [];
                             return { ...s, images: imgs };
                         }).filter(s =>
-                            s.id !== data.id &&
-                            s.model_id === data.model_id  // ← validação: só produtos do mesmo modelo
+                            String(s.id) !== String(data.id) &&
+                            String(s.model_id) === String(data.model_id)  // ← validação: só produtos do mesmo modelo
                         );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
                     }
@@ -234,10 +255,30 @@ export const PublicProductPage: React.FC = () => {
                             if (!Array.isArray(imgs)) imgs = [];
                             return { ...s, images: imgs };
                         }).filter(s =>
-                            s.id !== data.id &&
-                            s.parent_id === data.parent_id  // ← validação: só produtos do mesmo pai
+                            String(s.id) !== String(data.id) &&
+                            String(s.parent_id) === String(data.parent_id)  // ← validação: só produtos do mesmo pai
                         );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
+                    }
+                } else {
+                    // Fallback para agrupar por nome (para produtos sem model_id ou parent_id)
+                    const myGroupKey = generateGroupKey(data as unknown as CatalogProduct);
+                    const searchStr = myGroupKey.replace(/^unknown_/, '').replace(/[-_]/g, ' ');
+                    
+                    if (searchStr.trim().length > 2) {
+                        const searchResults = await vpsApiService.getProducts({ search: searchStr, status: 'active', limit: 50 });
+                        if (searchResults) {
+                            const cleanSibs = searchResults.map(s => {
+                                let imgs = s.images;
+                                if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
+                                if (!Array.isArray(imgs)) imgs = [];
+                                return { ...s, images: imgs };
+                            }).filter(s =>
+                                String(s.id) !== String(data.id) &&
+                                generateGroupKey(s as unknown as CatalogProduct) === myGroupKey
+                            );
+                            setSiblings(cleanSibs as unknown as CatalogProduct[]);
+                        }
                     }
                 }
 
@@ -696,7 +737,7 @@ export const PublicProductPage: React.FC = () => {
                         </div>
 
                         {/* Variantes (Cores / Capacidades) */}
-                        {siblings.length > 1 && (
+                        {uniqueVariants.length > 1 && (
                             <div className="pt-2">
                                 <h3 className="text-sm font-bold text-slate-900 mb-3">Opções Disponíveis:</h3>
                                 <div className="flex flex-wrap gap-2">

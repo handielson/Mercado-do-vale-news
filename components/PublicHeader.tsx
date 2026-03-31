@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag } from 'lucide-react';
+import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag, Heart } from 'lucide-react';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { StoreStatusBadge } from './ui/StoreStatusBadge';
@@ -210,6 +210,18 @@ export const PublicHeader: React.FC = () => {
                                             >
                                                 <Shield size={16} />
                                                 Painel Admin
+                                            </Link>
+                                        )}
+
+                                        {/* Favoritos — só para clientes não-admin */}
+                                        {customer?.customer_type !== 'ADMIN' && (
+                                            <Link
+                                                to="/favoritos"
+                                                className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                                                onClick={() => setShowUserMenu(false)}
+                                            >
+                                                <Heart size={16} className="text-red-500" />
+                                                Meus Favoritos
                                             </Link>
                                         )}
 

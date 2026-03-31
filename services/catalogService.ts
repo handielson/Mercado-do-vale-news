@@ -63,18 +63,9 @@ export const catalogService = {
 
         console.log(`🌐 [catalogService] Iniciando busca de produtos (bypassCache: ${bypassCache})`);
 
-        // ── VPS API FAST PATH ──────────────────────────────────────────────────
-        // Use for simple queries: no text search, no brands, no price range, no special flags.
-        // OR when fetching favorites, since favorites only exist in VPS now.
-        const isSimpleQuery = !filters?.search
-            && (!filters?.brands || filters.brands.length === 0)
-            && !filters?.priceRange
-            && !filters?.inStockOnly
-            && !filters?.featuredOnly
-            && !filters?.newOnly;
-
-        if (isSimpleQuery || filters?.favoritesOnly) {
-            try {
+        // ── 100% VPS API PATH ──────────────────────────────────────────────────
+        // Agora sempre utilizamos o fluxo VPS, independentemente dos filtros aplicados.
+        try {
                 const [vpsRaw, vpsCats] = await Promise.all([
                     vpsApiService.getProducts({
                         // status: 'active', // Removido: o VPS pode usar "Ativo", "DISPONÍVEL", etc. Filtragem será local.
@@ -177,6 +168,20 @@ export const catalogService = {
                         }
                     }
 
+                    // Client-side Text Search Filter (Fallback in case VPS API doesn't filter perfectly)
+                    if (filters?.search && filters.search.trim() !== '') {
+                        const query = filters.search.toLowerCase().trim();
+                        const lenBefore = result.length;
+                        result = result.filter(p => 
+                            (p.name && p.name.toLowerCase().includes(query)) ||
+                            (p.brand && p.brand.toLowerCase().includes(query)) ||
+                            (p.model && p.model.toLowerCase().includes(query)) ||
+                            (p.sku && p.sku.toLowerCase().includes(query)) ||
+                            (p.description && typeof p.description === 'string' && p.description.toLowerCase().includes(query))
+                        );
+                        console.log(`[catalogService] Ocultados por text search ("${query}"): ${lenBefore - result.length}`);
+                    }
+
                     if (settings.hide_inactive) {
                          const lenBefore = result.length;
                          result = result.filter(p => p.status === 'active');
@@ -234,208 +239,16 @@ export const catalogService = {
                     return { products: paginated, total: result.length, hasMore: paginated.length === pageSize };
                 }
             } catch (vpsErr) {
-                console.warn('[catalogService] VPS API failed, falling back to Supabase:', vpsErr);
+                console.error('[catalogService] VPS API hard failure:', vpsErr);
+                throw new Error('Falha ao conectar com o serviço de catálogo integrado.');
             }
-        }
-        // ── END VPS FAST PATH ─────────────────────────────────────────────────
-
-        // Construir query - Trocado exact por estimated para evitar Full Table Scan e gargalo na contagem de linhas
-        let query = supabase
-            .from('products')
-            .select('*', { count: 'estimated' });
-
-        // Get global catalog settings to apply DB-level filtering BEFORE pagination
-        const settings = await catalogConfigService.getSettings();
-
-        // Aplicar regras de visibilidade globais
-        if (settings.hide_inactive) {
-            query = query.eq('status', 'active');
-        } else {
-            // Default rule: always filter active to avoid desperate slots unless disabled
-            query = query.eq('status', 'active');
-        }
-
-        if (settings.hide_out_of_stock) {
-            query = query.gt('stock_quantity', 0);
-        }
-
-        if (settings.hide_zero_price) {
-            query = query.gt('price_retail', 0);
-        }
-
-        if (settings.min_stock_to_show && settings.min_stock_to_show > 0) {
-            query = query.gte('stock_quantity', settings.min_stock_to_show);
-        }
-
-        // Aplicar filtros
-        if (filters?.search) {
-            query = query.or(`name.ilike.%${filters.search}%,brand.ilike.%${filters.search}%,sku.ilike.%${filters.search}%`);
-        }
-
-        // IMPORTANTE: Só aplicar filtro de categoria se houver categorias selecionadas
-        // Se o array estiver vazio, não aplicar o filtro (mostrar todos os produtos)
-        if (filters?.categories && filters.categories.length > 0) {
-            query = query.in('category_id', filters.categories);
-        }
-
-        if (filters?.brands && filters.brands.length > 0) {
-            query = query.in('brand', filters.brands);
-        }
-
-        if (filters?.priceRange) {
-            query = query
-                .gte('price_retail', filters.priceRange[0])
-                .lte('price_retail', filters.priceRange[1]);
-        }
-
-        if (filters?.inStockOnly) {
-            query = query.gt('stock_quantity', 0);
-        }
-
-        if (filters?.featuredOnly) {
-            query = query.eq('featured', true);
-        }
-
-        if (filters?.newOnly) {
-            query = query.eq('is_new', true);
-        }
-
-        // Paginação
-        const from = (page - 1) * pageSize;
-        const to = from + pageSize - 1;
-        query = query.range(from, to);
-
-        // Ordenação dinâmica
-        switch (filters?.sortBy) {
-            case 'price_asc':
-                query = query.order('price_retail', { ascending: true }).order('name', { ascending: true });
-                break;
-            case 'price_desc':
-                query = query.order('price_retail', { ascending: false }).order('name', { ascending: true });
-                break;
-            case 'featured':
-                query = query.order('featured', { ascending: false }).order('created_at', { ascending: false }).order('name', { ascending: true });
-                break;
-            case 'recent':
-            default:
-                query = query.order('featured', { ascending: false }).order('created_at', { ascending: false }).order('name', { ascending: true });
-                break;
-        }
-
-        const { data, error, count } = await query;
-
-        console.log('[catalogService] Supabase Response:', {
-            data,
-            error,
-            count,
-            filters,
-            hasData: !!data,
-            dataLength: data?.length
-        });
-
-        if (error) throw error;
-
-        let products = (data || []) as CatalogProduct[];
-
-        // Extrai identificadores únicos necessários para as consultas de enriquecimento
-        const categoryIds = [...new Set(products.filter(p => p.category_id).map(p => p.category_id!))];
-        const productsNeedingImages = products.filter(p => (!p.images || p.images.length === 0) && p.model_id);
-        const modelIdsForImages = [...new Set(productsNeedingImages.map(p => p.model_id!))];
-        const colorNames = [...new Set(productsNeedingImages.map(p => p.specs?.color).filter(Boolean) as string[])];
-        const modelIdsForSpecs = [...new Set(products.filter(p => p.model_id).map(p => p.model_id!))];
-
-        // Dispara todas as consultas de enriquecimento em paralelo
-        const [
-            catResponse,
-            modelImagesResponse,
-            colorRowsResponse,
-            modelTemplatesResponse
-        ] = await Promise.all([
-            categoryIds.length > 0
-                ? supabase.from('categories').select('id, slug').in('id', categoryIds)
-                : Promise.resolve({ data: [] }),
-            modelIdsForImages.length > 0
-                ? supabase.from('model_color_images').select('model_id, color_id, images').in('model_id', modelIdsForImages)
-                : Promise.resolve({ data: [] }),
-            colorNames.length > 0
-                ? supabase.from('colors').select('id, name').in('name', colorNames)
-                : Promise.resolve({ data: [] }),
-            modelIdsForSpecs.length > 0
-                ? supabase.from('models').select('id, template_values').in('id', modelIdsForSpecs)
-                : Promise.resolve({ data: [] })
-        ]);
-
-        // Processa categorias
-        if (catResponse.data && catResponse.data.length > 0) {
-            const catSlugMap = new Map<string, string>(
-                (catResponse.data as any[]).map((c: any) => [c.id, c.slug])
-            );
-            products = products.map(p => ({
-                ...p,
-                category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
-            }));
-        }
-
-        // Processa cores e imagens
-        if (modelImagesResponse.data && modelImagesResponse.data.length > 0) {
-            const colorNameToId = new Map<string, string>(
-                (colorRowsResponse.data || []).map(c => [c.name, c.id])
-            );
-            
-            products = products.map(product => {
-                if (product.images && product.images.length > 0) return product;
-                if (!product.model_id) return product;
-
-                const entriesForModel = (modelImagesResponse.data as any[]).filter(mi => mi.model_id === product.model_id);
-                if (entriesForModel.length === 0) return product;
-
-                const colorName = product.specs?.color;
-                const colorId = colorName ? colorNameToId.get(colorName) : undefined;
-                let chosen = colorId ? entriesForModel.find(mi => mi.color_id === colorId) : undefined;
-                
-                if (!chosen) chosen = entriesForModel[0]; // fallback
-                if (chosen?.images?.length > 0) {
-                    return { ...product, images: chosen.images };
-                }
-                return product;
-            });
-        }
-
-        // Processa templates de modelo (Specs complementares)
-        if (modelTemplatesResponse.data && modelTemplatesResponse.data.length > 0) {
-            const templateMap = new Map<string, Record<string, any>>(
-                (modelTemplatesResponse.data as any[]).map((m: any) => [m.id, m.template_values || {}])
-            );
-            products = products.map(product => {
-                if (!product.model_id) return product;
-                const tmpl = templateMap.get(product.model_id);
-                if (!tmpl || Object.keys(tmpl).length === 0) return product;
-                
-                const mergedSpecs = { ...tmpl, ...(product.specs || {}) };
-                return { ...product, specs: mergedSpecs };
-            });
-        }
-
-        // Atualizar cache
-        if (!filters?.search) {
-            const storage = getStorage();
-            if (storage) {
-                try {
-                    // Caching the entire product list per category/filter easily hits the 5MB localStorage limit.
-                    // We only cache the result if it's a very light payload, or we rely on browser memory/React Query.
-                    // Disabled local storage persistence for large product arrays to avoid QuotaExceededError. 
-                } catch (e) {
-                    console.warn('Failed to save catalog to cache (storage full?)', e);
-                }
-            }
-        }
-
-        return {
-            products,
-            total: count || 0,
-            hasMore: products.length === pageSize
-        };
+        
+        // Se a VPS retornou explicitamente null ou falhou (e não usamos bypassCache), 
+        // retorna vazio.
+        return { products: [], total: 0, hasMore: false };
     },
+
+
 
     /**
      * Buscar produtos por texto

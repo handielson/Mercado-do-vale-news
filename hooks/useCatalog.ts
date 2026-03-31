@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { catalogService } from '@/services/catalogService';
 import { catalogConfigService } from '@/services/catalogConfigService';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import type { CatalogProduct } from '@/types/catalog';
 import type { FilterState } from '@/components/catalog';
 import type { CatalogSettings } from '@/types/catalogSettings';
@@ -16,16 +17,6 @@ interface UseCatalogOptions {
     customerId?: string;
 }
 
-const getGuestId = () => {
-    if (typeof window === 'undefined') return 'guest_ssr';
-    let id = localStorage.getItem('@mv:catalog_guest_id');
-    if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem('@mv:catalog_guest_id', id);
-    }
-    return `guest_${id}`;
-};
-
 export function useCatalog(options: UseCatalogOptions = {}) {
     const {
         initialFilters = {},
@@ -36,10 +27,17 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         customerId
     } = options;
 
-    const effectiveCustomerId = useMemo(() => customerId || getGuestId(), [customerId]);
+    // Favoritos vinculados exclusivamente ao cliente autenticado na VPS.
+    // Se não há customer logado, nenhum favorito é carregado ou gravado.
+    const { customer: authCustomer } = useSupabaseAuth();
+    const effectiveCustomerId = useMemo(
+        () => customerId || authCustomer?.id || null,
+        [customerId, authCustomer?.id]
+    );
 
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
+    const [fetching, setFetching] = useState(false); // refetch silencioso (mantém produtos anteriores)
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
     const [page, setPage] = useState(1);
@@ -48,6 +46,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     const [favorites, setFavorites] = useState<Set<string>>(new Set());
     const [catalogSettings, setCatalogSettings] = useState<CatalogSettings>(DEFAULT_CATALOG_SETTINGS as CatalogSettings);
     const [settingsLoading, setSettingsLoading] = useState(true);
+    const isFirstLoad = useRef(true); // true até a primeira carga completar
 
     const initialCategoryIsUuid = initialCategory && /^[0-9a-f]{8}-/i.test(initialCategory);
 
@@ -86,8 +85,13 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         return catalogConfigService.applyVisibilityRules(rawProducts, catalogSettings);
     }, [catalogSettings]);
 
+    const activeRequestRef = useRef<number>(0);
+
     // Carregar produtos
     const loadProducts = useCallback(async (reset = false, forcePage?: number) => {
+        const requestId = Date.now();
+        activeRequestRef.current = requestId;
+
         try {
             // Determina a página: reset volta p/ 1, forcePage sobreescreve, senão usa pageRef
             const currentPage = reset ? 1 : (forcePage ?? pageRef.current);
@@ -98,7 +102,13 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 searchQuery,
                 currentPage
             });
-            setLoading(true);
+
+            // Primeira carga: mostra spinner (lista vazia). Recargas: silencioso (mantém produtos).
+            if (isFirstLoad.current || products.length === 0) {
+                setLoading(true);
+            } else {
+                setFetching(true);
+            }
             setError(null);
 
             // Expand category to include its children automatically
@@ -136,6 +146,12 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             // NÃO reaplicar aqui para evitar dupla filtragem que elimina produtos válidos.
             console.log('[useCatalog] Products ready (visibility already applied by catalogService):', response.products.length);
 
+            // Se uma requisição mais nova foi iniciada, ignorar esta resposta obsoleta.
+            if (activeRequestRef.current !== requestId) {
+                console.log(`[useCatalog] Ignorando resposta obsoleta (reqId: ${requestId})`);
+                return;
+            }
+
             if (reset) {
                 setProducts(response.products);
                 setPage(1);
@@ -145,7 +161,10 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             }
 
             setHasMore(response.hasMore);
+            isFirstLoad.current = false;
         } catch (err: any) {
+            if (activeRequestRef.current !== requestId) return; // Ignorar erros se abortado
+
             // Ignore abort errors - they're expected when requests are cancelled
             if (err.name === 'AbortError' || err.message === 'AbortError' || err.message?.includes('aborted')) {
                 console.log('[useCatalog] Request was aborted (expected behavior)');
@@ -155,9 +174,12 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             console.error('[useCatalog] Error loading products:', err);
             setError(err.message || 'Erro ao carregar produtos');
         } finally {
-            setLoading(false);
+            if (activeRequestRef.current === requestId) {
+                setLoading(false);
+                setFetching(false);
+            }
         }
-    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache]);
+    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache, products.length]);
 
     // Recarregar quando filtros, busca ou configurações mudarem
     useEffect(() => {
@@ -177,8 +199,9 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         }
     }, [loading, hasMore, loadProducts]);
 
-    // Gerenciar favoritos
+    // Gerenciar favoritos — somente para clientes autenticados
     const toggleFavorite = useCallback(async (productId: string) => {
+        if (!effectiveCustomerId) return; // Sem login, não faz nada
         setFavorites((prev) => {
             const newFavorites = new Set(prev);
             const isFav = newFavorites.has(productId);
@@ -194,9 +217,19 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         });
     }, [effectiveCustomerId]);
 
-    // Carregar favoritos da VPS
+    // Carregar favoritos da VPS — somente para clientes autenticados.
+    // Quando effectiveCustomerId muda (ex: logout), zera imediatamente e
+    // só recarrega se houver um novo ID válido.
     useEffect(() => {
+        if (!effectiveCustomerId) {
+            setFavorites(new Set());
+            return;
+        }
+
         let mounted = true;
+        // Zerar imediatamente para evitar favoritos "herdados" do usuário anterior
+        setFavorites(new Set());
+
         const loadFavs = async () => {
             try {
                 const favs = await catalogService.getUserFavorites(effectiveCustomerId);
@@ -262,6 +295,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     return {
         products,
         loading: loading || settingsLoading,
+        fetching, // refetch silencioso — não apaga a lista
         error,
         searchQuery,
         setSearchQuery,

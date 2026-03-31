@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { X, LayoutGrid, List } from 'lucide-react';
+import { X, LayoutGrid, List, Heart } from 'lucide-react';
 import {
     BannerCarousel,
     ProductFilters,
@@ -66,6 +66,7 @@ function CatalogContent() {
     const {
         products,
         loading,
+        fetching,
         error,
         searchQuery,
         setSearchQuery,
@@ -233,8 +234,28 @@ function CatalogContent() {
                 </div>
             </div>
 
-            {/* Check-in Widget */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-end gap-2 relative z-10 flex-nowrap">
+            {/* Check-in Widget + Atalho de Favoritos */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-between gap-2 relative z-10 flex-nowrap">
+
+                {/* Atalho de Favoritos — só para clientes autenticados (não-admin) */}
+                {customer ? (
+                    <Link
+                        to="/favoritos"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:scale-105 active:scale-95 rounded-full text-sm font-semibold shadow-sm transition-all duration-200"
+                    >
+                        <Heart size={15} fill="currentColor" />
+                        <span className="hidden sm:inline">Meus Favoritos</span>
+                        <span className="sm:hidden">Favoritos</span>
+                        {favorites.size > 0 && (
+                            <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                                {favorites.size}
+                            </span>
+                        )}
+                    </Link>
+                ) : (
+                    <div />
+                )}
+
                 <div className="min-w-0 shrink">
                     <CheckinWidget />
                 </div>
@@ -334,12 +355,18 @@ function CatalogContent() {
 
                     {/* Barra de busca + Filtros + Toggle de colunas */}
                     <div className="flex items-stretch gap-2">
-                        <div className="flex-1">
+                        <div className="flex-1 relative">
                             <SearchBar
                                 onSearch={setSearchQuery}
                                 initialValue={searchQuery}
                                 placeholder="Buscar por nome ou marca..."
                             />
+                            {/* Indicador sutil de busca em progresso */}
+                            {fetching && (
+                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-100 overflow-hidden rounded-full">
+                                    <div className="h-full bg-blue-500 animate-[shimmer_1s_ease-in-out_infinite]" style={{width: '40%', animation: 'slide 1s ease-in-out infinite'}} />
+                                </div>
+                            )}
                         </div>
                         {/* Toggle mobile grade/lista — só no mobile */}
                         <button
