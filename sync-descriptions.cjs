@@ -30,7 +30,7 @@ async function fetchSupabaseProducts() {
   while (true) {
     const to = from + PAGE - 1;
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/products?select=id,sku,description,specs&order=name.asc`,
+      `${SUPABASE_URL}/rest/v1/products?select=id,sku,description&order=name.asc`,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -52,20 +52,20 @@ async function fetchSupabaseProducts() {
     from += PAGE;
   }
 
-  // Filtra apenas os que têm description ou specs
-  return all.filter(p => (p.description && p.description.trim().length > 0) || (p.specs && Object.keys(p.specs).length > 0));
+  // Filtra apenas os que têm description preenchida
+  return all.filter(p => p.description && p.description.trim().length > 0);
 }
 
 // ── VPS ───────────────────────────────────────────────────────────────────────
 
-async function patchDescription(sku, description, specs) {
+async function patchDescription(sku, description, technical_specifications) {
   const res = await fetch(`${VPS_BASE}/products/description`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
       'X-Sync-Key': SYNC_KEY,
     },
-    body: JSON.stringify({ sku, description, specs }),
+    body: JSON.stringify({ sku, description, technical_specifications }),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -96,7 +96,7 @@ async function sync() {
 
     process.stdout.write(`  ${sku}... `);
     try {
-      const result = await patchDescription(sku, product.description, product.specs);
+      const result = await patchDescription(sku, product.description, null);
       if (result.affectedRows > 0) {
         console.log('✅');
         synced++;

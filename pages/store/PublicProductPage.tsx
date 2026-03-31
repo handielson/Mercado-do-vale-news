@@ -213,6 +213,9 @@ export const PublicProductPage: React.FC = () => {
                         if (catData.config) setCategoryConfig(catData.config);
                     }
                 }
+
+                // VPS é a única fonte de verdade para description/technical_specifications.
+                // Migração do Supabase → VPS concluída em 31/03/2026 (568 produtos).
                 
                 const formattedProduct = {
                     ...data, 
