@@ -231,7 +231,7 @@ class VpsApiService {
 
   async syncCart(customerId: string, items: {product_id: string, quantity: number}[]): Promise<{ok: boolean, synced?: number}> {
     try {
-      const response = await fetch(`${this.baseUrl}/cart/sync`, {
+      const response = await fetch(`${VPS_BASE_URL}/cart/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
