@@ -219,6 +219,33 @@ class VpsApiService {
     return this.fetchSafe<any[]>(`/products/${id}/combo`, true);
   }
 
+  async getFavoritesRanking(limit: number = 100): Promise<any[]> {
+    const res = await this.fetchSafe<any[]>(`/admin/reports/favorites-ranking?limit=${limit}`, false, true);
+    return res || [];
+  }
+
+  async getCartsRanking(limit: number = 100): Promise<any[]> {
+    const res = await this.fetchSafe<any[]>(`/admin/reports/carts-ranking?limit=${limit}`, false, true);
+    return res || [];
+  }
+
+  async syncCart(customerId: string, items: {product_id: string, quantity: number}[]): Promise<{ok: boolean, synced?: number}> {
+    try {
+      const response = await fetch(`${this.baseUrl}/cart/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sync-Key': import.meta.env.VITE_VPS_SYNC_KEY || ''
+        },
+        body: JSON.stringify({ customerId, items }),
+      });
+      if (!response.ok) return { ok: false };
+      return await response.json();
+    } catch {
+      return { ok: false };
+    }
+  }
+
   async syncProducts(products: any[]): Promise<boolean> {
     if (!products?.length) return true;
     this.invalidateProductCache();

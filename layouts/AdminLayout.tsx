@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart } from 'lucide-react';
 
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -39,6 +39,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/settings/seo-analyzer', icon: <Search size={18} />, label: 'Análise de SEO', keywords: 'google analise indexacao' },
         { to: '/admin/settings/seo-blacklist', icon: <Globe size={18} />, label: 'Lista Negra SEO', keywords: 'bloquear google ocultar noindex' },
         { to: '/admin/promotions', icon: <Ticket size={18} />, label: 'Promoções', keywords: 'desconto oferta' },
+        { to: '/admin/relatorios/favoritos', icon: <Heart size={18} />, label: 'Ranking Favoritos', keywords: 'wishlist desejo clientes estatistica' },
         { to: '/admin/catalog-config', icon: <Settings size={18} />, label: 'Config. Catálogo', keywords: 'vitrine exibir' },
         { to: '/admin/settings/banners', icon: <Image size={18} />, label: 'Banners', keywords: 'imagens carrossel' },
         { to: '/admin/settings/marketing', icon: <Megaphone size={18} />, label: 'Criativos', keywords: 'anuncios divulgacao' },

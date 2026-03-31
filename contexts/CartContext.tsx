@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import type { CatalogProduct } from '@/types/catalog';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '../hooks/useEffectiveCustomerType';
+import { vpsApiService } from '../services/vpsApiService';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
 
     const { customer } = useSupabaseAuth();
+
+    // Sincroniza o carrinho com o backend quando logado
+    useEffect(() => {
+        if (!isHydrated || !customer?.id) return;
+        
+        const timeoutId = setTimeout(() => {
+            const payload = items.map(i => ({ product_id: i.product.id, quantity: i.quantity }));
+            vpsApiService.syncCart(customer.id, payload).catch(console.error);
+        }, 1500); // 1.5s debounce
+
+        return () => clearTimeout(timeoutId);
+    }, [items, customer?.id, isHydrated]);
 
     const calculateUnitPrice = (product: CatalogProduct, quantity: number): number => {
         // 1. Verifica Kits / Preço por Volume

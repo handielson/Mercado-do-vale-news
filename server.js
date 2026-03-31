@@ -754,6 +754,112 @@ fastify.get('/table-data/:name', { preHandler: requireSyncKey }, async (req, rep
     rows,
   };
 });
+
+// ─── Relatório Administrativo: Ranking de Favoritos ──────────────────────────
+fastify.get('/admin/reports/favorites-ranking', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const sql = `
+      SELECT 
+        cf.product_id, 
+        COUNT(cf.customer_id) as favorite_count,
+        p.name, p.sku, p.images, p.price_retail, p.stock_quantity
+      FROM customer_favorites cf
+      JOIN products p ON p.id = cf.product_id
+      GROUP BY cf.product_id
+      ORDER BY favorite_count DESC
+      LIMIT ?
+    `;
+    const [rows] = await pool.query(sql, [limit]);
+    
+    // Parse JSON images
+    const result = rows.map(r => ({
+      ...r,
+      images: typeof r.images === 'string' ? JSON.parse(r.images) : (r.images || [])
+    }));
+    
+    return result;
+  } catch (error) {
+    console.error('Error fetching favorites ranking:', error);
+    reply.code(500).send({ error: 'Failed to fetch favorites ranking' });
+  }
+});
+
+// ─── Relatório Administrativo: Ranking de Carrinhos ──────────────────────────
+fastify.get('/admin/reports/carts-ranking', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const sql = `
+      SELECT 
+        cc.product_id, 
+        COUNT(DISTINCT cc.customer_id) as cart_count,
+        SUM(cc.quantity) as total_quantity,
+        p.name, p.sku, p.images, p.price_retail, p.stock_quantity
+      FROM customer_carts cc
+      JOIN products p ON p.id = cc.product_id
+      GROUP BY cc.product_id
+      ORDER BY cart_count DESC, total_quantity DESC
+      LIMIT ?
+    `;
+    const [rows] = await pool.query(sql, [limit]);
+    
+    // Parse JSON images
+    const result = rows.map(r => ({
+      ...r,
+      images: typeof r.images === 'string' ? JSON.parse(r.images) : (r.images || [])
+    }));
+    
+    return result;
+  } catch (error) {
+    console.error('Error fetching carts ranking:', error);
+    reply.code(500).send({ error: 'Failed to fetch carts ranking' });
+  }
+});
+
+// ─── Sincronização de Carrinho do Cliente ───────────────────────────────────────
+fastify.post('/cart/sync', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { customerId, items } = req.body;
+  if (!customerId || !Array.isArray(items)) {
+    return reply.code(400).send({ error: 'customerId and items array required' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    // Basic table creation check in proxy fallback logic
+    await connection.query(`CREATE TABLE IF NOT EXISTS customer_carts (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      customer_id VARCHAR(255) NOT NULL,
+      product_id CHAR(36) NOT NULL,
+      quantity INT DEFAULT 1,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_unique_cart (customer_id, product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
+
+    await connection.beginTransaction();
+
+    // Remove old cart items for this customer
+    await connection.query('DELETE FROM customer_carts WHERE customer_id = ?', [customerId]);
+
+    // Insert new cart items
+    if (items.length > 0) {
+      const values = items.map(i => [customerId, i.product_id, i.quantity]);
+      await connection.query(
+        'INSERT INTO customer_carts (customer_id, product_id, quantity) VALUES ?',
+        [values]
+      );
+    }
+
+    await connection.commit();
+    return { ok: true, synced: items.length };
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error syncing cart:', error);
+    reply.code(500).send({ error: 'Failed to sync cart' });
+  } finally {
+    connection.release();
+  }
+});
+
 // ─── Table CRUD (protegido por X-Sync-Key) ───────────────────────────────────
 
 // Helper: detectar PK de uma tabela
