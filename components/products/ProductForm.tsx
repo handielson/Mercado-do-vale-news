@@ -160,6 +160,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             console.log('📦 specs keys:', initialData.specs ? Object.keys(initialData.specs) : 'NO SPECS');
             console.log('🔄 Resetting form with initialData...');
             reset(initialData);
+            
+            // 🔥 CRITICAL: Update external IDs state when initialData arrives asynchronously
+            setBlingId(initialData.bling_id || undefined);
+            setBlingParentId(initialData.bling_parent_id || undefined);
+            setShopeeItemId(initialData.shopee_item_id || undefined);
 
             // Em modo edição, carregar o modelo explicitamente para que templateValues
             // esteja disponível e ocultando campos que vêm do modelo (battery_mah, display, etc.)

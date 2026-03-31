@@ -22,10 +22,11 @@ conn.on('ready', () => {
             data += chunk.toString();
         }).on('close', () => {
             conn.end();
-            const match = data.match(/SYNC_KEY=([^\n\r]+)/);
+            // Procura SYNC_SECRET (nome real no .env da VPS)
+            const match = data.match(/SYNC_SECRET=([^\n\r]+)/);
             if (match && match[1]) {
                 const key = match[1].trim();
-                console.log('Chave SYNC_KEY encontrada na VPS!');
+                console.log('Chave SYNC_SECRET encontrada na VPS: ' + key);
                 
                 // Injetar no .env.local e no .env
                 let envLocal = '';

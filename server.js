@@ -246,6 +246,47 @@ fastify.get('/products', async (req, reply) => {
 
 });
 
+// Busca por slug (para PublicProductPage)
+fastify.get('/products/by-slug/:slug', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT *,
+      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+     FROM products WHERE slug = ?`,
+    [req.params.slug]
+  );
+  if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
+  const r = rows[0];
+  return {
+    ...r,
+    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    is_virtual:       r.is_virtual === 1,
+    is_gift:          r.is_gift === 1,
+    track_inventory:  r.track_inventory === 1,
+  };
+});
+
+// Busca por EAN
+fastify.get('/products/by-ean/:ean', async (req, reply) => {
+  const ean = req.params.ean;
+  const [rows] = await pool.query(
+    `SELECT *, (CASE WHEN is_combo = 1 THEN 0 ELSE stock_quantity END) AS stock_quantity
+     FROM products
+     WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
+    [ean, ean]
+  );
+  return rows.map(r => ({
+    ...r,
+    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+  }));
+});
+
 fastify.get('/products/:id', async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT *,
@@ -457,12 +498,14 @@ fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
       `INSERT INTO products (
         id, name, slug, sku, is_combo, combo_discount_type, combo_discount_value,
         price_retail, price_wholesale, price_cost, price_reseller,
-        status, track_inventory, images, category_id, brand
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, track_inventory, images, category_id, brand,
+        description, specs, dimensions, weight_kg, is_virtual
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, p.name, p.slug || null, p.sku || null, 1, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
-        p.status || 'active', p.track_inventory ? 1 : 0, jsonStr(p.images), p.category_id || null, p.brand || null
+        p.status || 'active', p.track_inventory ? 1 : 0, jsonStr(p.images), p.category_id || null, p.brand || null,
+        p.description || null, jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0
       ]
     );
 
@@ -494,14 +537,15 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
     await connection.beginTransaction();
     await connection.query(
       `UPDATE products SET 
-        name=?, sku=?, is_combo=1, combo_discount_type=?, combo_discount_value=?,
+        name=?, slug=?, sku=?, is_combo=1, combo_discount_type=?, combo_discount_value=?,
         price_retail=?, price_wholesale=?, price_cost=?, price_reseller=?,
-        status=?, images=?, category_id=?, brand=?, updated_at=CURRENT_TIMESTAMP
+        status=?, images=?, category_id=?, brand=?, description=?, specs=?, dimensions=?, weight_kg=?, is_virtual=?, updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
       [
-        p.name, p.sku || null, p.combo_discount_type || null, p.combo_discount_value || 0,
+        p.name, p.slug || null, p.sku || null, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
         p.status || 'active', jsonStr(p.images), p.category_id || null, p.brand || null,
+        p.description || null, jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0,
         comboId
       ]
     );
