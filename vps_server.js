@@ -172,7 +172,8 @@ fastify.get('/products', async (req, reply) => {
   const params = [];
 
   if (status && status !== 'all') { sql += ' AND status = ?'; params.push(status); }
-  else if (!status)               { sql += ' AND status = ?'; params.push('active'); }
+  else if (!status && !search)    { sql += ' AND status = ?'; params.push('active'); }
+  // When search is provided without explicit status → no status filter (allows finding by SKU/EAN regardless of status)
   // status=all: retorna todos os status (admin)
 
   if (category)           { sql += ' AND category_id = ?';   params.push(category); }
@@ -1750,6 +1751,29 @@ fastify.delete('/customers/:id/favorites/:productId', async (req, reply) => {
   } catch (err) {
     req.log.error(err);
     return reply.code(500).send({ error: 'Database error removing favorite' });
+  }
+});
+
+// ─── Public: Video existence check ──────────────────────────────────────────
+// GET /public/check-video?sku=PI153D
+// Verifica se existe um vídeo no Synology NAS para o SKU informado.
+// Necessário pois HEAD direto ao Synology pode ter CORS block no navegador.
+fastify.get('/public/check-video', async (req, reply) => {
+  reply.header('Cache-Control', 'public, max-age=300');
+  const sku = req.query.sku;
+  if (!sku) return reply.code(400).send({ error: 'sku required', exists: false });
+  try {
+    const [[setting]] = await pool.query(
+      'SELECT synology_video_base_url, synology_video_extension FROM company_settings LIMIT 1'
+    );
+    const baseUrl = (setting && setting.synology_video_base_url) || 'https://videos.mercadodovale.com.br';
+    const ext = (setting && setting.synology_video_extension) || '.mp4';
+    const url = `${baseUrl}/${encodeURIComponent(sku.trim())}${ext}`;
+    const headRes = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    return { exists: headRes.ok, url };
+  } catch {
+    const url = `https://videos.mercadodovale.com.br/${encodeURIComponent(sku.trim())}.mp4`;
+    return { exists: false, url };
   }
 });
 

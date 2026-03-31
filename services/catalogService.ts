@@ -182,7 +182,7 @@ export const catalogService = {
                         console.log(`[catalogService] Ocultados por text search ("${query}"): ${lenBefore - result.length}`);
                     }
 
-                    if (settings.hide_inactive) {
+                    if (settings.hide_inactive && !filters?.search) {
                          const lenBefore = result.length;
                          result = result.filter(p => p.status === 'active');
                          console.log(`[catalogService] Ocultados inativos: ${lenBefore - result.length}`);
