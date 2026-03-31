@@ -46,7 +46,7 @@ export const FavoritesRankingReport: React.FC = () => {
     if (!imgObj) return null;
     let url = typeof imgObj === 'string' ? imgObj : (imgObj.url || imgObj.path || null);
     if (url && !url.startsWith('http') && !url.startsWith('data:')) {
-      return `${vpsApiService['baseUrl']}/images/${url.replace(/^\\/+/, '')}`;
+      return `${vpsApiService['baseUrl']}/images/${url.replace(/^[\\/]+/, '')}`;
     }
     return url;
   };
