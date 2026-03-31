@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check, GitCompare, ShoppingBag } from 'lucide-react';
+import { Info, Heart, Share2, ChevronLeft, ChevronRight, ShoppingCart, Check, GitCompare, ShoppingBag, Pencil } from 'lucide-react';
 
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { ProductVariants } from '@/services/productVariants';
@@ -447,7 +447,20 @@ export function ModernProductCard({
                             {formatPrice(discountedPriceCents)}
                         </p>
                     </div>
-                    {/* Botão */}
+                    {/* Botão Admin Editar */}
+                    {isAdmin && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/admin/products/${product.id}`);
+                            }}
+                            className="shrink-0 p-1.5 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
+                            title="Editar Produto"
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                    )}
+                    {/* Botão Comprar/Orçar */}
                     <button
                         onClick={(e) => { e.stopPropagation(); handleAddToCart(e); }}
                         className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-900 text-white hover:bg-slate-700 active:scale-95 transition-all"
@@ -567,6 +580,18 @@ export function ModernProductCard({
                         className={`absolute bottom-3 right-3 flex gap-2 transition-all duration-300 ${isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                             }`}
                     >
+                        {isAdmin && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/admin/products/${product.id}`);
+                                }}
+                                className="p-2.5 rounded-full backdrop-blur-md transition-all shadow-lg bg-blue-500 text-white hover:bg-blue-600"
+                                title="Editar Produto"
+                            >
+                                <Pencil className="w-4 h-4" />
+                            </button>
+                        )}
                         <button
                             onClick={handleFavorite}
                             className={`p-2.5 rounded-full backdrop-blur-md transition-all shadow-lg ${isFavorite

@@ -2,7 +2,7 @@ const { Client } = require('ssh2');
 
 const conn = new Client();
 
-console.log('⏳ Conectando à VPS para adicionar a coluna "is_virtual"...');
+console.log('⏳ Conectando à VPS para listar as colunas de "products"...');
 
 conn.on('ready', () => {
   const remoteScript = `
@@ -17,13 +17,9 @@ conn.on('ready', () => {
         database: process.env.DB_NAME,
       });
       try {
-        const [cols] = await pool.query("SHOW COLUMNS FROM products LIKE 'is_virtual'");
-        if (cols.length === 0) {
-          await pool.query('ALTER TABLE products ADD COLUMN is_virtual BOOLEAN DEFAULT FALSE');
-          console.log('✅ Sucesso: Coluna "is_virtual" adicionada à tabela "products"!');
-        } else {
-          console.log('✅ Tudo Certo: A coluna "is_virtual" já existe na tabela!');
-        }
+        const [cols] = await pool.query("SHOW COLUMNS FROM products");
+        console.log("Colunas da VPS:");
+        cols.forEach(c => console.log('- ' + c.Field));
       } catch (err) {
         console.error('❌ Erro no DB da VPS:', err.message);
       } finally {
@@ -33,7 +29,6 @@ conn.on('ready', () => {
     main();
   `;
 
-  // We run the script inside the VPS using node -e
   const base64Script = Buffer.from(remoteScript).toString('base64');
   conn.exec(`cd /var/www/mdv-api && node -e "eval(Buffer.from('${base64Script}', 'base64').toString('utf8'))"`, (err, stream) => {
     if (err) throw err;
@@ -51,6 +46,5 @@ conn.on('ready', () => {
   host: '76.13.232.162',
   port: 22,
   username: 'root',
-  password: '@@@@Jsj2865@@@@' // Same credentials as vps_cmd.cjs
+  password: '@@@@Jsj2865@@@@'
 });
-

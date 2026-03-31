@@ -304,9 +304,9 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           stock_quantity, status, category_id, brand, model_id,
           images, specs, custom_fields, dimensions, weight_kg,
           ncm, cest, origin, bling_id, bling_parent_id, parent_id,
-          video_url, track_inventory, is_gift,
+          video_url, track_inventory, is_gift, is_virtual,
           warranty_type, warranty_template_id, company_id, kits
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=VALUES(name), slug=VALUES(slug), sku=VALUES(sku),
           ean=VALUES(ean), alternative_eans=VALUES(alternative_eans),
@@ -324,6 +324,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           bling_id=VALUES(bling_id), bling_parent_id=VALUES(bling_parent_id),
           parent_id=VALUES(parent_id), video_url=VALUES(video_url),
           track_inventory=VALUES(track_inventory), is_gift=VALUES(is_gift),
+          is_virtual=VALUES(is_virtual),
           warranty_type=VALUES(warranty_type),
           warranty_template_id=VALUES(warranty_template_id),
           kits=VALUES(kits),
@@ -341,7 +342,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.ncm || null, p.cest || null, p.origin || null,
           p.bling_id || null, p.bling_parent_id || null, p.parent_id || null,
           p.video_url || null,
-          p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
+          p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0, p.is_virtual ? 1 : 0,
           p.warranty_type || 'brand', p.warranty_template_id || null,
           p.company_id || null, jsonStr(p.kits),
         ]
@@ -445,12 +446,14 @@ fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
       `INSERT INTO products (
         id, name, slug, sku, is_combo, combo_discount_type, combo_discount_value,
         price_retail, price_wholesale, price_cost, price_reseller,
-        status, track_inventory, images, category_id, brand
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, track_inventory, images, category_id, brand,
+        description, specs, dimensions, weight_kg, is_virtual
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, p.name, p.slug || null, p.sku || null, 1, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
-        p.status || 'active', p.track_inventory ? 1 : 0, jsonStr(p.images), p.category_id || null, p.brand || null
+        p.status || 'active', p.track_inventory ? 1 : 0, jsonStr(p.images), p.category_id || null, p.brand || null,
+        p.description || null, jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0
       ]
     );
 
@@ -482,14 +485,15 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
     await connection.beginTransaction();
     await connection.query(
       `UPDATE products SET 
-        name=?, sku=?, is_combo=1, combo_discount_type=?, combo_discount_value=?,
+        name=?, slug=?, sku=?, is_combo=1, combo_discount_type=?, combo_discount_value=?,
         price_retail=?, price_wholesale=?, price_cost=?, price_reseller=?,
-        status=?, images=?, category_id=?, brand=?, updated_at=CURRENT_TIMESTAMP
+        status=?, images=?, category_id=?, brand=?, description=?, specs=?, dimensions=?, weight_kg=?, is_virtual=?, updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
       [
-        p.name, p.sku || null, p.combo_discount_type || null, p.combo_discount_value || 0,
+        p.name, p.slug || null, p.sku || null, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
         p.status || 'active', jsonStr(p.images), p.category_id || null, p.brand || null,
+        p.description || null, jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0,
         comboId
       ]
     );

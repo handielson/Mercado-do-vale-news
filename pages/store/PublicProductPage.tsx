@@ -208,7 +208,10 @@ export const PublicProductPage: React.FC = () => {
                 }
                 
                 // -- Siblings (Variantes do mesmo modelo) via VPS --
-                if (data.model_id) {
+                // IMPORTANTE: a API da VPS pode ignorar o filtro model_id/parent_id e devolver
+                // produtos aleatórios. Por isso validamos cada resultado: só consideramos sibling
+                // um produto que realmente compartilha o mesmo model_id (ou parent_id) do produto atual.
+                if (data.model_id && String(data.model_id) !== '0' && String(data.model_id) !== 'null') {
                     const sibs = await vpsApiService.getProducts({ model_id: data.model_id, status: 'active', limit: 50 });
                     if (sibs) {
                         const cleanSibs = sibs.map(s => {
@@ -216,20 +219,26 @@ export const PublicProductPage: React.FC = () => {
                             if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
                             if (!Array.isArray(imgs)) imgs = [];
                             return { ...s, images: imgs };
-                        }).filter(s => s.id !== data.id);
+                        }).filter(s =>
+                            s.id !== data.id &&
+                            s.model_id === data.model_id  // ← validação: só produtos do mesmo modelo
+                        );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
                     }
-                } else if (data.parent_id) {
+                } else if (data.parent_id && String(data.parent_id) !== '0' && String(data.parent_id) !== 'null') {
                     const sibs = await vpsApiService.getProducts({ parent_id: data.parent_id, status: 'active', limit: 50 });
-                     if (sibs) {
+                    if (sibs) {
                         const cleanSibs = sibs.map(s => {
                             let imgs = s.images;
                             if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
                             if (!Array.isArray(imgs)) imgs = [];
                             return { ...s, images: imgs };
-                        }).filter(s => s.id !== data.id);
+                        }).filter(s =>
+                            s.id !== data.id &&
+                            s.parent_id === data.parent_id  // ← validação: só produtos do mesmo pai
+                        );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
-                     }
+                    }
                 }
 
                 // -- Relacionados (Mesma categoria) via VPS --
@@ -587,7 +596,7 @@ export const PublicProductPage: React.FC = () => {
                                 <div className="text-slate-400 font-medium">Sem imagem</div>
                             )}
                         </div>
-                        {((product.images && product.images.length > 1) || effectiveVideoUrl || (product.is_combo && product.tags?.includes('mosaic_combo'))) && (
+                        {((product.images && product.images.length > 1) || effectiveVideoUrl || (Boolean(product.is_combo) && product.tags?.includes('mosaic_combo'))) && (
                             <div className="flex gap-3 overflow-x-auto pb-2">
                                 {effectiveVideoUrl && (
                                     <button
@@ -600,7 +609,7 @@ export const PublicProductPage: React.FC = () => {
                                         </div>
                                     </button>
                                 )}
-                                {product.is_combo && product.tags?.includes('mosaic_combo') && product.images && product.images.length > 1 && (
+                                {Boolean(product.is_combo) && product.tags?.includes('mosaic_combo') && product.images && product.images.length > 1 && (
                                     <button
                                         onClick={() => setSelectedImage('MOSAIC')}
                                         className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden flex items-center justify-center ${selectedImage === 'MOSAIC' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}

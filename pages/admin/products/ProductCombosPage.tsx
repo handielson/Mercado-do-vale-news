@@ -406,7 +406,18 @@ export const ProductCombosPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {filteredCombos.map(combo => (
                   <tr key={combo.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 font-medium text-slate-800">{combo.name}</td>
+                    <td className="p-4 font-medium text-slate-800">
+                      <a
+                        href={`/produto/${combo.slug || combo.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline hover:text-blue-600 transition-colors"
+                        title="Ver página do combo na loja"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {combo.name}
+                      </a>
+                    </td>
                     <td className="p-4 text-slate-500 text-sm whitespace-nowrap">{combo.sku || '-'}</td>
                     <td className="p-4 text-right font-medium text-teal-700">
                       {formatCurrency(combo.price_retail)}

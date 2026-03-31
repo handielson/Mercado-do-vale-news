@@ -200,7 +200,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2">{product.name}</h3>
+                        <h3 className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2">
+                            <a
+                                href={`/produto/${product.slug || product.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:underline hover:text-blue-600 transition-colors"
+                                title="Ver página do produto na loja"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {product.name}
+                            </a>
+                        </h3>
                         {/* Specs: cor + memória/RAM */}
                         <p className="font-mono text-xs text-slate-500 mt-0.5">
                             {[

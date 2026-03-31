@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, Share2, ShoppingCart } from 'lucide-react';
+import { Heart, Share2, ShoppingCart, Pencil } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
@@ -30,8 +30,9 @@ export function ProductCard({
     const [selectedKitQty, setSelectedKitQty] = useState<number>(1);
     const navigate = useNavigate();
 
-    // Get customer context for pricing
+    // Get customer context for pricing and roles
     const { customer } = useSupabaseAuth();
+    const isAdmin = customer?.customer_type === 'ADMIN';
 
     // Calcular preço com desconto usando tipo de cliente efetivo
     const effectivePrice = getEffectivePrice(product, customer);
@@ -210,6 +211,19 @@ export function ProductCard({
                             </div>
 
                             <div className="flex gap-2">
+                                {isAdmin && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            navigate(`/admin/products/${product.id}`);
+                                        }}
+                                        className="p-2 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
+                                        title="Editar Produto"
+                                    >
+                                        <Pencil className="w-5 h-5" />
+                                    </button>
+                                )}
                                 <button
                                     onClick={handleFavorite}
                                     className={`p-2 rounded-full transition-colors ${isFavorite
@@ -304,6 +318,19 @@ export function ProductCard({
                     className={`absolute top-3 right-3 flex flex-col gap-2 transition-all duration-300 ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'
                         }`}
                 >
+                    {isAdmin && (
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                navigate(`/admin/products/${product.id}`);
+                            }}
+                            className="p-2.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-all shadow-lg"
+                            title="Editar Produto"
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                    )}
                     {!hasDiscount && (
                         <>
                             <button
