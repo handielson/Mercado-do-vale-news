@@ -18,7 +18,7 @@ import { EANInput } from '../ui/EANInput';
 import { SmartInput } from '../ui/SmartInput';
 import { compressImage } from '../../utils/image-compression';
 import { generateProductName } from '../../utils/product-name-generator';
-import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText, Trash2, CheckCircle2, ListOrdered } from 'lucide-react';
+import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText, Trash2, CheckCircle2, ListOrdered, Globe } from 'lucide-react';
 import { useEANAutofill } from './hooks/useEANAutofill';
 import { useModelTemplate } from './hooks/useModelTemplate';
 import { ProductSpecifications } from './sections/ProductSpecifications';
@@ -771,6 +771,31 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 onModelSelected={(model) => setSelectedModel(model ?? undefined)}
             />
 
+            {/* 1. TIPO DE PRODUTO */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <Globe size={18} className="text-blue-600" />
+                    Tipo de Produto
+                </h3>
+                <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-lg">
+                    <input
+                        type="checkbox"
+                        checked={watch('is_virtual') ?? false}
+                        onChange={(e) => setValue('is_virtual', e.target.checked)}
+                        className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 mt-0.5"
+                    />
+                    <div className="flex-1">
+                        <label className="font-medium text-slate-700 cursor-pointer" onClick={() => setValue('is_virtual', !(watch('is_virtual') ?? false))}>
+                            Produto Virtual / Digital
+                        </label>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Marque esta opção se o produto for um serviço, garantia estendida, assinatura ou arquivo digital.<br/>
+                            <strong>Produtos virtuais não exigem peso, dimensões ou controle rígido de estoque para finalização de compra.</strong>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             {/* 2. ESPECIFICAÇÕES TÉCNICAS */}
             <ProductSpecifications
                 categoryConfig={categoryConfig}
@@ -957,6 +982,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             {/* Aqui continuam os Preços e Botão Salvar (abaixo) */}
 
             {/* 5. CONTROLE DE ESTOQUE */}
+            {!watch('is_virtual') && (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <Package size={18} className="text-blue-600" />
@@ -1007,6 +1033,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     )}
                 </div>
             </div>
+            )}
 
             {/* 6. PRECIFICAÇÃO */}
             <ProductPricing watch={watch} setValue={setValue} errors={errors} modelId={watch('model_id') || undefined} />
