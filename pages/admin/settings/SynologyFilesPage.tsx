@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Upload, Copy, Trash2, Image, Video, FileText, RefreshCw, ExternalLink, CheckCircle } from 'lucide-react';
+import { Upload, Copy, Trash2, Image, Video, FileText, RefreshCw, ExternalLink, CheckCircle, Shield, Clock, GitCommit, FileArchive, ChevronDown, ChevronUp } from 'lucide-react';
 import { vpsClient } from '../../../services/vpsClient';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -13,6 +13,19 @@ interface CDNFile {
 }
 
 type Folder = 'imagens' | 'videos' | 'arquivos';
+type ActiveSection = Folder | 'backups';
+
+interface BackupEntry {
+    id: string;
+    date: string;
+    commit: string;
+    commitMsg: string;
+    type: string;
+    summary: string;
+    motivo: string;
+    files: string[];
+    notas: string;
+}
 
 const TABS: { id: Folder; label: string; icon: React.ReactNode; accept: string; cdn: string }[] = [
     {
@@ -273,13 +286,110 @@ function Dropzone({ folder, accept, onUploadDone }: { folder: Folder; accept: st
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// ─── Backup Tab ───────────────────────────────────────────────────────────────
+
+function BackupCard({ entry }: { entry: BackupEntry }) {
+    const [expanded, setExpanded] = useState(false);
+    const typeColor = entry.type.includes('Manual')
+        ? 'bg-amber-100 text-amber-700'
+        : 'bg-green-100 text-green-700';
+
+    return (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all">
+            <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor}`}>
+                                {entry.type.includes('Manual') ? '✋ Manual' : '🔄 Automático'}
+                            </span>
+                            <span className="flex items-center gap-1 text-xs text-slate-400">
+                                <Clock size={11} />
+                                {entry.date}
+                            </span>
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 truncate" title={entry.id}>
+                            {entry.id}
+                        </p>
+                        {entry.commit && entry.commit !== 'N/A' && (
+                            <p className="flex items-center gap-1 text-xs text-slate-400 mt-1 font-mono">
+                                <GitCommit size={11} />
+                                {entry.commit} — {entry.commitMsg}
+                            </p>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => setExpanded(e => !e)}
+                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all shrink-0"
+                        title={expanded ? 'Recolher' : 'Ver detalhes'}
+                    >
+                        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                </div>
+
+                {/* Resumo */}
+                {entry.summary && (
+                    <p className="text-sm text-slate-600 mt-2 leading-relaxed">{entry.summary}</p>
+                )}
+
+                {/* Arquivos — sempre visíveis */}
+                {entry.files && entry.files.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                        {entry.files.map(f => (
+                            <span key={f} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">
+                                {f.split('/').pop()}
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Expandido: detalhes ricos */}
+            {expanded && (
+                <div className="border-t border-slate-100 p-4 bg-slate-50 space-y-3">
+                    {entry.motivo && (
+                        <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">💡 Motivo</p>
+                            <p className="text-sm text-slate-700">{entry.motivo}</p>
+                        </div>
+                    )}
+                    {entry.notas && (
+                        <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">📎 Notas</p>
+                            <p className="text-sm text-slate-700">{entry.notas}</p>
+                        </div>
+                    )}
+                    {entry.files && entry.files.length > 0 && (
+                        <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">📁 Arquivos modificados</p>
+                            <div className="space-y-0.5">
+                                {entry.files.map(f => (
+                                    <p key={f} className="text-xs font-mono text-slate-600">{f}</p>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <div className="pt-1 flex items-center gap-2 text-xs text-slate-400">
+                        <FileArchive size={11} />
+                        <span>Armazenado em: backup-mercadodovale/db/{entry.id}.txt</span>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export function SynologyFilesPage() {
-    const [activeTab, setActiveTab] = useState<Folder>('imagens');
+    const [activeTab, setActiveTab] = useState<ActiveSection>('imagens');
     const [files, setFiles] = useState<Record<Folder, CDNFile[] | null>>({
         imagens: null, videos: null, arquivos: null,
     });
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState('');
+    const [backupHistory, setBackupHistory] = useState<BackupEntry[] | null>(null);
+    const [loadingBackups, setLoadingBackups] = useState(false);
 
     const currentTab = TABS.find(t => t.id === activeTab)!;
 
@@ -297,8 +407,21 @@ export function SynologyFilesPage() {
     }, []);
 
     useEffect(() => {
-        if (files[activeTab] === null) loadFiles(activeTab);
+        if (activeTab !== 'backups' && files[activeTab as Folder] === null) {
+            loadFiles(activeTab as Folder);
+        }
     }, [activeTab, files, loadFiles]);
+
+    useEffect(() => {
+        if (activeTab === 'backups' && backupHistory === null) {
+            setLoadingBackups(true);
+            fetch('/backup-history.json')
+                .then(r => r.json())
+                .then((data: BackupEntry[]) => setBackupHistory([...data].reverse()))
+                .catch(() => setBackupHistory([]))
+                .finally(() => setLoadingBackups(false));
+        }
+    }, [activeTab, backupHistory]);
 
     async function handleDelete(folder: Folder, name: string) {
         try {
@@ -350,76 +473,138 @@ export function SynologyFilesPage() {
                         )}
                     </button>
                 ))}
+                {/* Aba Backups */}
+                <button
+                    onClick={() => { setActiveTab('backups'); setSearch(''); }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        activeTab === 'backups'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                >
+                    <Shield size={16} />
+                    Backups
+                    {backupHistory !== null && (
+                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">
+                            {backupHistory.length}
+                        </span>
+                    )}
+                </button>
             </div>
 
-            {/* CDN URL Info */}
-            <div className="mb-5 flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
-                <span className="text-blue-600 text-sm">🌐</span>
-                <span className="text-sm text-blue-800">CDN:</span>
-                <code className="text-sm text-blue-700 font-mono font-medium">https://{currentTab.cdn}/</code>
-            </div>
-
-            {/* Upload Zone */}
-            <Dropzone
-                folder={activeTab}
-                accept={currentTab.accept}
-                onUploadDone={() => loadFiles(activeTab)}
-            />
-
-            {/* File List Header */}
-            <div className="flex items-center justify-between mt-6 mb-4">
-                <div className="flex items-center gap-3">
-                    <h3 className="font-semibold text-slate-800">
-                        {loading ? 'Carregando...' : `${filtered.length} arquivo(s)`}
-                    </h3>
-                    <button
-                        onClick={() => loadFiles(activeTab)}
-                        disabled={loading}
-                        className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all disabled:opacity-40"
-                        title="Atualizar"
-                    >
-                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                    </button>
-                </div>
-                <input
-                    type="text"
-                    placeholder="Buscar arquivo..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg w-48 focus:outline-none focus:border-blue-400"
-                />
-            </div>
-
-            {/* File Grid */}
-            {loading && currentFiles === null ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                        <div key={i} className="bg-slate-100 rounded-xl h-52 animate-pulse" />
-                    ))}
-                </div>
-            ) : filtered.length === 0 ? (
-                <div className="text-center py-16 text-slate-400">
-                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                        {currentTab.icon}
+            {/* Conteúdo condicional por aba */}
+            {activeTab === 'backups' ? (
+                // ─── ABA BACKUPS ─────────────────────────────────────────────
+                <div>
+                    <div className="mb-5 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-xl">
+                        <Shield size={16} className="text-green-600" />
+                        <span className="text-sm text-green-800 font-medium">Histórico de backups gerados pelo script <code className="font-mono bg-green-100 px-1 rounded">backup-synology.cjs</code></span>
+                        <button
+                            onClick={() => { setBackupHistory(null); }}
+                            className="ml-auto p-1.5 text-green-600 hover:bg-green-100 rounded-lg transition-all"
+                            title="Atualizar"
+                        >
+                            <RefreshCw size={14} className={loadingBackups ? 'animate-spin' : ''} />
+                        </button>
                     </div>
-                    <p className="font-medium">
-                        {search ? 'Nenhum arquivo encontrado' : 'Nenhum arquivo nesta pasta'}
-                    </p>
-                    <p className="text-sm mt-1">
-                        {search ? 'Tente uma busca diferente' : 'Faça upload acima para começar'}
-                    </p>
+
+                    {loadingBackups ? (
+                        <div className="space-y-3">
+                            {Array.from({ length: 3 }).map((_, i) => (
+                                <div key={i} className="bg-slate-100 rounded-xl h-28 animate-pulse" />
+                            ))}
+                        </div>
+                    ) : !backupHistory || backupHistory.length === 0 ? (
+                        <div className="text-center py-16 text-slate-400">
+                            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                <Shield size={28} />
+                            </div>
+                            <p className="font-medium">Nenhum backup registrado ainda</p>
+                            <p className="text-sm mt-1">Execute: <code className="font-mono bg-slate-100 px-1 rounded">node backup-synology.cjs auto</code></p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {backupHistory.map(entry => (
+                                <BackupCard key={entry.id} entry={entry} />
+                            ))}
+                        </div>
+                    )}
                 </div>
             ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                    {filtered.map(file => (
-                        <FileCard
-                            key={file.name}
-                            file={file}
-                            onCopy={() => toast.success('URL copiada!')}
-                            onDelete={() => handleDelete(activeTab, file.name)}
+                // ─── ABAS CDN (Imagens, Vídeos, Arquivos) ────────────────────
+                <>
+                    {/* CDN URL Info */}
+                    <div className="mb-5 flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+                        <span className="text-blue-600 text-sm">🌐</span>
+                        <span className="text-sm text-blue-800">CDN:</span>
+                        <code className="text-sm text-blue-700 font-mono font-medium">https://{currentTab?.cdn}/</code>
+                    </div>
+
+                    {/* Upload Zone */}
+                    {currentTab && (
+                        <Dropzone
+                            folder={activeTab as Folder}
+                            accept={currentTab.accept}
+                            onUploadDone={() => loadFiles(activeTab as Folder)}
                         />
-                    ))}
-                </div>
+                    )}
+
+                    {/* File List Header */}
+                    <div className="flex items-center justify-between mt-6 mb-4">
+                        <div className="flex items-center gap-3">
+                            <h3 className="font-semibold text-slate-800">
+                                {loading ? 'Carregando...' : `${filtered.length} arquivo(s)`}
+                            </h3>
+                            <button
+                                onClick={() => loadFiles(activeTab as Folder)}
+                                disabled={loading}
+                                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all disabled:opacity-40"
+                                title="Atualizar"
+                            >
+                                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                            </button>
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Buscar arquivo..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg w-48 focus:outline-none focus:border-blue-400"
+                        />
+                    </div>
+
+                    {/* File Grid */}
+                    {loading && currentFiles === null ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="bg-slate-100 rounded-xl h-52 animate-pulse" />
+                            ))}
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <div className="text-center py-16 text-slate-400">
+                            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                {currentTab?.icon}
+                            </div>
+                            <p className="font-medium">
+                                {search ? 'Nenhum arquivo encontrado' : 'Nenhum arquivo nesta pasta'}
+                            </p>
+                            <p className="text-sm mt-1">
+                                {search ? 'Tente uma busca diferente' : 'Faça upload acima para começar'}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                            {filtered.map(file => (
+                                <FileCard
+                                    key={file.name}
+                                    file={file}
+                                    onCopy={() => toast.success('URL copiada!')}
+                                    onDelete={() => handleDelete(activeTab as Folder, file.name)}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );
