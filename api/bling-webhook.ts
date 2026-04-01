@@ -59,18 +59,25 @@ export default async function handler(req: any, res: any) {
                 return res.status(200).json({ ok: true, message: 'No product identifier in stock event' });
             }
 
-            // Usa saldo direto do payload quando disponível (v3 já traz saldoFisicoTotal)
-            // Isso evita chamada extra à API e funciona mesmo se token estiver expirado
-            const payloadStock: number | undefined = body?.data?.saldoFisicoTotal ?? body?.dados?.saldoFisicoTotal;
+            // ATENÇÃO: saldoFisicoTotal no payload = saldo de UM depósito específico,
+            // NÃO o saldo total do produto. Sempre buscar da API para obter o total real.
             let stockQty: number | null;
 
-            if (payloadStock !== undefined) {
+            if (!accessToken) {
+                // Sem token: usar saldoFisicoTotal do payload como fallback (pode ser impreciso)
+                const payloadStock = body?.data?.saldoFisicoTotal ?? body?.dados?.saldoFisicoTotal;
+                if (payloadStock === undefined) {
+                    return res.status(200).json({ ok: false, message: 'No Bling token and no stock in payload' });
+                }
                 stockQty = Number(payloadStock);
             } else {
-                if (!accessToken) {
-                    return res.status(200).json({ ok: false, message: 'No Bling token — cannot fetch stock' });
-                }
+                // Com token: buscar saldo real consolidado de todos os depósitos na API Bling
                 stockQty = await fetchBlingStock(blingId!, accessToken);
+                if (stockQty === null) {
+                    // Fallback para o payload se a API falhar
+                    const payloadStock = body?.data?.saldoFisicoTotal ?? body?.dados?.saldoFisicoTotal;
+                    stockQty = payloadStock !== undefined ? Number(payloadStock) : null;
+                }
                 if (stockQty === null) {
                     return res.status(200).json({ ok: false, message: 'Could not fetch stock from Bling' });
                 }
@@ -214,11 +221,16 @@ async function fetchBlingStock(blingId: number, accessToken: string): Promise<nu
         if (!res.ok) return null;
         const json = await res.json();
         const items: any[] = json.data || [];
+        // A API retorna 1 item por depósito para o produto.
+        // saldoFisico = saldo deste depósito; saldoFisicoTotal = total consolidado (igual em todos os itens).
+        // Usamos saldoFisicoTotal do primeiro item se disponível (já é o total real),
+        // caso contrário somamos saldoFisico de cada depósito.
+        if (items.length > 0 && items[0].saldoFisicoTotal !== undefined) {
+            return items[0].saldoFisicoTotal;
+        }
         let total = 0;
         for (const item of items) {
-            if (item.produto?.id === blingId) {
-                total += item.saldoFisicoTotal ?? item.saldoFisico ?? 0;
-            }
+            total += item.saldoFisico ?? 0;
         }
         return total;
     } catch {
