@@ -180,10 +180,10 @@ fastify.get('/products', async (req, reply) => {
   }
 
   if (status && status !== 'all') { sql += ' AND status = ?'; params.push(status); }
-  else if (!status)               { sql += ' AND status = ?'; params.push('active'); }
+  else if (!status && !search)    { sql += ' AND status = ?'; params.push('active'); }
 
   if (category) { sql += ' AND category_id = ?'; params.push(category); }
-  if (search)   { sql += ' AND name LIKE ?'; params.push(`%${search}%`); }
+  if (search)   { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ? OR slug LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
 
   if (req.query.is_featured === 'true') { sql += ' AND is_featured = 1'; }
   if (req.query.is_new === 'true')      { sql += ' AND is_new = 1'; }
@@ -479,6 +479,17 @@ fastify.patch('/products/description', { preHandler: requireSyncKey }, async (re
       specs ? JSON.stringify(specs) : '{}',
       sku
     ]
+  );
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
+// Update stock by SKU (used by Bling webhook)
+fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { sku, stock_quantity } = req.body || {};
+  if (!sku || stock_quantity === undefined) return reply.code(400).send({ error: 'sku and stock_quantity required' });
+  const [result] = await pool.query(
+    'UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    [Number(stock_quantity), sku]
   );
   return { ok: true, affectedRows: result.affectedRows };
 });

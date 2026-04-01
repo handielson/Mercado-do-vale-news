@@ -47,7 +47,10 @@ export default async function handler(req: any, res: any) {
         const accessToken: string | null = settings?.bling_access_token || null;
 
         // ── Evento de ESTOQUE ─────────────────────────────────────────────────
-        if (event.includes('estoque') || event.includes('movimentacao')) {
+        // Bling v3 (inglês): stock.created, virtual_stock.updated
+        // Legado (português): estoque, movimentacaoEstoque
+        const isStockEvent = event.includes('stock') || event.includes('estoque') || event.includes('movimentacao');
+        if (isStockEvent) {
             const productData = body?.data?.produto || body?.dados?.produto || body?.data;
             const blingId: number | undefined = productData?.id;
             const sku: string | undefined = productData?.codigo;
@@ -56,13 +59,21 @@ export default async function handler(req: any, res: any) {
                 return res.status(200).json({ ok: true, message: 'No product identifier in stock event' });
             }
 
-            if (!accessToken) {
-                return res.status(200).json({ ok: false, message: 'No Bling token — cannot fetch stock' });
-            }
+            // Usa saldo direto do payload quando disponível (v3 já traz saldoFisicoTotal)
+            // Isso evita chamada extra à API e funciona mesmo se token estiver expirado
+            const payloadStock: number | undefined = body?.data?.saldoFisicoTotal ?? body?.dados?.saldoFisicoTotal;
+            let stockQty: number | null;
 
-            const stockQty = await fetchBlingStock(blingId!, accessToken);
-            if (stockQty === null) {
-                return res.status(200).json({ ok: false, message: 'Could not fetch stock from Bling' });
+            if (payloadStock !== undefined) {
+                stockQty = Number(payloadStock);
+            } else {
+                if (!accessToken) {
+                    return res.status(200).json({ ok: false, message: 'No Bling token — cannot fetch stock' });
+                }
+                stockQty = await fetchBlingStock(blingId!, accessToken);
+                if (stockQty === null) {
+                    return res.status(200).json({ ok: false, message: 'Could not fetch stock from Bling' });
+                }
             }
 
             // Resolve SKU via Supabase caso não venha no payload
@@ -94,7 +105,10 @@ export default async function handler(req: any, res: any) {
         }
 
         // ── Evento de PRODUTO (nome/dados atualizados no Bling) ───────────────
-        if (event.includes('produto')) {
+        // Bling v3 (inglês): product.updated, product.created
+        // Legado (português): produto, produtos
+        const isProductEvent = event.includes('product') || event.includes('produto');
+        if (isProductEvent) {
             const productData = body?.data?.produto || body?.dados?.produto || body?.data;
             const blingId: number | undefined = productData?.id;
             const nome: string | undefined = productData?.nome || productData?.name;
