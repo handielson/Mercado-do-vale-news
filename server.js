@@ -483,6 +483,17 @@ fastify.patch('/products/description', { preHandler: requireSyncKey }, async (re
   return { ok: true, affectedRows: result.affectedRows };
 });
 
+// Update name by SKU (used by Bling webhook on product.updated)
+fastify.patch('/products/name', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { sku, name } = req.body || {};
+  if (!sku || !name) return reply.code(400).send({ error: 'sku and name required' });
+  const [result] = await pool.query(
+    'UPDATE products SET name=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    [name, sku]
+  );
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
 // Update stock by SKU (used by Bling webhook)
 fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, reply) => {
   const { sku, stock_quantity } = req.body || {};

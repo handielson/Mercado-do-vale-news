@@ -174,14 +174,19 @@ export default async function handler(req: any, res: any) {
             }
 
             if (!resolvedSku) {
-                // Tenta resolver via Supabase
-                const { data: product } = await supabase
-                    .from('products')
-                    .select('sku, name')
-                    .eq('bling_id', blingId)
-                    .maybeSingle();
-                resolvedSku  = product?.sku;
-                resolvedName = resolvedName || product?.name;
+                // Resolve SKU via VPS MySQL (produtos estão no MySQL, não no Supabase)
+                try {
+                    const vpsRes = await fetch(`${VPS_BASE_URL}/products?bling_id=${blingId}&limit=1`);
+                    if (vpsRes.ok) {
+                        const vpsProducts = await vpsRes.json();
+                        if (Array.isArray(vpsProducts) && vpsProducts[0]) {
+                            resolvedSku  = resolvedSku  || vpsProducts[0].sku;
+                            resolvedName = resolvedName || vpsProducts[0].name;
+                        }
+                    }
+                } catch (_) {
+                    // fallback silencioso
+                }
             }
 
             if (!resolvedSku) {
