@@ -37,14 +37,45 @@ export default async function handler(req: any, res: any) {
             auth: { persistSession: false, autoRefreshToken: false },
         });
 
-        // ── Busca o token do Bling para chamar a API quando necessário ────────
+        // ── Busca token do Bling com refresh automático ───────────────────────
         const { data: settings } = await supabase
             .from('company_settings')
-            .select('bling_access_token')
+            .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
             .limit(1)
             .maybeSingle();
 
-        const accessToken: string | null = settings?.bling_access_token || null;
+        let accessToken: string | null = settings?.bling_access_token || null;
+
+        // Verifica se o token expirou e tenta renovar via refresh_token
+        if (settings?.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
+            try {
+                const tokenRes = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        grant_type: 'refresh_token',
+                        refresh_token: settings.bling_refresh_token,
+                        client_id: settings.bling_client_id,
+                        client_secret: settings.bling_client_secret,
+                    }),
+                    signal: AbortSignal.timeout(10000),
+                });
+                if (tokenRes.ok) {
+                    const tokenData = await tokenRes.json();
+                    accessToken = tokenData.access_token;
+                    await supabase.from('company_settings').update({
+                        bling_access_token: tokenData.access_token,
+                        bling_refresh_token: tokenData.refresh_token,
+                        bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+                    }).eq('id', settings.id);
+                    console.log('[bling-webhook] Token renovado via refresh_token');
+                } else {
+                    console.warn('[bling-webhook] Falha ao renovar token:', await tokenRes.text());
+                }
+            } catch (refreshErr: any) {
+                console.warn('[bling-webhook] Erro no refresh de token:', refreshErr.message);
+            }
+        }
 
         // ── Evento de ESTOQUE ─────────────────────────────────────────────────
         // Bling v3 (inglês): stock.created, virtual_stock.updated
