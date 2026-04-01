@@ -506,6 +506,44 @@ export function SynologyFilesPage() {
                         >
                             <RefreshCw size={14} className={loadingBackups ? 'animate-spin' : ''} />
                         </button>
+
+                    {/* Acesso rápido às pastas no SynologyDrive */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                        <button
+                            onClick={() => {
+                                const path = 'C:\\Users\\Nitro\\SynologyDrive\\SynologyDrive\\backup-mercadodovale\\imagens\\products';
+                                navigator.clipboard.writeText(path);
+                                toast.success('Caminho copiado! Cole no Explorador de Arquivos (Win+E).');
+                            }}
+                            className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition-all text-left"
+                        >
+                            <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                                <Image size={18} className="text-blue-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-800">📸 Imagens de Produtos</p>
+                                <p className="text-xs text-slate-400 font-mono truncate">backup-mercadodovale/imagens/products/</p>
+                            </div>
+                            <Copy size={14} className="text-slate-400 shrink-0" />
+                        </button>
+                        <button
+                            onClick={() => {
+                                const path = 'C:\\Users\\Nitro\\SynologyDrive\\SynologyDrive\\backup-mercadodovale\\db';
+                                navigator.clipboard.writeText(path);
+                                toast.success('Caminho copiado! Cole no Explorador de Arquivos (Win+E).');
+                            }}
+                            className="flex items-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl hover:border-green-300 hover:bg-green-50 transition-all text-left"
+                        >
+                            <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                                <FileArchive size={18} className="text-green-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-800">📄 Changelogs / DB</p>
+                                <p className="text-xs text-slate-400 font-mono truncate">backup-mercadodovale/db/</p>
+                            </div>
+                            <Copy size={14} className="text-slate-400 shrink-0" />
+                        </button>
+                    </div>
                     </div>
 
                     {loadingBackups ? (
