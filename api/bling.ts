@@ -14,7 +14,62 @@ const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SU
 export default async function handler(req: any, res: any) {
     const resource = req.query.resource as string;
 
+    // ─── OAUTH-CALLBACK: recebe o code do Bling e troca por access_token ───────
+    // Chamado via rewrite: /api/auth/callback/bling → /api/bling?resource=oauth-callback
+    if (resource === 'oauth-callback' || req.query.code) {
+        const { code, error: oauthError, error_description } = req.query;
+
+        if (oauthError) {
+            console.error('Bling OAuth error:', oauthError, error_description);
+            return res.redirect(302, `/admin/settings/bling?error=${encodeURIComponent(String(oauthError))}`);
+        }
+        if (!code) {
+            return res.redirect(302, '/admin/settings/bling?error=missing_code');
+        }
+
+        const supabaseUrl2 = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+        const supabaseKey2 = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+        if (!supabaseUrl2 || !supabaseKey2) {
+            return res.redirect(302, '/admin/settings/bling?error=server_config');
+        }
+        const supaOAuth = createClient(supabaseUrl2, supabaseKey2, { auth: { persistSession: false, autoRefreshToken: false } });
+        const { data: settings2, error: settingsError2 } = await supaOAuth
+            .from('company_settings')
+            .select('id, bling_client_id, bling_client_secret, bling_callback_url')
+            .limit(1)
+            .maybeSingle();
+
+        if (settingsError2 || !settings2?.bling_client_id || !settings2?.bling_client_secret) {
+            return res.redirect(302, '/admin/settings/bling?error=missing_credentials');
+        }
+
+        const callbackUrl2 = settings2.bling_callback_url || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}/api/auth/callback/bling`;
+        try {
+            const credentials2 = Buffer.from(`${settings2.bling_client_id}:${settings2.bling_client_secret}`).toString('base64');
+            const tokenRes2 = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${credentials2}` },
+                body: new URLSearchParams({ grant_type: 'authorization_code', code: String(code), redirect_uri: callbackUrl2 }).toString(),
+            });
+            if (!tokenRes2.ok) {
+                const errText2 = await tokenRes2.text();
+                return res.redirect(302, `/admin/settings/bling?error=token_exchange_failed&status=${tokenRes2.status}`);
+            }
+            const tokenData2 = await tokenRes2.json();
+            const expiresAt2 = new Date(Date.now() + (tokenData2.expires_in || 3600) * 1000).toISOString();
+            await supaOAuth.from('company_settings').update({
+                bling_access_token: tokenData2.access_token,
+                bling_refresh_token: tokenData2.refresh_token || null,
+                bling_token_expires_at: expiresAt2,
+            }).eq('id', settings2.id);
+            return res.redirect(302, '/admin/settings/bling?connected=true');
+        } catch (fetchErr2: any) {
+            return res.redirect(302, '/admin/settings/bling?error=network_error');
+        }
+    }
+
     // ─── EXCHANGE: troca authorization_code / refresh_token por access_token ───
+
     if (resource === 'exchange') {
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
         const { code, client_id, client_secret, redirect_uri, grant_type } = req.body;

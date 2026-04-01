@@ -336,7 +336,7 @@ export default async function handler(req: any, res: any) {
                     // Prepara o form-data simulado manualmente ou via pacote
                     // Em Vercel Serverless Form-data nativo do fetch é a melhor opção se NodeJS >= 18
                     const formData = new FormData();
-                    formData.append('image', new Blob([buffer], { type: mimeType }), filename);
+                    formData.append('image', new Blob([new Uint8Array(buffer)], { type: mimeType }), filename);
 
                     const uploadPath = '/api/v2/media_space/upload_image';
                     const ts = Math.floor(Date.now() / 1000);
