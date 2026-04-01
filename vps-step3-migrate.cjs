@@ -17,19 +17,19 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 async function run() {
   console.log('>>> ETAPA 2: MIGRANDO DADOS (Supabase -> VPS) <<<');
   
-  // Buscar produtos do Supabase contendo APENAS as colunas válidas que salvávamos lá
-  console.log('1. Buscando descrições e imagens no Supabase...');
+  // Buscar TODOS os produtos e colunas vitais do Supabase para não sobreescrever com NULL
+  console.log('1. Buscando dados vitais de produtos no Supabase (Re-hidratando a VPS)...');
   const { data: products, error } = await supabase
     .from('products')
-    .select('id, name, description, images');
+    .select('*, brands(name)');
 
   if (error || !products) {
     console.error('Erro ao buscar do supabase:', error);
     return;
   }
 
-  console.log(`Foram localizados ${products.length} produtos para sincronização.`);
-  console.log('2. Enviando requisições em lote para a VPS (API Batch Update)...');
+  console.log(`Foram localizados ${products.length} produtos para re-hidratação.`);
+  console.log('2. Enviando requisições em lote para a VPS (Recuperando todos os dados)...');
 
   let successCount = 0;
   let errorCount = 0;
@@ -44,12 +44,20 @@ async function run() {
       try { images = JSON.parse(images); } catch(e) {}
     }
     
+    // Parse the brand name
+    let brandName = null;
+    if (p.brands && typeof p.brands === 'object') {
+       brandName = Array.isArray(p.brands) ? p.brands[0]?.name : p.brands.name;
+    }
+
+    // Passamos todos os campos vindo do Supabase + tratamento de imagem e marca
     const payload = {
-      id: p.id,
-      name: p.name, // Nome mantido por segurança no update
-      description: p.description,
-      images: images
+      ...p,
+      images: images,
+      brand: brandName
     };
+    // Remover o array de brands para limpar o payload
+    delete payload.brands;
 
     try {
       const res = await fetch(`${vpsUrl}/products/batch`, {

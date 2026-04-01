@@ -155,6 +155,24 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
+                // Busca a marca diretamente do Supabase caso a VPS não envie
+                if (!data.brand && data.model_id) {
+                    try {
+                        const { data: modelData } = await supabase
+                            .from('models')
+                            .select('brands(name)')
+                            .eq('id', data.model_id)
+                            .single();
+                            
+                        if (modelData?.brands && typeof modelData.brands === 'object') {
+                            const bRaw: any = modelData.brands;
+                            data.brand = Array.isArray(bRaw) ? bRaw[0]?.name : bRaw.name;
+                        }
+                    } catch (e) {
+                        console.warn('Falha ao tentar recuperar marca do Supabase', e);
+                    }
+                }
+
                 // Normaliza arrays JSON caso a stringificação tenha vazado
                 let parsedImages = data.images;
                 if (typeof parsedImages === 'string') {
@@ -561,7 +579,7 @@ export const PublicProductPage: React.FC = () => {
                         "sku": product.sku || '',
                         "brand": {
                             "@type": "Brand",
-                            "name": typeof product.brand === 'string' ? product.brand : 'Mercado do Vale'
+                            "name": typeof product.brand === 'string' && product.brand ? toTitleCase(product.brand) : 'Mercado do Vale'
                         },
                         "offers": {
                             "@type": "Offer",
@@ -693,7 +711,7 @@ export const PublicProductPage: React.FC = () => {
                                         <span>
                                             Marca:{' '}
                                             <span>
-                                                {typeof product.brand === 'string' && product.brand ? product.brand : '—'}
+                                                {typeof product.brand === 'string' && product.brand ? toTitleCase(product.brand) : '—'}
                                             </span>
                                         </span>
                                     </>

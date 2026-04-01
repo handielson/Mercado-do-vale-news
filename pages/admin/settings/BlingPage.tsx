@@ -1985,7 +1985,65 @@ export default function BlingPage() {
                                         </div>
                                     )}
                                 </div>
+                                {/* Arquitetura & Solução de Problemas (Bling -> VPS) */}
+                                <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 space-y-4">
+                                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                        <ShieldCheck className="w-5 h-5 text-green-600" />
+                                        Arquitetura &amp; Solução de Problemas (Bling ↔ VPS)
+                                    </h2>
+                                    <p className="text-sm text-slate-600">
+                                        Este guia documenta o fluxo de fallback e auto-recuperação do Webhook, 
+                                        implementado para manter nome e estoque sincronizados entre o Bling ERP e a VPS MySQL.
+                                    </p>
 
+                                    <div className="space-y-4">
+                                        {/* Ponto 1: Token Recovery */}
+                                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                            <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2 mb-2">
+                                                <RefreshCw className="w-4 h-4 text-blue-500" />
+                                                1. Renovação Automática de Token (Failover)
+                                            </h3>
+                                            <p className="text-xs text-slate-600 leading-relaxed">
+                                                O token do Bling expira naturalmente. O Webhook detecta a expiração (falha com HTTP 401) e executa um fluxo de <code>refresh_token</code> utilizando as credenciais (Client ID e Secret) registradas nesta página. O novo token é automaticamente renovado e gravado no Supabase para continuar processando eventos sem interferência manual.
+                                            </p>
+                                        </div>
+
+                                        {/* Ponto 2: Resolução de SKU / Fonte da Verdade */}
+                                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                            <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2 mb-2">
+                                                <Search className="w-4 h-4 text-amber-500" />
+                                                2. Resolução de SKU via VPS (Fonte da Verdade)
+                                            </h3>
+                                            <p className="text-xs text-slate-600 leading-relaxed">
+                                                Durante eventos de webhook (ex: <code>stock.created</code>, <code>product.updated</code>), o SKU nem sempre é transmitido ou confiável. Em vez de depender do payload ou Supabase de forma isolada, o webhook faz uma chamada direta para a API da VPS <code>/products/bling/{"{bling_id}"}</code>. Isso garante compatibilidade total com o catálogo local hospedado no MySQL.
+                                            </p>
+                                        </div>
+
+                                        {/* Ponto 3: Endpoint PATCH Name */}
+                                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                            <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2 mb-2">
+                                                <Package className="w-4 h-4 text-green-600" />
+                                                3. Sincronização de Nomes e Estoque (server.js)
+                                            </h3>
+                                            <p className="text-xs text-slate-600 leading-relaxed">
+                                                O webhook também captura edições gerais de produtos (<code>product.updated</code>). Um endpoint novo na VPS (<code>PATCH /products/name</code>) foi adicionado em <code>/var/www/mdv-api/server.js</code> para lidar com esse ciclo. Ou seja, ao modificar um Título no Bling, a mudança reflete em tempo real no banco MySQL e também é persistida.
+                                            </p>
+                                        </div>
+
+                                        {/* Troubleshooting */}
+                                        <div className="bg-red-50 p-4 rounded-lg border border-red-200 mt-4 shadow-sm">
+                                            <h3 className="font-semibold text-red-800 text-sm flex items-center gap-2 mb-2">
+                                                <AlertCircle className="w-4 h-4" />
+                                                Em Caso de Quebra de Sincronização (Troubleshooting)
+                                            </h3>
+                                            <ul className="text-xs text-red-700 list-disc list-inside space-y-2 leading-relaxed">
+                                                <li><strong>O Estoque parou de atualizar:</strong> Vá no painel do Bling → <em>Integrações → Webhooks</em>. Certifique-se de que a URL não foi "Desativada" por limite de retentativas. Caso haja travamento, ative novamente por lá.</li>
+                                                <li><strong>Erro de Token Expirado (Unauthorized):</strong> Verifique se o <strong>Client ID</strong> e o <strong>Client Secret</strong> estão preenchidos na aba Configurações. Crie a conexão manual usando o botão "Reconectar com Bling".</li>
+                                                <li><strong>Logs falhos na VPS:</strong> Se o webhook na Vercel relatar Timeout ou falha de acesso à VPS, acesse a nuvem Hostinger via Terminal SSH e confira o funcionamento do Node. Digite <code>pm2 logs mdv-api</code>. Caso note falhas no banco mysql, restarte via <code>pm2 restart mdv-api</code>.</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
 
                             </div>
                         );
