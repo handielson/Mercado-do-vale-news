@@ -93,24 +93,53 @@ export default async function handler(req: any, res: any) {
             // ATENÇÃO: saldoFisicoTotal no payload = saldo de UM depósito específico,
             // NÃO o saldo total do produto. Sempre buscar da API para obter o total real.
             let stockQty: number | null;
+            let stockSource = 'api'; // rastrear origem do valor para logs
 
             if (!accessToken) {
-                // Sem token: usar saldoFisicoTotal do payload como fallback (pode ser impreciso)
+                // Sem token OAuth: fallback para payload (impreciso — pode ser de 1 depósito)
                 const payloadStock = body?.data?.saldoFisicoTotal ?? body?.dados?.saldoFisicoTotal;
                 if (payloadStock === undefined) {
+                    console.warn('[bling-webhook] Sem token e sem saldoFisicoTotal no payload — abortando atualização de estoque');
                     return res.status(200).json({ ok: false, message: 'No Bling token and no stock in payload' });
                 }
                 stockQty = Number(payloadStock);
+                stockSource = 'payload_no_token';
+                console.warn(`[bling-webhook] ⚠️ Sem token OAuth — usando payload saldoFisicoTotal=${stockQty} (pode ser impreciso)`);
             } else {
                 // Com token: buscar saldo real consolidado de todos os depósitos na API Bling
                 stockQty = await fetchBlingStock(blingId!, accessToken);
+
                 if (stockQty === null) {
-                    // Fallback para o payload se a API falhar
+                    // API falhou — tenta usar o payload como fallback
                     const payloadStock = body?.data?.saldoFisicoTotal ?? body?.dados?.saldoFisicoTotal;
-                    stockQty = payloadStock !== undefined ? Number(payloadStock) : null;
+                    const payloadQty = payloadStock !== undefined ? Number(payloadStock) : null;
+
+                    console.warn(`[bling-webhook] ⚠️ fetchBlingStock falhou para blingId=${blingId} — payloadStock=${payloadQty}`);
+
+                    // ── PROTEÇÃO CONTRA ZERO FALSO ────────────────────────────
+                    // Se a API falhou E o payload diz 0, NÃO atualizamos.
+                    // Gravar 0 incorreto é pior que manter o valor atual.
+                    // O Bling reenviará o evento ou o sync manual corrigirá.
+                    if (payloadQty === null || payloadQty === 0) {
+                        console.warn(`[bling-webhook] 🛑 ABORTADO: API falhou e payload=${payloadQty} — risco de zerar estoque incorretamente. SKU=${sku} blingId=${blingId}`);
+                        return res.status(200).json({
+                            ok: false,
+                            message: 'API falhou e payload retornou 0 — atualização abortada para evitar estoque zerado incorretamente',
+                            blingId,
+                            sku,
+                        });
+                    }
+
+                    // Payload com valor positivo: confiável o suficiente para usar
+                    stockQty = payloadQty;
+                    stockSource = 'payload_api_fallback';
+                    console.warn(`[bling-webhook] ⚠️ Usando payload fallback: saldoFisicoTotal=${stockQty} (API indisponível)`);
+                } else {
+                    stockSource = 'api';
                 }
+
                 if (stockQty === null) {
-                    return res.status(200).json({ ok: false, message: 'Could not fetch stock from Bling' });
+                    return res.status(200).json({ ok: false, message: 'Could not fetch stock from Bling API' });
                 }
             }
 
@@ -143,7 +172,7 @@ export default async function handler(req: any, res: any) {
                 : supabase.from('products').update({ stock_quantity: stockQty }).eq('sku', resolvedSku);
             await supaFilter;
 
-            console.log(`[bling-webhook] Stock → SKU=${resolvedSku} qty=${stockQty} VPS=${vpsUpdated}`);
+            console.log(`[bling-webhook] Stock → SKU=${resolvedSku} qty=${stockQty} source=${stockSource} VPS=${vpsUpdated}`);
             return res.status(200).json({ ok: true, event, sku: resolvedSku, stock_quantity: stockQty, vpsUpdated });
         }
 
@@ -254,7 +283,10 @@ async function fetchBlingStock(blingId: number, accessToken: string): Promise<nu
                 signal: AbortSignal.timeout(10000),
             }
         );
-        if (!res.ok) return null;
+        if (!res.ok) {
+            console.warn(`[bling-webhook] fetchBlingStock HTTP ${res.status} para blingId=${blingId} — token inválido/expirado?`);
+            return null;
+        }
         const json = await res.json();
         const items: any[] = json.data || [];
         // A API retorna 1 item por depósito para o produto.
@@ -262,14 +294,18 @@ async function fetchBlingStock(blingId: number, accessToken: string): Promise<nu
         // Usamos saldoFisicoTotal do primeiro item se disponível (já é o total real),
         // caso contrário somamos saldoFisico de cada depósito.
         if (items.length > 0 && items[0].saldoFisicoTotal !== undefined) {
-            return items[0].saldoFisicoTotal;
+            const total = items[0].saldoFisicoTotal;
+            console.log(`[bling-webhook] fetchBlingStock OK: blingId=${blingId} saldoFisicoTotal=${total} (${items.length} depósito(s))`);
+            return total;
         }
         let total = 0;
         for (const item of items) {
             total += item.saldoFisico ?? 0;
         }
+        console.log(`[bling-webhook] fetchBlingStock OK (soma depósitos): blingId=${blingId} total=${total}`);
         return total;
-    } catch {
+    } catch (err: any) {
+        console.warn(`[bling-webhook] fetchBlingStock exception: ${err.message}`);
         return null;
     }
 }

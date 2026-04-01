@@ -223,13 +223,26 @@ export const PublicProductPage: React.FC = () => {
                     }
                 }
                 
-                // Categoria e Config (Mantemos chamada supérflua apenas para pegar configs locais de render das tags, categorias em breve vao pra vps tb)
+                // Categoria — VPS-first: busca nome na VPS; fallback Supabase para config
                 if (data.category_id) {
-                    const { data: catData } = await supabase.from('categories').select('name, config').eq('id', data.category_id).maybeSingle();
-                    if (catData) {
-                        data.category = catData.name;
-                        if (catData.config) setCategoryConfig(catData.config);
+                    // 1. Tenta VPS (fonte de verdade para nome da categoria)
+                    let catName: string | null = null;
+                    try {
+                        const vpsCategories = await vpsApiService.getCategories();
+                        const vpscat = vpsCategories?.find((c: any) => String(c.id) === String(data.category_id));
+                        if (vpscat?.name) catName = vpscat.name;
+                    } catch { /* VPS indisponível — segue para fallback */ }
+
+                    // 2. Supabase: fallback de nome + config (config não existe na VPS)
+                    if (!catName || true /* sempre busca config do Supabase */) {
+                        const { data: catData } = await supabase.from('categories').select('name, config').eq('id', data.category_id).maybeSingle();
+                        if (catData) {
+                            if (!catName) catName = catData.name; // só usa nome do Supabase se VPS falhou
+                            if (catData.config) setCategoryConfig(catData.config);
+                        }
                     }
+
+                    if (catName) data.category = catName;
                 }
 
                 // VPS é a única fonte de verdade para description/technical_specifications.
