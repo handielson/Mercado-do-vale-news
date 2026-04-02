@@ -131,6 +131,13 @@ export default function BlingPage() {
     const [loadingLogs, setLoadingLogs] = useState(false);
     const [logsTableExists, setLogsTableExists] = useState<boolean | null>(null);
 
+    // ── Fiscal Sync ──
+    const [fiscalSku, setFiscalSku] = useState('');
+    const [fiscalNcm, setFiscalNcm] = useState('');
+    const [fiscalCest, setFiscalCest] = useState('');
+    const [fiscalSyncing, setFiscalSyncing] = useState(false);
+    const [fiscalResult, setFiscalResult] = useState<{ ok: boolean; message: string } | null>(null);
+
     // ─────────────────────────────────────────────────────
     // Load
     // ─────────────────────────────────────────────────────
@@ -255,6 +262,73 @@ export default function BlingPage() {
     function copyCallbackUrl() {
         navigator.clipboard.writeText(credentials.bling_callback_url);
         toast.success('URL copiada!');
+    }
+
+    async function handleSyncFiscal() {
+        const sku = fiscalSku.trim();
+        const ncm = fiscalNcm.trim().replace(/\D/g, '');
+        if (!sku) { toast.error('Informe o SKU do produto.'); return; }
+        if (!ncm && !fiscalCest.trim()) { toast.error('Informe ao menos NCM ou CEST.'); return; }
+
+        setFiscalSyncing(true);
+        setFiscalResult(null);
+        try {
+            // 1. Busca o produto na VPS pelo SKU para obter o bling_id
+            const vpsBase = import.meta.env.DEV ? '/vps-proxy' : (import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+            const vpsRes = await fetch(`${vpsBase}/products?search=${encodeURIComponent(sku)}&limit=5`);
+            const vpsData = vpsRes.ok ? await vpsRes.json() : null;
+            const products: any[] = Array.isArray(vpsData) ? vpsData : vpsData?.products ?? vpsData?.data ?? [];
+            const product = products.find((p: any) =>
+                (p.sku || '').toLowerCase() === sku.toLowerCase()
+            ) ?? products[0];
+
+            if (!product?.bling_id) {
+                toast.error(`Produto "${sku}" não encontrado na VPS ou sem bling_id.`);
+                setFiscalResult({ ok: false, message: `Sem bling_id para SKU "${sku}"` });
+                return;
+            }
+
+            const blingId = product.bling_id;
+
+            // 2. Atualiza NCM/CEST no Bling via proxy
+            const blingRes = await fetch('/api/bling?resource=product-update-fiscal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    blingId,
+                    ncm: ncm || undefined,
+                    cest: fiscalCest.trim() || undefined,
+                }),
+            });
+            const blingJson = await blingRes.json();
+
+            if (!blingRes.ok || !blingJson.ok) {
+                const msg = blingJson.detail || blingJson.error || 'Falha ao atualizar o Bling';
+                toast.error(msg);
+                setFiscalResult({ ok: false, message: msg });
+                return;
+            }
+
+            // 3. Sincroniza também na VPS MySQL (fire-and-forget)
+            const syncKey = import.meta.env.VITE_VPS_SYNC_KEY || '';
+            if (syncKey && product.id) {
+                fetch(`${vpsBase}/products/${product.id}/fiscal`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+                    body: JSON.stringify({ ncm: ncm || undefined, cest: fiscalCest.trim() || undefined }),
+                }).catch(() => {});
+            }
+
+            const msg = `NCM/CEST atualizado no Bling para "${product.name || sku}" (bling_id: ${blingId})`;
+            toast.success(msg);
+            setFiscalResult({ ok: true, message: msg });
+        } catch (err: any) {
+            const msg = err.message || 'Erro inesperado';
+            toast.error(msg);
+            setFiscalResult({ ok: false, message: msg });
+        } finally {
+            setFiscalSyncing(false);
+        }
     }
 
     // ─────────────────────────────────────────────────────
@@ -687,6 +761,78 @@ export default function BlingPage() {
                                     <li><strong>Estoques</strong> — leitura de saldos por depósito</li>
                                 </ul>
                             </div>
+
+                            {/* ── Sincronização Fiscal ── */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center text-xs font-bold text-orange-700">5</span>
+                                    Sincronizar NCM / CEST → Bling
+                                </h2>
+                                <p className="text-sm text-slate-500">
+                                    Informe o <strong>SKU</strong> do produto e os dados fiscais para atualizar diretamente o cadastro no Bling ERP.
+                                    Também sincroniza na VPS MySQL.
+                                </p>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">SKU do produto</label>
+                                        <input
+                                            type="text"
+                                            value={fiscalSku}
+                                            onChange={e => setFiscalSku(e.target.value)}
+                                            placeholder="Ex: XRED-12-64"
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm font-mono"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">NCM</label>
+                                        <input
+                                            type="text"
+                                            value={fiscalNcm}
+                                            onChange={e => setFiscalNcm(e.target.value.replace(/[^0-9.]/g, '').slice(0, 11))}
+                                            placeholder="Ex: 8517.62.62"
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm font-mono"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">CEST <span className="font-normal text-slate-400">(opcional)</span></label>
+                                        <input
+                                            type="text"
+                                            value={fiscalCest}
+                                            onChange={e => setFiscalCest(e.target.value.replace(/[^0-9.]/g, '').slice(0, 9))}
+                                            placeholder="Ex: 21.062.00"
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm font-mono"
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleSyncFiscal}
+                                    disabled={fiscalSyncing || !isConnected || !fiscalSku.trim() || (!fiscalNcm.trim() && !fiscalCest.trim())}
+                                    className="flex items-center gap-2 px-5 py-2.5 bg-orange-600 text-white rounded-xl text-sm font-semibold hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {fiscalSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                    {fiscalSyncing ? 'Sincronizando...' : 'Sincronizar NCM → Bling'}
+                                </button>
+
+                                {!isConnected && (
+                                    <p className="text-xs text-amber-600">⚠️ Conecte o Bling (passo 3) antes de sincronizar.</p>
+                                )}
+
+                                {fiscalResult && (
+                                    <div className={`flex items-start gap-2 p-3 rounded-xl text-sm ${
+                                        fiscalResult.ok
+                                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                                            : 'bg-red-50 border border-red-200 text-red-800'
+                                    }`}>
+                                        {fiscalResult.ok
+                                            ? <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                                            : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />}
+                                        <span>{fiscalResult.message}</span>
+                                    </div>
+                                )}
+                            </div>
+
                         </div>
                     )}
 

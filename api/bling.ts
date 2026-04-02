@@ -910,7 +910,87 @@ export default async function handler(req: any, res: any) {
         }
     }
 
-    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|sync-prices-vps' });
+
+    // ─── PRODUCT-UPDATE-FISCAL: atualiza NCM/CEST de um produto no Bling ────────
+    // Body: { blingId: number, ncm?: string, cest?: string, origem?: number }
+    // Busca o produto completo, faz merge apenas em tributacao e envia PUT.
+    if (resource === 'product-update-fiscal') {
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        const { blingId, ncm, cest, origem } = req.body || {};
+        if (!blingId) return res.status(400).json({ error: 'blingId required' });
+        if (!ncm && !cest && origem === undefined) return res.status(400).json({ error: 'At least one of ncm, cest or origem required' });
+
+        try {
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const { data: settings } = await supabase
+                .from('company_settings')
+                .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
+                .single();
+            if (!settings?.bling_access_token) return res.status(401).json({ error: 'Bling not connected' });
+
+            // Refresh token if expired
+            let accessToken = settings.bling_access_token;
+            if (settings.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
+                const tokenRes = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: settings.bling_refresh_token, client_id: settings.bling_client_id, client_secret: settings.bling_client_secret }),
+                });
+                if (tokenRes.ok) {
+                    const tokenData = await tokenRes.json();
+                    accessToken = tokenData.access_token;
+                    await supabase.from('company_settings').update({
+                        bling_access_token: tokenData.access_token,
+                        bling_refresh_token: tokenData.refresh_token,
+                        bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+                    }).eq('id', settings.id);
+                }
+            }
+
+            // 1. Busca produto completo para não sobrescrever outros campos
+            const prodRes = await fetch(`https://api.bling.com.br/Api/v3/produtos/${blingId}`, {
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
+            });
+            if (!prodRes.ok) {
+                return res.status(prodRes.status).json({ error: 'fetch_failed', detail: await prodRes.text() });
+            }
+            const prodData = await prodRes.json();
+            const produto = prodData.data;
+
+            // 2. Merge tributacao — somente campos informados
+            const tributacaoAtual = produto.tributacao || {};
+            const tributacaoNova: Record<string, any> = { ...tributacaoAtual };
+            if (ncm !== undefined)    tributacaoNova.ncm    = ncm || null;
+            if (cest !== undefined)   tributacaoNova.cest   = cest || null;
+            if (origem !== undefined) tributacaoNova.origem = origem;
+
+            const payload = { ...produto, tributacao: tributacaoNova };
+            delete payload.estoque; // campo readonly — Bling rejeita se enviado
+
+            // 3. PUT no Bling
+            const putRes = await fetch(`https://api.bling.com.br/Api/v3/produtos/${blingId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!putRes.ok) {
+                const detail = await putRes.text();
+                return res.status(putRes.status).json({ ok: false, error: 'bling_update_failed', detail });
+            }
+
+            return res.status(200).json({ ok: true, blingId, ncm, cest });
+        } catch (err: any) {
+            return res.status(500).json({ error: 'network_error', message: err.message });
+        }
+    }
+
+    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|sync-prices-vps|product-update-fiscal' });
+
 }
 
 
