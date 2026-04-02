@@ -10,7 +10,8 @@ import type { OrderWithItems } from '@/types/order';
 import { formatCurrency } from '@/utils/saleCalculations';
 import {
     Package, CheckCircle, Truck, MapPin, Clock,
-    XCircle, AlertCircle, Loader2, MessageCircle, Copy
+    XCircle, AlertCircle, Loader2, MessageCircle, Copy,
+    Smartphone, Shield
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, {
@@ -97,12 +98,21 @@ const DELIVERY_LABELS: Record<string, string> = {
     delivery: 'Entrega',
 };
 
+interface SerializedUnitInfo {
+    item_id: string;
+    product_name: string;
+    imei_1?: string;
+    imei_2?: string;
+    serial?: string;
+}
+
 export default function OrderTrackingPage() {
     const { id } = useParams<{ id: string }>();
     const [order, setOrder] = useState<OrderWithItems | null>(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [serializedUnits, setSerializedUnits] = useState<SerializedUnitInfo[]>([]);
 
     const copyOrderId = () => {
         if (!order) return;
@@ -153,6 +163,31 @@ export default function OrderTrackingPage() {
                 }
 
                 setOrder(data);
+
+                // Fase 6: buscar dados de IMEI/Serial se documentos já foram liberados
+                if ((data as any).serialized_docs_released) {
+                    const unitIds = data.items
+                        .filter(i => (i as any).serialized_unit_id)
+                        .map(i => ({ item_id: i.id, product_name: i.product_name, unit_id: (i as any).serialized_unit_id }));
+
+                    if (unitIds.length > 0) {
+                        const { data: units } = await supabase
+                            .from('units')
+                            .select('id, imei_1, imei_2, serial')
+                            .in('id', unitIds.map(u => u.unit_id));
+
+                        if (units) {
+                            const unitMap = Object.fromEntries(units.map(u => [u.id, u]));
+                            setSerializedUnits(unitIds.map(u => ({
+                                item_id: u.item_id,
+                                product_name: u.product_name,
+                                imei_1: unitMap[u.unit_id]?.imei_1 || undefined,
+                                imei_2: unitMap[u.unit_id]?.imei_2 || undefined,
+                                serial: unitMap[u.unit_id]?.serial || undefined,
+                            })));
+                        }
+                    }
+                }
             })
             .catch(() => setNotFound(true))
             .finally(() => setLoading(false));
@@ -479,6 +514,43 @@ export default function OrderTrackingPage() {
                             </div>
                         )}
                     </div>
+
+                    {/* Card de IMEI/Serial — liberado pelo admin após entrega física */}
+                    {serializedUnits.length > 0 && (
+                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-4">
+                            <div className="flex items-center gap-2">
+                                <Smartphone className="w-4 h-4 text-indigo-600" />
+                                <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide">📱 Dados do Aparelho</p>
+                            </div>
+                            {serializedUnits.map(unit => (
+                                <div key={unit.item_id} className="space-y-2">
+                                    <p className="text-sm font-semibold text-gray-800 truncate">{unit.product_name}</p>
+                                    {unit.imei_1 && (
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-gray-500">IMEI 1</span>
+                                            <span className="font-mono text-gray-800 text-xs">{unit.imei_1}</span>
+                                        </div>
+                                    )}
+                                    {unit.imei_2 && (
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-gray-500">IMEI 2</span>
+                                            <span className="font-mono text-gray-800 text-xs">{unit.imei_2}</span>
+                                        </div>
+                                    )}
+                                    {unit.serial && (
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-gray-500">Serial</span>
+                                            <span className="font-mono text-gray-800 text-xs">{unit.serial}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            <div className="flex items-start gap-2 bg-indigo-100 rounded-lg p-3">
+                                <Shield className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
+                                <p className="text-xs text-indigo-700">Guarde esses dados. O IMEI é essencial para acionamento de garantia e registro de furto/roubo.</p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Card de Garantia Estendida — aparece quando pedido inclui garantia */}
                     {(() => {
