@@ -84,6 +84,7 @@ import OrderConfirmationPage from '../pages/store/OrderConfirmationPage';
 import OrderTrackingPage from '../pages/store/OrderTrackingPage';
 import { PublicProductPage } from '../pages/store/PublicProductPage';
 import OnlineOrdersPage from '../pages/admin/orders/OnlineOrdersPage';
+import SerializedUnitsPage from '../pages/admin/inventory/SerializedUnitsPage';
 import FinancialPage from '../pages/admin/financial/FinancialPage';
 import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
@@ -486,6 +487,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><InventoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/serializados",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SerializedUnitsPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
