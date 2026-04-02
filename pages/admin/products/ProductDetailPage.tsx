@@ -10,6 +10,8 @@ import { unitService } from '../../../services/units';
 import { ProductForm } from '../../../components/products/ProductForm';
 import { UnitList } from '../../../components/units/UnitList';
 import { UnitForm } from '../../../components/units/UnitForm';
+import { NcmSearchWidget } from '../../../components/admin/NcmSearchWidget';
+import { InmetroWidget } from '../../../components/admin/InmetroWidget';
 
 type TabType = 'product' | 'inventory';
 
@@ -220,12 +222,39 @@ export const ProductDetailPage: React.FC = () => {
                 {/* Tab Content */}
                 <div className="flex-1 min-w-0 space-y-6">
                     {activeTab === 'product' && (
-                        <ProductForm
-                            initialData={product}
-                            onSubmit={handleProductSubmit}
-                            onCancel={handleCancel}
-                            isLoading={isSaving}
-                        />
+                        <>
+                            <ProductForm
+                                initialData={product}
+                                onSubmit={handleProductSubmit}
+                                onCancel={handleCancel}
+                                isLoading={isSaving}
+                            />
+
+                            {/* ─── Seção Fiscal (VPS-first) ─── */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className="text-sm font-bold text-slate-700">Informações Fiscais</span>
+                                    <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-semibold">VPS → Bling → Shopee</span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <NcmSearchWidget
+                                        productId={product.id}
+                                        sku={product.sku}
+                                        productName={product.name}
+                                        currentNcm={product.ncm || ''}
+                                        autoSave={true}
+                                        onSaved={(ncm) => toast.success(`NCM ${ncm} salvo.`)}
+                                    />
+                                    <InmetroWidget
+                                        productId={product.id}
+                                        productName={product.name}
+                                        currentCertificate={product.specs?.inmetro_certificate || ''}
+                                        currentSpecs={product.specs || {}}
+                                        autoSave={true}
+                                    />
+                                </div>
+                            </div>
+                        </>
                     )}
 
                     {activeTab === 'inventory' && (

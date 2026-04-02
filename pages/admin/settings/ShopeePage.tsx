@@ -12,6 +12,8 @@ import { Company } from '../../../types/company';
 import ShopeeOrdersTab from './components/ShopeeOrdersTab';
 import ShopeePrintersTab from './components/ShopeePrintersTab';
 import ShopeeFinanceTab from './components/ShopeeFinanceTab';
+import { NcmSearchWidget } from '../../../components/admin/NcmSearchWidget';
+import { InmetroWidget } from '../../../components/admin/InmetroWidget';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ShopeeProduct {
@@ -1485,9 +1487,26 @@ function ExpandedItemPanel({
 
                 {/* ── Fiscal */}
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Informações Fiscais</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    {inp('NCM', 'ncm', 'text', 'ex: 8525.80.29')}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    {/* NCM com busca inteligente */}
+                    <NcmSearchWidget
+                        productId={p.product_id}
+                        sku={p.sku}
+                        productName={form.item_name}
+                        currentNcm={form.ncm}
+                        autoSave={true}
+                        onSaved={ncm => setF('ncm', ncm)}
+                        onChange={ncm => setF('ncm', ncm)}
+                    />
                     {inp('GTIN / EAN', 'gtin', 'text', 'ex: 7891234560123')}
+                </div>
+                <div className="mb-4">
+                    <InmetroWidget
+                        productId={p.product_id}
+                        productName={form.item_name}
+                        currentCertificate={p.inmetro_certificate || ''}
+                        autoSave={true}
+                    />
                 </div>
 
                 {/* ── Atributos de categoria (INMETRO, ANATEL etc.) */}
