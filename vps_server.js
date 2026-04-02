@@ -156,7 +156,7 @@ fastify.get('/products', async (req, reply) => {
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, exclude_from_seo, view_count, created_at, updated_at`
+       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
@@ -165,7 +165,7 @@ fastify.get('/products', async (req, reply) => {
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, exclude_from_seo, view_count, created_at, updated_at`;
+       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, created_at, updated_at`;
 
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
@@ -316,8 +316,9 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           images, specs, custom_fields, dimensions, weight_kg,
           ncm, cest, origin, bling_id, bling_parent_id, parent_id,
           video_url, track_inventory, is_gift, is_virtual,
-          warranty_type, warranty_template_id, company_id, kits
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          warranty_type, warranty_template_id, company_id, kits,
+          meta_title, meta_description, keywords
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=VALUES(name), slug=VALUES(slug), sku=VALUES(sku),
           ean=VALUES(ean), alternative_eans=VALUES(alternative_eans),
@@ -339,6 +340,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           warranty_type=VALUES(warranty_type),
           warranty_template_id=VALUES(warranty_template_id),
           kits=VALUES(kits),
+          meta_title=VALUES(meta_title), meta_description=VALUES(meta_description), keywords=VALUES(keywords),
           updated_at=CURRENT_TIMESTAMP`,
         [
           p.id, p.name, p.slug || null, p.sku || null,
@@ -356,6 +358,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0, p.is_virtual ? 1 : 0,
           p.warranty_type || 'brand', p.warranty_template_id || null,
           p.company_id || null, jsonStr(p.kits),
+          p.meta_title || null, p.meta_description || null, p.keywords || null,
         ]
       );
       results.upserted++;
@@ -380,6 +383,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?,
       video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
+      meta_title=?, meta_description=?, keywords=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
     [
@@ -397,6 +401,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.video_url || null,
       p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
+      p.meta_title || null, p.meta_description || null, p.keywords || null,
       req.params.id,
     ]
   );
@@ -1066,7 +1071,13 @@ fastify.get('/status', async (req, reply) => {
 fastify.get('/shipping/settings', async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM shipping_settings LIMIT 1');
   reply.header('Cache-Control', 'public, max-age=300');
-  return rows[0] || null;
+  if (!rows[0]) return null;
+  const row = rows[0];
+  // extra_config: mysql2 retorna JSON column como string em algumas versões
+  if (row.extra_config && typeof row.extra_config === 'string') {
+    try { row.extra_config = JSON.parse(row.extra_config); } catch { row.extra_config = null; }
+  }
+  return row;
 });
 
 fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -1078,15 +1089,16 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
        melhor_envio_token,melhor_envio_sandbox,melhor_envio_enabled,melhor_envio_allowed_services,
        frenet_token,frenet_enabled,local_delivery_enabled,
        enable_progressive_shipping_subsidy,min_order_value_for_subsidy,
-       default_subsidy_discount_percent,profit_margin_percentage_cap)
+       default_subsidy_discount_percent,profit_margin_percentage_cap,extra_config)
        VALUES (UUID(),?,?,?,?,?,?,?,?,?,?,?,
-       ?,?,?,?)`,
+       ?,?,?,?,?)`,
       [s.origin_cep,s.origin_label,s.secondary_origin_cep,s.secondary_origin_label,
        s.melhor_envio_token,s.melhor_envio_sandbox?1:0,s.melhor_envio_enabled?1:0,
        s.melhor_envio_allowed_services,s.frenet_token,s.frenet_enabled?1:0,s.local_delivery_enabled?1:0,
        s.enable_progressive_shipping_subsidy?1:0, s.min_order_value_for_subsidy||0,
        s.default_subsidy_discount_percent!=null?s.default_subsidy_discount_percent:100,
-       s.profit_margin_percentage_cap!=null?s.profit_margin_percentage_cap:20]
+       s.profit_margin_percentage_cap!=null?s.profit_margin_percentage_cap:20,
+       s.extra_config!=null?JSON.stringify(s.extra_config):null]
     );
   } else {
     await pool.query(
@@ -1101,6 +1113,7 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
        min_order_value_for_subsidy=COALESCE(?,min_order_value_for_subsidy),
        default_subsidy_discount_percent=COALESCE(?,default_subsidy_discount_percent),
        profit_margin_percentage_cap=COALESCE(?,profit_margin_percentage_cap),
+       extra_config=COALESCE(?,extra_config),
        updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
       [s.origin_cep,s.origin_label,s.secondary_origin_cep,s.secondary_origin_label,
@@ -1112,6 +1125,7 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
        s.min_order_value_for_subsidy,
        s.default_subsidy_discount_percent,
        s.profit_margin_percentage_cap,
+       s.extra_config!=null?JSON.stringify(s.extra_config):null,
        rows[0].id]
     );
   }
@@ -1827,7 +1841,11 @@ async function runMigrations() {
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");
+  await addColumnIfMissing('products', 'meta_title', "VARCHAR(255) NULL");
+  await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
+  await addColumnIfMissing('products', 'keywords', "TEXT NULL");
   await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
+  await addColumnIfMissing('shipping_settings', 'extra_config', 'JSON NULL');
   console.log('[migration] company_settings synology columns: OK');
 }
 
