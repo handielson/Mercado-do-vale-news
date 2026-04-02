@@ -323,6 +323,30 @@ class VpsApiService {
     return this.writeSafe('PATCH', `/products/${id}/seo`, { exclude_from_seo });
   }
 
+  /**
+   * Atualiza campos fiscais do produto na VPS (fonte primária).
+   * ncm: código NCM (8 dígitos, ex: "85176262")
+   * cest: código CEST (7 dígitos, ex: "2100300")
+   * origin: origem da mercadoria (ex: "0" = Nacional)
+   * inmetro_certificate: número do certificado Inmetro (ex: "011/2024")
+   *   → salvo em specs.inmetro_certificate (JSON flexível, sem schema migration)
+   */
+  async updateProductFiscal(
+    id: string,
+    data: { ncm?: string; cest?: string; origin?: string; inmetro_certificate?: string; specs?: Record<string, any> }
+  ): Promise<boolean> {
+    this.cache.delete(`/products/${id}`);
+    this.invalidateProductCache();
+    // Build payload
+    const payload: Record<string, any> = {};
+    if (data.ncm !== undefined)                   payload.ncm = data.ncm;
+    if (data.cest !== undefined)                  payload.cest = data.cest;
+    if (data.origin !== undefined)                payload.origin = data.origin;
+    if (data.inmetro_certificate !== undefined)   payload.specs = { ...(data.specs ?? {}), inmetro_certificate: data.inmetro_certificate };
+    return this.writeSafe('PATCH', `/products/${id}/fiscal`, payload);
+  }
+
+
   async deleteProduct(id: string): Promise<boolean> {
     this.invalidateProductCache();
     return this.writeSafe('DELETE', `/products/${id}`);

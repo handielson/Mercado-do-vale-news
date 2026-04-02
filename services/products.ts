@@ -339,6 +339,21 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);
 
+    // Garante persistência de NCM/CEST/Origin na VPS.
+    // O PUT /products/:id pode não gravar esses campos (schema seletivo do servidor).
+    // Usamos o POST /products/batch (upsert) que certamente processa todos os campos.
+    if (payload.ncm || payload.cest || payload.origin) {
+        const fiscalPatch = {
+            id,
+            company_id: payload.company_id,
+            ncm: payload.ncm ?? null,
+            cest: payload.cest ?? null,
+            origin: payload.origin ?? null,
+        };
+        vpsApiService.syncProducts([fiscalPatch])
+            .catch(e => console.warn('[productService] Fiscal sync via batch failed:', e));
+    }
+
     // Log price change (usa Supabase — tabela price_history não está na VPS)
     try {
         if (oldProduct) {
