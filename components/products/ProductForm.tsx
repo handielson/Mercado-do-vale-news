@@ -18,7 +18,7 @@ import { EANInput } from '../ui/EANInput';
 import { SmartInput } from '../ui/SmartInput';
 import { compressImage } from '../../utils/image-compression';
 import { generateProductName } from '../../utils/product-name-generator';
-import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText, Trash2, CheckCircle2, ListOrdered, Globe } from 'lucide-react';
+import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText, Trash2, CheckCircle2, ListOrdered, Globe, AlertCircle } from 'lucide-react';
 import { useEANAutofill } from './hooks/useEANAutofill';
 import { useModelTemplate } from './hooks/useModelTemplate';
 import { ProductSpecifications } from './sections/ProductSpecifications';
@@ -753,34 +753,89 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         (errors) => {
             console.error('Validation errors:', errors);
 
+            // Função recursiva para extrair erros aninhados
+            const extractErrors = (obj: any, path: string = ''): string[] => {
+                let errList: string[] = [];
+                for (const key in obj) {
+                    const newPath = path ? `${path}.${key}` : key;
+                    const value = obj[key];
+                    if (value && value.message) {
+                        errList.push(`- ${newPath}: ${value.message}`);
+                    } else if (typeof value === 'object' && value !== null) {
+                        errList = errList.concat(extractErrors(value, newPath));
+                    }
+                }
+                return errList;
+            };
+
+            const flatErrors = extractErrors(errors);
+
             // Log detalhado de cada erro
             console.group('🔴 ERROS DE VALIDAÇÃO DETALHADOS:');
-            Object.entries(errors).forEach(([field, error]) => {
-                console.error(`  ❌ ${field}:`, error?.message || error);
+            flatErrors.forEach((err) => {
+                console.error(err);
             });
             console.groupEnd();
 
-            // Conta quantos campos têm erro
-            const errorCount = Object.keys(errors).length;
-            const errorMessages = Object.entries(errors)
-                .map(([field, err]) => `- ${field}: ${err?.message || 'Erro'}`)
-                .join('\n');
-
             // Mostra toast com mensagem específica
-            if (errorCount > 0) {
+            if (flatErrors.length > 0) {
                 toast.error(
-                    `Falha de Validação (${errorCount} campo${errorCount === 1 ? '' : 's'})`,
+                    `Falha de Validação (${flatErrors.length} campo${flatErrors.length === 1 ? '' : 's'})`,
                     {
                         duration: 8000,
-                        description: `Verifique os seguintes campos:\n${errorMessages}`
+                        description: `Verifique os seguintes campos:\n${flatErrors.join('\n')}`
                     }
                 );
             }
         }
     );
 
+    // Dynamic error extraction for the UI banner
+    const extractValidationErrors = (obj: any, path: string = ''): string[] => {
+        let errList: string[] = [];
+        for (const key in obj) {
+            const newPath = path ? `${path}.${key}` : key;
+            const value = obj[key];
+            if (value && value.message) {
+                // Translator keys mapping if needed, otherwise raw path
+                errList.push(`${newPath}: ${value.message}`);
+            } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                errList = errList.concat(extractValidationErrors(value, newPath));
+            } else if (Array.isArray(value)) {
+                value.forEach((v, index) => {
+                   if (typeof v === 'object' && v !== null) {
+                       errList = errList.concat(extractValidationErrors(v, `${newPath}[${index}]`));
+                   } else if(v && v.message) {
+                       errList.push(`${newPath}[${index}]: ${v.message}`);
+                   }
+                });
+            }
+        }
+        return errList;
+    };
+
+    const hasValidationErrors = Object.keys(errors).length > 0;
+    const validationErrorList = hasValidationErrors ? extractValidationErrors(errors) : [];
+
     return (
         <form onSubmit={handleFormSubmit} className="space-y-6 pb-20">
+            {hasValidationErrors && validationErrorList.length > 0 && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm mb-6 animate-in fade-in slide-in-from-top-4">
+                    <h3 className="font-semibold text-red-800 flex items-center gap-2 mb-2">
+                        <AlertCircle size={18} className="text-red-600" />
+                        Erros de Validação Encontrados ({validationErrorList.length})
+                    </h3>
+                    <p className="text-sm text-red-700 mb-2">
+                        Por favor, corrija os seguintes campos antes de salvar:
+                    </p>
+                    <ul className="list-disc pl-5 text-sm font-medium text-red-700 space-y-1">
+                        {validationErrorList.map((err, i) => (
+                            <li key={i}>{err}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
             {/* 0. SCANNER EAN + MODELO + DADOS DO TEMPLATE */}
             <ProductBasicInfo
                 watch={watch}

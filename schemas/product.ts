@@ -10,12 +10,12 @@ import { ProductStatus } from '../utils/field-standards';
 
 export const productSchema = z.object({
     // Model Reference (optional - populated by EAN scanner)
-    model_id: z.string().optional(),
+    model_id: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
 
     // Category & Brand (optional - come from model)
-    category_id: z.string().optional(),
-    brand: z.string().optional(),
-    model: z.string().optional(),
+    category_id: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
+    brand: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
+    model: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
 
     // Basic Information
     name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
