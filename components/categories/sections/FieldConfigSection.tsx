@@ -157,7 +157,7 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                             </thead>
                             <tbody className="divide-y divide-slate-200">
                                 {availableFields.map((field) => {
-                                    const currentValue = (config[field.key] as FieldRequirement) || 'optional';
+                                    const currentValue = (config[field.key] as FieldRequirement) || 'off';
                                     const isEANExcluded = eanExcludedFields.includes(field.key);
                                     const isInAutoNaming = autoNamingFields.includes(field.key);
 
