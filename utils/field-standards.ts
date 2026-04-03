@@ -39,6 +39,7 @@ export enum UnitStatus {
   RESERVED = 'reserved',
   SOLD = 'sold',
   RMA = 'rma',
+  SCRAPPED = 'scrapped', // descartado — perda total (não volta ao estoque)
 }
 
 export enum ProductCondition {

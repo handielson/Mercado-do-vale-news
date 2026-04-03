@@ -9,12 +9,13 @@ interface CartItemsSectionProps {
     onUpdateQuantity: (id: string, qty: number) => void;
     onRemoveItem: (id: string) => void;
     onUpdateWarranty: (id: string, warranty: WarrantyOption | null) => void;
+    onUpdatePrice: (id: string, newPrice: number) => void;
 }
 
 const fmt = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
-export default function CartItemsSection({ items, warrantyOptions, onUpdateQuantity, onRemoveItem, onUpdateWarranty }: CartItemsSectionProps) {
+export default function CartItemsSection({ items, warrantyOptions, onUpdateQuantity, onRemoveItem, onUpdateWarranty, onUpdatePrice }: CartItemsSectionProps) {
     if (items.length === 0) return null;
 
     return (
@@ -37,13 +38,39 @@ export default function CartItemsSection({ items, warrantyOptions, onUpdateQuant
                             <div className="px-4 pt-3 pb-2 space-y-1">
 
                                 {/* Linha 1: produto */}
-                                <div className="flex justify-between items-baseline gap-2">
+                                <div className="flex justify-between items-center gap-2">
                                     <span className="text-sm font-medium text-slate-800">
                                         {item.quantity}x {item.product_name}
                                     </span>
-                                    <span className="text-sm font-semibold text-slate-800 shrink-0 tabular-nums">
-                                        {fmt(productTotal)}
-                                    </span>
+                                    {item.is_gift ? (
+                                        <span className="text-sm font-semibold text-slate-800 shrink-0 tabular-nums">
+                                            {fmt(productTotal)}
+                                        </span>
+                                    ) : (
+                                        <div className="flex flex-col items-end gap-1 shrink-0">
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-xs text-slate-500">Unidade: R$</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    className="w-24 px-2 py-1 text-right text-sm font-semibold text-slate-800 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                    value={(item.unit_price / 100)}
+                                                    onChange={(e) => {
+                                                        const val = parseFloat(e.target.value);
+                                                        if (!isNaN(val) && val >= 0) {
+                                                            onUpdatePrice(item.id, Math.round(val * 100));
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                            {item.quantity > 1 && (
+                                                <span className="text-xs font-semibold text-slate-600 tabular-nums">
+                                                    Total: {fmt(productTotal)}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Linha 2: garantia (condicional) */}

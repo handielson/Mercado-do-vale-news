@@ -79,7 +79,14 @@ export const shippingService = {
     async getSettings(): Promise<ShippingSettings | null> {
         try {
             const data = await vpsApiService.getShippingSettings();
-            if (data) return data as ShippingSettings;
+            if (data) {
+                // Expande extra_config para os campos de configuração extendida
+                const extraConfig = data.extra_config || {};
+                return {
+                    ...data,
+                    fast_delivery_config: extraConfig.fast_delivery_config ?? null,
+                } as ShippingSettings;
+            }
         } catch (e) {
             console.error('[shippingService] getSettings fallback to supabase:', e);
         }
@@ -95,14 +102,15 @@ export const shippingService = {
     async saveSettings(input: ShippingSettingsInput): Promise<void> {
         // Salva simultaneamente no banco local/Supabase e no VPS (Master)
         const existing = await shippingService.getSettings();
-        
-        // Remove campos que ainda não existem no schema do Supabase local (Fallback) para evitar 400 Bad Request
-        const { 
-            enable_progressive_shipping_subsidy, 
-            min_order_value_for_subsidy, 
-            default_subsidy_discount_percent, 
-            profit_margin_percentage_cap, 
-            ...supabaseInput 
+
+        // Remove campos que ainda não existem no schema do Supabase local para evitar 400 Bad Request
+        const {
+            enable_progressive_shipping_subsidy,
+            min_order_value_for_subsidy,
+            default_subsidy_discount_percent,
+            profit_margin_percentage_cap,
+            fast_delivery_config,
+            ...supabaseInput
         } = input;
 
         let localError;
@@ -119,10 +127,22 @@ export const shippingService = {
             localError = error;
         }
 
-        // Tenta jogar na VPS como Source of Truth principal (Single-tenant view)
-        // Passa o input completo para o VPS, que já deve ter a tabela atualizada
+        // Monta extra_config agrupando todas as configurações estendidas
+        // Preserva chaves existentes em extra_config que não foram enviadas agora
+        const currentExtra = existing?.fast_delivery_config
+            ? { fast_delivery_config: existing.fast_delivery_config }
+            : {};
+        const nextExtra = {
+            ...currentExtra,
+            ...(fast_delivery_config !== undefined ? { fast_delivery_config } : {}),
+        };
+
+        // Envia ao VPS com extra_config embutido (Source of Truth)
         try {
-            await vpsApiService.syncShippingSettings(input);
+            await vpsApiService.syncShippingSettings({
+                ...input,
+                extra_config: Object.keys(nextExtra).length > 0 ? nextExtra : null,
+            });
         } catch (e) {
             console.warn('[shippingService] Failed to sync shipping_settings with VPS', e);
         }

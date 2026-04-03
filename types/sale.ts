@@ -49,6 +49,14 @@ export interface SaleItem {
     product_specs?: { color?: string; ram?: string; storage?: string; imei1?: string; imei2?: string; [key: string]: string | undefined };
     product_brand?: string; // Marca do produto
     product_model?: string; // Modelo do produto
+
+    // Unidade serializada vinculada (bip de IMEI no PDV)
+    serialized_unit?: {
+        unitId: string;
+        imei1?: string;
+        imei2?: string;
+        serial?: string;
+    };
 }
 
 /**

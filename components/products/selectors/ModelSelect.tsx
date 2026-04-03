@@ -104,10 +104,16 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
                 <select
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
-                    disabled={isLoading}
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
+                    className={`flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${isLoading ? 'opacity-60 cursor-wait' : ''}`}
                 >
                     <option value="">Selecione um modelo</option>
+                    
+                    {/* GARANTIA DE COMPATIBILIDADE ASSÍNCRONA */}
+                    {/* Evita que o browser resete o campo enquanto loadModels() baixa a lista */}
+                    {value && !models.some(m => m.name === value) && (
+                        <option value={value}>{value}</option>
+                    )}
+
                     {models.map((model) => (
                         <option key={model.id} value={model.name}>
                             {model.name}

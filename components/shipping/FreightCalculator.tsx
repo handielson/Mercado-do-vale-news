@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Plus, Minus, Trash2, Package, AlertTriangle, CheckCircle, Loader2, Calculator, Share2, MessageCircle, Copy, Tag, X, User, FileText, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../services/supabase';
+import { vpsApiService } from '../../services/vpsApiService';
 import { shippingService } from '../../services/shippingService';
 import { melhorEnvioService } from '../../services/melhorEnvio';
 import type { ShippingSettings } from '../../types/shipping';
@@ -255,7 +256,25 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
     async function loadProducts() {
         setLoadingProducts(true);
 
-        // Busca produtos ativos com model_id
+        // ── Passo 1: Buscar dados de produto (preço, sku, nome) — VPS-first ────
+        // VPS é a fonte verdadeira de preços. Se falhar → fallback para Supabase.
+        let vpsProductMap = new Map<string, { price: number; price_cost: number; name: string }>();
+
+        try {
+            const vpsProducts = await vpsApiService.getProducts({ status: 'active' });
+            if (vpsProducts && vpsProducts.length > 0) {
+                for (const vp of vpsProducts) {
+                    const price = parseFloat(String(vp.price_retail ?? vp.price ?? 0)) || 0;
+                    const priceCost = parseFloat(String(vp.price_cost ?? 0)) || 0;
+                    vpsProductMap.set(String(vp.sku), { price, price_cost: priceCost, name: String(vp.name || '') });
+                }
+                console.log(`[FreightCalculator] VPS retornou ${vpsProducts.length} produtos (preços atualizados).`);
+            }
+        } catch {
+            console.warn('[FreightCalculator] VPS indisponível — usando preços do Supabase como backup.');
+        }
+
+        // ── Passo 2: Buscar produtos do Supabase (model_id + fallback de preço) ─
         const { data: products } = await supabase
             .from('products')
             .select('id, name, sku, model_id, price, price_cost')
@@ -269,7 +288,8 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
             return;
         }
 
-        // Busca template_values dos modelos (contém peso/dimensões)
+        // ── Passo 3: Buscar dimensões do Supabase (models.template_values) ──────
+        // VPS não armazena dimensões — Supabase é a única fonte para esse dado.
         const modelIds = [...new Set(products.map((p: any) => p.model_id).filter(Boolean))];
         const { data: models } = await supabase
             .from('models')
@@ -278,25 +298,31 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
 
         const modelMap = new Map((models ?? []).map((m: any) => [m.id, m.template_values ?? {}]));
 
+        // ── Passo 4: Mesclar VPS (preço) + Supabase (dimensões) ──────────────────
         setAllProducts(products.map((p: any) => {
             const tv: any = modelMap.get(p.model_id) ?? {};
 
-            // Campos exatos do banco: weight_kg (numérico) e dimensions.* (com ponto na chave)
+            // Dimensões — sempre do Supabase
             const rawWeight = tv['weight_kg'] != null ? tv['weight_kg'] * 1000 : null;
             const height_cm = tv['dimensions.height_cm'] ?? null;
-            const width_cm = tv['dimensions.width_cm'] ?? null;
+            const width_cm  = tv['dimensions.width_cm'] ?? null;
             const length_cm = tv['dimensions.depth_cm'] ?? null;
 
+            // Preço — VPS tem prioridade; Supabase como fallback
+            const vpsData = vpsProductMap.get(String(p.sku));
+            const price      = vpsData ? vpsData.price      : (typeof p.price === 'number' ? p.price : 0);
+            const price_cost = vpsData ? vpsData.price_cost : (typeof p.price_cost === 'number' ? p.price_cost : 0);
+
             return {
-                id: p.id,
-                name: p.name,
-                sku: p.sku,
+                id:       p.id,
+                name:     p.name,
+                sku:      p.sku,
                 weight_g: typeof rawWeight === 'number' ? rawWeight : null,
                 height_cm: typeof height_cm === 'number' ? height_cm : null,
-                width_cm: typeof width_cm === 'number' ? width_cm : null,
+                width_cm:  typeof width_cm  === 'number' ? width_cm  : null,
                 length_cm: typeof length_cm === 'number' ? length_cm : null,
-                price: typeof p.price === 'number' ? p.price : 0,
-                price_cost: typeof p.price_cost === 'number' ? p.price_cost : 0,
+                price,
+                price_cost,
             };
         }));
 

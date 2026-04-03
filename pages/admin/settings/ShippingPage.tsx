@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Truck, Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Package } from 'lucide-react';
+import { Truck, Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Package, Zap } from 'lucide-react';
 import { FreightCalculator } from '../../../components/shipping/FreightCalculator';
 import { shippingService } from '../../../services/shippingService';
 import type {
@@ -10,6 +10,7 @@ import type {
     ShippingPriceRange,
     ShippingPriceRangeInput,
     ShippingZoneType,
+    FastDeliveryConfig,
 } from '../../../types/shipping';
 import { toast } from 'sonner';
 
@@ -248,6 +249,49 @@ function PriceRangeForm({ range, zoneId, onSave, onCancel }: {
     );
 }
 
+// ─── Fast Delivery City Input ──────────────────────────────────────────────────
+
+function FastDeliveryCityInput({ cities, onChange }: {
+    cities: string[];
+    onChange: (cities: string[]) => void;
+}) {
+    const [input, setInput] = useState('');
+
+    const add = () => {
+        const city = input.trim();
+        if (city && !cities.includes(city)) onChange([...cities, city]);
+        setInput('');
+    };
+
+    return (
+        <div>
+            <div className="flex gap-2 mb-2">
+                <input
+                    className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add())}
+                    placeholder="Ex: Petrolina — pressione Enter para adicionar"
+                />
+                <button type="button" onClick={add} className="px-3 py-2 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600">
+                    <Plus size={16} />
+                </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+                {cities.map((city, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-medium">
+                        ⚡ {city}
+                        <button onClick={() => onChange(cities.filter((_, j) => j !== i))} className="hover:text-red-600 ml-1">
+                            <X size={11} />
+                        </button>
+                    </span>
+                ))}
+                {cities.length === 0 && <p className="text-xs text-slate-400">Nenhuma cidade adicionada.</p>}
+            </div>
+        </div>
+    );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ShippingPage() {
@@ -263,7 +307,24 @@ export default function ShippingPage() {
     const [editingZone, setEditingZone] = useState<ShippingZone | undefined>();
     const [showRangeForm, setShowRangeForm] = useState(false);
     const [editingRange, setEditingRange] = useState<ShippingPriceRange | undefined>();
-    const [settingsForm, setSettingsForm] = useState({
+    const [settingsForm, setSettingsForm] = useState<{
+        origin_cep: string;
+        origin_label: string;
+        secondary_origin_cep: string;
+        secondary_origin_label: string;
+        melhor_envio_token: string;
+        melhor_envio_sandbox: boolean;
+        melhor_envio_enabled: boolean;
+        melhor_envio_allowed_services: string;
+        frenet_token: string;
+        frenet_enabled: boolean;
+        local_delivery_enabled: boolean;
+        enable_progressive_shipping_subsidy: boolean;
+        min_order_value_for_subsidy: number;
+        default_subsidy_discount_percent: number;
+        profit_margin_percentage_cap: number;
+        fast_delivery_config: FastDeliveryConfig;
+    }>({
         origin_cep: '',
         origin_label: '',
         secondary_origin_cep: '',
@@ -278,7 +339,13 @@ export default function ShippingPage() {
         enable_progressive_shipping_subsidy: false,
         min_order_value_for_subsidy: 0,
         default_subsidy_discount_percent: 100,
-        profit_margin_percentage_cap: 20
+        profit_margin_percentage_cap: 20,
+        fast_delivery_config: {
+            enabled: false,
+            cities: [],
+            message: 'Entrega em até 1h para você! 🚀',
+            badge_label: 'Entrega em 1h',
+        },
     });
 
     useEffect(() => { loadAll(); }, []);
@@ -304,11 +371,17 @@ export default function ShippingPage() {
                 melhor_envio_allowed_services: s.melhor_envio_allowed_services ?? '',
                 frenet_token: s.frenet_token ?? '',
                 frenet_enabled: s.frenet_enabled ?? false,
-                local_delivery_enabled: s.local_delivery_enabled,
+                 local_delivery_enabled: s.local_delivery_enabled,
                 enable_progressive_shipping_subsidy: s.enable_progressive_shipping_subsidy ?? false,
                 min_order_value_for_subsidy: s.min_order_value_for_subsidy ?? 0,
                 default_subsidy_discount_percent: s.default_subsidy_discount_percent ?? 100,
                 profit_margin_percentage_cap: s.profit_margin_percentage_cap ?? 20,
+                fast_delivery_config: s.fast_delivery_config ?? {
+                    enabled: false,
+                    cities: [],
+                    message: 'Entrega em até 1h para você! 🚀',
+                    badge_label: 'Entrega em 1h',
+                },
             });
         }
         setZones(z);
@@ -532,6 +605,91 @@ export default function ShippingPage() {
                                                 onChange={e => setSettingsForm(p => ({ ...p, profit_margin_percentage_cap: Number(e.target.value) }))}
                                                 placeholder="Ex: 20" />
                                         </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ── Seção: Entrega Expressa ─────────────────────── */}
+                            <hr className="my-6 border-slate-100" />
+                            <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                                <Zap size={18} className="text-amber-500" /> Entrega Expressa (Badge "Entrega em 1h")
+                            </h2>
+                            <p className="text-xs text-slate-500 mb-4">
+                                Exibe um aviso exclusivo para clientes logados que moram nas cidades configuradas abaixo.
+                            </p>
+
+                            <div className="space-y-4 bg-amber-50/40 p-4 rounded-xl border border-amber-100">
+                                {/* Toggle ativar/desativar */}
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => setSettingsForm(p => ({
+                                        ...p,
+                                        fast_delivery_config: { ...p.fast_delivery_config, enabled: !p.fast_delivery_config.enabled }
+                                    }))}>
+                                        {settingsForm.fast_delivery_config.enabled
+                                            ? <ToggleRight className="w-8 h-8 text-green-600" />
+                                            : <ToggleLeft className="w-8 h-8 text-slate-400" />}
+                                    </button>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-800">Ativar Badge de Entrega Expressa</p>
+                                        <p className="text-xs text-slate-500">Visível apenas para clientes logados nas cidades configuradas</p>
+                                    </div>
+                                </div>
+
+                                {settingsForm.fast_delivery_config.enabled && (
+                                    <div className="space-y-4 pt-4 border-t border-amber-200">
+                                        {/* Cidades */}
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1">Cidades com Entrega Expressa</label>
+                                            <p className="text-xs text-slate-400 mb-2">Digite exatamente como está no cadastro do cliente (ex: Petrolina, Juazeiro)</p>
+                                            <FastDeliveryCityInput
+                                                cities={settingsForm.fast_delivery_config.cities}
+                                                onChange={cities => setSettingsForm(p => ({
+                                                    ...p,
+                                                    fast_delivery_config: { ...p.fast_delivery_config, cities }
+                                                }))}
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            {/* Mensagem */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-600 mb-1">Mensagem para o cliente</label>
+                                                <input
+                                                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                                                    value={settingsForm.fast_delivery_config.message}
+                                                    onChange={e => setSettingsForm(p => ({
+                                                        ...p,
+                                                        fast_delivery_config: { ...p.fast_delivery_config, message: e.target.value }
+                                                    }))}
+                                                    placeholder="Ex: Entrega em até 1h para você! 🚀"
+                                                />
+                                            </div>
+                                            {/* Rótulo curto */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-600 mb-1">Rótulo do Badge (curto)</label>
+                                                <input
+                                                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                                                    value={settingsForm.fast_delivery_config.badge_label}
+                                                    onChange={e => setSettingsForm(p => ({
+                                                        ...p,
+                                                        fast_delivery_config: { ...p.fast_delivery_config, badge_label: e.target.value }
+                                                    }))}
+                                                    placeholder="Ex: Entrega em 1h"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Preview */}
+                                        {settingsForm.fast_delivery_config.cities.length > 0 && (
+                                            <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl px-4 py-3 flex items-center gap-3 text-white text-sm shadow-sm">
+                                                <Zap size={18} className="flex-shrink-0" />
+                                                <div>
+                                                    <span className="font-bold">{settingsForm.fast_delivery_config.badge_label}</span>
+                                                    <span className="mx-2 opacity-60">—</span>
+                                                    <span className="opacity-90">{settingsForm.fast_delivery_config.message}</span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

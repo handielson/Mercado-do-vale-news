@@ -146,65 +146,75 @@ export default function PDVPage() {
     };
 
     // Adicionar produto ao carrinho
-    const handleAddToCart = (product: Product, quantity: number) => {
-        const existingItemIndex = cartItems.findIndex(item => item.product_id === product.id);
+    const handleAddToCart = (
+        product: Product,
+        quantity: number,
+        unitData?: { unitId: string; imei1?: string; imei2?: string; serial?: string }
+    ) => {
+        // Unidades serializadas (com IMEI) são sempre itens individuais — nunca agrupa
+        const isSerialized = !!unitData;
 
-        if (existingItemIndex >= 0) {
-            // Produto já existe, atualizar quantidade
-            const newItems = [...cartItems];
-            const newQuantity = newItems[existingItemIndex].quantity + quantity;
+        if (!isSerialized) {
+            const existingItemIndex = cartItems.findIndex(item => item.product_id === product.id && !item.serialized_unit);
 
-            // Validar estoque
-            if (product.track_inventory && product.stock_quantity !== undefined) {
-                if (newQuantity > product.stock_quantity) {
-                    toast.error(`Estoque insuficiente. Disponível: ${product.stock_quantity}`);
-                    return;
+            if (existingItemIndex >= 0) {
+                // Produto normal já existe, atualizar quantidade
+                const newItems = [...cartItems];
+                const newQuantity = newItems[existingItemIndex].quantity + quantity;
+
+                if (product.track_inventory && product.stock_quantity !== undefined) {
+                    if (newQuantity > product.stock_quantity) {
+                        toast.error(`Estoque insuficiente. Disponível: ${product.stock_quantity}`);
+                        return;
+                    }
                 }
-            }
 
-            newItems[existingItemIndex].quantity = newQuantity;
-            newItems[existingItemIndex].subtotal = newItems[existingItemIndex].unit_price * newItems[existingItemIndex].quantity;
-            newItems[existingItemIndex].total = product.is_gift
-                ? 0
-                : newItems[existingItemIndex].subtotal;
-            setCartItems(newItems);
-        } else {
-            // Novo produto
-            const newItem: SaleItem = {
-                id: crypto.randomUUID(), // ID temporário para o frontend
-                product_id: product.id,
-                product_name: (() => {
-                    const specs = (product as any).specs;
-                    if (!specs) return product.name;
-                    const memPart = specs.ram && specs.storage
-                        ? `, ${specs.ram}/${specs.storage}`
-                        : specs.ram ? `, ${specs.ram}`
-                            : specs.storage ? `, ${specs.storage}`
-                                : '';
-                    const colorPart = specs.color ? ` - ${specs.color}` : '';
-                    return `${product.name}${memPart}${colorPart}`;
-                })(),
-                product_sku: product.sku,
-                quantity,
-                unit_price: getEffectiveRetailPrice(product), // Usa promo se ativa, senão varejo
-                unit_cost: product.price_cost,
-                discount: product.is_gift ? product.price_retail : 0,
-                subtotal: getEffectiveRetailPrice(product) * quantity,
-                total: product.is_gift ? 0 : getEffectiveRetailPrice(product) * quantity,
-                is_gift: product.is_gift || false,
-                // Controle de estoque
-                track_inventory: product.track_inventory || false,
-                stock_quantity: product.stock_quantity,
-                // Specs para uso no termo de garantia (campo extra, não enviado ao banco)
-                product_specs: (product as any).specs || {},
-                product_brand: (product as any).brand || '',
-                product_model: product.model || product.name || '',
-            };
-            setCartItems([...cartItems, newItem]);
+                newItems[existingItemIndex].quantity = newQuantity;
+                newItems[existingItemIndex].subtotal = newItems[existingItemIndex].unit_price * newItems[existingItemIndex].quantity;
+                newItems[existingItemIndex].total = product.is_gift
+                    ? 0
+                    : newItems[existingItemIndex].subtotal;
+                setCartItems(newItems);
+                return;
+            }
         }
+
+        // Novo item (produto normal ou unidade serializada individual)
+        const newItem: SaleItem = {
+            id: crypto.randomUUID(),
+            product_id: product.id,
+            product_name: (() => {
+                const specs = (product as any).specs;
+                if (!specs) return product.name;
+                const memPart = specs.ram && specs.storage
+                    ? `, ${specs.ram}/${specs.storage}`
+                    : specs.ram ? `, ${specs.ram}`
+                        : specs.storage ? `, ${specs.storage}`
+                            : '';
+                const colorPart = specs.color ? ` - ${specs.color}` : '';
+                return `${product.name}${memPart}${colorPart}`;
+            })(),
+            product_sku: product.sku,
+            quantity: isSerialized ? 1 : quantity, // serializado sempre = 1
+            unit_price: getEffectiveRetailPrice(product),
+            unit_cost: product.price_cost,
+            discount: product.is_gift ? product.price_retail : 0,
+            subtotal: getEffectiveRetailPrice(product) * (isSerialized ? 1 : quantity),
+            total: product.is_gift ? 0 : getEffectiveRetailPrice(product) * (isSerialized ? 1 : quantity),
+            is_gift: product.is_gift || false,
+            track_inventory: product.track_inventory || false,
+            stock_quantity: product.stock_quantity,
+            product_specs: (product as any).specs || {},
+            product_brand: (product as any).brand || '',
+            product_model: product.model || product.name || '',
+            // Dados da unidade serializada (IMEI/Serial)
+            ...(unitData && { serialized_unit: unitData }),
+        };
+        setCartItems([...cartItems, newItem]);
     };
 
     // Atualizar quantidade de item
+
     const handleUpdateQuantity = (itemId: string, quantity: number) => {
         if (quantity < 1) return;
 
@@ -216,6 +226,33 @@ export default function PDVPage() {
                     quantity,
                     subtotal,
                     total: item.is_gift ? 0 : subtotal
+                };
+            }
+            return item;
+        });
+        setCartItems(newItems);
+    };
+
+    // Atualizar preço unitário de um item
+    const handleUpdatePrice = (itemId: string, newPrice: number) => {
+        const newItems = cartItems.map(item => {
+            if (item.id === itemId && !item.is_gift) {
+                // Se o item tem "warranty_months", precisamos re-calcular o preço da garantia 
+                // pois a garantia é um % do valor base. Mas dependendo de como as regras 
+                // da empresa funcionam, pode-se querer manter fixo. 
+                // Aqui iremos manter o preço da garantia anterior (ou atualizar se preferir).
+                // Como não sabemos a porcentagem exata aqui sem as options, vamos manter o valor da garantia como está,
+                // ou apenas somá-lo ao novo subtotal.
+                
+                const subtotal = (newPrice * item.quantity) + (item.warranty_price || 0);
+                return {
+                    ...item,
+                    unit_price: newPrice,
+                    subtotal,
+                    total: subtotal,
+                    // Ao editar o preço manualmente, nós atualizamos o "discount" interno pra bater com getEffectiveRetailPrice?
+                    // "discount" não é rigorosamente essencial no PDV desde que o subtotal esteja correto, mas podemos mantê-lo.
+                    discount: (item.unit_price - newPrice) > 0 ? (item.unit_price - newPrice) : 0
                 };
             }
             return item;
@@ -622,6 +659,7 @@ export default function PDVPage() {
                             onUpdateQuantity={handleUpdateQuantity}
                             onRemoveItem={handleRemoveItem}
                             onUpdateWarranty={handleUpdateWarranty}
+                            onUpdatePrice={handleUpdatePrice}
                         />
 
                         <DeliverySection

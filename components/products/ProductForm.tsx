@@ -541,15 +541,30 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             const currentWarrantyType = watch('warranty_type');
             const currentWarrantyTemplateId = watch('warranty_template_id');
             const currentVideoUrl = watch('video_url');
+            
+            // Injeção dos campos não registrados de SEO
+            const currentExcludeFromSeo = watch('exclude_from_seo');
+            const currentDescription = watch('description');
+            const currentSlug = watch('slug');
+            const currentMetaTitle = watch('meta_title');
+            const currentMetaDescription = watch('meta_description');
+            const currentKeywords = watch('keywords');
 
             console.log('🔧 [ProductForm] MANUAL INJECTIONS:');
             console.log('  - watch(warranty_type):', currentWarrantyType);
             console.log('  - watch(warranty_template_id):', currentWarrantyTemplateId);
             console.log('  - watch(video_url):', currentVideoUrl);
+            console.log('  - watch(meta_title):', currentMetaTitle);
 
             mergedData.warranty_type = currentWarrantyType || 'brand';
             mergedData.warranty_template_id = currentWarrantyTemplateId || null;
             mergedData.video_url = currentVideoUrl || null;
+            mergedData.exclude_from_seo = currentExcludeFromSeo || false;
+            mergedData.description = currentDescription || null;
+            mergedData.slug = currentSlug || null;
+            mergedData.meta_title = currentMetaTitle || null;
+            mergedData.meta_description = currentMetaDescription || null;
+            mergedData.keywords = currentKeywords || null;
 
             if (data.model) {
                 try {

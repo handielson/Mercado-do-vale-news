@@ -30,10 +30,17 @@ export interface Unit {
     // Notes
     internal_notes?: string;           // Notas internas sobre esta unidade
 
+    // Order/Sale tracking (migration 004)
+    order_id?: string;                 // Pedido vinculado (e-commerce)
+    sale_id?: string;                  // Venda vinculada (PDV)
+    reserved_at?: string;              // Timestamp da reserva
+    sold_at?: string;                  // Timestamp da entrega (imutável após set)
+
     // Timestamps
     created: string;
     updated: string;
 }
+
 
 /**
  * UnitInput Interface

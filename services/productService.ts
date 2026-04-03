@@ -1,11 +1,13 @@
 /**
  * Product Service (PDV)
  * Simplified search service for the Point of Sale screen.
- * Uses company_id filter explicitly for clarity (RLS also enforces this).
+ * Fonte primária: VPS MySQL (via vpsApiService).
+ * Supabase: backup apenas.
  */
 
 import { supabase } from './supabase';
 import { Product } from '../types/product';
+import { vpsApiService } from './vpsApiService';
 
 const COMPANY_SLUG = 'mercado-do-vale';
 
@@ -21,25 +23,25 @@ async function getCompanyId(): Promise<string> {
 }
 
 /**
- * Search products by multiple criteria within the company.
- * Searches: name, sku, serial, imei1, imei2
+ * Search products by multiple criteria.
+ * Usa a VPS como fonte primária (MySQL).
+ * Busca: name, sku, ean, model_id, slug
  */
 export const searchProducts = async (searchTerm: string): Promise<Product[]> => {
     if (!searchTerm.trim()) return [];
 
-    const term = searchTerm.trim().toLowerCase();
-    const companyId = await getCompanyId();
+    const term = searchTerm.trim();
 
-    const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('company_id', companyId)
-        .or(`name.ilike.%${term}%,sku.ilike.%${term}%,specs->>serial.ilike.%${term}%,specs->>imei1.ilike.%${term}%,specs->>imei2.ilike.%${term}%`)
-        .order('name', { ascending: true })
-        .limit(20);
+    const results = await vpsApiService.getProducts({
+        search: term,
+        status: 'active',
+        limit: 50,
+        compact: true,
+        noCache: true,
+    });
 
-    if (error) throw new Error(`Failed to search products: ${error.message}`);
-    return data || [];
+    if (!results) throw new Error('Falha ao buscar produtos na VPS');
+    return results as Product[];
 };
 
 /**

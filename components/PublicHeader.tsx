@@ -5,6 +5,7 @@ import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { StoreStatusBadge } from './ui/StoreStatusBadge';
 import { WeatherWidget } from './WeatherWidget';
+import { FastDeliveryBadge } from './FastDeliveryBadge';
 
 /**
  * PublicHeader - Header for public pages (catalog)
@@ -86,6 +87,7 @@ export const PublicHeader: React.FC = () => {
     };
 
     return (
+        <>
         <header className="sticky top-0 z-50 bg-white shadow-md border-b border-slate-200">
             <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
                 {/* Logo */}
@@ -306,5 +308,9 @@ export const PublicHeader: React.FC = () => {
                 </div>
             </div>
         </header>
+
+        {/* Banner de Entrega Expressa — visível abaixo do header apenas para clientes locais */}
+        <FastDeliveryBadge className="max-w-7xl mx-auto px-4 pt-3" />
+        </>
     );
 };

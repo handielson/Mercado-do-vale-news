@@ -5,6 +5,14 @@
 
 export type ShippingZoneType = 'local_free' | 'local_paid' | 'national';
 
+/** Configuração do badge de entrega expressa (ex: "Entrega em até 1h") */
+export interface FastDeliveryConfig {
+    enabled: boolean;
+    cities: string[];          // ex: ['Petrolina', 'Juazeiro']
+    message: string;           // ex: 'Entrega em até 1h para você! 🚀'
+    badge_label: string;       // ex: 'Entrega em 1h'
+}
+
 export interface ShippingSettings {
     id: string;
     origin_cep: string;
@@ -24,7 +32,10 @@ export interface ShippingSettings {
     min_order_value_for_subsidy: number;
     default_subsidy_discount_percent: number;
     profit_margin_percentage_cap: number;
-    
+
+    // Badge de Entrega Expressa
+    fast_delivery_config?: FastDeliveryConfig;
+
     updated_at: string;
 }
 
@@ -46,6 +57,9 @@ export interface ShippingSettingsInput {
     min_order_value_for_subsidy?: number;
     default_subsidy_discount_percent?: number;
     profit_margin_percentage_cap?: number;
+
+    // Badge de Entrega Expressa
+    fast_delivery_config?: FastDeliveryConfig;
 }
 
 export interface ShippingZone {

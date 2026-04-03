@@ -14,9 +14,11 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
     paymentFees,
     onSelectInstallment
 }) => {
-    // Filtrar apenas taxas de crédito e ordenar por parcelas
+    // Filtrar apenas taxas de crédito (se payment_method não for explícito 'credit', mas for da maquineta presencial)
     const creditFees = paymentFees
-        .filter(f => f.payment_method === 'credit')
+        .filter(f => f.payment_method === 'credit' || (f.channel === 'presencial' && f.installments >= 1))
+        .filter(f => f.installments >= 1 && f.installments <= 12)
+        .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments))
         .sort((a, b) => a.installments - b.installments);
 
     // Debug: verificar valores vindos do Supabase
@@ -62,50 +64,28 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
             </div>
 
             {installmentOptions.length > 0 ? (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="border-b border-gray-200 bg-gray-50">
-                                <th className="text-left p-2 font-semibold">Parcelas</th>
-                                <th className="text-right p-2 font-semibold">Valor/mês</th>
-                                <th className="text-right p-2 font-semibold">Total</th>
-                                <th className="text-center p-2 font-semibold">Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {installmentOptions.map(option => (
-                                <tr
-                                    key={option.installments}
-                                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                >
-                                    <td className="p-2 font-medium">{option.installments}x</td>
-                                    <td className="p-2 text-right">{formatCurrency(option.monthlyPayment)}</td>
-                                    <td className="p-2 text-right">
-                                        <div className="flex flex-col items-end">
-                                            <span className="font-medium">{formatCurrency(option.totalWithFee)}</span>
-                                            {option.feeAmount > 0 && (
-                                                <span className="text-xs text-orange-600">
-                                                    (+{formatCurrency(option.feeAmount)})
-                                                </span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="p-2 text-center">
-                                        <button
-                                            onClick={() => onSelectInstallment(
-                                                option.installments,
-                                                remainingBalance,
-                                                option.feeAmount
-                                            )}
-                                            className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                                        >
-                                            Usar
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                <div className="grid grid-cols-3 gap-3">
+                    {installmentOptions.map(option => (
+                        <button
+                            key={option.installments}
+                            onClick={() => onSelectInstallment(
+                                option.installments,
+                                remainingBalance,
+                                option.feeAmount
+                            )}
+                            className="flex flex-col items-center p-3 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                            <span className="text-sm font-bold text-gray-800">
+                                {option.installments}x
+                            </span>
+                            <span className="text-base font-bold text-blue-600 mt-1">
+                                {formatCurrency(option.monthlyPayment)}
+                            </span>
+                            <span className="text-[10px] text-gray-500 mt-1 font-medium">
+                                Total: {formatCurrency(option.totalWithFee)}
+                            </span>
+                        </button>
+                    ))}
                 </div>
             ) : (
                 <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">

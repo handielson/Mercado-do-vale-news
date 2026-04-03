@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { CatalogSection, CreateSectionData, UpdateSectionData, SectionType } from '@/types/catalogSections';
 import type { CatalogProduct } from '@/types/catalog';
 import { catalogConfigService } from '@/services/catalogConfigService';
+import { normalizeProduct } from '@/services/productNormalizer';
 
 class CatalogSectionsService {
     private cache: Map<string, { data: CatalogSection[]; timestamp: number }> = new Map();
@@ -249,30 +250,8 @@ class CatalogSectionsService {
             if (!res.ok) throw new Error(`VPS API returned ${res.status}`);
             const data = await res.json();
             
-            // Normalize VPS data keys for client-side visibility rules
-            products = (data || []).map((p: any) => {
-                const s = p.stock !== undefined ? p.stock : p.stock_quantity;
-                let stockVal = 0;
-                if (typeof s === 'number') stockVal = s;
-                else if (typeof s === 'string' && s.trim().toLowerCase() !== 'null' && s.trim() !== '') {
-                    stockVal = parseInt(s, 10) || 0;
-                }
-                
-                let track_inventory = p.track_inventory;
-                if (track_inventory === undefined) {
-                    track_inventory = (s !== null && s !== 'null' && s !== undefined);
-                }
-                
-                const priceNum = p.price !== undefined && p.price !== null ? parseFloat(p.price) : (p.price_retail !== undefined && p.price_retail !== null ? parseFloat(p.price_retail) : 0);
-
-                return {
-                    ...p,
-                    stock_quantity: stockVal,
-                    track_inventory: track_inventory,
-                    price_retail: isNaN(priceNum) ? 0 : priceNum,
-                    image_url: (p.images && p.images.length > 0) ? p.images[0] : p.image_url,
-                };
-            });
+            // Normaliza dados da VPS para campos canônicos (elimina colisões VPS ↔ Supabase)
+            products = (data || []).map((p: any) => normalizeProduct(p) as unknown as CatalogProduct);
 
             // Replace with Pinned products if any (to preserve sorting and exact matching)
             // Note: Since VPS API `in_ids` would just filter them, if section defines pins we do an explicit lookup.

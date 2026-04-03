@@ -33,12 +33,12 @@ export function PaymentFeesPage() {
         const map = new Map<FeeKey, FeeRow>();
 
         for (const fee of fees) {
-            const key: FeeKey = `${fee.method ?? 'unknown'}_${fee.installments}`;
+            const key: FeeKey = `${fee.payment_method ?? 'unknown'}_${fee.installments}`;
             if (!map.has(key)) {
                 map.set(key, {
-                    method: fee.method ?? '',
+                    method: fee.payment_method ?? '',
                     installments: fee.installments,
-                    label: getDisplayName(fee.method ?? '', fee.installments),
+                    label: getDisplayName(fee.payment_method ?? '', fee.installments),
                 });
             }
             const row = map.get(key)!;
@@ -82,11 +82,11 @@ export function PaymentFeesPage() {
             const currentFees: PaymentFee[] = await paymentFeesService.list();
             let updatedCount = 0;
             const updatedFees = currentFees.map(f => {
-                if ((f.method === 'credit' || f.method === null) && f.channel === 'online_mp') {
+                if ((f.payment_method === 'credit') && f.channel === 'online_mp') {
                     const match = installmentOptions.find(opt => opt.installments === f.installments);
                     if (match) {
                         updatedCount++;
-                        return { ...f, operator_fee_pct: match.installment_rate, applied_fee_pct: match.installment_rate };
+                        return { ...f, operator_fee: match.installment_rate, applied_fee: match.installment_rate };
                     }
                 }
                 return f;
@@ -128,7 +128,7 @@ export function PaymentFeesPage() {
                 const updated = editedFees.get(f.id);
                 if (updated) {
                     changedCount++;
-                    return { ...f, operator_fee_pct: updated.operator_fee_pct, applied_fee_pct: updated.applied_fee_pct };
+                    return { ...f, operator_fee: updated.operator_fee, applied_fee: updated.applied_fee };
                 }
                 return f;
             });
@@ -147,12 +147,12 @@ export function PaymentFeesPage() {
         }
     }
 
-    function updateFee(fee: PaymentFee, field: 'operator_fee_pct' | 'applied_fee_pct', value: number) {
+    function updateFee(fee: PaymentFee, field: 'operator_fee' | 'applied_fee', value: number) {
         // Pega a taxa atual já editada (ou a original se ainda não mexeu)
         const currentFee = editedFees.get(fee.id) || fee;
         const updated = { ...currentFee, [field]: value };
         
-        if (field === 'applied_fee_pct' && updated.applied_fee_pct < (updated.operator_fee_pct ?? 0)) {
+        if (field === 'applied_fee' && updated.applied_fee < (updated.operator_fee ?? 0)) {
             toast.error('Taxa aplicada deve ser maior ou igual à taxa operadora');
             return;
         }
@@ -290,31 +290,31 @@ export function PaymentFeesPage() {
                                             {/* ── Presencial ── */}
                                             <td className="px-3 py-2 border-l border-slate-100">
                                                 {pres
-                                                    ? <span className="text-xs text-slate-500">{pres.operator_fee_pct ?? '—'}%</span>
+                                                    ? <span className="text-xs text-slate-500">{pres.operator_fee ?? '—'}%</span>
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
                                             <td className="px-3 py-2">
                                                 {pres
-                                                    ? <input type="number" step="0.01" min="0" max="100" value={pres.operator_fee_pct ?? 0} onChange={e => updateFee(row.presencial!, 'operator_fee_pct', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusAmber}`} />
+                                                    ? <input type="number" step="0.01" min="0" max="100" value={pres.operator_fee ?? 0} onChange={e => updateFee(row.presencial!, 'operator_fee', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusAmber}`} />
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
                                             <td className="px-3 py-2">
                                                 {pres
-                                                    ? <input type="number" step="0.01" min="0" max="100" value={pres.applied_fee_pct ?? 0} onChange={e => updateFee(row.presencial!, 'applied_fee_pct', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusAmber}`} />
+                                                    ? <input type="number" step="0.01" min="0" max="100" value={pres.applied_fee ?? 0} onChange={e => updateFee(row.presencial!, 'applied_fee', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusAmber}`} />
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
 
                                             {/* ── MP Online ── */}
                                             <td className="px-3 py-2 border-l border-slate-100 bg-sky-50/40">
                                                 {mp
-                                                    ? <input type="number" step="0.01" min="0" max="100" value={mp.operator_fee_pct ?? 0} onChange={e => updateFee(row.online_mp!, 'operator_fee_pct', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusBlue}`} />
+                                                    ? <input type="number" step="0.01" min="0" max="100" value={mp.operator_fee ?? 0} onChange={e => updateFee(row.online_mp!, 'operator_fee', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusBlue}`} />
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
 
                                             {/* ── PS Online ── */}
                                             <td className="px-3 py-2 border-l border-slate-100">
                                                 {ps
-                                                    ? <input type="number" step="0.01" min="0" max="100" value={ps.operator_fee_pct ?? 0} onChange={e => updateFee(row.online_ps!, 'operator_fee_pct', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusGreen}`} />
+                                                    ? <input type="number" step="0.01" min="0" max="100" value={ps.operator_fee ?? 0} onChange={e => updateFee(row.online_ps!, 'operator_fee', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusGreen}`} />
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
 

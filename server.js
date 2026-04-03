@@ -1,5 +1,5 @@
 require('dotenv').config();
-const fastify = require('fastify')({ logger: false });
+const fastify = require('fastify')({ logger: false, bodyLimit: 50 * 1024 * 1024 }); // 50MB
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
@@ -87,6 +87,18 @@ fastify.get('/categories', async (req, reply) => {
   return result;
 });
 
+// ─── Category product counts (para navegação do catálogo) ──────────────────
+fastify.get('/products/category-counts', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT category_id, COUNT(*) as count
+     FROM products
+     WHERE status = 'active' AND category_id IS NOT NULL
+     GROUP BY category_id`
+  );
+  reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
+  return rows;
+});
+
 // ─── Brands (read) ─────────────────────────────────────────────────────────
 fastify.get('/brands', async (req, reply) => {
   const [rows] = await pool.query(
@@ -131,6 +143,8 @@ fastify.get('/products', async (req, reply) => {
   const category = req.query.category;
   const status   = req.query.status;
   const search   = req.query.search;
+  const favoritesOnly = req.query.favoritesOnly === 'true';
+  const customerId = req.query.customerId;
   const compact  = req.query.compact === 'true'; // sem images (evita 90+ MB de base64)
 
   // Colunas — compact exclui base64 mas inclui primeira URL de imagem (thumbnail)
@@ -150,84 +164,54 @@ fastify.get('/products', async (req, reply) => {
        price_promo, promo_start, promo_end,
        is_combo, combo_discount_type, combo_discount_value,
        (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
-       track_inventory, is_gift, is_virtual,
+       track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, created_at, updated_at`
+       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
        is_combo, combo_discount_type, combo_discount_value,
        (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
-       track_inventory, is_gift, is_virtual,
+       track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, created_at, updated_at`;
+       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, created_at, updated_at`;
 
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
   const params = [];
 
-  if (req.query.sku) {
-    sql += ' AND sku = ?';
-    params.push(req.query.sku);
-  }
-  
-  if (req.query.ean) {
-    sql += ' AND (ean = ? OR JSON_CONTAINS(alternative_eans, CAST(? AS JSON), "$"))';
-    params.push(req.query.ean, JSON.stringify(req.query.ean));
-  }
-
   if (status && status !== 'all') { sql += ' AND status = ?'; params.push(status); }
   else if (!status && !search)    { sql += ' AND status = ?'; params.push('active'); }
+  // When search is provided without explicit status → no status filter (allows finding by SKU/EAN regardless of status)
+  // status=all: retorna todos os status (admin)
 
-  if (category) { sql += ' AND category_id = ?'; params.push(category); }
-  if (search)   { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ? OR slug LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
+  if (category)           { sql += ' AND category_id = ?';   params.push(category); }
+  if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ? OR slug LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
+  if (req.query.parent_id){ sql += ' AND parent_id = ?';     params.push(req.query.parent_id); }
+  if (req.query.sku)      { sql += ' AND sku = ?';           params.push(req.query.sku); }
+  if (req.query.ean)      { sql += ' AND (ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?)))'; params.push(req.query.ean, req.query.ean); }
+  if (req.query.model_id) { sql += ' AND model_id = ?';      params.push(req.query.model_id); }
 
-  if (req.query.is_featured === 'true') { sql += ' AND is_featured = 1'; }
-  if (req.query.is_new === 'true')      { sql += ' AND is_new = 1'; }
-  if (req.query.has_discount === 'true'){ sql += ' AND discount_percentage > 0'; }
-
-  if (req.query.min_price) { sql += ' AND price_retail >= ?'; params.push(parseFloat(req.query.min_price)); }
-  if (req.query.max_price) { sql += ' AND price_retail <= ?'; params.push(parseFloat(req.query.max_price)); }
-
-  if (req.query.in_category) {
-    const cats = req.query.in_category.split(',');
-    if (cats.length) {
-      sql += ` AND category_id IN (${cats.map(() => '?').join(',')})`;
-      params.push(...cats);
-    }
+  if (favoritesOnly && customerId) {
+    sql += ' AND id IN (SELECT product_id FROM customer_favorites WHERE customer_id = ?)';
+    params.push(customerId);
   }
 
-  if (req.query.in_brand) {
-    const brands = req.query.in_brand.split(',');
-    if (brands.length) {
-      sql += ` AND brand IN (${brands.map(() => '?').join(',')})`;
-      params.push(...brands);
-    }
-  }
-
-  if (req.query.in_ids) {
-    const ids = req.query.in_ids.split(',');
-    if (ids.length) {
-      sql += ` AND id IN (${ids.map(() => '?').join(',')})`;
-      params.push(...ids);
-    }
-  }
-
-  if (req.query.sort_by) {
-    const validSortCols = ['created_at', 'price_retail', 'name', 'updated_at', 'sales_count', 'view_count'];
-    const sortCol = validSortCols.includes(req.query.sort_by) ? req.query.sort_by : 'created_at';
-    const sortDir = req.query.sort_direction === 'asc' ? 'ASC' : 'DESC';
-    sql += ` ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`;
-  } else {
-    sql += ' ORDER BY name ASC LIMIT ? OFFSET ?';
-  }
-
+  sql += ' ORDER BY name ASC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
+  if (search || status === 'all') { // Log explicitly what we are about to query
+    console.log(`[VPS GET /products] search="${search || ''}", status="${status || ''}", SQL: ${sql}`);
+  }
+
   const [rows] = await pool.query(sql, params);
+  
+  if (search || status === 'all') {
+    console.log(`[VPS GET /products] Returned ${rows.length} rows for search="${search || ''}"`);
+  }
 
   const result = rows.map(r => ({
     ...r,
@@ -236,14 +220,37 @@ fastify.get('/products', async (req, reply) => {
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
-    is_virtual:       r.is_virtual === 1,
-    is_gift:          r.is_gift === 1,
-    track_inventory:  r.track_inventory === 1,
   }));
 
-  reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
+  // Sem cache para admin (status=all) ou buscas dinâmicas (search)
+  // search requests NUNCA devem ser cacheados pelo CDN, pois o resultado
+  // varia por query e o cache stale causaria resultados vazios persistentes.
+  if (status === 'all' || search) {
+    reply.header('Cache-Control', 'no-store');
+  } else {
+    reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
+  }
   return result;
 
+});
+
+fastify.get('/products/:id', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT *,
+      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+     FROM products WHERE id = ?`, 
+    [req.params.id]
+  );
+  if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
+  const r = rows[0];
+  return {
+    ...r,
+    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+  };
 });
 
 // Busca por slug (para PublicProductPage)
@@ -263,9 +270,6 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
-    is_virtual:       r.is_virtual === 1,
-    is_gift:          r.is_gift === 1,
-    track_inventory:  r.track_inventory === 1,
   };
 });
 
@@ -285,51 +289,6 @@ fastify.get('/products/by-ean/:ean', async (req, reply) => {
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
   }));
-});
-
-fastify.get('/products/:id', async (req, reply) => {
-  const [rows] = await pool.query(
-    `SELECT *,
-      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
-     FROM products WHERE id = ?`, 
-    [req.params.id]
-  );
-  if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
-  const r = rows[0];
-  return {
-    ...r,
-    images:        typeof r.images === 'string'        ? JSON.parse(r.images)        : r.images,
-    specs:         typeof r.specs === 'string'         ? JSON.parse(r.specs)         : r.specs,
-    custom_fields: typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields) : r.custom_fields,
-    kits:          typeof r.kits === 'string'          ? JSON.parse(r.kits)          : r.kits,
-    is_virtual:    r.is_virtual === 1,
-    is_gift:       r.is_gift === 1,
-    track_inventory: r.track_inventory === 1,
-  };
-});
-
-fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
-  const { id } = req.params;
-
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-
-    // Remove referências se ele for combo parent de algo (na verdade, se deletarmos o parent as combos associadas somem/ficam orfãs, melhor apagar)
-    await conn.query(`DELETE FROM product_combos WHERE combo_product_id = ? OR child_product_id = ?`, [id, id]);
-    
-    // Apaga o produto
-    const [result] = await conn.query(`DELETE FROM products WHERE id = ?`, [id]);
-    
-    await conn.commit();
-    return { ok: true, deleted: result.affectedRows > 0 };
-  } catch (err) {
-    await conn.rollback();
-    reply.status(500);
-    return { ok: false, error: err.message };
-  } finally {
-    conn.release();
-  }
 });
 
 fastify.get('/products/:id/combo', async (req, reply) => {
@@ -369,8 +328,9 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           images, specs, custom_fields, dimensions, weight_kg,
           ncm, cest, origin, bling_id, bling_parent_id, parent_id,
           video_url, track_inventory, is_gift, is_virtual,
-          warranty_type, warranty_template_id, company_id, kits
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          warranty_type, warranty_template_id, company_id, kits,
+          meta_title, meta_description, keywords, exclude_from_seo
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=VALUES(name), slug=VALUES(slug), sku=VALUES(sku),
           ean=VALUES(ean), alternative_eans=VALUES(alternative_eans),
@@ -391,7 +351,8 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           is_virtual=VALUES(is_virtual),
           warranty_type=VALUES(warranty_type),
           warranty_template_id=VALUES(warranty_template_id),
-          kits=VALUES(kits),
+          kits=VALUES(kits), exclude_from_seo=VALUES(exclude_from_seo),
+          meta_title=VALUES(meta_title), meta_description=VALUES(meta_description), keywords=VALUES(keywords),
           updated_at=CURRENT_TIMESTAMP`,
         [
           p.id, p.name, p.slug || null, p.sku || null,
@@ -409,6 +370,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0, p.is_virtual ? 1 : 0,
           p.warranty_type || 'brand', p.warranty_template_id || null,
           p.company_id || null, jsonStr(p.kits),
+          p.meta_title || null, p.meta_description || null, p.keywords || null, p.exclude_from_seo ? 1 : 0,
         ]
       );
       results.upserted++;
@@ -431,8 +393,9 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       stock_quantity=?, status=?, category_id=?, brand=?, model_id=?,
       images=?, specs=?, custom_fields=?, dimensions=?, weight_kg=?,
       ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?,
-      video_url=?, track_inventory=?, is_gift=?, is_virtual=?,
+      video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
+      meta_title=?, meta_description=?, keywords=?, exclude_from_seo=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
     [
@@ -448,14 +411,20 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.ncm || null, p.cest || null, p.origin || null,
       p.bling_id || null, p.bling_parent_id || null, p.parent_id || null,
       p.video_url || null,
-      p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0, p.is_virtual ? 1 : 0,
+      p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
+      p.meta_title || null, p.meta_description || null, p.keywords || null, p.exclude_from_seo ? 1 : 0,
       req.params.id,
     ]
   );
   return { ok: true };
 });
 
+// Delete product (and children)
+fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  await pool.query(`DELETE FROM products WHERE id=? OR parent_id=?`, [req.params.id, req.params.id]);
+  return { ok: true };
+});
 
 // Update images by SKU (used by image bank sync)
 fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -465,25 +434,34 @@ fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, re
     'UPDATE products SET images=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
     [JSON.stringify(images), sku]
   );
+  // affectedRows=0 means the SKU doesn't exist in VPS MySQL yet
   return { ok: true, affectedRows: result.affectedRows };
 });
 
-// Update description by SKU (used by description sync)
+// Update description + technical_specifications by SKU (used by description sync)
 fastify.patch('/products/description', { preHandler: requireSyncKey }, async (req, reply) => {
-  const { sku, description, specs } = req.body || {};
+  const { sku, description, technical_specifications } = req.body || {};
   if (!sku) return reply.code(400).send({ error: 'sku required' });
   const [result] = await pool.query(
-    'UPDATE products SET description=?, specs=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
-    [
-      description ?? null,
-      specs ? JSON.stringify(specs) : '{}',
-      sku
-    ]
+    'UPDATE products SET description=?, technical_specifications=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    [description ?? null, technical_specifications ?? null, sku]
   );
   return { ok: true, affectedRows: result.affectedRows };
 });
 
-// Update name by SKU (used by Bling webhook on product.updated)
+// Update stock_quantity by SKU (used by Bling webhook — estoque event)
+fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { sku, stock_quantity } = req.body || {};
+  if (!sku) return reply.code(400).send({ error: 'sku required' });
+  if (stock_quantity === undefined || stock_quantity === null) return reply.code(400).send({ error: 'stock_quantity required' });
+  const [result] = await pool.query(
+    'UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    [Math.max(0, parseInt(stock_quantity, 10) || 0), sku]
+  );
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
+// Update product name by SKU (used by Bling webhook — produto event)
 fastify.patch('/products/name', { preHandler: requireSyncKey }, async (req, reply) => {
   const { sku, name } = req.body || {};
   if (!sku || !name) return reply.code(400).send({ error: 'sku and name required' });
@@ -494,15 +472,14 @@ fastify.patch('/products/name', { preHandler: requireSyncKey }, async (req, repl
   return { ok: true, affectedRows: result.affectedRows };
 });
 
-// Update stock by SKU (used by Bling webhook)
-fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, reply) => {
-  const { sku, stock_quantity } = req.body || {};
-  if (!sku || stock_quantity === undefined) return reply.code(400).send({ error: 'sku and stock_quantity required' });
-  const [result] = await pool.query(
-    'UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
-    [Number(stock_quantity), sku]
+
+fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { exclude_from_seo } = req.body;
+  await pool.query(
+    'UPDATE products SET exclude_from_seo=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+    [exclude_from_seo ? 1 : 0, req.params.id]
   );
-  return { ok: true, affectedRows: result.affectedRows };
+  return { ok: true };
 });
 
 // ─── Combos (write) ─────────────────────────────────────────────────────────
@@ -691,6 +668,31 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
     'business_hours_display_text',
     'store_label_open', 'store_label_closed', 'store_label_closing_soon', 'store_label_lunch',
     'synology_video_base_url', 'synology_video_extension',
+
+    // Campos de Identidade / Dados Gerais (usados por companyToRow em companyService.ts)
+    'name', 'razao_social', 'state_registration', 'cnae', 'situacao_cadastral',
+    'data_abertura', 'porte', 'logo', 'watermark_url', 'favicon',
+    
+    // Shopee Integration
+    'shopee_partner_id', 'shopee_partner_key', 'shopee_shop_id', 
+    'shopee_access_token', 'shopee_refresh_token',
+
+    // Campos de Endereço Extensos
+    'address_zip_code', 'address_street', 'address_number', 'address_complement',
+    'address_neighborhood', 'address_city', 'address_state', 'address_lat', 'address_lng',
+    
+    // Redes Sociais e Contatos Visuais
+    'social_instagram', 'social_facebook', 'social_youtube', 'social_website',
+    'google_reviews_link',
+    
+    // Dados Financeiros
+    'pix_key', 'pix_key_type', 'pix_beneficiary_name',
+    'bank_name', 'bank_agency', 'bank_account',
+    
+    // Campos adicionais e integrações
+    'description', 'internal_notes', 'google_analytics_id', 'catalog_footer_text',
+    'maintenance_mode', 'maintenance_message', 'maintenance_bypass_key',
+    'about_us_text', 'about_us_image_url'
   ];
   const body = req.body;
   const updates = [];
@@ -847,7 +849,7 @@ fastify.post('/cart/sync', { preHandler: requireSyncKey }, async (req, reply) =>
 
   const connection = await pool.getConnection();
   try {
-    // Basic table creation check in proxy fallback logic
+    // Basic table creation check
     await connection.query(`CREATE TABLE IF NOT EXISTS customer_carts (
       id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
       customer_id VARCHAR(255) NOT NULL,
@@ -1010,76 +1012,6 @@ fastify.get('/schema/table/:name', { preHandler: requireSyncKey }, async (req, r
   const [columns] = await pool.query('DESCRIBE ??', [req.params.name]);
   return columns.map(c => ({ field: c.Field, type: c.Type, null: c.Null, key: c.Key, default: c.Default }));
 });
-// ─── Diagnóstico de Qualidade de Dados ──────────────────────────────────────
-fastify.get('/admin/diagnostics', { preHandler: requireSyncKey }, async (req, reply) => {
-  const [[totals]] = await pool.query(`
-    SELECT
-      COUNT(*)                                                            AS total,
-      SUM(status = 'active')                                             AS active,
-      SUM(images IS NULL OR images = '[]' OR images = 'null' OR images = '') AS sem_imagem,
-      SUM(images IS NOT NULL AND images != '[]' AND images != 'null' AND images != ''
-          AND JSON_LENGTH(images) > 0
-          AND JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) LIKE 'data:%')  AS imagem_base64,
-      SUM(images IS NOT NULL AND images != '[]' AND images != 'null' AND images != ''
-          AND JSON_LENGTH(images) > 0
-          AND JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) LIKE 'http%')   AS imagem_url,
-      SUM(description IS NULL OR TRIM(description) = '')                 AS sem_descricao,
-      SUM(technical_specifications IS NULL OR TRIM(technical_specifications) = '') AS sem_specs,
-      SUM(price_retail IS NULL OR price_retail = 0)                     AS sem_preco,
-      SUM(bling_id IS NOT NULL AND bling_id != '')                      AS tem_bling_id
-    FROM products
-  `);
-
-  // Amostra: 1 produto com imagem base64 para confirmar o formato
-  const [sampleBase64] = await pool.query(`
-    SELECT id, sku, name,
-      LEFT(JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')), 80) AS img_preview
-    FROM products
-    WHERE images IS NOT NULL AND images != '[]'
-      AND JSON_LENGTH(images) > 0
-      AND JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) LIKE 'data:%'
-    LIMIT 3
-  `);
-
-  // Amostra: 1 produto com imagem URL para confirmar o formato
-  const [sampleUrl] = await pool.query(`
-    SELECT id, sku, name,
-      JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS img_preview
-    FROM products
-    WHERE images IS NOT NULL AND images != '[]'
-      AND JSON_LENGTH(images) > 0
-      AND JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) LIKE 'http%'
-    LIMIT 3
-  `);
-
-  // Amostra: produto sem imagem
-  const [sampleSemImagem] = await pool.query(`
-    SELECT id, sku, name, images
-    FROM products
-    WHERE images IS NULL OR images = '[]' OR images = 'null' OR images = ''
-    LIMIT 3
-  `);
-
-  return {
-    summary: {
-      total:          Number(totals.total),
-      active:         Number(totals.active),
-      sem_imagem:     Number(totals.sem_imagem),
-      imagem_base64:  Number(totals.imagem_base64),
-      imagem_url:     Number(totals.imagem_url),
-      sem_descricao:  Number(totals.sem_descricao),
-      sem_specs:      Number(totals.sem_specs),
-      sem_preco:      Number(totals.sem_preco),
-      tem_bling_id:   Number(totals.tem_bling_id),
-    },
-    amostras: {
-      com_base64:   sampleBase64,
-      com_url:      sampleUrl,
-      sem_imagem:   sampleSemImagem,
-    }
-  };
-});
-
 // ─── Catalog Settings ──────────────────────────────────────────────────────
 fastify.get('/catalog-settings', async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM catalog_settings LIMIT 1');
@@ -1151,7 +1083,13 @@ fastify.get('/status', async (req, reply) => {
 fastify.get('/shipping/settings', async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM shipping_settings LIMIT 1');
   reply.header('Cache-Control', 'public, max-age=300');
-  return rows[0] || null;
+  if (!rows[0]) return null;
+  const row = rows[0];
+  // extra_config: mysql2 retorna JSON column como string em algumas versões
+  if (row.extra_config && typeof row.extra_config === 'string') {
+    try { row.extra_config = JSON.parse(row.extra_config); } catch { row.extra_config = null; }
+  }
+  return row;
 });
 
 fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -1163,15 +1101,16 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
        melhor_envio_token,melhor_envio_sandbox,melhor_envio_enabled,melhor_envio_allowed_services,
        frenet_token,frenet_enabled,local_delivery_enabled,
        enable_progressive_shipping_subsidy,min_order_value_for_subsidy,
-       default_subsidy_discount_percent,profit_margin_percentage_cap)
+       default_subsidy_discount_percent,profit_margin_percentage_cap,extra_config)
        VALUES (UUID(),?,?,?,?,?,?,?,?,?,?,?,
-       ?,?,?,?)`,
+       ?,?,?,?,?)`,
       [s.origin_cep,s.origin_label,s.secondary_origin_cep,s.secondary_origin_label,
        s.melhor_envio_token,s.melhor_envio_sandbox?1:0,s.melhor_envio_enabled?1:0,
        s.melhor_envio_allowed_services,s.frenet_token,s.frenet_enabled?1:0,s.local_delivery_enabled?1:0,
        s.enable_progressive_shipping_subsidy?1:0, s.min_order_value_for_subsidy||0,
        s.default_subsidy_discount_percent!=null?s.default_subsidy_discount_percent:100,
-       s.profit_margin_percentage_cap!=null?s.profit_margin_percentage_cap:20]
+       s.profit_margin_percentage_cap!=null?s.profit_margin_percentage_cap:20,
+       s.extra_config!=null?JSON.stringify(s.extra_config):null]
     );
   } else {
     await pool.query(
@@ -1186,6 +1125,7 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
        min_order_value_for_subsidy=COALESCE(?,min_order_value_for_subsidy),
        default_subsidy_discount_percent=COALESCE(?,default_subsidy_discount_percent),
        profit_margin_percentage_cap=COALESCE(?,profit_margin_percentage_cap),
+       extra_config=COALESCE(?,extra_config),
        updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
       [s.origin_cep,s.origin_label,s.secondary_origin_cep,s.secondary_origin_label,
@@ -1197,6 +1137,7 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
        s.min_order_value_for_subsidy,
        s.default_subsidy_discount_percent,
        s.profit_margin_percentage_cap,
+       s.extra_config!=null?JSON.stringify(s.extra_config):null,
        rows[0].id]
     );
   }
@@ -1258,7 +1199,8 @@ fastify.delete('/shipping/zones/:id', { preHandler: requireSyncKey }, async (req
 // ─── Payment Fees ───────────────────────────────────────────────────────────
 fastify.get('/payment-fees', async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT * FROM payment_fees ORDER BY channel, method, installments`
+    `SELECT id, method, installments, operator_fee_pct, applied_fee_pct, channel, created_at, updated_at
+     FROM payment_fees ORDER BY method ASC, installments ASC`
   );
   reply.header('Cache-Control', 'public, max-age=900');
   return rows;
@@ -1266,16 +1208,27 @@ fastify.get('/payment-fees', async (req, reply) => {
 
 fastify.put('/payment-fees', { preHandler: requireSyncKey }, async (req, reply) => {
   const fees = req.body;
-  if (!Array.isArray(fees)) return reply.code(400).send({ error: 'Array required' });
-  await pool.query('DELETE FROM payment_fees');
-  for (const f of fees) {
-    await pool.query(
-      `INSERT INTO payment_fees (id,method,installments,operator_fee_pct,applied_fee_pct,channel)
-       VALUES (COALESCE(?,UUID()),?,?,?,?,?)`,
-      [f.id||null,f.method||null,f.installments,f.operator_fee_pct||0,f.applied_fee_pct||0,f.channel||'all']
-    );
+  if (!Array.isArray(fees)) return reply.code(400).send({ error: 'Expected array' });
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query('DELETE FROM payment_fees');
+    for (const f of fees) {
+      const id = require('crypto').randomUUID();
+      await conn.query(
+        `INSERT INTO payment_fees (id, method, installments, operator_fee_pct, applied_fee_pct, channel)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, f.method, f.installments || 1, f.operator_fee_pct ?? 0, f.applied_fee_pct ?? 0, f.channel || 'presencial']
+      );
+    }
+    await conn.commit();
+    return { ok: true, count: fees.length };
+  } catch (err) {
+    await conn.rollback();
+    reply.code(500).send({ error: err.message });
+  } finally {
+    conn.release();
   }
-  return { ok: true, count: fees.length };
 });
 
 // ─── Coupons ────────────────────────────────────────────────────────────────
@@ -1507,139 +1460,8 @@ fastify.delete('/battery-healths/:id', { preHandler: requireSyncKey }, async (re
   return { ok: true };
 });
 
-// ─── Team Members ───────────────────────────────────────────────────────────
-fastify.get('/team', { preHandler: requireSyncKey }, async (req, reply) => {
-  const [rows] = await pool.query('SELECT id,name,role,email,phone,active FROM team_members ORDER BY name');
-  return rows.map(r => ({ ...r, active: r.active === 1 }));
-});
+// ─── Team Members ────────────────────────────────────────────────────────────────
 
-fastify.post('/team', { preHandler: requireSyncKey }, async (req, reply) => {
-  const m = req.body;
-  const id = require('crypto').randomUUID();
-  await pool.query(
-    `INSERT INTO team_members (id,name,role,email,phone,active,pin) VALUES (?,?,?,?,?,?,?)`,
-    [id,m.name,m.role||null,m.email||null,m.phone||null,m.active?1:0,m.pin||null]
-  );
-  return { ok: true, id };
-});
-
-fastify.patch('/team/:id', { preHandler: requireSyncKey }, async (req, reply) => {
-  const m = req.body;
-  await pool.query(
-    `UPDATE team_members SET name=?,role=?,email=?,phone=?,active=?,pin=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-    [m.name,m.role||null,m.email||null,m.phone||null,m.active?1:0,m.pin||null,req.params.id]
-  );
-  return { ok: true };
-});
-
-fastify.delete('/team/:id', { preHandler: requireSyncKey }, async (req, reply) => {
-  await pool.query('DELETE FROM team_members WHERE id=?', [req.params.id]);
-  return { ok: true };
-});
-
-// ─── Synology CDN Manager ──────────────────────────────────────────────────
-// Rotas para gerenciar arquivos nos CDNs do Synology NAS
-// Funciona de qualquer rede via QuickConnect (sem CORS: chamadas server-side)
-
-// --- CUSTOMER FAVORITES ---
-fastify.get('/customers/:id/favorites', async (req, reply) => {
-  const { id } = req.params;
-  try {
-    const [rows] = await pool.query('SELECT product_id FROM customer_favorites WHERE customer_id = ?', [id]);
-    return rows.map(r => r.product_id);
-  } catch (err) {
-    if (err.code === 'ER_NO_SUCH_TABLE') {
-      await pool.query(`CREATE TABLE IF NOT EXISTS customer_favorites (
-        customer_id VARCHAR(50) NOT NULL,
-        product_id VARCHAR(50) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (customer_id, product_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
-      return [];
-    }
-    req.log.error(err);
-    return reply.code(500).send({ error: 'Failed to fetch favorites' });
-  }
-});
-
-fastify.post('/customers/:id/favorites', { preHandler: requireSyncKey }, async (req, reply) => {
-  const { id } = req.params;
-  const { productId } = req.body;
-  if (!productId) return reply.code(400).send({ error: 'productId required' });
-  try {
-    await pool.query('INSERT IGNORE INTO customer_favorites (customer_id, product_id) VALUES (?, ?)', [id, productId]);
-    return { ok: true };
-  } catch (err) {
-    if (err.code === 'ER_NO_SUCH_TABLE') {
-      await pool.query(`CREATE TABLE IF NOT EXISTS customer_favorites (
-        customer_id VARCHAR(50) NOT NULL,
-        product_id VARCHAR(50) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (customer_id, product_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
-      await pool.query('INSERT IGNORE INTO customer_favorites (customer_id, product_id) VALUES (?, ?)', [id, productId]);
-      return { ok: true };
-    }
-    req.log.error(err);
-    return reply.code(500).send({ error: 'Failed to add favorite' });
-  }
-});
-
-fastify.delete('/customers/:id/favorites/:productId', { preHandler: requireSyncKey }, async (req, reply) => {
-  const { id, productId } = req.params;
-  try {
-    await pool.query('DELETE FROM customer_favorites WHERE customer_id = ? AND product_id = ?', [id, productId]);
-    return { ok: true };
-  } catch (err) {
-    req.log.error(err);
-    return reply.code(500).send({ error: 'Failed to remove favorite' });
-  }
-});
-
-const SYNO_URL  = process.env.SYNOLOGY_URL  || 'https://192-168-1-2.handielson.direct.quickconnect.to:5001';
-const SYNO_USER = process.env.SYNOLOGY_USER || '';
-const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
-
-const SYNO_FOLDERS = {
-  imagens:  '/web/imagens',
-  videos:   '/web/videos',
-  arquivos: '/web/arquivos',
-};
-const SYNO_CDN = {
-  imagens:  'https://imagens.xiaomipetrolina.com.br',
-  videos:   'https://videos.mercadodovale.com.br',
-  arquivos: 'https://arquivos.xiaomipetrolina.com.br',
-};
-
-function synoHttpGet(urlObj, path) {
-  const https = require('https');
-  const port = urlObj.port ? parseInt(urlObj.port) : (urlObj.protocol === 'https:' ? 443 : 80);
-  return new Promise((resolve, reject) => {
-    const req = https.get({ hostname: urlObj.hostname, port, path, rejectUnauthorized: false }, (res) => {
-      let d = '';
-      res.on('data', c => d += c);
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
-    });
-    req.on('error', reject);
-    req.setTimeout(15000, () => { req.destroy(new Error('Synology request timeout (15s)')); });
-  });
-}
-
-async function synoLogin() {
-  const qs = `api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(SYNO_USER)}&passwd=${encodeURIComponent(SYNO_PASS)}&session=FileStation&format=sid`;
-  const urlObj = new URL(SYNO_URL);
-  const j = await synoHttpGet(urlObj, `/webapi/auth.cgi?${qs}`);
-  if (j.success) return j.data.sid;
-  throw new Error('Synology login failed: ' + JSON.stringify(j.error));
-}
-
-async function synoApiGet(apiPath) {
-  const urlObj = new URL(SYNO_URL);
-  return synoHttpGet(urlObj, apiPath);
-}
-
-
-// Cache de existência de vídeos: Map<sku, { exists, url, cachedAt }>
 const videoExistenceCache = new Map();
 const VIDEO_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutos
 
@@ -1685,6 +1507,82 @@ fastify.get('/public/check-video', async (req, reply) => {
   videoExistenceCache.set(cleanSku, { exists, url, cachedAt: Date.now() });
   return reply.send({ exists, ...(url ? { url } : {}) });
 });
+
+fastify.get('/team', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [rows] = await pool.query('SELECT id,name,role,email,phone,active FROM team_members ORDER BY name');
+  return rows.map(r => ({ ...r, active: r.active === 1 }));
+});
+
+fastify.post('/team', { preHandler: requireSyncKey }, async (req, reply) => {
+  const m = req.body;
+  const id = require('crypto').randomUUID();
+  await pool.query(
+    `INSERT INTO team_members (id,name,role,email,phone,active,pin) VALUES (?,?,?,?,?,?,?)`,
+    [id,m.name,m.role||null,m.email||null,m.phone||null,m.active?1:0,m.pin||null]
+  );
+  return { ok: true, id };
+});
+
+fastify.patch('/team/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const m = req.body;
+  await pool.query(
+    `UPDATE team_members SET name=?,role=?,email=?,phone=?,active=?,pin=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [m.name,m.role||null,m.email||null,m.phone||null,m.active?1:0,m.pin||null,req.params.id]
+  );
+  return { ok: true };
+});
+
+fastify.delete('/team/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  await pool.query('DELETE FROM team_members WHERE id=?', [req.params.id]);
+  return { ok: true };
+});
+
+// ─── Synology CDN Manager ──────────────────────────────────────────────────
+// Rotas para gerenciar arquivos nos CDNs do Synology NAS
+// Funciona de qualquer rede via QuickConnect (sem CORS: chamadas server-side)
+
+const SYNO_URL  = process.env.SYNOLOGY_URL  || 'https://192-168-1-2.handielson.direct.quickconnect.to:5001';
+const SYNO_USER = process.env.SYNOLOGY_USER || '';
+const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
+
+const SYNO_FOLDERS = {
+  imagens:  '/web/imagens',
+  videos:   '/web/videos',
+  arquivos: '/web/arquivos',
+};
+const SYNO_CDN = {
+  imagens:  'https://imagens.xiaomipetrolina.com.br',
+  videos:   'https://videos.mercadodovale.com.br',
+  arquivos: 'https://arquivos.xiaomipetrolina.com.br',
+};
+
+function synoHttpGet(urlObj, path) {
+  const https = require('https');
+  const port = urlObj.port ? parseInt(urlObj.port) : (urlObj.protocol === 'https:' ? 443 : 80);
+  return new Promise((resolve, reject) => {
+    const req = https.get({ hostname: urlObj.hostname, port, path, rejectUnauthorized: false }, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(new Error('Synology request timeout (15s)')); });
+  });
+}
+
+async function synoLogin() {
+  const qs = `api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(SYNO_USER)}&passwd=${encodeURIComponent(SYNO_PASS)}&session=FileStation&format=sid`;
+  const urlObj = new URL(SYNO_URL);
+  const j = await synoHttpGet(urlObj, `/webapi/auth.cgi?${qs}`);
+  if (j.success) return j.data.sid;
+  throw new Error('Synology login failed: ' + JSON.stringify(j.error));
+}
+
+async function synoApiGet(apiPath) {
+  const urlObj = new URL(SYNO_URL);
+  return synoHttpGet(urlObj, apiPath);
+}
+
 
 
 
@@ -1866,6 +1764,67 @@ fastify.delete('/synology/file', { preHandler: requireSyncKey }, async (req, rep
   return { ok: true };
 });
 
+// ─── Customer Favorites ────────────────────────────────────────────────────────
+
+fastify.get('/customers/:id/favorites', async (req, reply) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await pool.query('SELECT product_id FROM customer_favorites WHERE customer_id = ?', [id]);
+    reply.header('Cache-Control', 'no-store');
+    return rows.map(r => r.product_id);
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Database error fetching favorites' });
+  }
+});
+
+fastify.post('/customers/:id/favorites', async (req, reply) => {
+  const { id } = req.params;
+  const { productId } = req.body;
+  if (!productId) return reply.code(400).send({ error: 'Missing productId' });
+  try {
+    await pool.query('INSERT IGNORE INTO customer_favorites (customer_id, product_id) VALUES (?, ?)', [id, productId]);
+    return { success: true };
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Database error adding favorite' });
+  }
+});
+
+fastify.delete('/customers/:id/favorites/:productId', async (req, reply) => {
+  const { id, productId } = req.params;
+  try {
+    await pool.query('DELETE FROM customer_favorites WHERE customer_id = ? AND product_id = ?', [id, productId]);
+    return { success: true };
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Database error removing favorite' });
+  }
+});
+
+// ─── Video existence check ───────────────────────────────────────────────────
+// GET /check-video?sku=PI153D
+// Verifica se existe um vídeo no Synology NAS para o SKU informado.
+// Rota sem prefixo /public/ para evitar conflito com regras Nginx/CDN.
+fastify.get('/check-video', async (req, reply) => {
+  reply.header('Cache-Control', 'public, max-age=300');
+  const sku = req.query.sku;
+  if (!sku) return reply.code(400).send({ error: 'sku required', exists: false });
+  try {
+    const [[setting]] = await pool.query(
+      'SELECT synology_video_base_url, synology_video_extension FROM company_settings LIMIT 1'
+    );
+    const baseUrl = (setting && setting.synology_video_base_url) || 'https://videos.mercadodovale.com.br';
+    const ext = (setting && setting.synology_video_extension) || '.mp4';
+    const url = `${baseUrl}/${encodeURIComponent(sku.trim())}${ext}`;
+    const headRes = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    return { exists: headRes.ok, url };
+  } catch {
+    const url = `https://videos.mercadodovale.com.br/${encodeURIComponent(sku.trim())}.mp4`;
+    return { exists: false, url };
+  }
+});
+
 // ─── Auto-migrations ────────────────────────────────────────────────────────
 async function addColumnIfMissing(table, column, definition) {
   const [[row]] = await pool.query(
@@ -1881,10 +1840,53 @@ async function addColumnIfMissing(table, column, definition) {
   }
 }
 
+
 async function runMigrations() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_favorites (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      customer_id VARCHAR(255) NOT NULL,
+      product_id CHAR(36) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_unique_fav (customer_id, product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_carts (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      customer_id VARCHAR(255) NOT NULL,
+      product_id CHAR(36) NOT NULL,
+      quantity INT DEFAULT 1,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_unique_cart (customer_id, product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
+  await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");
+  await addColumnIfMissing('products', 'meta_title', "VARCHAR(255) NULL");
+  await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
+  await addColumnIfMissing('products', 'keywords', "TEXT NULL");
+  await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
+  await addColumnIfMissing('shipping_settings', 'extra_config', 'JSON NULL');
   console.log('[migration] company_settings synology columns: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS payment_fees (
+      id CHAR(36) PRIMARY KEY,
+      method VARCHAR(50) NOT NULL,
+      installments INT NOT NULL DEFAULT 1,
+      operator_fee_pct DECIMAL(8,4) NOT NULL DEFAULT 0,
+      applied_fee_pct DECIMAL(8,4) NOT NULL DEFAULT 0,
+      channel VARCHAR(50) NOT NULL DEFAULT 'presencial',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_fee_unique (method, installments, channel)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] payment_fees table: OK');
 }
 
 // ─── Start ─────────────────────────────────────────────────────────────────

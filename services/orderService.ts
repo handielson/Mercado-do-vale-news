@@ -19,6 +19,9 @@ import { mercadoPagoProvider } from './providers/mercadoPagoProvider';
 import { telegramBotService } from './telegramBot';
 import { formatCurrency } from '../utils/saleCalculations';
 import { addPendingCoinsForPurchase, confirmPendingCoins, cancelPendingCoins, cancelReferralReward } from './cashbackService';
+import { unitService } from './units';
+import { UnitStatus } from '../utils/field-standards';
+
 
 const COMPANY_SLUG = 'mercado-do-vale';
 
@@ -76,6 +79,64 @@ async function getCompanyId(): Promise<string> {
     if (error || !data) throw new Error('Empresa não encontrada.');
     return data.id;
 }
+
+// ─── Helper: auto-reserva de unidades serializadas ───────────────────────────
+/**
+ * Para cada item do pedido, verifica se o produto possui unidades serializadas
+ * disponíveis e reserva automaticamente a mais antiga (FIFO).
+ *
+ * Falhas de reserva são logadas, mas nunca bloqueiam o fluxo de pagamento
+ * (evitar perder vendas por inconsistência de estoque serializado).
+ *
+ * @param items  - Array de { product_id, quantity } dos itens do pedido
+ * @param orderId - UUID do pedido para vincular na unidade reservada
+ */
+async function autoReserveOrderItems(
+    items: Array<{ product_id: string; quantity: number }>,
+    orderId: string
+): Promise<void> {
+    for (const item of items) {
+        if (!item.product_id) continue;
+
+        // Para cada unidade do item (um celular qty=2 reserva 2 unidades)
+        for (let i = 0; i < item.quantity; i++) {
+            try {
+                await unitService.autoReserve(item.product_id, orderId);
+                console.log(`[orderService] Unidade reservada para produto ${item.product_id} (pedido ${orderId})`);
+            } catch (err: any) {
+                // Produto sem unidades cadastradas ou sem disponível — não é erro fatal
+                // (produtos não-serializados não têm unidades)
+                if (!err.message?.includes('Nenhuma unidade disponível')) {
+                    console.error(`[orderService] Falha inesperada ao reservar unidade para ${item.product_id}:`, err.message);
+                }
+                // Se não há unidade disponível, simplesmente ignora (produto não serializado)
+                break; // Não tenta reservar mais unidades deste produto
+            }
+        }
+    }
+}
+
+/**
+ * Libera todas as unidades reservadas para um pedido, voltando para 'available'.
+ * Chamado ao cancelar pedido.
+ */
+async function releaseOrderUnits(orderId: string): Promise<void> {
+    const { error } = await supabase
+        .from('units')
+        .update({
+            status: UnitStatus.AVAILABLE,
+            order_id: null,
+            reserved_at: null,
+        })
+        .eq('order_id', orderId)
+        .eq('status', UnitStatus.RESERVED);
+
+    if (error) {
+        console.error(`[orderService] Falha ao liberar unidades do pedido ${orderId}:`, error.message);
+    }
+}
+
+
 
 // ─── Criar pedido ─────────────────────────────────────────────────────────────
 
@@ -236,6 +297,10 @@ export async function createOrder(input: OrderInput): Promise<Order> {
 
                     if (mpResponse.status === 'approved') {
                         confirmPendingCoins(order.id).catch(console.error);
+                        // Auto-reserva de unidades serializadas (cartão aprovado na hora)
+                        autoReserveOrderItems(input.items, order.id).catch(e =>
+                            console.error('[orderService] Falha na reserva serializada (card approved):', e)
+                        );
                     }
                 }
 
@@ -248,6 +313,7 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                         })
                     );
                 }
+
 
                 if (mpResponse.status === 'rejected') {
                     await supabase.from('orders').delete().eq('id', order.id);
@@ -412,7 +478,7 @@ export async function confirmPayment(
         buildOrderNotificationData({ ...order, status: 'paid' }, items)
     );
 
-    // Deduz estoque dos itens
+    // Deduz estoque numérico dos itens
     for (const item of items) {
         if (!item.product_id) continue;
         const { error: stockError } = await supabase.rpc('decrement_stock', {
@@ -423,6 +489,12 @@ export async function confirmPayment(
             console.error(`[orderService] Falha ao deduzir estoque do produto ${item.product_id}:`, stockError);
         }
     }
+
+    // Auto-reserva de unidades serializadas (IMEI/Serial) — FIFO
+    // Roda após dedução de estoque, para qualquer produto que tenha unidades cadastradas
+    autoReserveOrderItems(items, order.id).catch(e =>
+        console.error('[orderService] Falha parcial na reserva serializada (confirmPayment):', e)
+    );
 }
 
 // ─── Finalizar pedido com pagamento na entrega (admin) ───────────────────────
@@ -463,7 +535,7 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
         });
     }
 
-    // Deduz estoque
+    // Deduz estoque numérico dos itens
     const items = (order as any).items || [];
     for (const item of items) {
         if (!item.product_id) continue;
@@ -475,6 +547,11 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
             console.error(`[orderService] Falha ao deduzir estoque:`, stockError);
         }
     }
+
+    // Auto-reserva de unidades serializadas (IMEI/Serial) — FIFO
+    autoReserveOrderItems(items, id).catch(e =>
+        console.error('[orderService] Falha parcial na reserva serializada (onDelivery):', e)
+    );
 }
 
 // ─── Cancelar pedido ──────────────────────────────────────────────────────────
@@ -491,6 +568,11 @@ export async function cancelOrder(id: string): Promise<void> {
 
     // Estorna moedas de indicação (se existirem e já tiverem sido pagas)
     cancelReferralReward(id).catch(e => console.error("Erro cancelando moedas de indicação:", e));
+
+    // Libera unidades serializadas reservadas — voltam para 'available'
+    releaseOrderUnits(id).catch(e =>
+        console.error('[orderService] Falha ao liberar unidades serializadas (cancelOrder):', e)
+    );
 }
 
 // ─── Salvar resultado do gateway no pedido ────────────────────────────────────

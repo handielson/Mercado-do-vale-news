@@ -44,8 +44,24 @@ export default function PaymentSection({
     const change = calculateChange(total, payments);
     const isComplete = totalPaid >= total;
 
+    // Calcular preview de 12x para o Total a Pagar
+    let twelveInstallmentTotal = 0;
+    let twelveInstallmentValue = 0;
+    if (paymentFees && paymentFees.length > 0) {
+        const creditFees = paymentFees
+            .filter(f => f.payment_method === 'credit' || (f.channel === 'presencial' && f.installments >= 1))
+            .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments));
+
+        const twelveFee = creditFees.find(f => f.installments === 12);
+        if (twelveFee) {
+             const feeAmount = Math.round(total * (twelveFee.applied_fee / 100));
+             twelveInstallmentTotal = total + feeAmount;
+             twelveInstallmentValue = Math.round(twelveInstallmentTotal / 12);
+        }
+    }
+
     // Adicionar pagamento
-    const handleAddPayment = () => {
+    const handleAddPayment = (method: PaymentMethodType) => {
         const amount = parseFloat(paymentAmount.replace(',', '.')) * 100; // converter para centavos
 
         if (!amount || amount <= 0) {
@@ -53,13 +69,11 @@ export default function PaymentSection({
             return;
         }
 
-        if (totalPaid + amount > total && selectedMethod !== 'money') {
-            toast.error('Valor excede o total (apenas dinheiro pode ter troco)');
-            return;
-        }
+        // Permite que qualquer forma de pagamento exceda o total (útil para "troco no cartão" ou acréscimos intencionais)
+
 
         const payment: PaymentMethod = {
-            method: selectedMethod,
+            method: method,
             amount: Math.round(amount),
             total_with_fee: Math.round(amount) // Sem taxa por enquanto
         };
@@ -69,10 +83,10 @@ export default function PaymentSection({
         toast.success(`${getPaymentMethodLabel(selectedMethod)} adicionado`);
     };
 
-    // Enter para adicionar
+    // Enter para adicionar - Padrão é dinheiro
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
-            handleAddPayment();
+            handleAddPayment('money');
         }
     };
 
@@ -142,8 +156,13 @@ export default function PaymentSection({
 
             {/* Total a Pagar */}
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-                <p className="text-sm text-slate-600 mb-1">Total a Pagar:</p>
+                <p className="text-sm text-slate-600 mb-1">Total a Pagar à vista:</p>
                 <p className="text-2xl font-bold text-blue-700">{formatCurrency(total)}</p>
+                {twelveInstallmentTotal > 0 && (
+                    <p className="text-sm font-medium text-slate-600 mt-1">
+                        ou no cartão em até 12x de <span className="font-bold text-blue-700">{formatCurrency(twelveInstallmentValue)}</span> ({formatCurrency(twelveInstallmentTotal)})
+                    </p>
+                )}
             </div>
 
             {/* Pagamentos Adicionados */}
@@ -201,83 +220,64 @@ export default function PaymentSection({
                 )}
             </div>
 
-            {/* Adicionar Novo Pagamento - PIX | Dinheiro | Débito */}
+            {/* Adicionar Novo Pagamento */}
             {!isComplete && (
                 <div className="space-y-3 mb-4">
-                    <h4 className="text-sm font-medium text-slate-700">Formas de Pagamento:</h4>
+                    <h4 className="text-sm font-medium text-slate-700">Informe o valor e a forma de pagamento:</h4>
 
-                    {/* PIX | Dinheiro | Débito */}
+                    <div className="flex gap-2">
+                        <div className="flex-1">
+                            <input
+                                type="text"
+                                value={paymentAmount}
+                                onChange={(e) => setPaymentAmount(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                                placeholder="0,00"
+                                className="w-full px-4 py-3 text-lg border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center font-bold"
+                            />
+                        </div>
+                        <button
+                            onClick={fillRemaining}
+                            className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                        >
+                            Restante
+                        </button>
+                    </div>
+                    
                     <div className="grid grid-cols-3 gap-2">
                         <button
-                            onClick={() => setSelectedMethod('pix')}
-                            className={`p-3 border-2 rounded-lg transition-all ${selectedMethod === 'pix'
-                                ? 'border-cyan-600 bg-cyan-50'
-                                : 'border-slate-200 hover:border-slate-300'
-                                }`}
+                            onClick={() => handleAddPayment('pix')}
+                            className="flex flex-col items-center justify-center p-3 border-2 border-cyan-200 bg-cyan-50 rounded-lg hover:bg-cyan-100 hover:border-cyan-300 transition-colors"
                         >
-                            <Smartphone size={24} className="mx-auto mb-1" />
-                            <p className="text-xs font-medium">PIX</p>
+                            <Smartphone size={20} className="mb-1 text-cyan-700" />
+                            <span className="text-xs font-semibold text-cyan-800">Add PIX</span>
                         </button>
                         <button
-                            onClick={() => setSelectedMethod('money')}
-                            className={`p-3 border-2 rounded-lg transition-all ${selectedMethod === 'money'
-                                ? 'border-green-600 bg-green-50'
-                                : 'border-slate-200 hover:border-slate-300'
-                                }`}
+                            onClick={() => handleAddPayment('money')}
+                            className="flex flex-col items-center justify-center p-3 border-2 border-green-200 bg-green-50 rounded-lg hover:bg-green-100 hover:border-green-300 transition-colors"
                         >
-                            <DollarSign size={24} className="mx-auto mb-1" />
-                            <p className="text-xs font-medium">Dinheiro</p>
+                            <DollarSign size={20} className="mb-1 text-green-700" />
+                            <span className="text-xs font-semibold text-green-800">Add Dinheiro</span>
                         </button>
                         <button
-                            onClick={() => setSelectedMethod('debit')}
-                            className={`p-3 border-2 rounded-lg transition-all ${selectedMethod === 'debit'
-                                ? 'border-purple-600 bg-purple-50'
-                                : 'border-slate-200 hover:border-slate-300'
-                                }`}
+                            onClick={() => handleAddPayment('debit')}
+                            className="flex flex-col items-center justify-center p-3 border-2 border-purple-200 bg-purple-50 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-colors"
                         >
-                            <CreditCard size={24} className="mx-auto mb-1" />
-                            <p className="text-xs font-medium">Débito</p>
+                            <CreditCard size={20} className="mb-1 text-purple-700" />
+                            <span className="text-xs font-semibold text-purple-800">Add Débito</span>
                         </button>
                     </div>
 
-                    {/* Valor - Mostrar para PIX, Dinheiro ou Débito */}
-                    {(selectedMethod === 'money' || selectedMethod === 'pix' || selectedMethod === 'debit') && (
-                        <div className="flex gap-2">
-                            <div className="flex-1">
-                                <input
-                                    type="text"
-                                    value={paymentAmount}
-                                    onChange={(e) => setPaymentAmount(e.target.value)}
-                                    onKeyPress={handleKeyPress}
-                                    placeholder="0,00"
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-                            <button
-                                onClick={fillRemaining}
-                                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-sm"
-                            >
-                                Restante
-                            </button>
-                            <button
-                                onClick={handleAddPayment}
-                                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                            >
-                                Adicionar
-                            </button>
+                    {/* Tabela de Parcelamento (Cartão de Crédito) baseada no Saldo Restante */}
+                    {remaining > 0 && paymentFees && onSelectInstallment && (
+                        <div className="mt-6 border-t border-slate-200 pt-4">
+                            <InstallmentCalculator
+                                remainingBalance={remaining}
+                                paymentFees={paymentFees}
+                                onSelectInstallment={onSelectInstallment}
+                            />
                         </div>
                     )}
-                </div>
-            )}
-
-            {/* Calculadora de Parcelamento - aparece quando há saldo restante */}
-            {remaining > 0 && paymentFees && onSelectInstallment && (
-                <div className="mb-4">
-                    <InstallmentCalculator
-                        remainingBalance={remaining}
-                        paymentFees={paymentFees}
-                        onSelectInstallment={onSelectInstallment}
-                    />
                 </div>
             )}
         </div>

@@ -32,7 +32,7 @@ function transformFromDB(row: any): Product {
     return {
         id: row.id,
         model_id: row.model_id,
-        model: '',
+        model: row.model || row.model_name || '',
         category_id: row.category_id,
         brand: row.brand,
         name: row.name,
@@ -69,6 +69,7 @@ function transformFromDB(row: any): Product {
         exclude_from_seo: Boolean(row.exclude_from_seo),
         meta_title: row.meta_title || undefined,
         meta_description: row.meta_description || undefined,
+        keywords: Array.isArray(row.keywords) ? row.keywords : (typeof row.keywords === 'string' ? row.keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : []),
         kits: row.kits || [],
         created: row.created_at,
         updated: row.updated_at,
@@ -86,7 +87,26 @@ async function list(): Promise<Product[]> {
 async function getById(id: string): Promise<Product | null> {
     const data = await vpsApiService.getProductById(id, true);
     if (!data || data.error) return null;
-    return transformFromDB(data);
+    
+    const product = transformFromDB(data);
+    
+    // Enrich with model name if missing but we have model_id
+    if (!product.model && product.model_id) {
+        try {
+            const { data: modelData } = await supabase
+                .from('models')
+                .select('name')
+                .eq('id', product.model_id)
+                .single();
+            if (modelData) {
+                product.model = modelData.name;
+            }
+        } catch (e) {
+            console.warn('[productService] Failed to enrich model name:', e);
+        }
+    }
+    
+    return product;
 }
 
 async function getByEan(ean: string): Promise<Product | null> {
@@ -216,6 +236,10 @@ async function create(input: ProductInput): Promise<Product> {
         shopee_item_id: input.shopee_item_id || null,
         video_url: finalVideoUrl,
         slug: input.slug || null,
+        exclude_from_seo: input.exclude_from_seo ? 1 : 0,
+        meta_title: input.meta_title || null,
+        meta_description: input.meta_description || null,
+        keywords: input.keywords ? input.keywords.join(',') : null,
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
     };
 
@@ -327,6 +351,10 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         shopee_item_id: input.shopee_item_id || null,
         video_url: finalVideoUrl,
         slug: input.slug || null,
+        exclude_from_seo: input.exclude_from_seo ? 1 : 0,
+        meta_title: input.meta_title || null,
+        meta_description: input.meta_description || null,
+        keywords: input.keywords ? input.keywords.join(',') : null,
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
     };
 

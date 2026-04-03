@@ -1,24 +1,52 @@
 import { vpsClient } from './vpsClient';
+import type { PaymentFee } from '../types/payment-fees';
+// Re-exporta para manter compatibilidade com imports existentes
+export type { PaymentFee } from '../types/payment-fees';
 
-export interface PaymentFee {
+// Tipos retornados brutos pela VPS MySQL (nomes de colunas do banco)
+interface RawPaymentFee {
     id: string;
     method: string | null;
     installments: number;
     operator_fee_pct: number;
     applied_fee_pct: number;
-    channel: 'presencial' | 'online_mp' | 'online_ps' | 'all';
+    channel: string;
     created_at?: string;
     updated_at?: string;
 }
 
+/** Normaliza campos da VPS para o padrão do frontend (types/payment-fees.ts) */
+function normalize(raw: RawPaymentFee): PaymentFee {
+    return {
+        id: raw.id,
+        company_id: '',
+        payment_method: (raw.method ?? '') as PaymentFee['payment_method'],
+        channel: (raw.channel ?? 'presencial') as PaymentFee['channel'],
+        installments: raw.installments,
+        operator_fee: raw.operator_fee_pct ?? 0,
+        applied_fee: raw.applied_fee_pct ?? 0,
+        created_at: raw.created_at ?? '',
+        updated_at: raw.updated_at ?? '',
+    };
+}
+
 export const paymentFeesService = {
     async list(): Promise<PaymentFee[]> {
-        return vpsClient.get<PaymentFee[]>('/payment-fees');
+        const raw = await vpsClient.get<RawPaymentFee[]>('/payment-fees');
+        return raw.map(normalize);
     },
 
     /** Replace ALL fees atomically (PUT replaces entire list) */
     async replaceAll(fees: Omit<PaymentFee, 'id' | 'created_at' | 'updated_at'>[]): Promise<void> {
-        await vpsClient.put<{ ok: boolean; count: number }>('/payment-fees', fees);
+        // Converte de volta para o formato da VPS antes de enviar
+        const vpsFormat = fees.map(f => ({
+            method: f.payment_method,
+            installments: f.installments,
+            operator_fee_pct: f.operator_fee,
+            applied_fee_pct: f.applied_fee,
+            channel: f.channel ?? 'presencial',
+        }));
+        await vpsClient.put<{ ok: boolean; count: number }>('/payment-fees', vpsFormat);
     },
 
     /** Legacy single-record update — patches one fee by id */
@@ -29,3 +57,4 @@ export const paymentFeesService = {
         await this.replaceAll(updated);
     },
 };
+

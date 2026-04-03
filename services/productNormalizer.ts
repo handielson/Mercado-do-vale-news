@@ -1,0 +1,187 @@
+/**
+ * productNormalizer.ts
+ *
+ * Converte qualquer objeto de produto (VPS MySQL, Supabase legado, Bling)
+ * para o formato canônico VPS — eliminando bugs de campo com nomes diferentes.
+ *
+ * ─── POR QUE ISSO EXISTE? ────────────────────────────────────────────────────
+ *   Campo          VPS MySQL         Supabase legado      Bling API
+ *   ──────────     ────────────      ───────────────      ─────────────────
+ *   Preço varejo   price_retail      price                precoVenda
+ *   Código barras  ean               barcode              gtin
+ *   Estoque        stock_quantity    stock                saldoFisicoTotal
+ *   Status         status (string)   active (boolean)     situacao
+ *
+ * Use normalizeProduct() sempre antes de lógica de negócio ou sync.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+export interface NormalizedProduct {
+  id: string;
+  sku: string;
+  ean: string;                    // nunca 'barcode'
+  name: string;
+  slug?: string;
+  status: 'active' | 'inactive'; // nunca booleano
+
+  // Preços — sempre prefixo price_*
+  price_retail: number;           // nunca 'price', 'preco', 'precoVenda'
+  price_cost?: number;
+  price_reseller?: number;
+  price_wholesale?: number;
+  price_promo?: number | null;
+  promo_start?: string | null;
+  promo_end?: string | null;
+
+  // Estoque
+  stock_quantity: number;         // nunca 'stock'
+  track_inventory: boolean;
+
+  // Mídia
+  images: string[];
+  image_url: string | null;       // sempre derivado de images[0]
+  video_url?: string | null;
+
+  // Relacionamentos
+  category_id?: string;
+  brand?: string;
+  model_id?: string;
+  parent_id?: string | null;
+
+  // Conteúdo
+  description?: string;
+  specs?: Record<string, unknown>;
+  custom_fields?: Record<string, unknown>;
+
+  // Dimensões
+  weight_g?: number | null;
+  height_cm?: number | null;
+  width_cm?: number | null;
+  length_cm?: number | null;
+
+  // Integração Bling
+  bling_id?: string;
+  bling_parent_id?: string;
+
+  [key: string]: unknown;
+}
+
+/**
+ * Normaliza qualquer produto para o formato canônico VPS MySQL.
+ * Seguro para usar com dados de VPS, Supabase legado ou Bling.
+ */
+export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
+  // ── Status ─────────────────────────────────────────────────────────────────
+  // VPS: 'active' | 'inactive' | 'ativo' | 'a' | 'disponível' | 'disponivel'
+  // Supabase: active = true | false
+  let status: 'active' | 'inactive';
+  if (typeof p.status === 'string') {
+    const s = p.status.toLowerCase().trim();
+    status = (s === 'active' || s === 'ativo' || s === 'a' || s === 'disponível' || s === 'disponivel')
+      ? 'active'
+      : 'inactive';
+  } else if (typeof p.active === 'boolean') {
+    status = p.active ? 'active' : 'inactive'; // Supabase usa booleano
+  } else {
+    status = 'active'; // fallback seguro
+  }
+
+  // ── EAN ─────────────────────────────────────────────────────────────────────
+  // VPS = ean, Supabase = barcode, Bling = gtin
+  const ean = String(p.ean || p.barcode || p.gtin || '');
+
+  // ── Preço de venda ──────────────────────────────────────────────────────────
+  // VPS = price_retail, Supabase = price, Bling = precoVenda / preco_venda / preco_varejo
+  const rawPrice = p.price_retail ?? p.price ?? p.preco ?? p.preco_venda ?? p.preco_varejo ?? p.precoVenda ?? null;
+  const price_retail = rawPrice !== null && rawPrice !== undefined
+    ? (isNaN(parseFloat(String(rawPrice))) ? 0 : parseFloat(String(rawPrice)))
+    : 0;
+
+  // ── Estoque ─────────────────────────────────────────────────────────────────
+  // VPS = stock_quantity, Supabase = stock
+  const stockRaw = p.stock_quantity !== undefined ? p.stock_quantity : p.stock;
+  let stock_quantity = 0;
+  if (typeof stockRaw === 'number') {
+    stock_quantity = stockRaw;
+  } else if (typeof stockRaw === 'string' && stockRaw.trim() && stockRaw.toLowerCase() !== 'null') {
+    stock_quantity = parseInt(stockRaw, 10) || 0;
+  }
+
+  // ── Track inventory ─────────────────────────────────────────────────────────
+  let track_inventory: boolean;
+  if (p.track_inventory !== undefined) {
+    track_inventory = Boolean(p.track_inventory);
+  } else {
+    // Inferir: se stock existe e é não-nulo, assume que rastrea estoque
+    track_inventory = stockRaw !== null && stockRaw !== undefined && String(stockRaw).toLowerCase() !== 'null';
+  }
+
+  // ── Imagens ─────────────────────────────────────────────────────────────────
+  // VPS pode retornar como array ou como string JSON
+  let images: string[] = [];
+  if (Array.isArray(p.images)) {
+    images = p.images;
+  } else if (typeof p.images === 'string' && p.images) {
+    try { images = JSON.parse(p.images); } catch { images = []; }
+  }
+
+  const image_url = images.length > 0 ? images[0] : (p.image_url ?? null);
+
+  return {
+    ...p, // preserva campos extras sem perder dados
+
+    // Campos normalizados (sobrescrevem os raw)
+    id: String(p.id || ''),
+    sku: String(p.sku || ''),
+    ean,
+    name: String(p.name || ''),
+    slug: p.slug,
+    status,
+    price_retail,
+    price_cost: p.price_cost !== undefined ? parseFloat(String(p.price_cost)) || 0 : undefined,
+    price_reseller: p.price_reseller !== undefined ? parseFloat(String(p.price_reseller)) || 0 : undefined,
+    price_wholesale: p.price_wholesale !== undefined ? parseFloat(String(p.price_wholesale)) || 0 : undefined,
+    price_promo: p.price_promo != null ? parseFloat(String(p.price_promo)) || null : null,
+    promo_start: p.promo_start ?? null,
+    promo_end: p.promo_end ?? null,
+    stock_quantity,
+    track_inventory,
+    images,
+    image_url,
+    video_url: p.video_url ?? null,
+    category_id: p.category_id,
+    brand: p.brand,
+    model_id: p.model_id,
+    parent_id: p.parent_id ?? null,
+    description: p.description,
+    specs: p.specs ?? {},
+    custom_fields: p.custom_fields ?? {},
+    bling_id: p.bling_id,
+    bling_parent_id: p.bling_parent_id,
+  };
+}
+
+/**
+ * Normaliza um array de produtos.
+ */
+export function normalizeProducts(products: Record<string, any>[]): NormalizedProduct[] {
+  return products.map(normalizeProduct);
+}
+
+/**
+ * Converte produto normalizado (VPS) para formato Supabase legado.
+ * @deprecated Use apenas em scripts de migração — nunca no frontend.
+ */
+export function toSupabaseFormat(p: NormalizedProduct): Record<string, unknown> {
+  return {
+    ...p,
+    price: p.price_retail,         // Supabase usa 'price'
+    barcode: p.ean,                // Supabase usa 'barcode'
+    stock: p.stock_quantity,       // Supabase usa 'stock'
+    active: p.status === 'active', // Supabase usa booleano
+    price_retail: undefined,
+    ean: undefined,
+    stock_quantity: undefined,
+    status: undefined,
+  };
+}

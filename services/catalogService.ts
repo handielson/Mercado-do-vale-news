@@ -1,7 +1,8 @@
 import { supabase } from './supabase';
-import type { CatalogProduct, FilterState } from '@/types/catalog';
+import type { CatalogProduct } from '@/types/catalog';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import { vpsApiService } from '@/services/vpsApiService';
+import { normalizeProduct } from '@/services/productNormalizer';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos (Para revalidação silenciosa)
@@ -99,49 +100,9 @@ export const catalogService = {
 
                     // Apply visibility rules + multi-category filter client-side
                     let result = (vpsRaw as any[]).map((p: any) => {
-                        const s = p.stock !== undefined ? p.stock : p.stock_quantity;
-                        let stockVal = 0;
-                        if (typeof s === 'number') {
-                            stockVal = s;
-                        } else if (typeof s === 'string' && s.trim().toLowerCase() !== 'null' && s.trim() !== '') {
-                            stockVal = parseInt(s, 10) || 0;
-                        }
-                        
-                        let track_inventory = p.track_inventory;
-                        if (track_inventory === undefined) {
-                            track_inventory = (s !== null && s !== 'null' && s !== undefined);
-                        }
-                        
-                        // Parse price safely — tenta todos os campos possíveis da VPS em ordem de prioridade.
-                        const rawPrice = p.price_retail ?? p.price ?? p.preco ?? p.preco_venda ?? p.preco_varejo ?? null;
-                        const priceNum = rawPrice !== null && rawPrice !== undefined ? parseFloat(String(rawPrice)) : 0;
-
-                        // Normalize images
-                        let parsedImages: any[] = [];
-                        if (Array.isArray(p.images)) parsedImages = p.images;
-                        else if (typeof p.images === 'string') {
-                            try { parsedImages = JSON.parse(p.images); } catch { parsedImages = []; }
-                        }
-
-                        // Normalize status
-                        let normalizedStatus = p.status;
-                        if (typeof normalizedStatus === 'string') {
-                            const strStatus = normalizedStatus.toLowerCase();
-                            if (strStatus === 'ativo' || strStatus === 'a' || strStatus === 'active' || strStatus === 'disponível' || strStatus === 'disponivel') {
-                                normalizedStatus = 'active';
-                            }
-                        } else if (!normalizedStatus) {
-                            normalizedStatus = 'active'; // assume active if missing
-                        }
-
+                        const normalized = normalizeProduct(p);
                         return {
-                            ...p,
-                            status: normalizedStatus,
-                            stock_quantity: stockVal,
-                            track_inventory: track_inventory,
-                            price_retail: isNaN(priceNum) ? 0 : priceNum,
-                            image_url: (parsedImages && parsedImages.length > 0) ? parsedImages[0] : p.image_url,
-                            images: parsedImages,
+                            ...normalized,
                             category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
                         };
                     });
@@ -255,39 +216,21 @@ export const catalogService = {
      */
     searchProducts: async (query: string): Promise<CatalogProduct[]> => {
         if (query.length < 2) return [];
-
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .or(`name.ilike.%${query}%,brand.ilike.%${query}%,model.ilike.%${query}%,sku.ilike.%${query}%`)
-            .order('featured', { ascending: false })
-            .order('created_at', { ascending: false })
-            .limit(50);
-
-        if (error) throw error;
-
-        return (data || []) as CatalogProduct[];
+        // VPS é a fonte de verdade — Supabase products descontinuado para catálogo
+        const results = await vpsApiService.getProducts({ search: query, limit: 50, noCache: true });
+        return (results || []).map(normalizeProduct) as unknown as CatalogProduct[];
     },
 
     /**
      * Buscar produto por ID
      */
     getProductById: async (id: string): Promise<CatalogProduct | null> => {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
-
-        // Registrar visualização
+        // VPS é a fonte de verdade — Supabase products descontinuado para catálogo
+        const product = await vpsApiService.getProductById(id, true);
+        if (!product) return null;
+        // Registrar visualização (Supabase analytics — ok manter)
         await catalogService.recordProductView(id);
-
-        return data as CatalogProduct;
+        return normalizeProduct(product) as unknown as CatalogProduct;
     },
 
     /**
@@ -295,7 +238,6 @@ export const catalogService = {
      */
     getProductsByCategory: async (category: string, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
         const cacheKey = `${CACHE_KEY_PREFIX}category:${category}`;
-
         if (!bypassCache) {
             const storage = getStorage();
             if (storage) {
@@ -303,35 +245,20 @@ export const catalogService = {
                     const cachedStr = storage.getItem(cacheKey);
                     if (cachedStr) {
                         const cached = JSON.parse(cachedStr);
-                        if (Date.now() - cached.timestamp < CACHE_TTL) {
-                            return cached.data;
-                        }
+                        if (Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
                     }
                 } catch (e) { }
             }
         }
-
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('category_id', category)
-            .order('featured', { ascending: false })
-            .order('created_at', { ascending: false })
-            .order('id', { ascending: true });
-
-        if (error) throw error;
-
-        const products = (data || []) as CatalogProduct[];
-
+        // VPS é a fonte de verdade — Supabase products descontinuado para catálogo
+        const results = await vpsApiService.getProducts({ category, limit: 200 });
+        const products = (results || []).map(normalizeProduct) as unknown as CatalogProduct[];
         if (!bypassCache) {
             const storage = getStorage();
             if (storage) {
-                try {
-                    storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() }));
-                } catch (e) { }
+                try { storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() })); } catch (e) { }
             }
         }
-
         return products;
     },
 
@@ -340,7 +267,6 @@ export const catalogService = {
      */
     getFeaturedProducts: async (limit: number = 10, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
         const cacheKey = `${CACHE_KEY_PREFIX}featured:${limit}`;
-
         if (!bypassCache) {
             const storage = getStorage();
             if (storage) {
@@ -348,34 +274,29 @@ export const catalogService = {
                     const cachedStr = storage.getItem(cacheKey);
                     if (cachedStr) {
                         const cached = JSON.parse(cachedStr);
-                        if (Date.now() - cached.timestamp < CACHE_TTL) {
-                            return cached.data;
-                        }
+                        if (Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
                     }
                 } catch (e) { }
             }
         }
-
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('featured', true)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw error;
-
-        const products = (data || []) as CatalogProduct[];
-
+        // VPS é a fonte de verdade — busca produtos em destaque
+        const VPS_URL = (import.meta as any).env?.DEV
+            ? '/vps-proxy'
+            : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+        let products: CatalogProduct[] = [];
+        try {
+            const res = await fetch(`${VPS_URL}/products?is_featured=true&limit=${limit}`);
+            if (res.ok) {
+                const data = await res.json();
+                products = (data || []).map(normalizeProduct) as unknown as CatalogProduct[];
+            }
+        } catch (e) { console.warn('[catalogService] getFeaturedProducts VPS error:', e); }
         if (!bypassCache) {
             const storage = getStorage();
             if (storage) {
-                try {
-                    storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() }));
-                } catch (e) { }
+                try { storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() })); } catch (e) { }
             }
         }
-
         return products;
     },
 
@@ -384,7 +305,6 @@ export const catalogService = {
      */
     getNewProducts: async (limit: number = 10, bypassCache: boolean = false): Promise<CatalogProduct[]> => {
         const cacheKey = `${CACHE_KEY_PREFIX}new:${limit}`;
-
         if (!bypassCache) {
             const storage = getStorage();
             if (storage) {
@@ -392,34 +312,29 @@ export const catalogService = {
                     const cachedStr = storage.getItem(cacheKey);
                     if (cachedStr) {
                         const cached = JSON.parse(cachedStr);
-                        if (Date.now() - cached.timestamp < CACHE_TTL) {
-                            return cached.data;
-                        }
+                        if (Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
                     }
                 } catch (e) { }
             }
         }
-
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('is_new', true)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) throw error;
-
-        const products = (data || []) as CatalogProduct[];
-
+        // VPS é a fonte de verdade — busca produtos novos
+        const VPS_URL = (import.meta as any).env?.DEV
+            ? '/vps-proxy'
+            : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+        let products: CatalogProduct[] = [];
+        try {
+            const res = await fetch(`${VPS_URL}/products?is_new=true&limit=${limit}`);
+            if (res.ok) {
+                const data = await res.json();
+                products = (data || []).map(normalizeProduct) as unknown as CatalogProduct[];
+            }
+        } catch (e) { console.warn('[catalogService] getNewProducts VPS error:', e); }
         if (!bypassCache) {
             const storage = getStorage();
             if (storage) {
-                try {
-                    storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() }));
-                } catch (e) { }
+                try { storage.setItem(cacheKey, JSON.stringify({ data: products, timestamp: Date.now() })); } catch (e) { }
             }
         }
-
         return products;
     },
 
@@ -537,29 +452,16 @@ export const catalogService = {
                 const cachedStr = storage.getItem(cacheKey);
                 if (cachedStr) {
                     const cached = JSON.parse(cachedStr);
-                    if (Date.now() - cached.timestamp < CACHE_TTL) {
-                        return cached.data;
-                    }
+                    if (Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
                 }
             } catch (e) { }
         }
-
-        const { data, error } = await supabase
-            .from('products')
-            .select('category_id')
-            .not('category_id', 'is', null);
-
-        if (error) throw error;
-
-        const categories = [...new Set(data?.map(p => p.category_id).filter(Boolean))];
-        const result = categories.sort();
-
+        // VPS é a fonte de verdade para categorias
+        const cats = await vpsApiService.getCategories();
+        const result = [...new Set((cats || []).map((c: any) => c.id).filter(Boolean))].sort() as string[];
         if (storage) {
-            try {
-                storage.setItem(cacheKey, JSON.stringify({ data: result, timestamp: Date.now() }));
-            } catch (e) { }
+            try { storage.setItem(cacheKey, JSON.stringify({ data: result, timestamp: Date.now() })); } catch (e) { }
         }
-
         return result;
     },
 
@@ -609,29 +511,16 @@ export const catalogService = {
                 const cachedStr = storage.getItem(cacheKey);
                 if (cachedStr) {
                     const cached = JSON.parse(cachedStr);
-                    if (Date.now() - cached.timestamp < CACHE_TTL) {
-                        return cached.data;
-                    }
+                    if (Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
                 }
             } catch (e) { }
         }
-
-        const { data, error } = await supabase
-            .from('products')
-            .select('brand')
-            .not('brand', 'is', null);
-
-        if (error) throw error;
-
-        const brands = [...new Set(data?.map(p => p.brand).filter(Boolean))];
-        const result = brands.sort();
-
+        // VPS é a fonte de verdade — extrai marcas únicas dos produtos
+        const vpsProducts = await vpsApiService.getProducts({ limit: 2000, compact: true });
+        const result = [...new Set((vpsProducts || []).map((p: any) => p.brand).filter(Boolean))].sort() as string[];
         if (storage) {
-            try {
-                storage.setItem(cacheKey, JSON.stringify({ data: result, timestamp: Date.now() }));
-            } catch (e) { }
+            try { storage.setItem(cacheKey, JSON.stringify({ data: result, timestamp: Date.now() })); } catch (e) { }
         }
-
         return result;
     }
 };
