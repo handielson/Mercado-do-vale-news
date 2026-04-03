@@ -17,6 +17,21 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
+export interface FieldPreset {
+  id: string;
+  name: string;
+  description?: string;
+  config: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FieldPresetInput {
+  name: string;
+  description?: string;
+  config: Record<string, string>;
+}
+
 class VpsApiService {
   private cache = new Map<string, CacheEntry<unknown>>();
 
@@ -87,6 +102,51 @@ class VpsApiService {
 
   invalidateProductCache() {
     [...this.cache.keys()].filter(k => k.startsWith('/products')).forEach(k => this.cache.delete(k));
+  }
+
+  // ── Field Presets ──────────────────────────────────────────────────────
+
+  async getFieldPresets(): Promise<FieldPreset[] | null> {
+    return this.fetchSafe<FieldPreset[]>('/field-presets');
+  }
+
+  async createFieldPreset(data: FieldPresetInput): Promise<FieldPreset | null> {
+    if (!SYNC_KEY) return null;
+    try {
+      const res = await fetch(`${VPS_BASE_URL}/field-presets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  }
+
+  async updateFieldPreset(id: string, data: FieldPresetInput): Promise<boolean> {
+    if (!SYNC_KEY) return false;
+    try {
+      const res = await fetch(`${VPS_BASE_URL}/field-presets/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      return res.ok;
+    } catch { return false; }
+  }
+
+  async deleteFieldPreset(id: string): Promise<boolean> {
+    if (!SYNC_KEY) return false;
+    try {
+      const res = await fetch(`${VPS_BASE_URL}/field-presets/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-Sync-Key': SYNC_KEY },
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      return res.ok;
+    } catch { return false; }
   }
 
   // ── READ ──────────────────────────────────────────────────────────────

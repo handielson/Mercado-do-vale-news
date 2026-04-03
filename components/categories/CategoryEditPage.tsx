@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, BookMarked, ChevronDown } from 'lucide-react';
 import { Category, CategoryConfig, CategoryInput, FieldRequirement, CustomField } from '../../types/category';
 import { categoryService } from '../../services/categories';
 import { BasicInfoSection } from './sections/BasicInfoSection';
@@ -8,6 +8,7 @@ import { UniqueFieldsSection } from './sections/UniqueFieldsSection';
 import { FieldConfigSection } from './sections/FieldConfigSection';
 import { CustomFieldsSection } from './sections/CustomFieldsSection';
 import { toast } from 'react-hot-toast';
+import { vpsApiService, FieldPreset } from '../../services/vpsApiService';
 
 interface CategoryEditPageProps {
     categoryId?: string; // undefined = criar nova
@@ -49,6 +50,9 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
         ean_autofill_config: { enabled: true, exclude_fields: [] }
     });
     const [uniqueFields, setUniqueFields] = useState<string[]>([]);
+    const [presets, setPresets] = useState<FieldPreset[]>([]);
+    const [presetMergeMode, setPresetMergeMode] = useState<'replace' | 'merge'>('replace');
+    const [presetOpen, setPresetOpen] = useState(false);
 
     // Load category data if editing and load available parents
     useEffect(() => {
@@ -56,9 +60,11 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
             try {
                 // Fetch all categories to populate the "Parent Category" dropdown
                 const allCategories = await categoryService.list();
-                // A category cannot be its own parent, nor can it be a parent to a category if that would cause a loop.
-                // For a simple hierarchy, we exclude the current category from the list.
-                setAvailableParents(allCategories.filter(c => c.id !== categoryId && c.parent_id === null)); // Allowing only root items as parents to avoid deep nesting for now
+                setAvailableParents(allCategories.filter(c => c.id !== categoryId && c.parent_id === null));
+
+                // Load field presets from VPS
+                const presetsData = await vpsApiService.getFieldPresets();
+                setPresets(presetsData ?? []);
 
                 if (categoryId) {
                     await loadCategory(categoryId);
@@ -318,6 +324,101 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                         config={config}
                         onChange={updateFieldConfig}
                     />
+
+                    {/* Preset Selector */}
+                    {presets.length > 0 && (
+                        <div className="bg-white rounded-xl border border-slate-200 p-5">
+                            <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                                <BookMarked className="w-4 h-4 text-blue-600" />
+                                Aplicar Preset de Campos
+                            </h3>
+                            <p className="text-sm text-slate-500 mb-4">
+                                Selecione um grupo pré-configurado para preencher rapidamente a visibilidade dos campos.
+                            </p>
+
+                            {/* Merge mode toggle */}
+                            <div className="flex items-center gap-3 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <span className="text-xs font-medium text-slate-600">Modo:</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setPresetMergeMode('replace')}
+                                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                                        presetMergeMode === 'replace'
+                                            ? 'bg-red-100 text-red-700 border border-red-300'
+                                            : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    🔄 Substituir tudo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPresetMergeMode('merge')}
+                                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                                        presetMergeMode === 'merge'
+                                            ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                            : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    🔀 Mesclar (mantém configurados)
+                                </button>
+                                <span className="text-xs text-slate-400 ml-1">
+                                    {presetMergeMode === 'replace'
+                                        ? 'O preset sobrescreve todos os campos'
+                                        : 'Preset preenche apenas campos ainda em Oculto'}
+                                </span>
+                            </div>
+
+                            {/* Preset dropdown */}
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setPresetOpen(!presetOpen)}
+                                    className="w-full flex items-center justify-between px-4 py-2.5 border border-slate-300 rounded-lg text-sm text-slate-700 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                                >
+                                    <span>Escolher preset...</span>
+                                    <ChevronDown className={`w-4 h-4 transition-transform ${presetOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {presetOpen && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                                        {presets.map(preset => (
+                                            <button
+                                                key={preset.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    const presetConfig = preset.config as Record<string, FieldRequirement>;
+                                                    if (presetMergeMode === 'replace') {
+                                                        setConfig(prev => ({
+                                                            ...prev,
+                                                            ...presetConfig,
+                                                        }));
+                                                    } else {
+                                                        // Mesclar: só aplica nos campos que ainda estão 'off' ou sem valor
+                                                        setConfig(prev => {
+                                                            const merged = { ...prev };
+                                                            for (const [key, value] of Object.entries(presetConfig)) {
+                                                                if (!merged[key as keyof CategoryConfig] || merged[key as keyof CategoryConfig] === 'off') {
+                                                                    (merged as any)[key] = value;
+                                                                }
+                                                            }
+                                                            return merged;
+                                                        });
+                                                    }
+                                                    setPresetOpen(false);
+                                                    toast.success(`Preset "${preset.name}" aplicado!`);
+                                                }}
+                                                className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0"
+                                            >
+                                                <p className="font-medium text-slate-800 text-sm">{preset.name}</p>
+                                                {preset.description && (
+                                                    <p className="text-xs text-slate-500 mt-0.5">{preset.description}</p>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Section 3: Field Configuration */}
                     <FieldConfigSection

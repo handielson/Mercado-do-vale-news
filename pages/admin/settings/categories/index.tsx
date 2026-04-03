@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit2, Plus, GripVertical } from 'lucide-react';
+import { Edit2, Plus, GripVertical, BookMarked } from 'lucide-react';
 import { Category } from '../../../../types/category';
 import { categoryService } from '../../../../services/categories';
 import { NextStepBanner } from '../../../../components/ui/NextStepBanner';
@@ -221,13 +221,22 @@ export default function CategorySettingsPage() {
                         <b> Arraste as linhas</b> para definir categorias pai e subcategorias.
                     </p>
                 </div>
-                <button
-                    onClick={handleCreate}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                >
-                    <Plus className="w-4 h-4" />
-                    Nova Categoria
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => navigate('/admin/settings/categories/presets')}
+                        className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-sm"
+                    >
+                        <BookMarked className="w-4 h-4 text-blue-500" />
+                        Presets
+                    </button>
+                    <button
+                        onClick={handleCreate}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Nova Categoria
+                    </button>
+                </div>
             </div>
 
             {/* Categories Table */}

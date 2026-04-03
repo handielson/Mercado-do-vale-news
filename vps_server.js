@@ -70,6 +70,49 @@ fastify.get('/health', async () => ({
   db: 'mysql'
 }));
 
+// ─── Field Presets ────────────────────────────────────────────────────────
+// Presets de campos de categoria: grupos pré-configurados de visibilidade
+
+fastify.get('/field-presets', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT id, name, description, config, created_at, updated_at
+     FROM field_presets
+     ORDER BY name ASC`
+  );
+  return rows.map(r => ({
+    ...r,
+    config: typeof r.config === 'string' ? JSON.parse(r.config) : r.config,
+  }));
+});
+
+fastify.post('/field-presets', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { name, description, config } = req.body || {};
+  if (!name || !config) return reply.code(400).send({ error: 'name and config required' });
+  const [result] = await pool.query(
+    `INSERT INTO field_presets (id, name, description, config)
+     VALUES (UUID(), ?, ?, ?)`,
+    [name, description || null, jsonStr(config)]
+  );
+  const [rows] = await pool.query('SELECT * FROM field_presets WHERE id = (SELECT id FROM field_presets ORDER BY created_at DESC LIMIT 1)');
+  const row = rows[0];
+  return { ...row, config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config };
+});
+
+fastify.put('/field-presets/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { name, description, config } = req.body || {};
+  if (!name || !config) return reply.code(400).send({ error: 'name and config required' });
+  await pool.query(
+    `UPDATE field_presets SET name=?, description=?, config=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [name, description || null, jsonStr(config), req.params.id]
+  );
+  return { ok: true };
+});
+
+fastify.delete('/field-presets/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  await pool.query('DELETE FROM field_presets WHERE id=?', [req.params.id]);
+  return { ok: true };
+});
+
 // ─── Categories ────────────────────────────────────────────────────────────
 fastify.get('/categories', async (req, reply) => {
   const [rows] = await pool.query(
@@ -1950,7 +1993,17 @@ async function runMigrations() {
       UNIQUE KEY idx_fee_unique (method, installments, channel)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
-  console.log('[migration] payment_fees table: OK');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS field_presets (
+      id          CHAR(36)     PRIMARY KEY DEFAULT (UUID()),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      config      JSON         NOT NULL,
+      created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] field_presets table: OK');
 }
 
 // ─── Start ─────────────────────────────────────────────────────────────────

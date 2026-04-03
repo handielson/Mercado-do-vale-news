@@ -25,6 +25,7 @@ import { ProductCombosPage } from '../pages/admin/products/ProductCombosPage';
 import { InventoryPage } from '../pages/admin/inventory/InventoryPage';
 import CategorySettingsPage from '../pages/admin/settings/categories/index';
 import NewCategoryPage from '../pages/admin/settings/categories/new';
+import FieldPresetsPage from '../pages/admin/settings/categories/presets';
 import EditCategoryPage from '../pages/admin/settings/categories/[id]/edit';
 import FieldsManagementPage from '../pages/admin/settings/fields';
 import { BrandsPage } from '../pages/admin/settings/BrandsPage';
@@ -451,7 +452,7 @@ export const router = createBrowserRouter([
     )
   },
   {
-    path: "/admin/products/:id",
+    path: "/admin/products/:id/:slug?",
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductDetailPage /></AdminLayout>
@@ -527,6 +528,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><NewCategoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/categories/presets",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><FieldPresetsPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
