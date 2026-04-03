@@ -316,6 +316,24 @@ class VpsApiService {
     return { ok: allOk, sent };
   }
 
+  async bulkUpdateCategory(ids: string[], category_id: string, specs?: Record<string, any>): Promise<{ ok: boolean; updated: number }> {
+    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return { ok: false, updated: 0 }; }
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(`${VPS_BASE_URL}/products/bulk-category`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        body: JSON.stringify({ ids, category_id, specs }),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return { ok: false, updated: 0 };
+      return await res.json();
+    } catch (err) {
+      console.warn('[vpsApiService] bulkUpdateCategory error:', err);
+      return { ok: false, updated: 0 };
+    }
+  }
+
   async updateProduct(id: string, data: any): Promise<boolean> {
     this.cache.delete(`/products/${id}`);
     this.invalidateProductCache();

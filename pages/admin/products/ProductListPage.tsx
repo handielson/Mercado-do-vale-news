@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
 import { Product } from '../../../types/product';
 import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal';
+import { BulkActionBar } from '../../../components/products/BulkActionBar';
+import { BulkCategoryModal } from '../../../components/products/BulkCategoryModal';
 import { supabase } from '../../../services/supabase';
 import { toast } from 'sonner';
 
@@ -19,6 +21,11 @@ export const ProductListPage: React.FC = () => {
     const navigate = useNavigate();
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isGeneratingVideos, setIsGeneratingVideos] = useState(false);
+
+    // Bulk selection state
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
 
     const {
         products,
@@ -46,7 +53,30 @@ export const ProductListPage: React.FC = () => {
     };
 
     const handleEditProduct = (product: Product) => {
-        navigate(`/admin/products/${product.id}`);
+        if (selectionMode) return; // bloqueia navegação em modo seleção
+        const slug = product.name 
+            ? product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+            : 'produto';
+        navigate(`/admin/products/${product.id}/${slug}`);
+    };
+
+    const handleToggleSelect = useCallback((product: Product) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(product.id)) next.delete(product.id);
+            else next.add(product.id);
+            return next;
+        });
+    }, []);
+
+    const handleExitSelection = () => {
+        setSelectionMode(false);
+        setSelectedIds(new Set());
+    };
+
+    const handleBulkSuccess = () => {
+        handleExitSelection();
+        refresh();
     };
 
     const handleDeleteProduct = async (product: Product) => {
@@ -132,6 +162,20 @@ export const ProductListPage: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-3">
+                    {/* Selection mode toggle */}
+                    <button
+                        onClick={() => selectionMode ? handleExitSelection() : setSelectionMode(true)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors shadow-sm border font-medium ${
+                            selectionMode
+                                ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                        title={selectionMode ? 'Sair do modo seleção' : 'Ativar modo seleção para edição em lote'}
+                    >
+                        {selectionMode ? <XSquare className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+                        <span>{selectionMode ? 'Cancelar Seleção' : 'Selecionar'}</span>
+                    </button>
+
                     {/* Refresh button */}
                     <button
                         onClick={refresh}
@@ -223,6 +267,25 @@ export const ProductListPage: React.FC = () => {
                 isLoading={isLoading}
                 onEditProduct={handleEditProduct}
                 onDeleteProduct={handleDeleteProduct}
+                selectionMode={selectionMode}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+            />
+
+            {/* Bulk Action Bar */}
+            <BulkActionBar
+                selectedCount={selectedIds.size}
+                onChangeCategoryClick={() => setIsBulkModalOpen(true)}
+                onClearSelection={handleExitSelection}
+            />
+
+            {/* Bulk Category Modal */}
+            <BulkCategoryModal
+                isOpen={isBulkModalOpen}
+                selectedCount={selectedIds.size}
+                selectedIds={Array.from(selectedIds)}
+                onClose={() => setIsBulkModalOpen(false)}
+                onSuccess={handleBulkSuccess}
             />
 
             {/* Results Count and Pagination Controls */}

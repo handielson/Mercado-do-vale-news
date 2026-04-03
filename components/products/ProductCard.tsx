@@ -14,6 +14,9 @@ interface ProductCardProps {
     product: Product;
     onEdit?: (product: Product) => void;
     onDelete?: (product: Product) => void;
+    selectionMode?: boolean;
+    isSelected?: boolean;
+    onToggleSelect?: (product: Product) => void;
 }
 
 
@@ -21,7 +24,7 @@ interface ProductCardProps {
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect }) => {
     const [fetchedImages, setFetchedImages] = useState<string[]>([]);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [currentStatus, setCurrentStatus] = useState<ProductStatus>(product.status);
@@ -234,9 +237,37 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     };
 
     return (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow duration-200">
+        <div
+            className={cn(
+                "bg-white rounded-xl border overflow-hidden transition-all duration-200",
+                selectionMode
+                    ? isSelected
+                        ? "border-blue-400 ring-2 ring-blue-300 shadow-md cursor-pointer"
+                        : "border-slate-200 hover:border-blue-300 cursor-pointer"
+                    : "border-slate-200 hover:shadow-lg"
+            )}
+            onClick={selectionMode ? () => onToggleSelect?.(product) : undefined}
+        >
             {/* Image */}
             <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden relative">
+                {/* Selection Checkbox */}
+                {selectionMode && (
+                    <div className="absolute top-2 left-2 z-10">
+                        <div className={cn(
+                            'w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors',
+                            isSelected
+                                ? 'bg-blue-600 border-blue-600'
+                                : 'bg-white/90 border-slate-300'
+                        )}>
+                            {isSelected && (
+                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {coverImage ? (
                     <img
                         src={coverImage}

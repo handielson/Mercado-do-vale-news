@@ -9,6 +9,9 @@ interface ProductListProps {
     isLoading: boolean;
     onEditProduct?: (product: Product) => void;
     onDeleteProduct?: (product: Product) => void;
+    selectionMode?: boolean;
+    selectedIds?: Set<string>;
+    onToggleSelect?: (product: Product) => void;
 }
 
 /**
@@ -19,7 +22,10 @@ export const ProductList: React.FC<ProductListProps> = ({
     products,
     isLoading,
     onEditProduct,
-    onDeleteProduct
+    onDeleteProduct,
+    selectionMode = false,
+    selectedIds = new Set(),
+    onToggleSelect,
 }) => {
     // Loading State: Show skeleton cards
     if (isLoading) {
@@ -75,6 +81,9 @@ export const ProductList: React.FC<ProductListProps> = ({
                     product={product}
                     onEdit={onEditProduct}
                     onDelete={onDeleteProduct}
+                    selectionMode={selectionMode}
+                    isSelected={selectedIds.has(product.id)}
+                    onToggleSelect={onToggleSelect}
                 />
             ))}
         </div>

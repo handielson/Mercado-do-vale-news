@@ -483,6 +483,43 @@ fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, r
   return { ok: true };
 });
 
+// Bulk update category + specs for multiple products
+fastify.patch('/products/bulk-category', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { ids, category_id, specs } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return reply.code(400).send({ error: 'ids[] required' });
+  }
+  if (!category_id) {
+    return reply.code(400).send({ error: 'category_id required' });
+  }
+
+  // Build placeholders for IN clause
+  const placeholders = ids.map(() => '?').join(', ');
+
+  if (specs && Object.keys(specs).length > 0) {
+    // Merge specs: keep existing specs not overwritten by the new ones
+    await pool.query(
+      `UPDATE products
+       SET category_id = ?,
+           specs = JSON_MERGE_PATCH(COALESCE(specs, '{}'), ?),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id IN (${placeholders})`,
+      [category_id, JSON.stringify(specs), ...ids]
+    );
+  } else {
+    await pool.query(
+      `UPDATE products
+       SET category_id = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id IN (${placeholders})`,
+      [category_id, ...ids]
+    );
+  }
+
+  return { ok: true, updated: ids.length };
+});
+
+
 // ─── Combos (write) ─────────────────────────────────────────────────────────
 
 fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
