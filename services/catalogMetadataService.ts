@@ -26,7 +26,7 @@ export const catalogMetadataService = {
      * Buscar todas as categorias com contagem de produtos
      * Counts vêm da VPS (fonte primária); fallback para Supabase se a VPS falhar.
      */
-    getAllCategories: async (): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number }>> => {
+    getAllCategories: async (): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count: number }>> => {
         // Fetch all categories (from Supabase — tem parent_id, sort_order, etc.)
         const { data: cats, error: catsError } = await supabase
             .from('categories')
@@ -41,19 +41,24 @@ export const catalogMetadataService = {
             return [];
         }
 
-        const countMap = new Map<string, number>();
+        const countMap = new Map<string, { count: number, in_stock_count: number }>();
 
         // Sempre faz a contagem pelo Supabase como base de garantia
         const { data: counts, error: countsError } = await supabase
             .from('products')
             .select('category_id, status, stock_quantity')
-            .not('category_id', 'is', null);
+            .not('category_id', 'is', null)
+            .eq('status', 'active'); // Foca apenas em produtos ativos
 
         if (!countsError) {
             (counts || []).forEach(p => {
                 if (p.category_id) {
-                    // Soma +1 para o fallback
-                    countMap.set(p.category_id, (countMap.get(p.category_id) || 0) + 1);
+                    const curr = countMap.get(p.category_id) || { count: 0, in_stock_count: 0 };
+                    curr.count += 1;
+                    if (p.stock_quantity === null || p.stock_quantity > 0) {
+                        curr.in_stock_count += 1;
+                    }
+                    countMap.set(p.category_id, curr);
                 }
             });
         }
@@ -61,16 +66,22 @@ export const catalogMetadataService = {
         // Tentar contar produtos pela VPS (fonte primária) para substituir/somar a contagem
         try {
             const { vpsApiService } = await import('./vpsApiService');
-            const vpsCounts = await vpsApiService.getCategoryCounts();
+            const vpsCounts = await vpsApiService.getCategoryCounts() as any[];
 
             if (vpsCounts && vpsCounts.length > 0) {
                 // Atualiza/Sobrescreve com os valores da VPS onde existirem
                 vpsCounts.forEach(row => {
                     if (row.category_id) {
                         const vpsCount = Number(row.count) || 0;
+                        // Fallback: se a VPS ainda não foi atualizada com o novo server.js, in_stock_count virá como undefined.
+                        // Nesse caso, assumimos que in_stock_count é igual a vpsCount provisoriamente.
+                        const vpsInStock = row.in_stock_count !== undefined ? Number(row.in_stock_count) : vpsCount;
                         // Usa o maior valor entre VPS e Supabase para evitar ocultar categoria por erro de sincronização
-                        const currentCount = countMap.get(row.category_id) || 0;
-                        countMap.set(row.category_id, Math.max(currentCount, vpsCount));
+                        const curr = countMap.get(row.category_id) || { count: 0, in_stock_count: 0 };
+                        countMap.set(row.category_id, {
+                            count: Math.max(curr.count, vpsCount),
+                            in_stock_count: Math.max(curr.in_stock_count, vpsInStock)
+                        });
                     }
                 });
             }
@@ -78,12 +89,16 @@ export const catalogMetadataService = {
             console.error('Erro ao buscar contagens de categoria da VPS:', err);
         }
 
-        return (cats || []).map(cat => ({
-            id: cat.id,
-            name: cat.name,
-            parent_id: cat.parent_id,
-            count: countMap.get(cat.id) || 0
-        }));
+        return (cats || []).map(cat => {
+            const stats = countMap.get(cat.id) || { count: 0, in_stock_count: 0 };
+            return {
+                id: cat.id,
+                name: cat.name,
+                parent_id: cat.parent_id,
+                count: stats.count,
+                in_stock_count: stats.in_stock_count
+            };
+        });
     },
 
 

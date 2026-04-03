@@ -90,7 +90,7 @@ fastify.get('/categories', async (req, reply) => {
 // ─── Category product counts (para navegação do catálogo) ──────────────────
 fastify.get('/products/category-counts', async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT category_id, COUNT(*) as count
+    `SELECT category_id, COUNT(*) as count, SUM(IF(stock_quantity > 0 OR stock_quantity IS NULL, 1, 0)) as in_stock_count
      FROM products
      WHERE status = 'active' AND category_id IS NOT NULL
      GROUP BY category_id`
@@ -200,7 +200,18 @@ fastify.get('/products', async (req, reply) => {
     params.push(customerId);
   }
 
-  sql += ' ORDER BY name ASC LIMIT ? OFFSET ?';
+  const allowedSortFields = ['created_at', 'updated_at', 'name', 'price_retail', 'price_promo', 'view_count'];
+  let sortBy = 'name';
+  let sortDirection = 'ASC';
+
+  if (req.query.sort_by && allowedSortFields.includes(req.query.sort_by)) {
+    sortBy = req.query.sort_by;
+  }
+  if (req.query.sort_direction && ['asc', 'desc'].includes(req.query.sort_direction.toLowerCase())) {
+    sortDirection = req.query.sort_direction.toUpperCase();
+  }
+
+  sql += ` ORDER BY ${sortBy} ${sortDirection} LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
   if (search || status === 'all') { // Log explicitly what we are about to query

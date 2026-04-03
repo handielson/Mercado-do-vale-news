@@ -180,9 +180,9 @@ class CatalogConfigService {
      * Aplicar regras de visibilidade nas categorias
      */
     async applyCategoryVisibilityRules(
-        categories: Array<{ id: string; name: string; parent_id?: string | null; count: number }>,
+        categories: Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count?: number }>,
         settings: CatalogSettings
-    ): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number }>> {
+    ): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count?: number }>> {
         // Regra: Ocultar categorias vazias
         if (settings.hide_empty_categories) {
             categories = categories.filter(cat => {
@@ -197,35 +197,13 @@ class CatalogConfigService {
         // Regra: Ocultar categorias sem estoque
         // Produtos com stock_quantity=null não monitoram estoque (ex: acessórios) → tratados como disponíveis
         if (settings.hide_categories_no_stock) {
-            const categoriesWithStock = await Promise.all(
-                categories.map(async (cat) => {
-                    // Verifica estoque da própria categoria
-                    const { data } = await supabase
-                        .from('products')
-                        .select('id')
-                        .eq('category_id', cat.id)
-                        .or('stock_quantity.gt.0,stock_quantity.is.null')
-                        .limit(1);
-
-                    if (data && data.length > 0) return cat;
-
-                    // Se não tiver, e se for uma categoria pai, verifica nas subcategorias
-                    const childrenIds = categories.filter(c => c.parent_id === cat.id).map(c => c.id);
-                    if (childrenIds.length > 0) {
-                        const { data: childData } = await supabase
-                            .from('products')
-                            .select('id')
-                            .in('category_id', childrenIds)
-                            .or('stock_quantity.gt.0,stock_quantity.is.null')
-                            .limit(1);
-                        if (childData && childData.length > 0) return cat;
-                    }
-
-                    return null;
-                })
-            );
-
-            categories = categoriesWithStock.filter(cat => cat !== null) as typeof categories;
+            categories = categories.filter(cat => {
+                if ((cat.in_stock_count ?? 0) > 0) return true;
+                // Mantém se for categoria pai e alguma subcategoria tiver estoque
+                const hasFilledChild = categories.some(child => child.parent_id === cat.id && (child.in_stock_count ?? 0) > 0);
+                if (hasFilledChild) return true;
+                return false;
+            });
         }
 
         return categories;

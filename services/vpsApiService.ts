@@ -95,8 +95,8 @@ class VpsApiService {
     return this.fetchSafe<any[]>('/categories');
   }
 
-  async getCategoryCounts(): Promise<{ category_id: string; count: number }[] | null> {
-    return this.fetchSafe<{ category_id: string; count: number }[]>('/products/category-counts');
+  async getCategoryCounts(): Promise<{ category_id: string; count: number; in_stock_count: number }[] | null> {
+    return this.fetchSafe<{ category_id: string; count: number; in_stock_count: number }[]>('/products/category-counts');
   }
 
 

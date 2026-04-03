@@ -244,7 +244,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
 
     // Estatísticas de filtros
     const [filterStats, setFilterStats] = useState<{
-        categories: Array<{ id: string; name: string; parent_id?: string | null; count: number }>;
+        categories: Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count?: number }>;
         brands: Array<{ name: string; count: number }>;
         priceRange?: { min: number; max: number };
     }>({
