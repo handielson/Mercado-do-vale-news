@@ -12,8 +12,9 @@ interface Category {
 
 interface CategoryNavProps {
     activeCategory: string | null;
-    onCategoryChange: (categoryId: string | null) => void;
+    onCategoryChange: (categoryId: string | string[] | null) => void;
     categories: Array<{ id?: string; name: string; count: number; parent_id?: string | null }>;
+    activeCategoryIds?: string[];
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -30,7 +31,8 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 export const CategoryNav: React.FC<CategoryNavProps> = ({
     activeCategory,
     onCategoryChange,
-    categories
+    categories,
+    activeCategoryIds = []
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -81,12 +83,25 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
     const CategoryCard = ({ category }: { category: Category }) => {
         // O card raiz fica ativo se "todos", se ele próprio ou se uma subcategoria dele estiver ativa
         const isActive = activeRootId === category.id;
-        
+        const handleCategoryClick = () => {
+            if (category.id === null) {
+                onCategoryChange(null);
+                return;
+            }
+            const children = childCategories.filter(c => c.parent_id === category.id);
+            if (children.length > 0) {
+                const ids = [category.id, ...children.map(c => c.id!)];
+                onCategoryChange(ids);
+            } else {
+                onCategoryChange(category.id);
+            }
+        };
+
         return (
             <motion.button
                 whileHover={{ scale: 1.02, y: -2 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => onCategoryChange(category.id)}
+                onClick={handleCategoryClick}
                 className={`
                     relative flex flex-col items-center justify-center p-3 sm:p-4 
                     rounded-2xl border transition-all duration-300 w-full min-h-[90px]
@@ -175,10 +190,11 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
                             className="overflow-hidden"
                         >
                             <div className="pt-4 border-t border-slate-100 flex flex-wrap gap-2 justify-center">
+                                {/* Todos — passa o pai + todos os filhos */}
                                 <button 
-                                    onClick={() => onCategoryChange(activeRootId)}
+                                    onClick={() => onCategoryChange([activeRootId!, ...activeRootChildren.map(c => c.id!)])}
                                     className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                                        activeCategory === activeRootId 
+                                        activeCategoryIds.length > 1
                                             ? 'bg-blue-600 text-white shadow-md' 
                                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                     }`}
@@ -190,7 +206,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
                                         key={child.id!}
                                         onClick={() => onCategoryChange(child.id!)}
                                         className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                                            activeCategory === child.id 
+                                            activeCategoryIds.length === 1 && activeCategoryIds[0] === child.id 
                                                 ? 'bg-blue-600 text-white shadow-md' 
                                                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                         }`}

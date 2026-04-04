@@ -408,29 +408,6 @@ export const unitService = {
         return data || [];
     },
 
-    /**
-     * Marca unidade como VENDIDA/entregue ao cliente.
-     * Registra sold_at e limpa referências de reserva.
-     * Chamado pelo admin ao confirmar entrega física.
-     */
-    async markAsSold(unitId: string): Promise<Unit> {
-        const companyId = await getCompanyId();
-
-        const { data, error } = await supabase
-            .from('units')
-            .update({
-                status: UnitStatus.SOLD,
-                sold_at: new Date().toISOString(),
-            })
-            .eq('id', unitId)
-            .eq('company_id', companyId)
-            .select()
-            .single();
-
-        if (error || !data) throw new Error('Falha ao marcar unidade como vendida.');
-
-        return transformFromDB(data);
-    },
 };
 
 

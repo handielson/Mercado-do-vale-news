@@ -111,21 +111,9 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             }
             setError(null);
 
-            // Expand category to include its children automatically
-            let expandedCategories = filters.categories;
-            if (filters.categories && filters.categories.length === 1 && filterStats?.categories?.length > 0) {
-                const selectedId = filters.categories[0];
-                const childIds = filterStats.categories
-                    .filter(c => c.parent_id === selectedId)
-                    .map(c => c.id);
-                if (childIds.length > 0) {
-                    expandedCategories = [selectedId, ...childIds];
-                }
-            }
-
             const response = await catalogService.getProducts({
                 search: searchQuery || undefined,
-                categories: expandedCategories,
+                categories: filters.categories,
                 brands: filters.brands,
                 priceRange: filters.priceRange ? [filters.priceRange.min, filters.priceRange.max] : undefined,
                 inStockOnly: filters.inStockOnly,
@@ -271,13 +259,23 @@ export function useCatalog(options: UseCatalogOptions = {}) {
 
                 setFilterStats({ categories: filteredCategories, brands, priceRange: priceRange ?? undefined });
 
-                // Traduzir slug de categoria via URL para ID real
-                if (initialCategory && !initialCategory.match(/^[0-9a-f]{8}-/i)) {
-                    const matchedCat = filteredCategories.find(c => c.name.toLowerCase() === initialCategory.toLowerCase());
+                // Expandir categoria inicial da URL (seja por nome ou UUID) para incluir IDs dos filhos
+                if (initialCategory) {
+                    let matchedCat;
+                    if (initialCategory.match(/^[0-9a-f]{8}-/i)) {
+                        matchedCat = filteredCategories.find(c => c.id === initialCategory);
+                    } else {
+                        matchedCat = filteredCategories.find(c => c.name.toLowerCase() === initialCategory.toLowerCase());
+                    }
+
                     if (matchedCat) {
+                        const childIds = filteredCategories
+                            .filter(c => c.parent_id === matchedCat.id)
+                            .map(c => c.id);
+                            
                         setFilters(prev => ({
                             ...prev,
-                            categories: [matchedCat.id]
+                            categories: [matchedCat.id, ...childIds]
                         }));
                     }
                 }

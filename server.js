@@ -185,10 +185,18 @@ fastify.get('/products', async (req, reply) => {
 
   if (status && status !== 'all') { sql += ' AND status = ?'; params.push(status); }
   else if (!status && !search)    { sql += ' AND status = ?'; params.push('active'); }
-  // When search is provided without explicit status → no status filter (allows finding by SKU/EAN regardless of status)
-  // status=all: retorna todos os status (admin)
 
-  if (category)           { sql += ' AND category_id = ?';   params.push(category); }
+  if (category) {
+    if (category.includes(',')) {
+      const cats = category.split(',').map(c => c.trim()).filter(Boolean);
+      sql += ` AND category_id IN (${cats.map(() => '?').join(',')})`;
+      params.push(...cats);
+    } else {
+      sql += ' AND category_id = ?';
+      params.push(category);
+    }
+  }
+
   if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ? OR slug LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
   if (req.query.parent_id){ sql += ' AND parent_id = ?';     params.push(req.query.parent_id); }
   if (req.query.sku)      { sql += ' AND sku = ?';           params.push(req.query.sku); }
@@ -211,7 +219,10 @@ fastify.get('/products', async (req, reply) => {
     sortDirection = req.query.sort_direction.toUpperCase();
   }
 
-  sql += ` ORDER BY ${sortBy} ${sortDirection} LIMIT ? OFFSET ?`;
+  // Secondary sort: desempata por created_at DESC quando updated_at/created_at forem iguais (batch simultâneo)
+  const secondarySort = (sortBy === 'updated_at' || sortBy === 'created_at') ? ', created_at DESC' : '';
+  sql += ` ORDER BY ${sortBy} ${sortDirection}${secondarySort} LIMIT ? OFFSET ?`;
+
   params.push(limit, offset);
 
   if (search || status === 'all') { // Log explicitly what we are about to query
@@ -492,6 +503,30 @@ fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, r
   );
   return { ok: true };
 });
+
+// Toca updated_at de todos os produtos de uma categoria (para "Mais Recentes")
+fastify.patch('/products/touch-category', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { category_id, ids } = req.body || {};
+  if (!category_id && (!ids || !Array.isArray(ids) || ids.length === 0)) {
+    return reply.code(400).send({ error: 'category_id or ids[] required' });
+  }
+  let result;
+  if (ids && ids.length > 0) {
+    const ph = ids.map(() => '?').join(',');
+    [result] = await pool.query(
+      `UPDATE products SET updated_at=CURRENT_TIMESTAMP WHERE id IN (${ph})`,
+      ids
+    );
+  } else {
+    [result] = await pool.query(
+      'UPDATE products SET updated_at=CURRENT_TIMESTAMP WHERE category_id=?',
+      [category_id]
+    );
+  }
+  console.log(`[touch-category] updated_at bumped: ${result.affectedRows} produtos (cat=${category_id || 'by ids'})`);
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
 
 // ─── Combos (write) ─────────────────────────────────────────────────────────
 

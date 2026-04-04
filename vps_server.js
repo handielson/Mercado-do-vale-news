@@ -1908,45 +1908,6 @@ async function addColumnIfMissing(table, column, definition) {
     console.log(`[migration] ${table}.${column} already exists — skip`);
   }
 }
-// ─── Payment Fees ────────────────────────────────────────────────────────────
-
-// GET /payment-fees — lista todas as taxas
-fastify.get('/payment-fees', { preHandler: requireSyncKey }, async (req, reply) => {
-  const [rows] = await pool.query(
-    `SELECT id, method, installments, operator_fee_pct, applied_fee_pct, channel, created_at, updated_at
-     FROM payment_fees ORDER BY method ASC, installments ASC`
-  );
-  reply.header('Cache-Control', 'no-store');
-  return rows;
-});
-
-// PUT /payment-fees — substitui todas as taxas atomicamente
-fastify.put('/payment-fees', { preHandler: requireSyncKey }, async (req, reply) => {
-  const fees = req.body;
-  if (!Array.isArray(fees)) return reply.code(400).send({ error: 'Expected array' });
-
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    await conn.query('DELETE FROM payment_fees');
-    for (const f of fees) {
-      const id = require('crypto').randomUUID();
-      await conn.query(
-        `INSERT INTO payment_fees (id, method, installments, operator_fee_pct, applied_fee_pct, channel)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, f.method, f.installments || 1, f.operator_fee_pct ?? 0, f.applied_fee_pct ?? 0, f.channel || 'presencial']
-      );
-    }
-    await conn.commit();
-    return { ok: true, count: fees.length };
-  } catch (err) {
-    await conn.rollback();
-    reply.code(500).send({ error: err.message });
-  } finally {
-    conn.release();
-  }
-});
-
 
 async function runMigrations() {
   await pool.query(`

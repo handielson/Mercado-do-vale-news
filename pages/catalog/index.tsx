@@ -193,6 +193,27 @@ function CatalogContent() {
         return productGroups.slice(0, visibleCount);
     }, [productGroups, visibleCount]);
 
+    // Modo "Todos" — múltiplas categorias selecionadas (pai + filhos)
+    const isAllChildrenMode = filters.categories.length > 1;
+
+    // Agrupar productGroups por subcategoria para o modo Seções
+    const categorySections = useMemo(() => {
+        if (!isAllChildrenMode) return [];
+
+        const catList = filterStats?.categories || [];
+        const catMap = new Map(catList.map(c => [c.id!, c.name]));
+
+        return filters.categories
+            .map(catId => ({
+                categoryId: catId,
+                categoryName: catMap.get(catId) || 'Categoria',
+                groups: productGroups.filter(g =>
+                    g.representativeProduct.category_id === catId
+                )
+            }))
+            .filter(s => s.groups.length > 0);
+    }, [isAllChildrenMode, filters.categories, productGroups, filterStats]);
+
     const actualHasMore = hasMore || visibleCount < productGroups.length;
 
     const handleLoadMore = useCallback(() => {
@@ -264,17 +285,23 @@ function CatalogContent() {
             {/* Category Navigation - NOVO */}
             <CategoryNav
                 activeCategory={filters.categories[0] || null}
+                activeCategoryIds={filters.categories}
                 onCategoryChange={(categoryId) => {
+                    const ids = Array.isArray(categoryId)
+                        ? categoryId
+                        : categoryId ? [categoryId] : [];
+
                     setFilters({
                         ...filters,
-                        categories: categoryId ? [categoryId] : []
+                        categories: ids
                     });
                     
                     const newParams = new URLSearchParams(searchParams);
-                    if (categoryId) {
+                    const firstId = ids[0];
+                    if (firstId) {
                         // Tentar usar o nome legível na URL se achado, senão o ID
-                        const catMetadata = filterStats?.categories.find(c => c.id === categoryId);
-                        newParams.set('categoria', catMetadata ? catMetadata.name : categoryId);
+                        const catMetadata = filterStats?.categories.find(c => c.id === firstId);
+                        newParams.set('categoria', catMetadata ? catMetadata.name : firstId);
                     } else {
                         newParams.delete('categoria');
                     }
@@ -461,23 +488,65 @@ function CatalogContent() {
                 )}
 
                 {/* Grid de produtos - Largura total */}
-                <ProductGroupGrid
-                    groups={visibleGroups}
-                    loading={loading && productGroups.length === 0}
-                    hasMore={actualHasMore}
-                    onLoadMore={handleLoadMore}
-                    onFavorite={toggleFavorite}
-                    onShare={handleShare}
-                    favorites={favorites}
-                    mobileColumns={2}
-                    variant={mobileView === 'list' ? 'list' : 'grid'}
-                    columns={{
-                        mobile: 2,
-                        tablet: 3,
-                        desktop: 4,
-                        wide: 5
-                    }}
-                />
+                {isAllChildrenMode ? (
+                    /* Modo Todos: seções por subcategoria */
+                    <div className="space-y-12">
+                        {categorySections.length === 0 && !loading && (
+                            <div className="text-center py-16 text-slate-400">
+                                <p className="text-lg font-medium">Nenhum produto encontrado</p>
+                            </div>
+                        )}
+                        {categorySections.map(section => (
+                            <div key={section.categoryId} className="relative">
+                                {/* Divisor com título da subcategoria */}
+                                <div className="flex items-center gap-3 mb-6">
+                                    <h2 className="text-xl font-bold text-slate-800">
+                                        {section.categoryName}
+                                    </h2>
+                                    <span className="text-sm text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
+                                        {section.groups.length} {section.groups.length === 1 ? 'item' : 'itens'}
+                                    </span>
+                                    <div className="flex-1 h-px bg-slate-200" />
+                                </div>
+                                <ProductGroupGrid
+                                    groups={section.groups}
+                                    loading={loading && section.groups.length === 0}
+                                    hasMore={false}
+                                    onLoadMore={() => {}}
+                                    onFavorite={toggleFavorite}
+                                    onShare={handleShare}
+                                    favorites={favorites}
+                                    mobileColumns={2}
+                                    variant={mobileView === 'list' ? 'list' : 'grid'}
+                                    columns={{
+                                        mobile: 2,
+                                        tablet: 3,
+                                        desktop: 4,
+                                        wide: 5
+                                    }}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <ProductGroupGrid
+                        groups={visibleGroups}
+                        loading={loading && productGroups.length === 0}
+                        hasMore={actualHasMore}
+                        onLoadMore={handleLoadMore}
+                        onFavorite={toggleFavorite}
+                        onShare={handleShare}
+                        favorites={favorites}
+                        mobileColumns={2}
+                        variant={mobileView === 'list' ? 'list' : 'grid'}
+                        columns={{
+                            mobile: 2,
+                            tablet: 3,
+                            desktop: 4,
+                            wide: 5
+                        }}
+                    />
+                )}
             </div>
 
             {/* Carrinho de Compras Online */}

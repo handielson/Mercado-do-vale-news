@@ -20,5 +20,40 @@
       "vps-step3-migrate.cjs"
     ],
     "notas": ""
+  },
+  {
+    "id": "2026-04-02_149ca56_refatorado-server-js-api-de-produtos-par",
+    "date": "02/04/2026 às 22:55 (Horário de Brasília)",
+    "commit": "149ca56",
+    "commitMsg": "fix: resolve ordenação do catalogo VPS e contagem de estoque",
+    "type": "Automático (pós-commit)",
+    "summary": "Refatorado server.js (API de produtos) para calcular in_stock_count diretamente no SQL da VPS e habilitada a ordenação dinâmica para consertar a aba de Mais Recentes. Configuração do catalogMetadataService também atualizada.",
+    "motivo": "Produtos e categorias (ex: Tablets) não apareciam publicamente pois o contador de estoque dependia do Supabase não sincronizado. A aba \"Mais Recentes\" estava falhando pois o backend travava a ordenação em formato alfabético.",
+    "files": [
+      "hooks/useCatalog.ts",
+      "server.js",
+      "services/catalogConfigService.ts",
+      "services/catalogMetadataService.ts",
+      "services/vpsApiService.ts"
+    ],
+    "notas": "Deploy do banco validado. Dados agora persistem corretamente da VPS MySQL como base da verdade absoluta."
+  },
+  {
+    "id": "2026-04-03_MANUAL_field-presets-e-correcao-rota-duplicada",
+    "date": "03/04/2026 às 14:59 (Horário de Brasília)",
+    "commit": "07756b4",
+    "commitMsg": "feat: presets de campos, alteracao em lote de categoria e campos ocultos por padrao",
+    "type": "Manual (sob demanda pelo desenvolvedor)",
+    "summary": "\"Implementação dos presets de campos de categoria + correção da rota duplicada payment-fees\"",
+    "motivo": "\"Novos presets para padronizar campos de categorias; rota duplicada travava o servidor\"",
+    "files": [
+      "components/categories/CategoryEditPage.tsx",
+      "pages/admin/settings/categories/index.tsx",
+      "pages/admin/settings/categories/presets.tsx",
+      "routes/index.tsx",
+      "services/vpsApiService.ts",
+      "vps_server.js"
+    ],
+    "notas": "n"
   }
 ]

@@ -67,17 +67,27 @@ export const catalogService = {
         // ── 100% VPS API PATH ──────────────────────────────────────────────────
         // Agora sempre utilizamos o fluxo VPS, independentemente dos filtros aplicados.
         try {
-                const [vpsRaw, vpsCats] = await Promise.all([
-                    vpsApiService.getProducts({
-                        // status: 'active', // Removido: o VPS pode usar "Ativo", "DISPONÍVEL", etc. Filtragem será local.
-                        category: filters?.categories?.length === 1 ? filters.categories[0] : undefined,
+                let vpsRaw: any = null;
+                const vpsCats = await vpsApiService.getCategories();
+
+                // Quando tem categoria específica e não tem busca, filtra na VPS.
+                // Se tiver busca de texto, a API já lida via query `search`.
+                if (filters?.categories && filters.categories.length > 0 && !filters.search) {
+                    vpsRaw = await vpsApiService.getProducts({
+                        category: filters.categories.join(','),
+                        search: filters?.search,
+                        favoritesOnly: filters?.favoritesOnly,
+                        customerId: filters?.customerId,
+                        limit: 2000,
+                    });
+                } else {
+                    vpsRaw = await vpsApiService.getProducts({
                         search: filters?.search,
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
                         limit: 1000,
-                    }),
-                    vpsApiService.getCategories(),
-                ]);
+                    });
+                }
 
                 if (vpsRaw !== null) {
                     const rawSettings = await catalogConfigService.getSettings();
