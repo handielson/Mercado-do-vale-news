@@ -9,7 +9,8 @@ class CatalogSectionsService {
     private cacheDuration = 5 * 60 * 1000; // 5 minutos
 
     // Prefix for persistent LocalStorage caching of section products
-    private CACHE_KEY_PREFIX = '@mv:section_products:';
+    // ⚠️ Bump a versão aqui sempre que a lógica de fetch mudar (invalida cache antigo automaticamente)
+    private CACHE_KEY_PREFIX = '@mv:section_products:v2:';
 
     // Helper to safely access localStorage (prevents SSR errors)
     private getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
@@ -217,9 +218,8 @@ class CatalogSectionsService {
             if (section.section_type === 'new')      params.append('is_new', 'true');
             if (section.section_type === 'promotions') params.append('has_discount', 'true');
 
-            if (section.filter_categories && section.filter_categories.length > 0) {
-                params.append('in_category', section.filter_categories.join(','));
-            }
+            // NOTA: O VPS só suporta ?category= (ID único). O parâmetro in_category é ignorado.
+            // O filtro por múltiplas categorias é aplicado client-side abaixo após o fetch.
 
             if (section.filter_brands && section.filter_brands.length > 0) {
                 params.append('in_brand', section.filter_brands.join(','));
@@ -241,9 +241,17 @@ class CatalogSectionsService {
                 ? '/vps-proxy'
                 : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
 
-            // Sorting
-            if (section.sort_by) params.append('sort_by', section.sort_by);
-            if (section.sort_direction) params.append('sort_direction', section.sort_direction);
+            // Sorting — default seguro: updated_at DESC para qualquer seção sem sort configurado
+            // MOTIVO: produtos movidos para novas subcategorias têm updated_at recente mas created_at antigo
+            // updated_at reflete quando o produto foi modificado/recategorizado, garantindo que
+            // "Mais Recentes" mostre produtos recém-adicionados ou atualizados
+            if (section.sort_by) {
+                params.append('sort_by', section.sort_by);
+                if (section.sort_direction) params.append('sort_direction', section.sort_direction);
+            } else {
+                params.append('sort_by', 'updated_at');
+                params.append('sort_direction', 'desc');
+            }
 
             // Fetch dynamic products
             const res = await fetch(`${VPS_URL}/products?${params.toString()}`);
@@ -252,6 +260,22 @@ class CatalogSectionsService {
             
             // Normaliza dados da VPS para campos canônicos (elimina colisões VPS ↔ Supabase)
             products = (data || []).map((p: any) => normalizeProduct(p) as unknown as CatalogProduct);
+
+            // Filtro client-side por categorias (VPS ignora in_category, só aceita category único)
+            // Expande filter_categories para incluir subcategorias do Supabase
+            if (section.filter_categories && section.filter_categories.length > 0 && !section.pinned_product_ids?.length) {
+                // Busca hierarquia de categorias para expandir pais → filhos
+                const { data: allCats } = await supabase.from('categories').select('id, parent_id');
+                const parentSet = new Set(section.filter_categories);
+                const allowedCats = new Set(section.filter_categories);
+                for (const cat of (allCats || [])) {
+                    if (cat.parent_id && parentSet.has(cat.parent_id)) {
+                        allowedCats.add(cat.id);
+                    }
+                }
+                products = products.filter(p => p.category_id && allowedCats.has(p.category_id));
+                console.log(`[catalogSectionsService] Filtro client-side por categorias (expandido): ${products.length} de ${data?.length || 0} (categorias: ${[...allowedCats].length})`);
+            }
 
             // Replace with Pinned products if any (to preserve sorting and exact matching)
             // Note: Since VPS API `in_ids` would just filter them, if section defines pins we do an explicit lookup.
@@ -410,6 +434,20 @@ class CatalogSectionsService {
     }
 
     private clearCache() {
+        this.cache.clear();
+    }
+
+    /**
+     * Limpar todo o cache de produtos de seções (localStorage) + cache de seções (memória)
+     * útil após criar/mover produtos para garantir que as seções reflitam os dados atuais.
+     */
+    public clearProductsCache(): void {
+        const storage = this.getStorage();
+        if (storage) {
+            const keysToRemove = Object.keys(storage).filter(k => k.startsWith(this.CACHE_KEY_PREFIX));
+            keysToRemove.forEach(k => storage.removeItem(k));
+            console.log(`[catalogSectionsService] Cleared ${keysToRemove.length} section product cache entries from localStorage`);
+        }
         this.cache.clear();
     }
 }
