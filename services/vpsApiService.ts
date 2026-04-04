@@ -104,6 +104,12 @@ class VpsApiService {
     [...this.cache.keys()].filter(k => k.startsWith('/products')).forEach(k => this.cache.delete(k));
   }
 
+  // ── Categories ─────────────────────────────────────────────────────────
+
+  async getCategoryCounts() {
+    return this.fetchSafe<any[]>('/products/category-counts') || [];
+  }
+
   // ── Field Presets ──────────────────────────────────────────────────────
 
   async getFieldPresets(): Promise<FieldPreset[] | null> {

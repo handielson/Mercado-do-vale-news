@@ -161,18 +161,27 @@ export const catalogService = {
 
                     if (settings.hide_out_of_stock || filters?.inStockOnly) {
                         const lenBefore = result.length;
-                        result = result.filter(p => !p.track_inventory || (p.stock_quantity || 0) > 0);
+                        result = result.filter(p => {
+                            const keep = !p.track_inventory || (p.stock_quantity || 0) > 0;
+                            return keep;
+                        });
                         console.log(`[catalogService] Ocultados por falta de estoque (track_inventory + <= 0): ${lenBefore - result.length}`);
                     }
                     if (settings.hide_zero_price) {
                         const lenBefore = result.length;
                         // Combos (is_combo=1) nunca são filtrados por preço zero — seu preço é calculado
-                        result = result.filter(p => p.is_combo === 1 || p.is_combo === true || (p.price_retail || 0) > 0);
+                        result = result.filter(p => {
+                            const keep = p.is_combo === 1 || p.is_combo === true || (p.price_retail || 0) > 0;
+                            return keep;
+                        });
                         console.log(`[catalogService] Ocultados por preço 0: ${lenBefore - result.length}`);
                     }
                     if (settings.min_stock_to_show > 0) {
                         const lenBefore = result.length;
-                        result = result.filter(p => !p.track_inventory || (p.stock_quantity || 0) >= settings.min_stock_to_show);
+                        result = result.filter(p => {
+                            const keep = !p.track_inventory || (p.stock_quantity || 0) >= settings.min_stock_to_show;
+                            return keep;
+                        });
                         console.log(`[catalogService] Ocultados por estoque min_stock_to_show (${settings.min_stock_to_show}): ${lenBefore - result.length}`);
                     }
                     

@@ -138,11 +138,13 @@ function CatalogContent() {
         return () => clearInterval(timer);
     }, [promoActive, promoData]);
 
+
     const loadSections = async () => {
         try {
             setSectionsLoading(true);
             const data = await catalogSectionsService.getActiveSections();
             setSections(data);
+            console.log('[DEBUG] Sections loaded:', data);
         } catch (error: any) {
             if (error.code !== '20' && error.name !== 'AbortError' && !error.message?.includes('aborted')) {
                 console.error('Erro ao carregar seções:', error);
@@ -186,8 +188,10 @@ function CatalogContent() {
     // Group products by variants (Brand + Model + RAM + Storage)
     // Pass includeOutOfStock=true for admin so zero-stock SKUs still get grouped
     const productGroups = useMemo(() => {
-        return groupProductsByVariants(products, isAdmin);
+        const groups = groupProductsByVariants(products, isAdmin);
+        return groups;
     }, [products, isAdmin]);
+
 
     const visibleGroups = useMemo(() => {
         return productGroups.slice(0, visibleCount);
