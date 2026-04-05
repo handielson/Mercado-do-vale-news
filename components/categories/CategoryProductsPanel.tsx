@@ -214,9 +214,13 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                             </span>
 
                             {/* Price */}
-                            <span className="text-sm text-slate-600 flex-shrink-0 w-20 text-right">
-                                {product.price_retail > 0
-                                    ? `R$ ${product.price_retail.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                            <span className="text-sm font-medium text-slate-700 flex-shrink-0 w-28 text-right whitespace-nowrap">
+                                {parseFloat(String(product.price_retail)) > 0
+                                    ? parseFloat(String(product.price_retail)).toLocaleString('pt-BR', {
+                                        style: 'currency',
+                                        currency: 'BRL',
+                                        minimumFractionDigits: 2,
+                                    })
                                     : '-'
                                 }
                             </span>
