@@ -213,10 +213,10 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                                 {product.stock_quantity} un
                             </span>
 
-                            {/* Price */}
+                            {/* Price — stored as INTEGER CENTS (4900 = R$ 49,00) */}
                             <span className="text-sm font-medium text-slate-700 flex-shrink-0 w-28 text-right whitespace-nowrap">
                                 {parseFloat(String(product.price_retail)) > 0
-                                    ? parseFloat(String(product.price_retail)).toLocaleString('pt-BR', {
+                                    ? (parseFloat(String(product.price_retail)) / 100).toLocaleString('pt-BR', {
                                         style: 'currency',
                                         currency: 'BRL',
                                         minimumFractionDigits: 2,
