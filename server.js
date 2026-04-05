@@ -70,7 +70,25 @@ fastify.get('/health', async () => ({
   db: 'mysql'
 }));
 
-// ─── Categories ────────────────────────────────────────────────────────────
+// ─── Migração temporária: adiciona production_days ─────────────────────────
+fastify.post('/admin/migrate/production-days', { preHandler: requireSyncKey }, async (req, reply) => {
+  const results = [];
+  const queries = [
+    `ALTER TABLE categories ADD COLUMN IF NOT EXISTS production_days INT DEFAULT NULL COMMENT 'Prazo de fabricação padrão da categoria (dias úteis)'`,
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS production_days INT DEFAULT NULL COMMENT 'Prazo de fabricação individual, sobrescreve a categoria'`,
+  ];
+  for (const sql of queries) {
+    try {
+      await pool.query(sql);
+      results.push({ sql: sql.substring(0, 60) + '...', ok: true });
+    } catch (e) {
+      results.push({ sql: sql.substring(0, 60) + '...', ok: false, error: e.message });
+    }
+  }
+  return { migrated: true, results };
+});
+
+
 fastify.get('/categories', async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT id, name, slug, config, warranty_days, production_days, sort_order,
