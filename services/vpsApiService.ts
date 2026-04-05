@@ -106,9 +106,7 @@ class VpsApiService {
 
   // ── Categories ─────────────────────────────────────────────────────────
 
-  async getCategoryCounts() {
-    return this.fetchSafe<any[]>('/products/category-counts') || [];
-  }
+
 
   // ── Field Presets ──────────────────────────────────────────────────────
 
@@ -166,7 +164,7 @@ class VpsApiService {
   }
 
 
-  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string }): Promise<any[] | null> {
+  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string; favoritesOnly?: boolean; customerId?: string }): Promise<any[] | null> {
     const qs = new URLSearchParams();
     if (params?.category)  qs.set('category',  params.category);
     if (params?.status)    qs.set('status',     params.status);
@@ -178,6 +176,8 @@ class VpsApiService {
     if (params?.sku)       qs.set('sku',         params.sku);
     if (params?.ean)       qs.set('ean',         params.ean);
     if (params?.model_id)  qs.set('model_id',    params.model_id);
+    if (params?.favoritesOnly) qs.set('favoritesOnly', 'true');
+    if (params?.customerId) qs.set('customerId', params.customerId);
     if (params?.noCache)   qs.set('_t',          String(Date.now()));
     const query = qs.toString() ? `?${qs.toString()}` : '';
     // [DEBUG] Explicit log for search requests
@@ -302,12 +302,12 @@ class VpsApiService {
   }
 
   async getFavoritesRanking(limit: number = 100): Promise<any[]> {
-    const res = await this.fetchSafe<any[]>(`/admin/reports/favorites-ranking?limit=${limit}`, false, true);
+    const res = await this.fetchSafe<any[]>(`/admin/reports/favorites-ranking?limit=${limit}`, false);
     return res || [];
   }
 
   async getCartsRanking(limit: number = 100): Promise<any[]> {
-    const res = await this.fetchSafe<any[]>(`/admin/reports/carts-ranking?limit=${limit}`, false, true);
+    const res = await this.fetchSafe<any[]>(`/admin/reports/carts-ranking?limit=${limit}`, false);
     return res || [];
   }
 
@@ -480,6 +480,40 @@ class VpsApiService {
 
   clearCache(): void {
     this.cache.clear();
+  }
+
+  // --- PRODUCT CATEGORIES (multi-categoria) ---
+
+  async getProductsByCategory(categoryId: string, page = 1, limit = 20): Promise<{
+    items: Array<{
+      id: string; name: string; sku: string; brand: string;
+      category_id: string; status: string; price_retail: number;
+      stock_quantity: number; thumbnail: string | null; is_primary_category: boolean;
+    }>;
+    total: number; page: number; limit: number; hasMore: boolean;
+  }> {
+    const qs = `?page=${page}&limit=${limit}`;
+    const url = `/products/by-category/${categoryId}${qs}`;
+    const cached = this.cache.get(url);
+    if (cached) return cached as any;
+    const res = await fetch(`${this.baseUrl}${url}`);
+    if (!res.ok) throw new Error(`getProductsByCategory failed: ${res.status}`);
+    const data = await res.json();
+    this.cache.set(url, data);
+    return data;
+  }
+
+  async addProductCategory(productId: string, categoryId: string): Promise<boolean> {
+    return this.writeSafe('POST', '/product-categories', { product_id: productId, category_id: categoryId });
+  }
+
+  async removeProductCategory(productId: string, categoryId: string): Promise<boolean> {
+    return this.writeSafe('DELETE', `/product-categories/${productId}/${categoryId}`);
+  }
+
+  async moveProductCategory(productId: string, categoryId: string): Promise<boolean> {
+    // Atualiza categoria principal e remove da tabela extra automaticamente
+    return this.writeSafe('PATCH', `/products/${productId}/category`, { category_id: categoryId });
   }
 }
 

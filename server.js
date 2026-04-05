@@ -1933,7 +1933,97 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] payment_fees table: OK');
+
+  // Tabela de multi-categoria (produtos em mais de uma categoria)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_categories (
+      product_id  VARCHAR(36) NOT NULL,
+      category_id VARCHAR(36) NOT NULL,
+      created_at  DATETIME DEFAULT NOW(),
+      PRIMARY KEY (product_id, category_id),
+      INDEX idx_pc_category (category_id),
+      INDEX idx_pc_product (product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] product_categories table: OK');
 }
+
+// ─── Product-Categories (multi-categoria) ────────────────────────────────────
+
+// GET /products/by-category/:id?page=1&limit=20
+// Retorna produtos da categoria (principal OU extra), paginados
+fastify.get('/products/by-category/:id', async (req, reply) => {
+  const categoryId = req.params.id;
+  const limit  = Math.min(parseInt(req.query.limit) || 20, 100);
+  const page   = Math.max(parseInt(req.query.page)  || 1, 1);
+  const offset = (page - 1) * limit;
+
+  // Busca produtos cuja categoria principal OU extra é a solicitada
+  const [rows] = await pool.query(
+    `SELECT p.id, p.name, p.sku, p.brand, p.category_id, p.status,
+            p.price_retail, p.stock_quantity,
+            CASE WHEN p.images IS NOT NULL AND JSON_LENGTH(p.images) > 0
+                      AND JSON_UNQUOTE(JSON_EXTRACT(p.images, '$[0]')) LIKE 'http%'
+                 THEN JSON_UNQUOTE(JSON_EXTRACT(p.images, '$[0]'))
+                 ELSE NULL END AS thumbnail,
+            (p.category_id = ?) AS is_primary_category
+     FROM products p
+     WHERE p.category_id = ?
+        OR p.id IN (SELECT product_id FROM product_categories WHERE category_id = ?)
+     ORDER BY p.name ASC
+     LIMIT ? OFFSET ?`,
+    [categoryId, categoryId, categoryId, limit, offset]
+  );
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(DISTINCT p.id) as total
+     FROM products p
+     WHERE p.category_id = ?
+        OR p.id IN (SELECT product_id FROM product_categories WHERE category_id = ?)`,
+    [categoryId, categoryId]
+  );
+
+  reply.header('Cache-Control', 'no-store');
+  return { items: rows, total, page, limit, hasMore: offset + rows.length < total };
+});
+
+// POST /product-categories — adiciona produto a categoria extra
+fastify.post('/product-categories', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { product_id, category_id } = req.body || {};
+  if (!product_id || !category_id) {
+    return reply.code(400).send({ error: 'product_id and category_id required' });
+  }
+  await pool.query(
+    `INSERT IGNORE INTO product_categories (product_id, category_id) VALUES (?, ?)`,
+    [product_id, category_id]
+  );
+  return { ok: true };
+});
+
+// DELETE /product-categories/:product_id/:category_id — remove produto de categoria extra
+fastify.delete('/product-categories/:product_id/:category_id', { preHandler: requireSyncKey }, async (req, reply) => {
+  await pool.query(
+    `DELETE FROM product_categories WHERE product_id = ? AND category_id = ?`,
+    [req.params.product_id, req.params.category_id]
+  );
+  return { ok: true };
+});
+
+// PATCH /products/:id/category — move produto para outra categoria principal
+fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { category_id } = req.body || {};
+  if (!category_id) return reply.code(400).send({ error: 'category_id required' });
+  await pool.query(
+    `UPDATE products SET category_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [category_id, req.params.id]
+  );
+  // Remove da tabela extra caso estivesse lá para evitar duplicata visual
+  await pool.query(
+    `DELETE FROM product_categories WHERE product_id = ? AND category_id = ?`,
+    [req.params.id, category_id]
+  );
+  return { ok: true };
+});
 
 // ─── Start ─────────────────────────────────────────────────────────────────
 runMigrations().then(() => {

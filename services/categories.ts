@@ -87,7 +87,12 @@ async function create(input: CategoryInput): Promise<Category> {
         .select()
         .single();
 
-    if (error) throw new Error(`Failed to create category: ${error.message}`);
+    if (error) {
+        if (error.code === '23505') {
+            throw new Error(`Já existe uma categoria com o nome "${input.name}" nesta empresa. Escolha um nome diferente.`);
+        }
+        throw new Error(`Failed to create category: ${error.message}`);
+    }
 
     const result = {
         id: data.id,
@@ -173,7 +178,12 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
         .eq('id', id)
         .eq('company_id', companyId);
 
-    if (error) throw new Error(`Failed to update category: ${error.message}`);
+    if (error) {
+        if (error.code === '23505') {
+            throw new Error(`Já existe uma categoria com o nome "${input.name}" nesta empresa. Escolha um nome diferente.`);
+        }
+        throw new Error(`Failed to update category: ${error.message}`);
+    }
 
     // SELECT separado após UPDATE (tem permissão de leitura)
     const updated = await getById(id);

@@ -1,17 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit2, Plus, GripVertical, BookMarked } from 'lucide-react';
+import { Edit2, Plus, GripVertical, BookMarked, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { Category } from '../../../../types/category';
 import { categoryService } from '../../../../services/categories';
 import { NextStepBanner } from '../../../../components/ui/NextStepBanner';
 import { toast } from 'react-hot-toast';
+import { CategoryProductsPanel } from '../../../../components/categories/CategoryProductsPanel';
+
+interface DraggedProduct {
+    product: {
+        id: string; name: string; sku: string; brand: string;
+        category_id: string; status: string; price_retail: number;
+        stock_quantity: number; thumbnail: string | null; is_primary_category: boolean;
+    };
+    sourceCategoryId: string;
+}
 
 export default function CategorySettingsPage() {
     const navigate = useNavigate();
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+    const [draggedProduct, setDraggedProduct] = useState<DraggedProduct | null>(null);
 
-    // States for Drag & Drop
+    // States for Category Drag & Drop
     const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
     const [hoveredCategoryId, setHoveredCategoryId] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
@@ -24,7 +36,6 @@ export default function CategorySettingsPage() {
         try {
             setIsLoading(true);
             const data = await categoryService.list();
-            // Garante ordenação primária por sort_order, fallback para nome
             data.sort((a, b) => {
                 const orderA = a.sort_order ?? 9999;
                 const orderB = b.sort_order ?? 9999;
@@ -53,16 +64,43 @@ export default function CategorySettingsPage() {
         const required = Object.values(config).filter(v => v === 'required').length;
         const optional = Object.values(config).filter(v => v === 'optional').length;
         const off = Object.values(config).filter(v => v === 'off').length;
-
         const parts = [];
         if (required > 0) parts.push(`${required} obrigatório${required > 1 ? 's' : ''}`);
         if (optional > 0) parts.push(`${optional} opcional${optional > 1 ? 'is' : ''}`);
         if (off > 0) parts.push(`${off} oculto${off > 1 ? 's' : ''}`);
-
         return parts.join(', ') || 'Nenhuma configuração';
     };
 
-    // ------------- DRAG & DROP LOGIC -------------
+    // --- Expand / collapse ---
+    const toggleExpand = (id: string) => {
+        setExpandedCategories(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const expandAll = () => {
+        setExpandedCategories(new Set(categories.map(c => c.id!)));
+    };
+
+    const collapseAll = () => {
+        setExpandedCategories(new Set());
+    };
+
+    const allExpanded = categories.length > 0 && expandedCategories.size === categories.length;
+
+    // --- Product drag callbacks ---
+    const handleProductDragStart = useCallback((product: DraggedProduct['product'], sourceCategoryId: string) => {
+        setDraggedProduct({ product, sourceCategoryId });
+    }, []);
+
+    const handleProductDragEnd = useCallback(() => {
+        setDraggedProduct(null);
+    }, []);
+
+    // ------------- CATEGORY DRAG & DROP LOGIC -------------
     const onDragStart = (e: React.DragEvent, id: string) => {
         setDraggedCategoryId(id);
         e.dataTransfer.setData('text/plain', id);
@@ -70,9 +108,9 @@ export default function CategorySettingsPage() {
     };
 
     const onDragOver = (e: React.DragEvent, id: string | null) => {
-        e.preventDefault(); // Necessário para permitir o drop
+        e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        
+
         if (id === null) {
             if (hoveredCategoryId !== null) setHoveredCategoryId(null);
             if (dropPosition !== 'inside') setDropPosition('inside');
@@ -84,11 +122,8 @@ export default function CategorySettingsPage() {
         const threshold = rect.height * 0.25;
 
         let newPosition: 'before' | 'after' | 'inside' = 'inside';
-        if (y < threshold) {
-            newPosition = 'before';
-        } else if (y > rect.height - threshold) {
-            newPosition = 'after';
-        }
+        if (y < threshold) newPosition = 'before';
+        else if (y > rect.height - threshold) newPosition = 'after';
 
         if (hoveredCategoryId !== id || dropPosition !== newPosition) {
             setHoveredCategoryId(id);
@@ -104,7 +139,7 @@ export default function CategorySettingsPage() {
 
     const handleDrop = async (e: React.DragEvent, targetId: string | null) => {
         e.preventDefault();
-        
+
         const currentDraggedId = draggedCategoryId;
         const currentTargetId = targetId;
         const currentPosition = dropPosition;
@@ -113,31 +148,22 @@ export default function CategorySettingsPage() {
         setDropPosition(null);
         setDraggedCategoryId(null);
 
-        if (!currentDraggedId || currentDraggedId === currentTargetId) {
-            return;
-        }
+        if (!currentDraggedId || currentDraggedId === currentTargetId) return;
 
         try {
             setIsLoading(true);
             const draggedCategory = categories.find(c => c.id === currentDraggedId);
             const targetCategory = currentTargetId ? categories.find(c => c.id === currentTargetId) : null;
-            
             if (!draggedCategory) return;
 
-            // Determinar o novo parent_id
             let newParentId: string | null = null;
             if (currentTargetId === null) {
-                // Soltou na zona raiz (desvinculou)
                 newParentId = null;
             } else if (targetCategory) {
-                if (currentPosition === 'inside') {
-                    newParentId = targetCategory.id;
-                } else {
-                    newParentId = targetCategory.parent_id || null;
-                }
+                if (currentPosition === 'inside') newParentId = targetCategory.id;
+                else newParentId = targetCategory.parent_id || null;
             }
 
-            // Prevention of Loop: Se novo parent é descendente do dragged
             if (newParentId !== null) {
                 let current = categories.find(c => c.id === newParentId);
                 while (current) {
@@ -152,33 +178,21 @@ export default function CategorySettingsPage() {
 
             toast.loading('Organizando categorias...', { id: 'move-cat' });
 
-            // Clonar categorias para manipulação local
             let newCategories = [...categories];
 
-            // 1. Atualizar parent_id (se mudou)
             if (draggedCategory.parent_id !== newParentId) {
                 const { id, created_at, updated_at, ...updateData } = draggedCategory as any;
-                await categoryService.update(draggedCategory.id!, {
-                    ...updateData,
-                    parent_id: newParentId
-                });
-                // Atualizar na memória para a ordenação considerar no grupo correto
+                await categoryService.update(draggedCategory.id!, { ...updateData, parent_id: newParentId });
                 const idx = newCategories.findIndex(c => c.id === currentDraggedId);
                 if (idx !== -1) newCategories[idx] = { ...newCategories[idx], parent_id: newParentId };
             }
 
-            // 2. Obter irmãos no novo destino (incluindo a própria categoria)
             let siblings = newCategories.filter(c => c.parent_id === newParentId);
-            
-            // Remover a categoria que estamos movendo para reinseri-la na posição certa
             siblings = siblings.filter(c => c.id !== currentDraggedId);
 
-            // 3. Encontrar índice de inserção
             if (currentTargetId === null || currentPosition === 'inside') {
-                // Vai pro final do grupo
                 siblings.push(newCategories.find(c => c.id === currentDraggedId)!);
             } else {
-                // Before ou After target
                 const targetSiblingIndex = siblings.findIndex(c => c.id === currentTargetId);
                 if (targetSiblingIndex !== -1) {
                     const insertAt = currentPosition === 'before' ? targetSiblingIndex : targetSiblingIndex + 1;
@@ -188,19 +202,10 @@ export default function CategorySettingsPage() {
                 }
             }
 
-            // 4. Salvar as novas ordens (apenas se a ordem original não bater)
-            const updates = siblings.map((cat, index) => ({
-                id: cat.id!,
-                sort_order: (index + 1) * 10
-            }));
+            const updates = siblings.map((cat, index) => ({ id: cat.id!, sort_order: (index + 1) * 10 }));
+            if (updates.length > 0) await categoryService.updateSortOrder(updates);
 
-            if (updates.length > 0) {
-                await categoryService.updateSortOrder(updates);
-            }
-
-            toast.success(`Hierarquia atualizada!`, { id: 'move-cat' });
-            
-            // Recarrega do banco
+            toast.success('Hierarquia atualizada!', { id: 'move-cat' });
             await loadCategories();
         } catch (error) {
             console.error(error);
@@ -208,7 +213,6 @@ export default function CategorySettingsPage() {
             setIsLoading(false);
         }
     };
-    // ---------------------------------------------
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
@@ -217,11 +221,22 @@ export default function CategorySettingsPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Gerenciamento de Categorias</h1>
                     <p className="text-slate-600 mt-1">
-                        Configure quais campos são obrigatórios, opcionais ou ocultos para cada categoria. 
-                        <b> Arraste as linhas</b> para definir categorias pai e subcategorias.
+                        Configure quais campos são obrigatórios, opcionais ou ocultos para cada categoria.
+                        <b> Arraste as linhas</b> para definir hierarquia.
+                        <b> Expanda</b> para ver e reorganizar produtos.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={allExpanded ? collapseAll : expandAll}
+                        className="px-3 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-sm"
+                        title={allExpanded ? 'Recolher todos os produtos' : 'Expandir todos os produtos'}
+                    >
+                        {allExpanded
+                            ? <><ChevronsDownUp className="w-4 h-4" /> Recolher Tudo</>
+                            : <><ChevronsUpDown className="w-4 h-4" /> Expandir Tudo</>
+                        }
+                    </button>
                     <button
                         onClick={() => navigate('/admin/settings/categories/presets')}
                         className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-sm"
@@ -239,6 +254,15 @@ export default function CategorySettingsPage() {
                 </div>
             </div>
 
+            {/* Drag-and-drop hint for products */}
+            {draggedProduct && (
+                <div className="mb-4 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex items-center gap-2">
+                    <span className="font-semibold">"{draggedProduct.product.name}"</span>
+                    <span>sendo arrastado • Solte em outra categoria para mover</span>
+                    <span className="ml-auto text-xs bg-blue-100 px-2 py-0.5 rounded">Ctrl + Soltar = Adicionar também</span>
+                </div>
+            )}
+
             {/* Categories Table */}
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <table className="w-full">
@@ -253,9 +277,9 @@ export default function CategorySettingsPage() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                        {/* Dropzone para resetar/Root - SÓ MOSTRA SE ESTIVER ARRASTANDO */}
+                        {/* Dropzone para resetar/Root */}
                         {draggedCategoryId && (
-                            <tr 
+                            <tr
                                 onDragOver={(e) => onDragOver(e, null)}
                                 onDragLeave={onDragLeave}
                                 onDrop={(e) => handleDrop(e, null)}
@@ -276,24 +300,19 @@ export default function CategorySettingsPage() {
 
                         {isLoading ? (
                             <tr>
-                                <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                                    Carregando categorias...
-                                </td>
+                                <td colSpan={6} className="px-6 py-8 text-center text-slate-500">Carregando categorias...</td>
                             </tr>
                         ) : categories.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                                    Nenhuma categoria cadastrada
-                                </td>
+                                <td colSpan={6} className="px-6 py-8 text-center text-slate-500">Nenhuma categoria cadastrada</td>
                             </tr>
                         ) : (
                             categories.filter(c => !c.parent_id).map(rootCategory => {
-                                const renderCategoryRow = (category: Category, level: number = 0) => {
+                                const renderCategoryRow = (category: Category, level: number = 0): React.ReactNode => {
                                     const children = categories.filter(c => c.parent_id === category.id);
-                                    
+                                    const isExpanded = expandedCategories.has(category.id!);
                                     const isBeingDragged = draggedCategoryId === category.id;
                                     const isTargetHovered = hoveredCategoryId === category.id;
-                                    const isGhost = isBeingDragged;
 
                                     let dropClass = '';
                                     if (isTargetHovered) {
@@ -302,28 +321,44 @@ export default function CategorySettingsPage() {
                                         if (dropPosition === 'after') dropClass = 'border-b-4 border-b-blue-500 drop-shadow-md relative z-10';
                                     }
 
+                                    // Drop highlight for product drag
+                                    const isProductDropTarget = draggedProduct &&
+                                        draggedProduct.sourceCategoryId !== category.id &&
+                                        isExpanded;
+
                                     return (
                                         <React.Fragment key={category.id}>
-                                            <tr 
-                                                draggable={true}
-                                                onDragStart={(e) => onDragStart(e, category.id!)}
-                                                onDragOver={(e) => onDragOver(e, category.id!)}
-                                                onDragLeave={onDragLeave}
-                                                onDrop={(e) => handleDrop(e, category.id!)}
+                                            <tr
+                                                draggable={!draggedProduct}
+                                                onDragStart={(e) => !draggedProduct && onDragStart(e, category.id!)}
+                                                onDragOver={(e) => !draggedProduct && onDragOver(e, category.id!)}
+                                                onDragLeave={(e) => !draggedProduct && onDragLeave(e)}
+                                                onDrop={(e) => !draggedProduct && handleDrop(e, category.id!)}
                                                 className={`transition-all ${
-                                                    isGhost ? 'opacity-30 bg-slate-100' : 'hover:bg-slate-50'
+                                                    isBeingDragged ? 'opacity-30 bg-slate-100' : 'hover:bg-slate-50'
                                                 } ${dropClass}`}
                                             >
                                                 <td className="px-4 py-4 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500">
                                                     <GripVertical className="w-5 h-5 mx-auto" />
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <div 
+                                                    <div
                                                         className={`font-medium text-slate-900 flex items-center gap-2 ${isTargetHovered && 'text-blue-700'}`}
                                                         style={{ paddingLeft: `${level * 24}px` }}
                                                     >
                                                         {level > 0 && <span className="text-slate-400">↳</span>}
-                                                        {category.name}
+                                                        {/* Expand toggle button */}
+                                                        <button
+                                                            onClick={() => toggleExpand(category.id!)}
+                                                            className="flex items-center gap-1.5 hover:text-blue-600 transition-colors"
+                                                            title={isExpanded ? 'Recolher produtos' : 'Expandir produtos'}
+                                                        >
+                                                            {isExpanded
+                                                                ? <ChevronDown className="w-4 h-4 text-blue-500" />
+                                                                : <ChevronRight className="w-4 h-4 text-slate-400" />
+                                                            }
+                                                            {category.name}
+                                                        </button>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
@@ -337,9 +372,7 @@ export default function CategorySettingsPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <div className="text-sm text-slate-600">
-                                                        {getConfigSummary(category)}
-                                                    </div>
+                                                    <div className="text-sm text-slate-600">{getConfigSummary(category)}</div>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <button
@@ -352,6 +385,22 @@ export default function CategorySettingsPage() {
                                                     </button>
                                                 </td>
                                             </tr>
+
+                                            {/* Products panel (expanded) */}
+                                            {isExpanded && (
+                                                <tr>
+                                                    <td colSpan={6} className="px-6 pb-3 pt-0">
+                                                        <CategoryProductsPanel
+                                                            categoryId={category.id!}
+                                                            categoryName={category.name}
+                                                            onDragStart={handleProductDragStart}
+                                                            draggedProduct={draggedProduct}
+                                                            onDragEnd={handleProductDragEnd}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            )}
+
                                             {children.map(child => renderCategoryRow(child, level + 1))}
                                         </React.Fragment>
                                     );
@@ -380,7 +429,15 @@ export default function CategorySettingsPage() {
                         <span className="w-3 h-3 rounded-full bg-red-500"></span>
                         <span>Oculto - Campo não aparece no formulário</span>
                     </div>
+                    <div className="flex items-center gap-2 ml-auto">
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium">Categoria Extra</span>
+                        <span>Produto aparece em múltiplas categorias</span>
+                    </div>
                 </div>
+                <p className="text-xs text-slate-400 mt-2">
+                    💡 <b>Dica:</b> Arraste um produto para outra categoria para <b>movê-lo</b>.
+                    Segure <b>Ctrl</b> ao soltar para <b>adicionar em múltiplas categorias</b> sem remover da original.
+                </p>
             </div>
 
             <NextStepBanner
