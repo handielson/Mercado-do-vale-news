@@ -170,6 +170,73 @@ fastify.get('/products/category-counts', async (req, reply) => {
   return rows;
 });
 
+// ─── Catalog Metadata (1 chamada = categorias+counts+marcas+preços) ─────────
+// Substitui 3-4 queries separadas ao Supabase. Resultado cacheável por 5 min.
+fastify.get('/catalog/metadata', async (req, reply) => {
+  const [[categories], [counts], [brands], [priceRow]] = await Promise.all([
+    // 1. Todas as categorias com parent_id e sort_order
+    pool.query(
+      `SELECT id, name, parent_id, sort_order
+       FROM categories
+       ORDER BY sort_order ASC, name ASC`
+    ),
+    // 2. Contagem de produtos ativos por categoria (com in_stock_count)
+    pool.query(
+      `SELECT
+         category_id,
+         COUNT(*) AS count,
+         SUM(CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 1 ELSE 0 END) AS in_stock_count
+       FROM products
+       WHERE status = 'active' AND category_id IS NOT NULL
+       GROUP BY category_id`
+    ),
+    // 3. Marcas únicas com contagem
+    pool.query(
+      `SELECT brand AS name, COUNT(*) AS count
+       FROM products
+       WHERE status = 'active' AND brand IS NOT NULL AND brand != ''
+       GROUP BY brand
+       ORDER BY count DESC`
+    ),
+    // 4. Faixa de preços (min/max)
+    pool.query(
+      `SELECT MIN(price_retail) AS min_price, MAX(price_retail) AS max_price
+       FROM products
+       WHERE status = 'active' AND price_retail > 0`
+    ),
+  ]);
+
+  // Montar mapa de counts por category_id
+  const countMap = {};
+  for (const row of counts) {
+    countMap[row.category_id] = {
+      count: Number(row.count) || 0,
+      in_stock_count: Number(row.in_stock_count) || 0,
+    };
+  }
+
+  // Juntar categorias com seus counts
+  const categoriesWithCounts = categories.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    parent_id: cat.parent_id || null,
+    sort_order: cat.sort_order,
+    count: countMap[cat.id]?.count || 0,
+    in_stock_count: countMap[cat.id]?.in_stock_count || 0,
+  }));
+
+  const priceRange = priceRow[0]?.min_price != null
+    ? { min: Number(priceRow[0].min_price), max: Number(priceRow[0].max_price) }
+    : null;
+
+  reply.header('Cache-Control', 'public, max-age=300, s-maxage=600');
+  return {
+    categories: categoriesWithCounts,
+    brands: brands.map(b => ({ name: b.name, count: Number(b.count) })),
+    priceRange,
+  };
+});
+
 
 // ─── Brands (read) ─────────────────────────────────────────────────────────
 fastify.get('/brands', async (req, reply) => {

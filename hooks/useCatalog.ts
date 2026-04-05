@@ -169,13 +169,12 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         }
     }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache, products.length]);
 
-    // Recarregar quando filtros, busca ou configurações mudarem
+    // Recarregar quando filtros ou busca mudarem
+    // Não aguardamos settingsLoading: carregamos com defaults e reaplicamos quando settings chegarem
     useEffect(() => {
-        if (!settingsLoading) {
-            loadProducts(true);
-        }
+        loadProducts(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchQuery, filters, catalogSettings, settingsLoading]);
+    }, [searchQuery, filters, catalogSettings]);
 
     // Carregar mais produtos
     const loadMore = useCallback(() => {
@@ -287,7 +286,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         if (!settingsLoading) {
             loadMetadata();
         }
-    }, [catalogSettings, settingsLoading]);
+    }, [catalogSettings]);
 
 
     return {

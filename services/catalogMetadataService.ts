@@ -1,151 +1,122 @@
-import { supabase } from './supabase';
+/**
+ * catalogMetadataService — Fonte única: VPS MySQL via /catalog/metadata
+ *
+ * Antes: 3-4 queries separadas ao Supabase (full table scans, sem cache adequado)
+ * Depois: 1 chamada à VPS que executa 4 queries MySQL em paralelo com cache de 5 min
+ */
+
+const VPS_BASE_URL = (import.meta as any).env?.DEV
+    ? '/vps-proxy'
+    : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+interface MetadataCache {
+    categories: Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count: number }>;
+    brands: Array<{ name: string; count: number }>;
+    priceRange: { min: number; max: number } | null;
+    timestamp: number;
+}
+
+let metadataCache: MetadataCache | null = null;
+let pendingFetch: Promise<MetadataCache | null> | null = null;
+
+async function fetchMetadata(): Promise<MetadataCache | null> {
+    // Deduplicação de requisições concorrentes
+    if (pendingFetch) return pendingFetch;
+
+    pendingFetch = (async () => {
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 10000);
+            const res = await fetch(`${VPS_BASE_URL}/catalog/metadata`, {
+                signal: controller.signal,
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+            });
+            clearTimeout(timer);
+            if (!res.ok) return null;
+            const data = await res.json();
+            return {
+                categories: data.categories || [],
+                brands: data.brands || [],
+                priceRange: data.priceRange || null,
+                timestamp: Date.now(),
+            };
+        } catch {
+            return null;
+        } finally {
+            pendingFetch = null;
+        }
+    })();
+
+    return pendingFetch;
+}
+
+async function getMetadata(): Promise<MetadataCache | null> {
+    // Cache fresco → retorna imediatamente
+    if (metadataCache && Date.now() - metadataCache.timestamp < CACHE_TTL) {
+        return metadataCache;
+    }
+
+    // SWR: se tiver cache stale, serve imediatamente e revalida em background
+    if (metadataCache) {
+        fetchMetadata().then(fresh => { if (fresh) metadataCache = fresh; });
+        return metadataCache;
+    }
+
+    // Primeira carga: aguarda
+    const fresh = await fetchMetadata();
+    if (fresh) metadataCache = fresh;
+    return fresh;
+}
 
 export const catalogMetadataService = {
     /**
-     * Buscar nomes de categorias por IDs
+     * Buscar nomes de categorias por IDs (mantido para compatibilidade)
      */
     getCategoryNames: async (categoryIds: string[]): Promise<Map<string, string>> => {
         if (categoryIds.length === 0) return new Map();
-
-        const { data, error } = await supabase
-            .from('categories')
-            .select('id, name')
-            .in('id', categoryIds);
-
-        if (error) {
-            if (error.code !== '20' && !error.message?.includes('aborted')) {
-                console.error('Erro ao buscar categorias:', error);
-            }
-            return new Map();
-        }
-
-        return new Map((data || []).map(cat => [cat.id, cat.name]));
+        const meta = await getMetadata();
+        if (!meta) return new Map();
+        return new Map(
+            meta.categories
+                .filter(c => categoryIds.includes(c.id))
+                .map(c => [c.id, c.name])
+        );
     },
 
     /**
      * Buscar todas as categorias com contagem de produtos
-     * Counts vêm da VPS (fonte primária); fallback para Supabase se a VPS falhar.
+     * Fonte: VPS /catalog/metadata (sem Supabase)
      */
     getAllCategories: async (): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count: number }>> => {
-        // Fetch all categories (from Supabase — tem parent_id, sort_order, etc.)
-        const { data: cats, error: catsError } = await supabase
-            .from('categories')
-            .select('id, name, parent_id, sort_order')
-            .order('sort_order', { ascending: true })
-            .order('name', { ascending: true });
-
-        if (catsError) {
-            if (catsError.code !== '20' && !catsError.message?.includes('aborted')) {
-                console.error('Erro ao buscar categorias:', catsError);
-            }
-            return [];
-        }
-
-        const countMap = new Map<string, { count: number, in_stock_count: number }>();
-
-        // Sempre faz a contagem pelo Supabase como base de garantia
-        const { data: counts, error: countsError } = await supabase
-            .from('products')
-            .select('category_id, status, stock_quantity')
-            .not('category_id', 'is', null)
-            .eq('status', 'active'); // Foca apenas em produtos ativos
-
-        if (!countsError) {
-            (counts || []).forEach(p => {
-                if (p.category_id) {
-                    const curr = countMap.get(p.category_id) || { count: 0, in_stock_count: 0 };
-                    curr.count += 1;
-                    if (p.stock_quantity === null || p.stock_quantity > 0) {
-                        curr.in_stock_count += 1;
-                    }
-                    countMap.set(p.category_id, curr);
-                }
-            });
-        }
-
-        // Tentar contar produtos pela VPS (fonte primária) para substituir/somar a contagem
-        try {
-            const { vpsApiService } = await import('./vpsApiService');
-            const vpsCounts = await vpsApiService.getCategoryCounts() as any[];
-
-            if (vpsCounts && vpsCounts.length > 0) {
-                // Atualiza/Sobrescreve com os valores da VPS onde existirem
-                vpsCounts.forEach(row => {
-                    if (row.category_id) {
-                        const vpsCount = Number(row.count) || 0;
-                        // Fallback: se a VPS ainda não foi atualizada com o novo server.js, in_stock_count virá como undefined.
-                        // Nesse caso, assumimos que in_stock_count é igual a vpsCount provisoriamente.
-                        const vpsInStock = row.in_stock_count !== undefined ? Number(row.in_stock_count) : vpsCount;
-                        // Usa o maior valor entre VPS e Supabase para evitar ocultar categoria por erro de sincronização
-                        const curr = countMap.get(row.category_id) || { count: 0, in_stock_count: 0 };
-                        countMap.set(row.category_id, {
-                            count: Math.max(curr.count, vpsCount),
-                            in_stock_count: Math.max(curr.in_stock_count, vpsInStock)
-                        });
-                    }
-                });
-            }
-        } catch (err) {
-            console.error('Erro ao buscar contagens de categoria da VPS:', err);
-        }
-
-        return (cats || []).map(cat => {
-            const stats = countMap.get(cat.id) || { count: 0, in_stock_count: 0 };
-            return {
-                id: cat.id,
-                name: cat.name,
-                parent_id: cat.parent_id,
-                count: stats.count,
-                in_stock_count: stats.in_stock_count
-            };
-        });
+        const meta = await getMetadata();
+        return meta?.categories || [];
     },
-
 
     /**
      * Buscar todas as marcas únicas com contagem
+     * Fonte: VPS /catalog/metadata (sem Supabase)
      */
     getAllBrands: async (): Promise<Array<{ name: string; count: number }>> => {
-        const { data, error } = await supabase
-            .from('products')
-            .select('brand');
-
-        if (error) {
-            if (error.code !== '20' && !error.message?.includes('aborted')) {
-                console.error('Erro ao buscar marcas:', error);
-            }
-            return [];
-        }
-
-        // Contar ocorrências de cada marca
-        const counts = new Map<string, number>();
-        (data || []).forEach(p => {
-            if (p.brand) {
-                counts.set(p.brand, (counts.get(p.brand) || 0) + 1);
-            }
-        });
-
-        return Array.from(counts.entries())
-            .map(([name, count]) => ({ name, count }))
-            .sort((a, b) => b.count - a.count); // Ordenar por contagem
+        const meta = await getMetadata();
+        return meta?.brands || [];
     },
 
     /**
      * Buscar faixa de preços (min/max) dos produtos do catálogo
+     * Fonte: VPS /catalog/metadata (sem Supabase)
      */
     getPriceRange: async (): Promise<{ min: number; max: number } | null> => {
-        const { data, error } = await supabase
-            .from('products')
-            .select('price_retail')
-            .not('price_retail', 'is', null)
-            .gt('price_retail', 0);
+        const meta = await getMetadata();
+        return meta?.priceRange || null;
+    },
 
-        if (error || !data || data.length === 0) return null;
-
-        const prices = data.map(p => p.price_retail as number);
-        return {
-            min: Math.min(...prices),
-            max: Math.max(...prices)
-        };
-    }
+    /**
+     * Invalida o cache local (útil após sync de produtos)
+     */
+    invalidateCache: () => {
+        metadataCache = null;
+    },
 };

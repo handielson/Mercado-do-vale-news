@@ -65,29 +65,34 @@ export const catalogService = {
         console.log(`🌐 [catalogService] Iniciando busca de produtos (bypassCache: ${bypassCache})`);
 
         // ── 100% VPS API PATH ──────────────────────────────────────────────────
-        // Agora sempre utilizamos o fluxo VPS, independentemente dos filtros aplicados.
+        // P1: busca categorias e produtos em PARALELO (antes era sequencial → -200-400ms)
         try {
                 let vpsRaw: any = null;
-                const vpsCats = await vpsApiService.getCategories();
+                let vpsCats: any[] = [];
 
-                // Quando tem categoria específica e não tem busca, filtra na VPS.
-                // Se tiver busca de texto, a API já lida via query `search`.
-                if (filters?.categories && filters.categories.length > 0 && !filters.search) {
-                    vpsRaw = await vpsApiService.getProducts({
-                        category: filters.categories.join(','),
-                        search: filters?.search,
-                        favoritesOnly: filters?.favoritesOnly,
-                        customerId: filters?.customerId,
-                        limit: 2000,
-                    });
+                if (filters?.categories && filters.categories.length > 0 && !filters?.search) {
+                    [vpsCats, vpsRaw] = await Promise.all([
+                        vpsApiService.getCategories(),
+                        vpsApiService.getProducts({
+                            category: filters.categories.join(','),
+                            search: filters?.search,
+                            favoritesOnly: filters?.favoritesOnly,
+                            customerId: filters?.customerId,
+                            limit: 2000,
+                        }),
+                    ]);
                 } else {
-                    vpsRaw = await vpsApiService.getProducts({
-                        search: filters?.search,
-                        favoritesOnly: filters?.favoritesOnly,
-                        customerId: filters?.customerId,
-                        limit: 1000,
-                    });
+                    [vpsCats, vpsRaw] = await Promise.all([
+                        vpsApiService.getCategories(),
+                        vpsApiService.getProducts({
+                            search: filters?.search,
+                            favoritesOnly: filters?.favoritesOnly,
+                            customerId: filters?.customerId,
+                            limit: 1000,
+                        }),
+                    ]);
                 }
+
 
                 if (vpsRaw !== null) {
                     const rawSettings = await catalogConfigService.getSettings();
