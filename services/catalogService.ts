@@ -1,8 +1,8 @@
 import { supabase } from './supabase';
 import type { CatalogProduct } from '@/types/catalog';
-import { catalogConfigService } from '@/services/catalogConfigService';
 import { vpsApiService } from '@/services/vpsApiService';
 import { normalizeProduct } from '@/services/productNormalizer';
+
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos (Para revalidação silenciosa)
@@ -95,18 +95,15 @@ export const catalogService = {
 
 
                 if (vpsRaw !== null) {
-                    const rawSettings = await catalogConfigService.getSettings();
-                    // No caminho VPS, desativamos filtros que dependem de dados que podem
-                    // estar incompletos na VPS (preço e estoque podem estar apenas no Supabase).
+                    // Settings no caminho VPS: hide_zero_price e hide_out_of_stock são sempre false
+                    // (a VPS não tem dados suficientes de estoque/preço para esses filtros).
+                    // NÃO buscamos settings aqui para evitar req. extra a cada carga de produtos.
                     const settings = {
-                        ...rawSettings,
-                        hide_zero_price: false,   // VPS pode ter preço 0; o preço real está no Supabase
-                        hide_out_of_stock: rawSettings.hide_out_of_stock && !filters?.inStockOnly 
-                            ? false  // Não filtramos estoque na VPS (combos têm stock=0 na VPS)
-                            : false,
+                        hide_inactive: true,
+                        hide_zero_price: false,
+                        hide_out_of_stock: false,
+                        min_stock_to_show: 0,
                     };
-                    console.log('[catalogService] Settings aplicados no caminho VPS:', 
-                        { hide_zero_price: settings.hide_zero_price, hide_out_of_stock: settings.hide_out_of_stock, hide_inactive: settings.hide_inactive });
 
                     // Category slug map from VPS
                     const catSlugMap = new Map<string, string>(

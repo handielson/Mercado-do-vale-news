@@ -169,12 +169,13 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         }
     }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache, products.length]);
 
-    // Recarregar quando filtros ou busca mudarem
-    // Não aguardamos settingsLoading: carregamos com defaults e reaplicamos quando settings chegarem
+    // Recarregar quando filtros, busca ou configurações mudarem
     useEffect(() => {
-        loadProducts(true);
+        if (!settingsLoading) {
+            loadProducts(true);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchQuery, filters, catalogSettings]);
+    }, [searchQuery, filters, catalogSettings, settingsLoading]);
 
     // Carregar mais produtos
     const loadMore = useCallback(() => {
