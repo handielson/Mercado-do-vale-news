@@ -154,89 +154,96 @@ export const ProductListPage: React.FC = () => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Produtos</h1>
-                    <p className="text-sm text-slate-500 mt-1">
-                        Gerencie o catálogo de produtos do sistema
-                    </p>
-                </div>
-                <div className="flex gap-3">
-                    {/* Selection mode toggle */}
-                    <button
-                        onClick={() => selectionMode ? handleExitSelection() : setSelectionMode(true)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors shadow-sm border font-medium ${
-                            selectionMode
-                                ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                        }`}
-                        title={selectionMode ? 'Sair do modo seleção' : 'Ativar modo seleção para edição em lote'}
-                    >
-                        {selectionMode ? <XSquare className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
-                        <span>{selectionMode ? 'Cancelar Seleção' : 'Selecionar'}</span>
-                    </button>
+            <div className="space-y-3">
+                {/* Linha 1: Título + ações principais */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900">Produtos</h1>
+                        <p className="text-sm text-slate-500 mt-1">
+                            Gerencie o catálogo de produtos do sistema
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {/* Selection mode toggle */}
+                        <button
+                            onClick={() => selectionMode ? handleExitSelection() : setSelectionMode(true)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors shadow-sm border text-sm font-medium ${
+                                selectionMode
+                                    ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                            }`}
+                            title={selectionMode ? 'Sair do modo seleção' : 'Ativar modo seleção para edição em lote'}
+                        >
+                            {selectionMode ? <XSquare className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+                            <span>{selectionMode ? 'Cancelar' : 'Selecionar'}</span>
+                        </button>
 
-                    {/* Refresh button */}
-                    <button
-                        onClick={refresh}
-                        disabled={isRefreshing}
-                        title="Atualizar dados sem recarregar a página"
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors shadow-sm disabled:opacity-60"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                        <span className="font-medium">
-                            {isRefreshing ? 'Atualizando...' : 'Atualizar'}
-                        </span>
-                        {cacheAge && !isRefreshing && (
-                            <span className="text-xs text-slate-400 font-normal">
-                                ({cacheAge})
+                        {/* Refresh button */}
+                        <button
+                            onClick={refresh}
+                            disabled={isRefreshing}
+                            title="Atualizar dados sem recarregar a página"
+                            className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors shadow-sm disabled:opacity-60 text-sm"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            <span className="font-medium">
+                                {isRefreshing ? 'Atualizando...' : 'Atualizar'}
                             </span>
-                        )}
-                    </button>
+                            {cacheAge && !isRefreshing && (
+                                <span className="text-xs text-slate-400 font-normal">({cacheAge})</span>
+                            )}
+                        </button>
 
+                        {/* Novo Produto — ação principal em destaque */}
+                        <button
+                            onClick={handleNewProduct}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Novo Produto
+                        </button>
+                    </div>
+                </div>
+
+                {/* Linha 2: Ações secundárias */}
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-slate-400 uppercase tracking-wider mr-1">Ferramentas:</span>
                     <button
                         onClick={() => setIsExportModalOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm text-xs font-medium"
                     >
-                        <Share2 className="w-5 h-5" />
-                        <span className="font-medium">Exportar Catálogo</span>
+                        <Share2 className="w-3.5 h-3.5" />
+                        Exportar Catálogo
                     </button>
                     <button
                         onClick={() => navigate('/admin/products/image-bank')}
-                        className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-sm text-xs font-medium"
                     >
-                        <Images className="w-5 h-5" />
-                        <span className="font-medium">Banco de Imagens</span>
+                        <Images className="w-3.5 h-3.5" />
+                        Banco de Imagens
                     </button>
                     <button
                         onClick={handleAutoGenerateVideos}
                         disabled={isGeneratingVideos}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-60"
-                        title="Gerar e vincular vídeos automaticamente para todos os produtos com SKU que ainda não tenham um vídeo associado"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-60 text-xs font-medium"
+                        title="Gerar links de vídeo para todos os produtos com SKU sem vídeo"
                     >
-                        <Video className={`w-5 h-5 ${isGeneratingVideos ? 'animate-pulse' : ''}`} />
-                        <span className="font-medium">Gerar Links de Vídeo</span>
+                        <Video className={`w-3.5 h-3.5 ${isGeneratingVideos ? 'animate-pulse' : ''}`} />
+                        Gerar Links de Vídeo
                     </button>
                     <button
                         onClick={handleBulkRegistration}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm text-xs font-medium"
                     >
-                        <Package className="w-5 h-5" />
-                        <span className="font-medium">Cadastro em Massa</span>
+                        <Package className="w-3.5 h-3.5" />
+                        Cadastro em Massa
                     </button>
                     <button
                         onClick={() => navigate('/admin/products/combos')}
-                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm text-xs font-medium"
                     >
-                        <Package className="w-5 h-5" />
-                        <span className="font-medium">Combos</span>
-                    </button>
-                    <button
-                        onClick={handleNewProduct}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                    >
-                        <Plus className="w-5 h-5" />
-                        <span className="font-medium">Novo Produto</span>
+                        <Package className="w-3.5 h-3.5" />
+                        Combos
                     </button>
                 </div>
             </div>

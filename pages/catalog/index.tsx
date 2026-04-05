@@ -43,6 +43,7 @@ function CatalogContent() {
 
     const { customer } = useSupabaseAuth();
     const [mobileView, setMobileView] = useState<'grid' | 'list'>('grid');
+    const [autoDetectedBrand, setAutoDetectedBrand] = useState<string | null>(null);
 
     // Mapeia customer_type do banco (retail/wholesale/resale) → CustomerType do banner (varejo/revenda/atacado)
     const customerType = ((): CustomerType | undefined => {
@@ -217,6 +218,48 @@ function CatalogContent() {
             }))
             .filter(s => s.groups.length > 0);
     }, [isAllChildrenMode, filters.categories, productGroups, filterStats]);
+
+    // Melhoria 2 — Detecção visual de marca na busca (chip informativo, sem alterar filters.brands)
+    // Nota: NÃO adicionamos ao filters.brands pois o filtro client-side de marca no catalogService
+    // é case-sensitive e p.brand pode ser null, quebrando a busca. A busca textual já inclui p.brand.
+    useEffect(() => {
+        if (!filterStats?.brands?.length) return;
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) {
+            if (autoDetectedBrand) setAutoDetectedBrand(null);
+            return;
+        }
+        const knownBrands = filterStats.brands.map(b => b.name);
+        const matched = knownBrands.find(name => name.toLowerCase() === query) ?? null;
+        if (matched !== autoDetectedBrand) setAutoDetectedBrand(matched);
+    }, [searchQuery, filterStats, autoDetectedBrand]);
+
+    // Melhoria 1 — Agrupar resultados de busca por categoria (mín. 3 produtos por categoria)
+    const searchCategorySections = useMemo(() => {
+        if (!searchQuery || filters.categories.length > 0) return [];
+
+        const catList = filterStats?.categories || [];
+        const catMap = new Map(catList.map(c => [c.id!, c.name]));
+
+        const catGroupMap = new Map<string, typeof productGroups>();
+        for (const group of productGroups) {
+            const catId = group.representativeProduct.category_id;
+            if (!catId) continue;
+            if (!catGroupMap.has(catId)) catGroupMap.set(catId, []);
+            catGroupMap.get(catId)!.push(group);
+        }
+
+        return Array.from(catGroupMap.entries())
+            .filter(([, groups]) => groups.length >= 3)
+            .map(([catId, groups]) => ({
+                categoryId: catId,
+                categoryName: catMap.get(catId) || 'Categoria',
+                groups,
+            }));
+    }, [searchQuery, filters.categories, productGroups, filterStats?.categories]);
+
+    // Ativa agrupamento quando há busca ativa, sem filtro de categoria e 2+ seções com 3+ itens
+    const isSearchCategoryMode = !!searchQuery && !filters.categories.length && searchCategorySections.length >= 2;
 
     const actualHasMore = hasMore || visibleCount < productGroups.length;
 
@@ -418,7 +461,7 @@ function CatalogContent() {
                     </div>
 
                     {/* Chips de Filtros Ativos Renderizados na Raiz */}
-                    {(filters.brands.length > 0 || (filters.sortBy && filters.sortBy !== 'recent') || filters.priceRange || filters.favoritesOnly) && (
+                    {(filters.brands.length > 0 || (filters.sortBy && filters.sortBy !== 'recent') || filters.priceRange || filters.favoritesOnly || autoDetectedBrand) && (
                         <div className="flex flex-wrap gap-2 mt-4 items-center animate-in fade-in slide-in-from-top-2 duration-300">
                             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mr-1">Filtros Ativos:</span>
                             
@@ -446,11 +489,27 @@ function CatalogContent() {
                                 </span>
                             )}
 
-                            {/* Chips de Marcas */}
+                            {/* Chip de Marca Auto-Detectada */}
+                            {autoDetectedBrand && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 shadow-sm text-blue-700 rounded-full text-xs font-medium">
+                                    🏷️ Marca: {autoDetectedBrand}
+                                    <button
+                                        onClick={() => { setAutoDetectedBrand(null); setSearchQuery(''); }}
+                                        className="hover:text-red-500 transition-colors focus:outline-none"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </span>
+                            )}
+
+                            {/* Chips de Marcas (filtros manuais do painel) */}
                             {filters.brands.map(b => (
                                 <span key={b} className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 shadow-sm text-slate-700 rounded-full text-xs font-medium hover:border-slate-300 transition-colors">
                                     {b}
-                                    <button onClick={() => setFilters({ ...filters, brands: filters.brands.filter(brand => brand !== b) })} className="hover:text-red-500 transition-colors focus:outline-none">
+                                    <button
+                                        onClick={() => setFilters({ ...filters, brands: filters.brands.filter(brand => brand !== b) })}
+                                        className="hover:text-red-500 transition-colors focus:outline-none"
+                                    >
                                         <X className="w-3.5 h-3.5" />
                                     </button>
                                 </span>
@@ -528,6 +587,35 @@ function CatalogContent() {
                                         desktop: 4,
                                         wide: 5
                                     }}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                ) : isSearchCategoryMode ? (
+                    /* Modo Busca: produtos agrupados por categoria */
+                    <div className="space-y-12">
+                        {searchCategorySections.map(section => (
+                            <div key={section.categoryId} className="relative">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <h2 className="text-xl font-bold text-slate-800">
+                                        {section.categoryName}
+                                    </h2>
+                                    <span className="text-sm text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
+                                        {section.groups.length} {section.groups.length === 1 ? 'item' : 'itens'}
+                                    </span>
+                                    <div className="flex-1 h-px bg-slate-200" />
+                                </div>
+                                <ProductGroupGrid
+                                    groups={section.groups}
+                                    loading={false}
+                                    hasMore={false}
+                                    onLoadMore={() => {}}
+                                    onFavorite={toggleFavorite}
+                                    onShare={handleShare}
+                                    favorites={favorites}
+                                    mobileColumns={2}
+                                    variant={mobileView === 'list' ? 'list' : 'grid'}
+                                    columns={{ mobile: 2, tablet: 3, desktop: 4, wide: 5 }}
                                 />
                             </div>
                         ))}
