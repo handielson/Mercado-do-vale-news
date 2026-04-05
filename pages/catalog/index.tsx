@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { useSearchParams, Link } from 'react-router-dom';
 import { X, LayoutGrid, List, Heart, Search, MoreHorizontal } from 'lucide-react';
 import {
@@ -305,6 +306,20 @@ function CatalogContent() {
 
     return (
         <div className="min-h-screen bg-slate-50">
+            {/* SEO — Helmet injeta title/meta na <head> para crawlers */}
+            <Helmet>
+                <title>Mercado do Vale | Smartphones e Eletrônicos em Petrolina-PE</title>
+                <meta name="description" content="Compre smartphones Xiaomi, Samsung, iPhones, tablets e eletrônicos com os melhores preços em Petrolina-PE. Entrega rápida e garantia." />
+                <link rel="canonical" href="https://mercadodovale.com.br/" />
+                <meta property="og:title" content="Mercado do Vale | Smartphones e Eletrônicos em Petrolina-PE" />
+                <meta property="og:description" content="Smartphones, tablets e eletrônicos com os melhores preços em Petrolina-PE." />
+                <meta property="og:type" content="website" />
+                <meta property="og:url" content="https://mercadodovale.com.br/" />
+            </Helmet>
+
+            {/* h1 invisível ao usuário mas visível para crawlers (SEO) */}
+            <h1 className="sr-only">Mercado do Vale — Smartphones e Eletrônicos em Petrolina-PE</h1>
+
             {/* Public Header */}
             <PublicHeader />
 

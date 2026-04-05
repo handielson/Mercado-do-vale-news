@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /pdv/
+Disallow: /team/
+Disallow: /auth/
+Allow: /
+
+Sitemap: https://mercadodovale.com.br/sitemap.xml
