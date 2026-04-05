@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Grid, Smartphone, Tablet, Box, Package, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -15,6 +15,7 @@ interface CategoryNavProps {
     onCategoryChange: (categoryId: string | string[] | null) => void;
     categories: Array<{ id?: string; name: string; count: number; parent_id?: string | null }>;
     activeCategoryIds?: string[];
+    forceExpanded?: boolean;
 }
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -32,9 +33,15 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
     activeCategory,
     onCategoryChange,
     categories,
-    activeCategoryIds = []
+    activeCategoryIds = [],
+    forceExpanded,
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+
+    // Sync with external forceExpanded (from mobile ··· button)
+    useEffect(() => {
+        if (forceExpanded !== undefined) setIsExpanded(forceExpanded);
+    }, [forceExpanded]);
 
     const safeCategories = Array.isArray(categories) ? categories : [];
     

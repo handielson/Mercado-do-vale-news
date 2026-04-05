@@ -70,7 +70,35 @@ fastify.get('/health', async () => ({
   db: 'mysql'
 }));
 
-// ─── Field Presets ────────────────────────────────────────────────────────
+// ─── Migração: adiciona production_days ────────────────────────────────────
+fastify.post('/admin/migrate/production-days', { preHandler: requireSyncKey }, async (req, reply) => {
+  const results = [];
+  // Verifica via INFORMATION_SCHEMA e adiciona apenas se não existir
+  const checks = [
+    { table: 'categories', column: 'production_days' },
+    { table: 'products',   column: 'production_days' },
+  ];
+  for (const { table, column } of checks) {
+    try {
+      const [cols] = await pool.query(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+        [table, column]
+      );
+      if (cols.length > 0) {
+        results.push({ table, column, skipped: true, reason: 'column already exists' });
+        continue;
+      }
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN ${column} INT DEFAULT NULL`);
+      results.push({ table, column, ok: true });
+    } catch (e) {
+      results.push({ table, column, ok: false, error: e.message });
+    }
+  }
+  return { migrated: true, results };
+});
+
+
 // Presets de campos de categoria: grupos pré-configurados de visibilidade
 
 fastify.get('/field-presets', async (req, reply) => {
@@ -116,7 +144,7 @@ fastify.delete('/field-presets/:id', { preHandler: requireSyncKey }, async (req,
 // ─── Categories ────────────────────────────────────────────────────────────
 fastify.get('/categories', async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT id, name, slug, config, warranty_days, sort_order,
+    `SELECT id, name, slug, config, warranty_days, production_days, sort_order,
             extended_warranty_enabled, margin_wholesale, margin_reseller,
             created_at, updated_at
      FROM categories
@@ -212,7 +240,7 @@ fastify.get('/products', async (req, reply) => {
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, created_at, updated_at`
+       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
@@ -221,7 +249,7 @@ fastify.get('/products', async (req, reply) => {
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, created_at, updated_at`;
+       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
 
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
@@ -244,8 +272,13 @@ fastify.get('/products', async (req, reply) => {
     params.push(customerId);
   }
 
-  sql += ' ORDER BY name ASC LIMIT ? OFFSET ?';
+  // Ordenação dinâmica (whitelist contra SQL injection)
+  const ALLOWED_SORT = ['name', 'created_at', 'updated_at', 'price_retail', 'view_count', 'sales_count', 'stock_quantity'];
+  const sortBy  = ALLOWED_SORT.includes(req.query.sort_by) ? req.query.sort_by : 'name';
+  const sortDir = req.query.sort_direction === 'desc' ? 'DESC' : 'ASC';
+  sql += ` ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
   params.push(limit, offset);
+
 
   if (search || status === 'all') { // Log explicitly what we are about to query
     console.log(`[VPS GET /products] search="${search || ''}", status="${status || ''}", SQL: ${sql}`);
@@ -440,6 +473,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
       meta_title=?, meta_description=?, keywords=?,
+      production_days=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
     [
@@ -458,6 +492,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
       p.meta_title || null, p.meta_description || null, p.keywords || null,
+      p.production_days != null ? parseInt(p.production_days) : null,
       req.params.id,
     ]
   );
