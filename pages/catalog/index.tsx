@@ -296,39 +296,87 @@ function CatalogContent() {
             {/* Public Header */}
             <PublicHeader />
 
-            {/* Mobile Sticky Search Bar — visível apenas no mobile */}
-            <div className="sm:hidden sticky top-[60px] z-40 bg-white border-b border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2">
-                <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Buscar produtos..."
-                        className="w-full pl-9 pr-8 py-2 text-sm bg-slate-100 rounded-xl border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery('')}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 transition-colors"
-                            aria-label="Limpar busca"
-                        >
-                            <X className="w-3.5 h-3.5 text-slate-400" />
-                        </button>
-                    )}
+            {/* Mobile Sticky Search Bar + Categories Dropdown */}
+            <div className="sm:hidden sticky top-[56px] z-40">
+                {/* Barra de busca */}
+                <div className="bg-white border-b border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2">
+                    <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Buscar produtos..."
+                            className="w-full pl-9 pr-8 py-2 text-sm bg-slate-100 rounded-xl border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 transition-colors"
+                                aria-label="Limpar busca"
+                            >
+                                <X className="w-3.5 h-3.5 text-slate-400" />
+                            </button>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => setExpandCats(v => !v)}
+                        className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all shrink-0 ${
+                            expandCats
+                                ? 'bg-slate-900 text-white shadow-md'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                        title="Ver categorias"
+                        aria-label="Categorias"
+                    >
+                        <MoreHorizontal className="w-5 h-5" />
+                    </button>
                 </div>
-                <button
-                    onClick={() => setExpandCats(v => !v)}
-                    className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all shrink-0 ${
-                        expandCats
-                            ? 'bg-slate-900 text-white shadow-md'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                    title="Ver todas as categorias"
-                    aria-label="Categorias"
-                >
-                    <MoreHorizontal className="w-5 h-5" />
-                </button>
+
+                {/* Dropdown de categorias */}
+                {expandCats && (
+                    <div className="bg-white border-b border-slate-200 shadow-lg px-3 py-3">
+                        <div className="grid grid-cols-3 gap-2">
+                            {/* Botão TODOS */}
+                            <button
+                                onClick={() => { setFilters({ ...filters, categories: [] }); setExpandCats(false); }}
+                                className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all ${
+                                    filters.categories.length === 0
+                                        ? 'bg-slate-900 border-slate-900 text-white shadow-md'
+                                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                }`}
+                            >
+                                <span className="text-lg mb-0.5">🏠</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wide leading-tight">Todos</span>
+                            </button>
+
+                            {(filterStats?.categories || []).filter(c => !c.parent_id).map(cat => (
+                                <button
+                                    key={cat.id}
+                                    onClick={() => {
+                                        const children = (filterStats?.categories || []).filter(c => c.parent_id === cat.id);
+                                        const ids = children.length > 0
+                                            ? [cat.id!, ...children.map(c => c.id!)]
+                                            : [cat.id!];
+                                        setFilters({ ...filters, categories: ids });
+                                        setExpandCats(false);
+                                    }}
+                                    className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all ${
+                                        filters.categories.includes(cat.id!)
+                                            ? 'bg-slate-900 border-slate-900 text-white shadow-md'
+                                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    <span className="text-lg mb-0.5">📦</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wide leading-tight line-clamp-2">{cat.name}</span>
+                                    {cat.count > 0 && (
+                                        <span className="text-[9px] text-slate-400 mt-0.5">{cat.count}</span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Banner Carousel */}
@@ -365,11 +413,11 @@ function CatalogContent() {
                 </div>
             </div>
 
-            {/* Category Navigation */}
+            {/* Category Navigation - oculto no mobile (coberto pelo dropdown da sticky bar) */}
+            <div className="hidden sm:block">
             <CategoryNav
                 activeCategory={filters.categories[0] || null}
                 activeCategoryIds={filters.categories}
-                forceExpanded={expandCats}
                 onCategoryChange={(categoryId) => {
                     const ids = Array.isArray(categoryId)
                         ? categoryId
@@ -398,6 +446,7 @@ function CatalogContent() {
                     count: cat.count
                 }))}
             />
+            </div>
 
             {/* Promo Banner Global */}
             {promoData && promoActive && (
