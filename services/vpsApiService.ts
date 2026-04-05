@@ -492,15 +492,12 @@ class VpsApiService {
     }>;
     total: number; page: number; limit: number; hasMore: boolean;
   }> {
-    const qs = `?page=${page}&limit=${limit}`;
-    const url = `/products/by-category/${categoryId}${qs}`;
-    const cached = this.cache.get(url);
-    if (cached) return cached as any;
-    const res = await fetch(`${this.baseUrl}${url}`);
-    if (!res.ok) throw new Error(`getProductsByCategory failed: ${res.status}`);
-    const data = await res.json();
-    this.cache.set(url, data);
-    return data;
+    const path = `/products/by-category/${categoryId}?page=${page}&limit=${limit}`;
+    const result = await this.fetchSafe<{
+      items: any[]; total: number; page: number; limit: number; hasMore: boolean;
+    }>(path, true); // noCache=true para dados administrativos
+    if (!result) throw new Error('Falha ao carregar produtos da categoria');
+    return result;
   }
 
   async addProductCategory(productId: string, categoryId: string): Promise<boolean> {
@@ -518,3 +515,4 @@ class VpsApiService {
 }
 
 export const vpsApiService = new VpsApiService();
+
