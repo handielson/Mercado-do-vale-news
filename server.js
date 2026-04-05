@@ -73,7 +73,7 @@ fastify.get('/health', async () => ({
 // ─── Categories ────────────────────────────────────────────────────────────
 fastify.get('/categories', async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT id, name, slug, config, warranty_days, sort_order,
+    `SELECT id, name, slug, config, warranty_days, production_days, sort_order,
             extended_warranty_enabled, margin_wholesale, margin_reseller,
             created_at, updated_at
      FROM categories
@@ -168,7 +168,7 @@ fastify.get('/products', async (req, reply) => {
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, created_at, updated_at`
+       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
@@ -177,7 +177,7 @@ fastify.get('/products', async (req, reply) => {
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, created_at, updated_at`;
+       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
 
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
@@ -375,6 +375,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           warranty_template_id=VALUES(warranty_template_id),
           kits=VALUES(kits), exclude_from_seo=VALUES(exclude_from_seo),
           meta_title=VALUES(meta_title), meta_description=VALUES(meta_description), keywords=VALUES(keywords),
+          production_days=VALUES(production_days),
           updated_at=CURRENT_TIMESTAMP`,
         [
           p.id, p.name, p.slug || null, p.sku || null,
@@ -418,6 +419,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
       meta_title=?, meta_description=?, keywords=?, exclude_from_seo=?,
+      production_days=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
     [
@@ -436,6 +438,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
       p.meta_title || null, p.meta_description || null, p.keywords || null, p.exclude_from_seo ? 1 : 0,
+      p.production_days != null ? parseInt(p.production_days) : null,
       req.params.id,
     ]
   );
@@ -1946,6 +1949,13 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] product_categories table: OK');
+
+  // Prazo de produção: por categoria (padrão) e por produto (override)
+  await pool.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS production_days INT NOT NULL DEFAULT 0`);
+  console.log('[migration] categories.production_days: OK');
+
+  await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS production_days INT DEFAULT NULL`);
+  console.log('[migration] products.production_days: OK');
 }
 
 // ─── Product-Categories (multi-categoria) ────────────────────────────────────
@@ -1966,8 +1976,10 @@ fastify.get('/products/by-category/:id', async (req, reply) => {
                       AND JSON_UNQUOTE(JSON_EXTRACT(p.images, '$[0]')) LIKE 'http%'
                  THEN JSON_UNQUOTE(JSON_EXTRACT(p.images, '$[0]'))
                  ELSE NULL END AS thumbnail,
-            (p.category_id = ?) AS is_primary_category
+            (p.category_id = ?) AS is_primary_category,
+            COALESCE(p.production_days, c.production_days, 0) AS effective_production_days
      FROM products p
+     LEFT JOIN categories c ON c.id = p.category_id
      WHERE p.category_id = ?
         OR p.id IN (SELECT product_id FROM product_categories WHERE category_id = ?)
      ORDER BY p.name ASC
@@ -2007,6 +2019,17 @@ fastify.delete('/product-categories/:product_id/:category_id', { preHandler: req
     [req.params.product_id, req.params.category_id]
   );
   return { ok: true };
+});
+
+// PATCH /products/:id/production-days — define prazo de produção individual
+fastify.patch('/products/:id/production-days', { preHandler: requireSyncKey }, async (req, reply) => {
+  const days = req.body?.production_days;
+  const val  = days == null || days === '' ? null : parseInt(days);
+  await pool.query(
+    `UPDATE products SET production_days = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [val, req.params.id]
+  );
+  return { ok: true, production_days: val };
 });
 
 // PATCH /products/:id/category — move produto para outra categoria principal

@@ -430,13 +430,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 </div>
 
                 {/* Status Badge */}
-                <div>
+                <div className="flex flex-wrap items-center gap-1.5">
                     <span className={cn(
                         'inline-block px-2 py-1 text-xs font-medium rounded-md border',
                         getStatusColor(currentStatus)
                     )}>
                         {getStatusLabel(currentStatus)}
                     </span>
+                    {(product.production_days != null && product.production_days > 0) && (
+                        <span className="inline-block px-2 py-1 text-xs font-medium rounded-md border bg-amber-50 text-amber-700 border-amber-200">
+                            ⚙️ {product.production_days}d fab.
+                        </span>
+                    )}
                 </div>
 
                 {/* Unique Identifiers (IMEI / Serial) */}

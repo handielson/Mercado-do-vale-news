@@ -34,6 +34,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
     const [parentId, setParentId] = useState<string | null>(null);
     const [availableParents, setAvailableParents] = useState<Category[]>([]);
     const [warrantyDays, setWarrantyDays] = useState(90);
+    const [productionDays, setProductionDays] = useState(0);
     const [extendedWarrantyEnabled, setExtendedWarrantyEnabled] = useState(false);
     const [marginWholesale, setMarginWholesale] = useState<number | undefined>();
     const [marginReseller, setMarginReseller] = useState<number | undefined>();
@@ -85,6 +86,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                 setName(category.name);
                 setParentId(category.parent_id || null);
                 setWarrantyDays(category.warranty_days || 90);
+                setProductionDays(category.production_days || 0);
                 setExtendedWarrantyEnabled(category.extended_warranty_enabled ?? false);
                 setMarginWholesale(category.margin_wholesale);
                 setMarginReseller(category.margin_reseller);
@@ -162,6 +164,7 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                 parent_id: parentId,
                 config,
                 warranty_days: warrantyDays,
+                production_days: productionDays,
                 extended_warranty_enabled: extendedWarrantyEnabled,
                 margin_wholesale: marginWholesale,
                 margin_reseller: marginReseller
@@ -233,6 +236,8 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
                         availableParents={availableParents}
                         warrantyDays={warrantyDays}
                         onWarrantyDaysChange={setWarrantyDays}
+                        productionDays={productionDays}
+                        onProductionDaysChange={setProductionDays}
                         isEditing={!!categoryId}
                     />
 

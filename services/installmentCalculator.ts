@@ -32,7 +32,7 @@ export async function calculateInstallments(
 
     // PIX (à vista - canal presencial 1x)
     const pixFee = fees.find(f => f.channel === 'presencial' && f.installments === 1);
-    const appliedPixFee = parseFloat(String(pixFee?.applied_fee_pct ?? (pixFee as any)?.applied_fee ?? 0));
+    const appliedPixFee = parseFloat(String(pixFee?.applied_fee ?? (pixFee as any)?.applied_fee_pct ?? 0));
     const pixTotal = Math.round(priceInCents * (1 + appliedPixFee / 100));
 
     plans.push({
@@ -52,7 +52,7 @@ export async function calculateInstallments(
     for (const fee of presencialFees) {
         if (fee.installments === 1) continue; // PIX já adicionado acima
 
-        const appliedFeeDecimal = parseFloat(String(fee.applied_fee_pct ?? (fee as any).applied_fee ?? 0)) / 100;
+        const appliedFeeDecimal = parseFloat(String((fee as any).applied_fee_pct ?? fee.applied_fee ?? 0)) / 100;
         const total = Math.round(priceInCents * (1 + appliedFeeDecimal));
         const installmentValue = Math.round(total / fee.installments);
 

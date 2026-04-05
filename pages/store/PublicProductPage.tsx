@@ -1028,6 +1028,24 @@ export const PublicProductPage: React.FC = () => {
                                 )}
 
                                 <div className="mt-6">
+                                    {/* Aviso de prazo de produção (Sob Encomenda) */}
+                                    {((product as any).effective_production_days ?? (product as any).production_days ?? 0) > 0 && (
+                                        <div className="mb-3 flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                                            <span className="text-xl mt-0.5">⚙️</span>
+                                            <div>
+                                                <p className="font-semibold text-amber-800 text-sm">
+                                                    Produzido sob encomenda
+                                                </p>
+                                                <p className="text-xs text-amber-700 mt-0.5">
+                                                    Este produto é fabricado após o pedido. Prazo de produção:{' '}
+                                                    <span className="font-bold">
+                                                        {(product as any).effective_production_days ?? (product as any).production_days} dias úteis
+                                                    </span>
+                                                    {' '}+ prazo de entrega.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                     <button
                                         onClick={handleAddToCart}
                                         disabled={!product.track_inventory ? false : (product.stock_quantity || 0) <= 0}
@@ -1095,6 +1113,15 @@ export const PublicProductPage: React.FC = () => {
                                         <span className="text-slate-400 text-xs ml-1.5">· Calcule o frete pelo CEP acima</span>
                                     </div>
                                 </div>
+                                {((product as any).effective_production_days ?? (product as any).production_days ?? 0) > 0 && (
+                                    <div className="flex items-center gap-3 px-3 py-2 bg-amber-50 rounded-xl border border-amber-200">
+                                        <Settings className="w-5 h-5 text-amber-600 shrink-0" />
+                                        <div className="min-w-0">
+                                            <span className="font-semibold text-amber-800 text-sm">Fabricação: {(product as any).effective_production_days ?? (product as any).production_days} dias úteis</span>
+                                            <span className="text-amber-600 text-xs ml-1.5">· Sob encomenda</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                         </div>

@@ -566,6 +566,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             mergedData.meta_description = currentMetaDescription || null;
             mergedData.keywords = currentKeywords || null;
 
+            // Prazo de produção individual (override da categoria)
+            const currentProductionDays = watch('production_days');
+            mergedData.production_days = currentProductionDays != null && currentProductionDays !== '' as any
+                ? parseInt(String(currentProductionDays))
+                : null;
+
             if (data.model) {
                 try {
                     const models = await modelService.listActive();
@@ -1169,6 +1175,36 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             </div >
 
 
+
+            {/* — PRAZO DE PRODUÇÃO (Override individual) — */}
+            <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl shadow-sm">
+                <h3 className="font-semibold text-amber-800 mb-1 flex items-center gap-2">
+                    ⚙️ Prazo de Produção Individual
+                </h3>
+                <p className="text-xs text-amber-700 mb-3">
+                    Deixe em branco para herdar o prazo da categoria. Preencha apenas se este produto tem um prazo diferente.
+                </p>
+                <div className="flex items-center gap-3">
+                    <input
+                        type="number"
+                        min="0"
+                        value={watch('production_days') ?? ''}
+                        onChange={(e) => setValue('production_days' as any, e.target.value === '' ? null : parseInt(e.target.value) || 0)}
+                        placeholder="Ex: 3 (dias úteis)"
+                        className="w-40 px-3 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white text-sm"
+                    />
+                    <span className="text-sm text-amber-700">dias úteis antes do envio</span>
+                    {(watch('production_days') != null) && (
+                        <button
+                            type="button"
+                            onClick={() => setValue('production_days' as any, null)}
+                            className="text-xs text-amber-600 underline hover:text-amber-800"
+                        >
+                            Limpar (usar categoria)
+                        </button>
+                    )}
+                </div>
+            </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
                 <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900">

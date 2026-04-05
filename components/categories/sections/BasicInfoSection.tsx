@@ -9,6 +9,8 @@ interface BasicInfoSectionProps {
     availableParents?: Category[];
     warrantyDays: number;
     onWarrantyDaysChange: (days: number) => void;
+    productionDays: number;
+    onProductionDaysChange: (days: number) => void;
     isEditing?: boolean;
 }
 
@@ -29,6 +31,8 @@ export const BasicInfoSection: React.FC<BasicInfoSectionProps> = ({
     availableParents = [],
     warrantyDays,
     onWarrantyDaysChange,
+    productionDays,
+    onProductionDaysChange,
     isEditing = false
 }) => {
     // Generate slug from name
@@ -120,6 +124,24 @@ export const BasicInfoSection: React.FC<BasicInfoSectionProps> = ({
                     />
                     <p className="text-xs text-slate-500 mt-1">
                         Período de garantia padrão para produtos desta categoria
+                    </p>
+                </div>
+
+                {/* Production Days */}
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <label className="block text-sm font-semibold text-amber-800 mb-1">
+                        ⚙️ Prazo de Produção (dias úteis)
+                    </label>
+                    <input
+                        type="number"
+                        min="0"
+                        value={productionDays}
+                        onChange={(e) => onProductionDaysChange(parseInt(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                    />
+                    <p className="text-xs text-amber-700 mt-1">
+                        Dias úteis de fabricação antes do envio. <b>0 = entrega normal.</b> Produtos desta categoria herdam este prazo automaticamente (pode ser sobrescrito por produto).
                     </p>
                 </div>
             </div>

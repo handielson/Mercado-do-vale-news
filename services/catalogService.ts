@@ -146,7 +146,7 @@ export const catalogService = {
                         result = result.filter(p => 
                             (p.name && p.name.toLowerCase().includes(query)) ||
                             (p.brand && p.brand.toLowerCase().includes(query)) ||
-                            (p.model && p.model.toLowerCase().includes(query)) ||
+                            ((p as any).model && (p as any).model.toLowerCase().includes(query)) ||
                             (p.sku && p.sku.toLowerCase().includes(query)) ||
                             (p.description && typeof p.description === 'string' && p.description.toLowerCase().includes(query))
                         );
@@ -171,7 +171,7 @@ export const catalogService = {
                         const lenBefore = result.length;
                         // Combos (is_combo=1) nunca são filtrados por preço zero — seu preço é calculado
                         result = result.filter(p => {
-                            const keep = p.is_combo === 1 || p.is_combo === true || (p.price_retail || 0) > 0;
+                            const keep = (p as any).is_combo === 1 || (p as any).is_combo === true || (p.price_retail || 0) > 0;
                             return keep;
                         });
                         console.log(`[catalogService] Ocultados por preço 0: ${lenBefore - result.length}`);
@@ -205,8 +205,8 @@ export const catalogService = {
                         default:
                             // recent / featured: newest first (images-first for display)
                             result.sort((a, b) => {
-                                const dateA = new Date(a.created_at || 0).getTime();
-                                const dateB = new Date(b.created_at || 0).getTime();
+                                const dateA = new Date((a as any).created_at || 0).getTime();
+                                const dateB = new Date((b as any).created_at || 0).getTime();
                                 return dateB - dateA;
                             });
                     }
@@ -216,7 +216,7 @@ export const catalogService = {
                     const paginated = result.slice(from, from + pageSize);
 
                     console.log(`⚡ [catalogService] VPS served ${paginated.length}/${result.length} products`);
-                    return { products: paginated, total: result.length, hasMore: paginated.length === pageSize };
+                    return { products: paginated as unknown as CatalogProduct[], total: result.length, hasMore: paginated.length === pageSize };
                 }
             } catch (vpsErr) {
                 console.error('[catalogService] VPS API hard failure:', vpsErr);

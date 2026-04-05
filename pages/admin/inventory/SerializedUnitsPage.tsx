@@ -22,9 +22,14 @@ import {
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
 
-interface UnitWithProduct extends Unit {
+interface UnitWithProduct extends Omit<Unit, 'created' | 'updated'> {
     product_name?: string;
     product_sku?: string;
+    companyId: string;
+    productId: string;
+    serial?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 interface SwapLog {
@@ -380,6 +385,7 @@ export default function SerializedUnitsPage() {
                 imei_1: row.imei_1,
                 imei_2: row.imei_2,
                 serial: row.serial,
+                serial_number: row.serial,
                 status: row.status,
                 condition: row.condition,
                 cost_price: row.cost_price,

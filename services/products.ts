@@ -71,6 +71,7 @@ function transformFromDB(row: any): Product {
         meta_description: row.meta_description || undefined,
         keywords: Array.isArray(row.keywords) ? row.keywords : (typeof row.keywords === 'string' ? row.keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : []),
         kits: row.kits || [],
+        production_days: row.production_days ?? null,
         created: row.created_at,
         updated: row.updated_at,
     };
@@ -241,6 +242,7 @@ async function create(input: ProductInput): Promise<Product> {
         meta_description: input.meta_description || null,
         keywords: input.keywords ? input.keywords.join(',') : null,
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
+        production_days: input.production_days != null ? input.production_days : null,
     };
 
     const result = await vpsApiService.createProduct(payload);
@@ -356,6 +358,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         meta_description: input.meta_description || null,
         keywords: input.keywords ? input.keywords.join(',') : null,
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
+        production_days: input.production_days != null ? input.production_days : null,
     };
 
     // Pegamos o oldProduct ANTES de atualizar para comparar preços e estoques

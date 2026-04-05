@@ -156,6 +156,9 @@ export interface Product {
     // Product Kits (Volume Pricing)
     kits?: ProductKit[];       // Descontos por quantidade no mesmo produto
 
+    // Production Lead Time (Encomenda)
+    production_days?: number | null;  // Dias úteis de fabricação (null = usar padrão da categoria)
+
     // Timestamps
     created: string;
     updated: string;
@@ -227,4 +230,7 @@ export interface ProductInput {
 
     // Product Kits (Volume Pricing)
     kits?: ProductKit[];
+
+    // Production Lead Time (Encomenda)
+    production_days?: number | null;  // Dias úteis (null = herdar da categoria)
 }

@@ -49,6 +49,7 @@ async function list(): Promise<Category[]> {
         slug: row.slug,
         config: row.config,
         warranty_days: row.warranty_days || 90,
+        production_days: row.production_days || 0,
         extended_warranty_enabled: row.extended_warranty_enabled ?? false,
         margin_wholesale: row.margin_wholesale,
         margin_reseller: row.margin_reseller,

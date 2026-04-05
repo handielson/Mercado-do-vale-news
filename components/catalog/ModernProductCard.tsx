@@ -573,6 +573,12 @@ export function ModernProductCard({
                                 🔥 Acabando
                             </span>
                         )}
+                        {/* Badge Sob Encomenda */}
+                        {((product as any).effective_production_days ?? (product as any).production_days ?? 0) > 0 && (
+                            <span className="text-[10px] sm:text-xs bg-amber-500/90 backdrop-blur-sm text-white px-2 py-1 rounded-full font-medium shadow-sm">
+                                ⚙️ Encomenda
+                            </span>
+                        )}
                     </div>
 
                     {/* Action Buttons (bottom right on hover) */}

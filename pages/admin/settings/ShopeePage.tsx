@@ -32,6 +32,8 @@ interface ShopeeProduct {
     price_retail?: number;
     price_cost?: number;
     category_slug?: string;
+    inmetro_certificate?: string;
+    ncm?: string;
 }
 
 interface LocalProduct {
@@ -42,6 +44,8 @@ interface LocalProduct {
     price_retail: number;
     price_cost: number;
     category_slug: string;
+    inmetro_certificate?: string;
+    ncm?: string;
 }
 
 type Tab = 'config' | 'products' | 'orders' | 'finance' | 'printers';
@@ -758,6 +762,7 @@ export default function ShopeePage() {
                                                                             sku: p.sku || '',
                                                                             images: p.images || [],
                                                                             price_retail: p.price_retail || 0,
+                                                                            price_cost: p.price_cost || 0,
                                                                             category_slug: p.category_slug || '',
                                                                         })}
                                                                         className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-[#ee4d2d] text-white hover:bg-[#d73f21]">

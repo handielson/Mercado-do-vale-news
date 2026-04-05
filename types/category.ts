@@ -139,7 +139,8 @@ export interface Category {
     slug: string;
     config: CategoryConfig;
     warranty_days: number;
-    extended_warranty_enabled: boolean; // Se true, exibe opção de garantia estendida no carrinho
+    production_days: number;          // Dias úteis de produção antes do envio (0 = entrega normal)
+    extended_warranty_enabled: boolean;
     margin_wholesale?: number;
     margin_reseller?: number;
     created_at?: string;
@@ -157,6 +158,7 @@ export interface CategoryInput {
     slug?: string;
     config: CategoryConfig;
     warranty_days?: number;
+    production_days?: number;
     extended_warranty_enabled?: boolean;
     margin_wholesale?: number;
     margin_reseller?: number;
