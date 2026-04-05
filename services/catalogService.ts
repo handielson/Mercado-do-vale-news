@@ -34,7 +34,112 @@ export const catalogService = {
     ): Promise<{ products: CatalogProduct[], total: number, hasMore: boolean }> => {
         const cacheKey = `${CACHE_KEY_PREFIX}products:${JSON.stringify({ filters, page, pageSize })}`;
 
-        // 1. STALE: Try to return instantly from LocalStorage
+        // Helper para salvar no cache
+        const saveToCache = (products: any[], total: number, hasMore: boolean) => {
+            if (filters?.search) return; // Buscas não são cacheadas
+            const storage = getStorage();
+            if (!storage) return;
+            try {
+                storage.setItem(cacheKey, JSON.stringify({ data: products, total, hasMore, timestamp: Date.now() }));
+            } catch (e) {
+                // quota exceeded — ignora silenciosamente
+            }
+        };
+
+        // Helper para buscar da VPS
+        const fetchFromVps = async () => {
+            let vpsRaw: any = null;
+            let vpsCats: any[] = [];
+
+            if (filters?.categories && filters.categories.length > 0 && !filters?.search) {
+                [vpsCats, vpsRaw] = await Promise.all([
+                    vpsApiService.getCategories(),
+                    vpsApiService.getProducts({
+                        category: filters.categories.join(','),
+                        search: filters?.search,
+                        favoritesOnly: filters?.favoritesOnly,
+                        customerId: filters?.customerId,
+                        limit: 2000,
+                    }),
+                ]);
+            } else {
+                [vpsCats, vpsRaw] = await Promise.all([
+                    vpsApiService.getCategories(),
+                    vpsApiService.getProducts({
+                        search: filters?.search,
+                        favoritesOnly: filters?.favoritesOnly,
+                        customerId: filters?.customerId,
+                        limit: 1000,
+                    }),
+                ]);
+            }
+
+            if (vpsRaw === null) return null;
+
+            const settings = {
+                hide_inactive: true,
+                hide_zero_price: false,
+                hide_out_of_stock: false,
+                min_stock_to_show: 0,
+            };
+
+            const catSlugMap = new Map<string, string>(
+                (vpsCats || []).map((c: any) => [c.id, c.slug])
+            );
+
+            let result = (vpsRaw as any[]).map((p: any) => {
+                const normalized = normalizeProduct(p);
+                return { ...normalized, category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined };
+            });
+
+            if (filters?.search && filters.search.trim() !== '') {
+                const query = filters.search.toLowerCase().trim();
+                result = result.filter(p =>
+                    (p.name && p.name.toLowerCase().includes(query)) ||
+                    (p.brand && p.brand.toLowerCase().includes(query)) ||
+                    ((p as any).model && (p as any).model.toLowerCase().includes(query)) ||
+                    (p.sku && p.sku.toLowerCase().includes(query)) ||
+                    (p.description && typeof p.description === 'string' && p.description.toLowerCase().includes(query))
+                );
+            }
+
+            if (settings.hide_inactive && !filters?.search) {
+                result = result.filter(p => p.status === 'active');
+            }
+            if (filters?.inStockOnly) {
+                result = result.filter(p => !p.track_inventory || (p.stock_quantity || 0) > 0);
+            }
+            if (filters?.categories && filters.categories.length > 1) {
+                result = result.filter(p => p.category_id && filters.categories!.includes(p.category_id));
+            }
+            if (filters?.brands && filters.brands.length > 0) {
+                result = result.filter(p => p.brand && filters.brands!.includes(p.brand));
+            }
+            if (filters?.priceRange) {
+                result = result.filter(p => (p.price_retail || 0) >= filters.priceRange![0] && (p.price_retail || 0) <= filters.priceRange![1]);
+            }
+            if (filters?.featuredOnly) {
+                result = result.filter(p => p.custom_fields && typeof p.custom_fields === 'object' && 'featured' in p.custom_fields && p.custom_fields.featured === true);
+            }
+
+            switch (filters?.sortBy) {
+                case 'price_asc':  result.sort((a, b) => (a.price_retail || 0) - (b.price_retail || 0)); break;
+                case 'price_desc': result.sort((a, b) => (b.price_retail || 0) - (a.price_retail || 0)); break;
+                default:
+                    result.sort((a, b) => {
+                        const dateA = new Date((a as any).created_at || 0).getTime();
+                        const dateB = new Date((b as any).created_at || 0).getTime();
+                        return dateB - dateA;
+                    });
+            }
+
+            const from = (page - 1) * pageSize;
+            const paginated = result.slice(from, from + pageSize);
+            return { products: paginated as unknown as CatalogProduct[], total: result.length, hasMore: paginated.length === pageSize };
+        };
+
+        // ── SWR (Stale-While-Revalidate) ──────────────────────────────────────
+        // 1. Verificar cache localStorage
         if (!bypassCache && !filters?.search) {
             const storage = getStorage();
             if (storage) {
@@ -42,194 +147,43 @@ export const catalogService = {
                     const cachedStr = storage.getItem(cacheKey);
                     if (cachedStr) {
                         const cached = JSON.parse(cachedStr);
-                        // Serve staled cache instantly, but still proceed to fetch and revalidate in background IF TTL expired
-                        if (Date.now() - cached.timestamp < CACHE_TTL) {
-                            console.log('⚡ [catalogService] Serving from persistent cache (Fresh)');
-                            return {
-                                products: cached.data,
-                                total: cached.total,
-                                hasMore: cached.hasMore
-                            };
+                        const isStale = Date.now() - cached.timestamp >= CACHE_TTL;
+
+                        if (!isStale) {
+                            // Cache fresco → retorna instantaneamente
+                            console.log('⚡ [catalogService] Cache fresco — retornando instantaneamente');
+                            return { products: cached.data, total: cached.total, hasMore: cached.hasMore };
                         } else {
-                            // It's stale - we COULD return it here for instant SWR, but for critical e-comm data 
-                            // we usually prefer letting TTL control freshness, or we return now and trigger async fetch via React Query.
-                            // Since we are not using React Query, we will just let it fetch normally if expired.
+                            // Cache stale → serve imediatamente e revalida em background
+                            console.log('⚡ [catalogService] Cache stale — servindo imediatamente, revalidando em background');
+                            fetchFromVps().then(fresh => {
+                                if (fresh) saveToCache(fresh.products, fresh.total, fresh.hasMore);
+                            }).catch(() => {});
+                            return { products: cached.data, total: cached.total, hasMore: cached.hasMore };
                         }
                     }
                 } catch (e) {
-                    console.warn('Failed to parse catalog cache', e);
+                    console.warn('[catalogService] Failed to parse catalog cache', e);
                 }
             }
         }
 
-        console.log(`🌐 [catalogService] Iniciando busca de produtos (bypassCache: ${bypassCache})`);
-
-        // ── 100% VPS API PATH ──────────────────────────────────────────────────
-        // P1: busca categorias e produtos em PARALELO (antes era sequencial → -200-400ms)
+        // 2. Sem cache → busca da VPS e salva
+        console.log(`🌐 [catalogService] Buscando da VPS (bypassCache: ${bypassCache})`);
         try {
-                let vpsRaw: any = null;
-                let vpsCats: any[] = [];
-
-                if (filters?.categories && filters.categories.length > 0 && !filters?.search) {
-                    [vpsCats, vpsRaw] = await Promise.all([
-                        vpsApiService.getCategories(),
-                        vpsApiService.getProducts({
-                            category: filters.categories.join(','),
-                            search: filters?.search,
-                            favoritesOnly: filters?.favoritesOnly,
-                            customerId: filters?.customerId,
-                            limit: 2000,
-                        }),
-                    ]);
-                } else {
-                    [vpsCats, vpsRaw] = await Promise.all([
-                        vpsApiService.getCategories(),
-                        vpsApiService.getProducts({
-                            search: filters?.search,
-                            favoritesOnly: filters?.favoritesOnly,
-                            customerId: filters?.customerId,
-                            limit: 1000,
-                        }),
-                    ]);
-                }
-
-
-                if (vpsRaw !== null) {
-                    // Settings no caminho VPS: hide_zero_price e hide_out_of_stock são sempre false
-                    // (a VPS não tem dados suficientes de estoque/preço para esses filtros).
-                    // NÃO buscamos settings aqui para evitar req. extra a cada carga de produtos.
-                    const settings = {
-                        hide_inactive: true,
-                        hide_zero_price: false,
-                        hide_out_of_stock: false,
-                        min_stock_to_show: 0,
-                    };
-
-                    // Category slug map from VPS
-                    const catSlugMap = new Map<string, string>(
-                        (vpsCats || []).map((c: any) => [c.id, c.slug])
-                    );
-
-                    // Apply visibility rules + multi-category filter client-side
-                    let result = (vpsRaw as any[]).map((p: any) => {
-                        const normalized = normalizeProduct(p);
-                        return {
-                            ...normalized,
-                            category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
-                        };
-                    });
-
-                    console.log(`[catalogService] Total de produtos brutos da VPS antes de filtros: ${result.length}`);
-                    if (result.length > 0) {
-                        // Fazemos um log do primeiro e do KB-SCLS caso exista
-                        const comboTest = result.find(c => c.sku === 'KB-SCLS' || c.name?.includes('SCLS'));
-                        if (comboTest) console.log('[catalogService] Exemplo de Produto Combo (KB-SCLS) Mapeado:', comboTest);
-                        // Log diagnóstico de campos de preço na VPS
-                        const zeroPriceExample = result.find(p => (p.price_retail || 0) <= 0);
-                        const positivePriceExample = result.find(p => (p.price_retail || 0) > 0);
-                        if (zeroPriceExample) {
-                            const raw = (vpsRaw as any[]).find(p => p.id === zeroPriceExample.id);
-                            console.log('[catalogService] 🔎 Produto com preço 0 — campos de preço brutos da VPS:', 
-                                { id: raw?.id, sku: raw?.sku, price: raw?.price, price_retail: raw?.price_retail, 
-                                  preco: raw?.preco, preco_venda: raw?.preco_venda, preco_varejo: raw?.preco_varejo });
-                        }
-                        if (positivePriceExample) {
-                            const raw = (vpsRaw as any[]).find(p => p.id === positivePriceExample.id);
-                            console.log('[catalogService] ✅ Produto com preço > 0 — campos de preço brutos da VPS:', 
-                                { id: raw?.id, sku: raw?.sku, price: raw?.price, price_retail: raw?.price_retail, 
-                                  preco: raw?.preco, preco_venda: raw?.preco_venda, preco_varejo: raw?.preco_varejo });
-                        }
-                    }
-
-                    // Client-side Text Search Filter (Fallback in case VPS API doesn't filter perfectly)
-                    if (filters?.search && filters.search.trim() !== '') {
-                        const query = filters.search.toLowerCase().trim();
-                        const lenBefore = result.length;
-                        result = result.filter(p => 
-                            (p.name && p.name.toLowerCase().includes(query)) ||
-                            (p.brand && p.brand.toLowerCase().includes(query)) ||
-                            ((p as any).model && (p as any).model.toLowerCase().includes(query)) ||
-                            (p.sku && p.sku.toLowerCase().includes(query)) ||
-                            (p.description && typeof p.description === 'string' && p.description.toLowerCase().includes(query))
-                        );
-                        console.log(`[catalogService] Ocultados por text search ("${query}"): ${lenBefore - result.length}`);
-                    }
-
-                    if (settings.hide_inactive && !filters?.search) {
-                         const lenBefore = result.length;
-                         result = result.filter(p => p.status === 'active');
-                         console.log(`[catalogService] Ocultados inativos: ${lenBefore - result.length}`);
-                    }
-
-                    if (settings.hide_out_of_stock || filters?.inStockOnly) {
-                        const lenBefore = result.length;
-                        result = result.filter(p => {
-                            const keep = !p.track_inventory || (p.stock_quantity || 0) > 0;
-                            return keep;
-                        });
-                        console.log(`[catalogService] Ocultados por falta de estoque (track_inventory + <= 0): ${lenBefore - result.length}`);
-                    }
-                    if (settings.hide_zero_price) {
-                        const lenBefore = result.length;
-                        // Combos (is_combo=1) nunca são filtrados por preço zero — seu preço é calculado
-                        result = result.filter(p => {
-                            const keep = (p as any).is_combo === 1 || (p as any).is_combo === true || (p.price_retail || 0) > 0;
-                            return keep;
-                        });
-                        console.log(`[catalogService] Ocultados por preço 0: ${lenBefore - result.length}`);
-                    }
-                    if (settings.min_stock_to_show > 0) {
-                        const lenBefore = result.length;
-                        result = result.filter(p => {
-                            const keep = !p.track_inventory || (p.stock_quantity || 0) >= settings.min_stock_to_show;
-                            return keep;
-                        });
-                        console.log(`[catalogService] Ocultados por estoque min_stock_to_show (${settings.min_stock_to_show}): ${lenBefore - result.length}`);
-                    }
-                    
-                    if (filters?.categories && filters.categories.length > 1) {
-                        result = result.filter(p => p.category_id && filters.categories!.includes(p.category_id));
-                    }
-                    if (filters?.brands && filters.brands.length > 0) {
-                        result = result.filter(p => p.brand && filters.brands!.includes(p.brand));
-                    }
-                    if (filters?.priceRange) {
-                        result = result.filter(p => (p.price_retail || 0) >= filters.priceRange![0] && (p.price_retail || 0) <= filters.priceRange![1]);
-                    }
-                    if (filters?.featuredOnly) {
-                        result = result.filter(p => p.custom_fields && typeof p.custom_fields === 'object' && 'featured' in p.custom_fields && p.custom_fields.featured === true);
-                    }
-
-                    // Client-side sort
-                    switch (filters?.sortBy) {
-                        case 'price_asc':  result.sort((a, b) => (a.price_retail || 0) - (b.price_retail || 0)); break;
-                        case 'price_desc': result.sort((a, b) => (b.price_retail || 0) - (a.price_retail || 0)); break;
-                        default:
-                            // recent / featured: newest first (images-first for display)
-                            result.sort((a, b) => {
-                                const dateA = new Date((a as any).created_at || 0).getTime();
-                                const dateB = new Date((b as any).created_at || 0).getTime();
-                                return dateB - dateA;
-                            });
-                    }
-
-                    // Client-side pagination
-                    const from = (page - 1) * pageSize;
-                    const paginated = result.slice(from, from + pageSize);
-
-                    console.log(`⚡ [catalogService] VPS served ${paginated.length}/${result.length} products`);
-                    return { products: paginated as unknown as CatalogProduct[], total: result.length, hasMore: paginated.length === pageSize };
-                }
-            } catch (vpsErr) {
-                console.error('[catalogService] VPS API hard failure:', vpsErr);
-                throw new Error('Falha ao conectar com o serviço de catálogo integrado.');
+            const fresh = await fetchFromVps();
+            if (fresh) {
+                saveToCache(fresh.products, fresh.total, fresh.hasMore);
+                console.log(`⚡ [catalogService] VPS: ${fresh.products.length}/${fresh.total} produtos`);
+                return fresh;
             }
-        
-        // Se a VPS retornou explicitamente null ou falhou (e não usamos bypassCache), 
-        // retorna vazio.
+        } catch (vpsErr) {
+            console.error('[catalogService] VPS falhou:', vpsErr);
+            throw new Error('Falha ao conectar com o serviço de catálogo integrado.');
+        }
+
         return { products: [], total: 0, hasMore: false };
     },
-
 
 
     /**
