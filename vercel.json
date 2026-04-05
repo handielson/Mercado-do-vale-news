@@ -15,6 +15,10 @@
             "destination": "/api/$1"
         },
         {
+            "source": "/sitemap.xml",
+            "destination": "/api/sitemap"
+        },
+        {
             "source": "/produto/:slug",
             "destination": "/api/seo-produto?slug=:slug"
         },
