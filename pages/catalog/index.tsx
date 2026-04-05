@@ -45,6 +45,18 @@ function CatalogContent() {
     const [mobileView, setMobileView] = useState<'grid' | 'list'>('grid');
     const [autoDetectedBrand, setAutoDetectedBrand] = useState<string | null>(null);
     const [expandCats, setExpandCats] = useState(false);
+    const [headerHeight, setHeaderHeight] = useState(56);
+
+    // Mede a altura real do header para posicionar a sticky bar corretamente
+    useEffect(() => {
+        const header = document.querySelector('header');
+        if (!header) return;
+        const update = () => setHeaderHeight(header.offsetHeight);
+        update();
+        const observer = new ResizeObserver(update);
+        observer.observe(header);
+        return () => observer.disconnect();
+    }, []);
 
     // Mapeia customer_type do banco (retail/wholesale/resale) → CustomerType do banner (varejo/revenda/atacado)
     const customerType = ((): CustomerType | undefined => {
@@ -297,7 +309,7 @@ function CatalogContent() {
             <PublicHeader />
 
             {/* Mobile Sticky Search Bar + Categories Dropdown */}
-            <div className="sm:hidden sticky top-[56px] z-40">
+            <div className="sm:hidden sticky z-40" style={{ top: headerHeight }}>
                 {/* Barra de busca */}
                 <div className="bg-white border-b border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2">
                     <div className="flex-1 relative">
