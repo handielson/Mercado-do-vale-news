@@ -29,7 +29,8 @@ async function fetchMetadata(): Promise<MetadataCache | null> {
         try {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), 10000);
-            const res = await fetch(`${VPS_BASE_URL}/catalog/metadata`, {
+            const timestamp = Date.now();
+            const res = await fetch(`${VPS_BASE_URL}/catalog/metadata?t=${timestamp}`, {
                 signal: controller.signal,
                 headers: { Accept: 'application/json' },
                 cache: 'no-store',
