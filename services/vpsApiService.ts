@@ -60,7 +60,8 @@ class VpsApiService {
       const res = await fetch(`${VPS_BASE_URL}${path}`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
-        cache: 'no-store', // Sempre ignora cache nativo HTTP para usar o nosso in-memory this.cache
+        // Não forçamos 'no-store': o browser/CDN pode usar Cache-Control da VPS.
+        // O cache in-memory (this.cache, 5 min) já previne requisições duplicadas na sessão.
       });
       clearTimeout(timer);
       if (!res.ok) return null;

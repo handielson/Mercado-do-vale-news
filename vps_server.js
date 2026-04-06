@@ -49,6 +49,12 @@ fastify.register(require('@fastify/multipart'), {
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
 });
 
+// Compressão HTTP gzip/br — reduz payload JSON de 90MB → ~8MB, compact+gzip → ~800KB
+fastify.register(require('@fastify/compress'), {
+  global: true,
+  encodings: ['gzip', 'deflate'],
+});
+
 
 // ─── Auth middleware for write endpoints ───────────────────────────────────
 function requireSyncKey(request, reply, done) {
@@ -398,13 +404,28 @@ fastify.get('/products/:id', async (req, reply) => {
 });
 
 // Busca por slug (para PublicProductPage)
+// Fallback: se não encontrar por slug E o parâmetro for um UUID, busca por ID
 fastify.get('/products/by-slug/:slug', async (req, reply) => {
-  const [rows] = await pool.query(
+  const slugParam = req.params.slug;
+
+  let rows;
+  [rows] = await pool.query(
     `SELECT *,
       (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
      FROM products WHERE slug = ?`,
-    [req.params.slug]
+    [slugParam]
   );
+
+  // Fallback: slug pode ser um UUID (produto sem slug no banco)
+  if (!rows.length && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(slugParam)) {
+    [rows] = await pool.query(
+      `SELECT *,
+        (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+       FROM products WHERE id = ?`,
+      [slugParam]
+    );
+  }
+
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
   return {

@@ -6,7 +6,7 @@ import { normalizeProduct } from '@/services/productNormalizer';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos (Para revalidação silenciosa)
-const CACHE_KEY_PREFIX = '@mv:catalog:v2:';
+const CACHE_KEY_PREFIX = '@mv:catalog:v3:';
 
 // Helper to safely access localStorage (prevents SSR errors)
 const getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
@@ -53,15 +53,16 @@ export const catalogService = {
             let vpsRaw: any = null;
             let vpsCats: any[] = [];
 
+            // compact: true → retorna apenas imagens com URL HTTP (descarta base64 ~90MB → ~5MB)
+            // Produtos com imagens base64 terão images:[] — placeholder exibido normalmente
             if (filters?.categories && filters.categories.length > 0 && !filters?.search) {
                 [vpsCats, vpsRaw] = await Promise.all([
                     vpsApiService.getCategories(),
                     vpsApiService.getProducts({
                         category: filters.categories.join(','),
-                        // Removido search aqui para não fazer a filtragem com acentos no backend, 
-                        // e deixar o filtro local sem-acentos resolver.
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
+                        compact: true,
                         limit: 2000,
                     }),
                 ]);
@@ -71,6 +72,7 @@ export const catalogService = {
                     vpsApiService.getProducts({
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
+                        compact: true,
                         limit: 1000,
                     }),
                 ]);

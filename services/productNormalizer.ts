@@ -67,9 +67,20 @@ export interface NormalizedProduct {
 }
 
 /**
- * Normaliza qualquer produto para o formato canônico VPS MySQL.
- * Seguro para usar com dados de VPS, Supabase legado ou Bling.
+ * Gera slug a partir de qualquer string (pt-BR safe)
+ * Ex: "Caneta Stylus / iOS" → "caneta-stylus-ios"
  */
+function slugify(text: string): string {
+  return text
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')  // caracteres especiais → espaço
+    .trim()
+    .replace(/\s+/g, '-')           // espaços → hífens
+    .replace(/-{2,}/g, '-');         // hífens duplos → simples
+}
+
+
 export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
   // ── Status ─────────────────────────────────────────────────────────────────
   // VPS: 'active' | 'inactive' | 'ativo' | 'a' | 'disponível' | 'disponivel'
@@ -135,7 +146,7 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     sku: String(p.sku || ''),
     ean,
     name: String(p.name || ''),
-    slug: p.slug,
+    slug: p.slug || slugify(String(p.name || p.sku || p.id || '')),
     status,
     price_retail,
     price_cost: p.price_cost !== undefined ? parseFloat(String(p.price_cost)) || 0 : undefined,
