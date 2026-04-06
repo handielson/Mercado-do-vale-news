@@ -439,7 +439,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         if (settings?.melhor_envio_token) {
             tasks.push((async () => {
                 try {
-                    const res = await fetch('/api/melhor-envio-calculate', {
+                    const res = await fetch('/api/shipping?provider=melhor-envio&action=calculate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -475,7 +475,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         if (settings?.frenet_token && settings?.frenet_enabled) {
             tasks.push((async () => {
                 try {
-                    const res = await fetch('/api/frenet-calculate', {
+                    const res = await fetch('/api/shipping?provider=frenet&action=calculate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -674,7 +674,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         if (!activeCarrier || !settings?.melhor_envio_token) return;
         setLabelLoading(true);
         try {
-            const res = await fetch('/api/melhor-envio-label', {
+            const res = await fetch('/api/shipping?provider=melhor-envio&action=label', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

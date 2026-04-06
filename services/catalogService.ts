@@ -93,13 +93,14 @@ export const catalogService = {
             });
 
             if (filters?.search && filters.search.trim() !== '') {
-                const query = filters.search.toLowerCase().trim();
+                const removeAccents = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const query = removeAccents(filters.search.toLowerCase().trim());
                 result = result.filter(p =>
-                    (p.name && p.name.toLowerCase().includes(query)) ||
-                    (p.brand && p.brand.toLowerCase().includes(query)) ||
-                    ((p as any).model && (p as any).model.toLowerCase().includes(query)) ||
-                    (p.sku && p.sku.toLowerCase().includes(query)) ||
-                    (p.description && typeof p.description === 'string' && p.description.toLowerCase().includes(query))
+                    (p.name && removeAccents(p.name.toLowerCase()).includes(query)) ||
+                    (p.brand && removeAccents(p.brand.toLowerCase()).includes(query)) ||
+                    ((p as any).model && removeAccents((p as any).model.toLowerCase()).includes(query)) ||
+                    (p.sku && removeAccents(p.sku.toLowerCase()).includes(query)) ||
+                    (p.description && typeof p.description === 'string' && removeAccents(p.description.toLowerCase()).includes(query))
                 );
             }
 
