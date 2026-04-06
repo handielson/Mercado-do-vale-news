@@ -970,6 +970,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 isCompressing={isCompressing}
                 handleImageUpload={handleImageUpload}
                 removeImage={removeImage}
+                onReorder={(newImages) => {
+                    setValue('images', newImages);
+                    setImagePreviews(newImages);
+                }}
                 useCustomImages={useCustomImages}
                 onToggleCustomImages={setUseCustomImages}
                 hasDefaultImages={!!selectedModel?.id && !!selectedColor}

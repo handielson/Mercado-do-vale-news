@@ -1,5 +1,5 @@
-import React from 'react';
-import { Loader2, X, Upload } from 'lucide-react';
+import React, { useState } from 'react';
+import { Loader2, X, Upload, GripVertical } from 'lucide-react';
 import { getCacheBustedUrl } from '../../../utils/cache-buster';
 
 interface ProductImagesProps {
@@ -7,6 +7,7 @@ interface ProductImagesProps {
     isCompressing: boolean;
     handleImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
     removeImage: (index: number) => void;
+    onReorder?: (newImages: string[]) => void;
     useCustomImages?: boolean;
     onToggleCustomImages?: (value: boolean) => void;
     hasDefaultImages?: boolean;
@@ -20,6 +21,7 @@ export function ProductImages({
     isCompressing,
     handleImageUpload,
     removeImage,
+    onReorder,
     useCustomImages = false,
     onToggleCustomImages,
     hasDefaultImages = false,
@@ -27,6 +29,37 @@ export function ProductImages({
 }: ProductImagesProps) {
     const canAddMore = imagePreviews.length < MAX_IMAGES;
     const remainingSlots = MAX_IMAGES - imagePreviews.length;
+    const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+    const handleDragStart = (index: number) => {
+        setDraggedIndex(index);
+    };
+
+    const handleDragOver = (e: React.DragEvent, index: number) => {
+        e.preventDefault();
+        if (draggedIndex === null || draggedIndex === index) return;
+        setDragOverIndex(index);
+    };
+
+    const handleDrop = (e: React.DragEvent, index: number) => {
+        e.preventDefault();
+        if (draggedIndex === null || draggedIndex === index || !onReorder) return;
+
+        const newImages = [...imagePreviews];
+        const draggedItem = newImages[draggedIndex];
+        newImages.splice(draggedIndex, 1);
+        newImages.splice(index, 0, draggedItem);
+
+        onReorder(newImages);
+        setDraggedIndex(null);
+        setDragOverIndex(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedIndex(null);
+        setDragOverIndex(null);
+    };
 
     return (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
@@ -36,6 +69,12 @@ export function ProductImages({
                     {imagePreviews.length} / {MAX_IMAGES} imagens
                 </span>
             </div>
+
+            {onReorder && imagePreviews.length > 1 && (
+                <p className="text-xs text-slate-400 flex items-center gap-1">
+                    <GripVertical size={12} /> Arraste as imagens para reordenar. A primeira é a capa.
+                </p>
+            )}
 
             {/* Toggle for custom images (used products) */}
             {hasDefaultImages && onToggleCustomImages && (
@@ -69,12 +108,36 @@ export function ProductImages({
 
             <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
                 {imagePreviews.map((src, index) => (
-                    <div key={index} className="relative aspect-square group">
+                    <div
+                        key={index}
+                        draggable={!!onReorder}
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDrop={(e) => handleDrop(e, index)}
+                        onDragEnd={handleDragEnd}
+                        className={[
+                            'relative aspect-square group transition-all',
+                            draggedIndex === index ? 'opacity-40 scale-95' : '',
+                            dragOverIndex === index && draggedIndex !== index
+                                ? 'ring-2 ring-blue-500 ring-offset-1 rounded-lg'
+                                : '',
+                            onReorder ? 'cursor-move' : '',
+                        ].join(' ')}
+                    >
                         <img
                             src={getCacheBustedUrl(src, updatedAt)}
                             alt={`Imagem ${index + 1}`}
                             className="w-full h-full object-cover rounded-lg border border-slate-200"
                         />
+
+                        {/* Badge CAPA na primeira imagem */}
+                        {index === 0 && (
+                            <div className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded font-semibold">
+                                CAPA
+                            </div>
+                        )}
+
+                        {/* Botão remover */}
                         <button
                             type="button"
                             onClick={() => removeImage(index)}
@@ -83,9 +146,18 @@ export function ProductImages({
                         >
                             <X size={12} />
                         </button>
+
+                        {/* Número da posição */}
                         <div className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">
                             {index + 1}
                         </div>
+
+                        {/* Ícone de arraste */}
+                        {onReorder && (
+                            <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <GripVertical size={14} className="text-white drop-shadow" />
+                            </div>
+                        )}
                     </div>
                 ))}
 
