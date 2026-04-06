@@ -88,21 +88,35 @@ export const catalogMetadataService = {
      */
     getAllCategories: async (): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count: number }>> => {
         try {
-            // Contagens vêm da VPS para altíssima velocidade
-            const meta = await getMetadata();
-            const vpsCounts = new Map(meta?.categories?.map(c => [c.id, { count: c.count || 0, in_stock_count: c.in_stock_count || 0 }]) || []);
-
             // Nomes e hierarquia vêm do Supabase (A fonte da Verdade que nunca falha)
             const { data, error } = await supabase.from('categories').select('id, name, parent_id').order('sort_order', { ascending: true });
             
-            if (error || !data) return meta?.categories || [];
+            if (error || !data) {
+                const meta = await getMetadata();
+                return meta?.categories || [];
+            }
+
+            // A VPS tem uma tabela `categories` desatualizada que engole os counts de categorias que não estão nela (ex: Cuidado Pessoal).
+            // Por isso não podemos usar meta.categories para puxar as contagens!
+            // Precisamos puxar a contagem CRUZADA diretamente da tabela de produtos (RAW COUNTS), ignorando a tabela categories da VPS.
+            const timestamp = Date.now();
+            const res = await fetch(`${VPS_BASE_URL}/products/category-counts?_t=${timestamp}`, {
+                headers: { 'Cache-Control': 'no-cache, no-store' }, cache: 'no-store'
+            });
+            
+            let rawCounts: any[] = [];
+            if (res.ok) {
+                rawCounts = await res.json();
+            }
+
+            const countMap = new Map(rawCounts.map(c => [c.category_id, { count: c.count || 0 }]));
 
             return data.map(c => ({
                 id: c.id,
                 name: c.name,
                 parent_id: c.parent_id,
-                count: vpsCounts.get(c.id)?.count || 0,
-                in_stock_count: vpsCounts.get(c.id)?.in_stock_count || 0,
+                count: countMap.get(c.id)?.count || 0,
+                in_stock_count: countMap.get(c.id)?.count || 0, // Fallback p/ in_stock igual ao count total
             }));
         } catch(e) {
             console.error('Erro getAllCategories:', e);
