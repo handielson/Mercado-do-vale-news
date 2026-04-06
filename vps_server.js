@@ -76,7 +76,36 @@ fastify.get('/health', async () => ({
   db: 'mysql'
 }));
 
-// ─── Migração: adiciona production_days ────────────────────────────────────
+// ─── Upload de imagem de produto ───────────────────────────────────────────
+// POST /products/:id/upload-image  (multipart/form-data, campo "file")
+// Retorna: { url: "https://api.xiaomipetrolina.com.br/images/products/:id/img-N.webp" }
+fastify.post('/products/:id/upload-image', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { id } = req.params;
+
+  // Ler o arquivo do multipart
+  const data = await req.file();
+  if (!data) return reply.code(400).send({ error: 'Nenhum arquivo enviado' });
+
+  // Diretório de destino
+  const dir = path.join(UPLOADS_DIR, 'products', id);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  // Contar imagens existentes para numerar a nova
+  const existing = fs.readdirSync(dir).filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f));
+  const ext = path.extname(data.filename || '').replace('.', '') || 'jpg';
+  const fname = `img-${existing.length + 1}.${ext}`;
+  const dest = path.join(dir, fname);
+
+  // Salvar o arquivo
+  const chunks = [];
+  for await (const chunk of data.file) chunks.push(chunk);
+  const buffer = Buffer.concat(chunks);
+  fs.writeFileSync(dest, buffer);
+
+  const url = `https://api.xiaomipetrolina.com.br/images/products/${id}/${fname}`;
+  return reply.send({ url, filename: fname });
+});
+
 fastify.post('/admin/migrate/production-days', { preHandler: requireSyncKey }, async (req, reply) => {
   const results = [];
   // Verifica via INFORMATION_SCHEMA e adiciona apenas se não existir

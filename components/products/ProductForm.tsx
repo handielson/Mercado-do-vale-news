@@ -377,19 +377,43 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
         try {
             const processedImages: string[] = [];
+            // ID do produto: existente ou temp para novo produto
+            const productId = initialData?.id || (window as any).__pendingProductTempId || (() => {
+                const tid = crypto.randomUUID();
+                (window as any).__pendingProductTempId = tid;
+                return tid;
+            })();
+
+            const VPS_BASE = import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+            const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY;
+
             for (const file of filesToProcess) {
                 const compressed = await compressImage(file);
 
-                // Convert to base64 for permanent storage
+                if (SYNC_KEY) {
+                    // Upload direto para VPS — salva como URL HTTP (não base64)
+                    const form = new FormData();
+                    form.append('file', compressed, file.name);
+                    const res = await fetch(`${VPS_BASE}/products/${productId}/upload-image`, {
+                        method: 'POST',
+                        headers: { 'x-sync-key': SYNC_KEY },
+                        body: form,
+                    });
+                    if (res.ok) {
+                        const { url } = await res.json();
+                        processedImages.push(url);
+                        continue;
+                    }
+                }
+
+                // Fallback: base64 (caso upload falhe ou SYNC_KEY ausente)
                 const reader = new FileReader();
-                const base64Promise = new Promise<string>((resolve, reject) => {
+                const base64 = await new Promise<string>((resolve, reject) => {
                     reader.onload = () => resolve(reader.result as string);
                     reader.onerror = reject;
                     reader.readAsDataURL(compressed);
                 });
-
-                const base64String = await base64Promise;
-                processedImages.push(base64String);
+                processedImages.push(base64);
             }
             const newImages = [...currentImages, ...processedImages];
             setValue('images', newImages);
@@ -400,6 +424,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             setIsCompressing(false);
             e.target.value = ''; // Reset input
         }
+
     };
 
     const removeImage = (index: number) => {
