@@ -86,6 +86,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     }, [catalogSettings]);
 
     const activeRequestRef = useRef<number>(0);
+    const loadProductsRef = useRef<(reset?: boolean, forcePage?: number) => Promise<void>>();
     const productsCountRef = useRef<number>(0); // Store length to avoid dependency loop
 
     // Carregar produtos
@@ -174,12 +175,17 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         }
     }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache, effectiveCustomerId]);
 
+    // Manter ref sempre atualizada com a versão mais recente de loadProducts
+    loadProductsRef.current = loadProducts;
+
     // Recarregar quando filtros, busca ou configurações mudarem
+    // ⚠️ loadProducts NÃO entra nas deps: usamos a ref para evitar loop de re-criação
     useEffect(() => {
         if (!settingsLoading) {
-            loadProducts(true);
+            loadProductsRef.current?.(true);
         }
-    }, [searchQuery, filters, catalogSettings, settingsLoading, loadProducts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery, filters, catalogSettings, settingsLoading]);
 
     // Carregar mais produtos
     const loadMore = useCallback(() => {
@@ -291,7 +297,10 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         if (!settingsLoading) {
             loadMetadata();
         }
-    }, [catalogSettings]);
+    // settingsLoading como dep garante execução única após settings carregarem.
+    // catalogSettings omitida intencionalmente para evitar re-fetch a cada mudança.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [settingsLoading]);
 
 
     return {

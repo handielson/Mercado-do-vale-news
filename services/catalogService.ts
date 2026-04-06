@@ -63,6 +63,7 @@ export const catalogService = {
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
                         limit: 2000,
+                        compact: true, // ⚡ Evita trazer base64 completo (dezenas de MB)
                     }),
                 ]);
             } else {
@@ -72,6 +73,7 @@ export const catalogService = {
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
                         limit: 1000,
+                        compact: true, // ⚡ Evita trazer base64 completo (dezenas de MB)
                     }),
                 ]);
             }

@@ -117,6 +117,61 @@ fastify.get('/products/category-counts', async (req, reply) => {
   return rows;
 });
 
+// ─── Catalog Metadata (categorias + marcas + faixa de preço em 1 request) ──
+fastify.get('/catalog/metadata', async (req, reply) => {
+  const [[catRows], [countRows], [brandRows], [priceRows]] = await Promise.all([
+    pool.query(
+      `SELECT id, name, slug, parent_id
+       FROM categories
+       ORDER BY sort_order ASC, name ASC`
+    ),
+    pool.query(
+      `SELECT category_id,
+              COUNT(*) AS count,
+              SUM(IF(stock_quantity > 0 OR stock_quantity IS NULL, 1, 0)) AS in_stock_count
+       FROM products
+       WHERE status = 'active' AND category_id IS NOT NULL
+       GROUP BY category_id`
+    ),
+    pool.query(
+      `SELECT brand AS name, COUNT(*) AS count
+       FROM products
+       WHERE status = 'active' AND brand IS NOT NULL AND brand != ''
+       GROUP BY brand
+       ORDER BY brand ASC`
+    ),
+    pool.query(
+      `SELECT MIN(price_retail) AS min_price, MAX(price_retail) AS max_price
+       FROM products
+       WHERE status = 'active' AND price_retail IS NOT NULL AND price_retail > 0`
+    ),
+  ]);
+
+  // Merge category rows with their product counts
+  const countMap = new Map();
+  for (const row of countRows) {
+    countMap.set(row.category_id, { count: Number(row.count), in_stock_count: Number(row.in_stock_count) });
+  }
+
+  const categories = catRows.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    slug: cat.slug,
+    parent_id: cat.parent_id || null,
+    count: countMap.get(cat.id)?.count ?? 0,
+    in_stock_count: countMap.get(cat.id)?.in_stock_count ?? 0,
+  }));
+
+  const brands = brandRows.map(b => ({ name: b.name, count: Number(b.count) }));
+
+  const priceRange = priceRows[0]?.min_price != null
+    ? { min: Number(priceRows[0].min_price), max: Number(priceRows[0].max_price) }
+    : null;
+
+  reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
+  return { categories, brands, priceRange };
+});
+
 // ─── Brands (read) ─────────────────────────────────────────────────────────
 fastify.get('/brands', async (req, reply) => {
   const [rows] = await pool.query(
