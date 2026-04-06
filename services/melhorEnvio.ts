@@ -19,7 +19,7 @@ interface MelhorEnvioInput {
 
 export const melhorEnvioService = {
     async calculate(input: MelhorEnvioInput): Promise<ShippingOption[]> {
-        const res = await fetch('/api/melhor-envio-calculate', {
+        const res = await fetch('/api/shipping?provider=melhor-envio&action=calculate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

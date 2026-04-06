@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabase } from '../src/services/supabase'; // Ajuste conforme seu path
+import { supabase } from '../services/supabase'; // Ajuste conforme seu path
 import crypto from 'crypto';
 
 /**

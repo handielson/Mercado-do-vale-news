@@ -157,6 +157,28 @@ export default async function handler(req: any, res: any) {
       }
     }
     </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org/",
+      "@type": "BreadcrumbList",
+      "itemListElement": [{
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "${baseUrl}"
+      },{
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Produtos",
+        "item": "${baseUrl}/catalog"
+      },{
+        "@type": "ListItem",
+        "position": 3,
+        "name": "${safeTitle}",
+        "item": "${url}"
+      }]
+    }
+    </script>
     <!-- Fim SEO seo-produto -->
         `;
 

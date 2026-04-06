@@ -393,7 +393,7 @@ export const shippingService = {
                         tasks.push(
                             (async () => {
                                 try {
-                                    const res = await fetch('/api/frenet-calculate', {
+                                    const res = await fetch('/api/shipping?provider=frenet&action=calculate', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({
