@@ -6,7 +6,7 @@ import { normalizeProduct } from '@/services/productNormalizer';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos (Para revalidação silenciosa)
-const CACHE_KEY_PREFIX = '@mv:catalog:v4:';
+const CACHE_KEY_PREFIX = '@mv:catalog:v5:';
 
 // Helper to safely access localStorage (prevents SSR errors)
 const getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;

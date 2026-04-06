@@ -141,7 +141,16 @@ async function run() {
                 changed = true;
               } else {
                 try {
-                  await exec(conn, `mkdir -p "${dir}"`);
+                  // Use SFTP stat/mkdir to avoid opening new SSH channels with exec
+                  try {
+                    await new Promise((res, rej) => sftp.stat(dir, err => err ? rej(err) : res()));
+                  } catch (err) {
+                    // Try to create parent then dir
+                    const parentDir = `/var/www/mdv-api/uploads/products`;
+                    await new Promise(r => sftp.mkdir(parentDir, () => r()));
+                    await new Promise(r => sftp.mkdir(dir, () => r()));
+                  }
+                    
                   await writeFile(sftp, remote, buffer); // reutiliza sessao SFTP
                   newUrls.push(url);
                   changed = true;
