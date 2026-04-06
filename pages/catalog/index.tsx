@@ -379,47 +379,81 @@ function CatalogContent() {
                     </button>
                 </div>
 
-                {/* Dropdown de categorias */}
+                {/* Dropdown de categorias (Mobile Tree) */}
                 {expandCats && (
-                    <div className="bg-white border-b border-slate-200 shadow-lg px-3 py-3">
-                        <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-white border-b border-slate-200 shadow-lg px-3 py-3 max-h-[70vh] overflow-y-auto overscroll-contain">
+                        <div className="flex flex-col gap-2">
                             {/* Botão TODOS */}
                             <button
-                                onClick={() => { setFilters({ ...filters, categories: [] }); setExpandCats(false); }}
-                                className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all ${
+                                onClick={() => { setFilters({ ...filters, categories: [], page: 1 }); setExpandCats(false); }}
+                                className={`flex items-center gap-3 py-3 px-4 rounded-xl border transition-all ${
                                     filters.categories.length === 0
                                         ? 'bg-slate-900 border-slate-900 text-white shadow-md'
                                         : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                                 }`}
                             >
-                                <span className="text-lg mb-0.5">🏠</span>
-                                <span className="text-[10px] font-bold uppercase tracking-wide leading-tight">Todos</span>
+                                <span className="text-xl">🏠</span>
+                                <span className="text-xs sm:text-sm font-bold uppercase tracking-wide">Todos os Produtos</span>
                             </button>
 
-                            {(filterStats?.categories || []).filter(c => !c.parent_id).map(cat => (
-                                <button
-                                    key={cat.id}
-                                    onClick={() => {
-                                        const children = (filterStats?.categories || []).filter(c => c.parent_id === cat.id);
-                                        const ids = children.length > 0
-                                            ? [cat.id!, ...children.map(c => c.id!)]
-                                            : [cat.id!];
-                                        setFilters({ ...filters, categories: ids });
-                                        setExpandCats(false);
-                                    }}
-                                    className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all ${
-                                        filters.categories.includes(cat.id!)
-                                            ? 'bg-slate-900 border-slate-900 text-white shadow-md'
-                                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                                    }`}
-                                >
-                                    <span className="text-lg mb-0.5">📦</span>
-                                    <span className="text-[10px] font-bold uppercase tracking-wide leading-tight line-clamp-2">{cat.name}</span>
-                                    {cat.count > 0 && (
-                                        <span className="text-[9px] text-slate-400 mt-0.5">{cat.count}</span>
-                                    )}
-                                </button>
-                            ))}
+                            {(filterStats?.categories || []).filter(c => !c.parent_id).map(cat => {
+                                const children = (filterStats?.categories || []).filter(c => c.parent_id === cat.id);
+                                const isRootActive = filters.categories.includes(cat.id!);
+                                const hasActiveChild = children.some(c => filters.categories.includes(c.id!));
+                                const isActiveBlock = isRootActive || hasActiveChild;
+
+                                return (
+                                    <div key={cat.id} className={`flex flex-col rounded-xl border overflow-hidden transition-all ${isActiveBlock ? 'border-slate-300 shadow-sm' : 'border-slate-100'}`}>
+                                        {/* Categoria Pai */}
+                                        <button
+                                            onClick={() => {
+                                                const ids = children.length > 0 ? [cat.id!, ...children.map(c => c.id!)] : [cat.id!];
+                                                setFilters({ ...filters, categories: ids, page: 1 });
+                                                setExpandCats(false);
+                                            }}
+                                            className={`flex items-center gap-3 py-2.5 px-3 transition-all ${
+                                                isActiveBlock
+                                                    ? 'bg-slate-100/80 text-slate-900'
+                                                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                                            }`}
+                                        >
+                                            <span className="text-lg opacity-80">📦</span>
+                                            <span className="text-xs sm:text-sm font-bold uppercase tracking-wide flex-1 text-left line-clamp-1">{cat.name}</span>
+                                            {cat.count > 0 && (
+                                                <span className="text-[10px] font-bold text-slate-500 bg-slate-200/50 px-2 py-0.5 rounded-full">{cat.count}</span>
+                                            )}
+                                        </button>
+
+                                        {/* Subcategorias (Filhos em Grid) */}
+                                        {children.length > 0 && (
+                                            <div className="grid grid-cols-2 gap-px bg-slate-200/50 border-t border-slate-100">
+                                                {children.map(child => {
+                                                    const isChildActive = filters.categories.includes(child.id!);
+                                                    return (
+                                                        <button
+                                                            key={child.id}
+                                                            onClick={() => {
+                                                                setFilters({ ...filters, categories: [child.id!], page: 1 });
+                                                                setExpandCats(false);
+                                                            }}
+                                                            className={`flex items-center justify-between py-2 px-3 bg-white transition-all ${
+                                                                isChildActive ? 'text-blue-600 font-bold bg-blue-50/50' : 'text-slate-600 hover:bg-slate-50'
+                                                            }`}
+                                                        >
+                                                            <span className="text-[10px] uppercase font-semibold tracking-wide truncate pr-1">{child.name}</span>
+                                                            {child.count > 0 && (
+                                                                <span className={`text-[9px] font-bold px-1.5 rounded-full ${isChildActive ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                                    {child.count}
+                                                                </span>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}

@@ -58,19 +58,15 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
             id: null,
             name: 'TODOS',
             icon: CATEGORY_ICONS['TODOS'],
-            // Soma todos os produtos no "Todos"
-            count: safeCategories.reduce((sum, cat) => sum + cat.count, 0)
+            // Soma todos os produtos das raízes (que já contêm a soma das subcategorias via VPS)
+            count: rootCategoriesData.reduce((sum, cat) => sum + cat.count, 0)
         },
         ...rootCategoriesData.map(cat => {
-            // Conta os produtos da categoria pai + produtos das subcategorias diretas
-            const childrenForThisRoot = childCategories.filter(c => c.parent_id === cat.id);
-            const childrenCount = childrenForThisRoot.reduce((s, c) => s + c.count, 0);
-            
             return {
                 id: cat.id || cat.name,
                 name: cat.name.toUpperCase(),
                 icon: CATEGORY_ICONS[cat.name.toUpperCase()] || CATEGORY_ICONS['OUTROS'],
-                count: cat.count + childrenCount,
+                count: cat.count,
                 parent_id: cat.parent_id
             };
         })

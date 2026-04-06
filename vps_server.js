@@ -241,7 +241,7 @@ fastify.get('/catalog/metadata', async (req, reply) => {
     ),
   ]);
 
-  // Montar mapa de counts por category_id
+  // Montar mapa de counts por category_id com base nos produtos diretos
   const countMap = {};
   for (const row of counts) {
     countMap[row.category_id] = {
@@ -249,6 +249,20 @@ fastify.get('/catalog/metadata', async (req, reply) => {
       in_stock_count: Number(row.in_stock_count) || 0,
     };
   }
+
+  // Garantir que toda categoria tenha registro no countMap
+  categories.forEach(cat => {
+    if (!countMap[cat.id]) countMap[cat.id] = { count: 0, in_stock_count: 0 };
+  });
+
+  // Agregar contagem de filhos para as categorias pai
+  categories.filter(c => !c.parent_id).forEach(parent => {
+    const children = categories.filter(c => c.parent_id === parent.id);
+    for (const child of children) {
+      countMap[parent.id].count += (countMap[child.id]?.count || 0);
+      countMap[parent.id].in_stock_count += (countMap[child.id]?.in_stock_count || 0);
+    }
+  });
 
   // Juntar categorias com seus counts
   const categoriesWithCounts = categories.map(cat => ({

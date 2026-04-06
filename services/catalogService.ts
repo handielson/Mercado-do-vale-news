@@ -6,7 +6,7 @@ import { normalizeProduct } from '@/services/productNormalizer';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos (Para revalidação silenciosa)
-const CACHE_KEY_PREFIX = '@mv:catalog:v3:';
+const CACHE_KEY_PREFIX = '@mv:catalog:v4:';
 
 // Helper to safely access localStorage (prevents SSR errors)
 const getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
@@ -53,8 +53,7 @@ export const catalogService = {
             let vpsRaw: any = null;
             let vpsCats: any[] = [];
 
-            // compact: true → retorna apenas imagens com URL HTTP (descarta base64 ~90MB → ~5MB)
-            // Produtos com imagens base64 terão images:[] — placeholder exibido normalmente
+            // compact: true descarta base64 e retorna apenas URLs HTTP (~5MB vs 90MB)
             if (filters?.categories && filters.categories.length > 0 && !filters?.search) {
                 [vpsCats, vpsRaw] = await Promise.all([
                     vpsApiService.getCategories(),
@@ -62,8 +61,8 @@ export const catalogService = {
                         category: filters.categories.join(','),
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
-                        compact: true,
                         limit: 2000,
+                        compact: true,
                     }),
                 ]);
             } else {
@@ -72,8 +71,8 @@ export const catalogService = {
                     vpsApiService.getProducts({
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
-                        compact: true,
                         limit: 1000,
+                        compact: true,
                     }),
                 ]);
             }
