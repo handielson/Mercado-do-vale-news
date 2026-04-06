@@ -179,7 +179,7 @@ fastify.delete('/field-presets/:id', { preHandler: requireSyncKey }, async (req,
 // ─── Categories ────────────────────────────────────────────────────────────
 fastify.get('/categories', async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT id, name, slug, config, warranty_days, production_days, sort_order,
+    `SELECT id, parent_id, name, slug, config, warranty_days, production_days, sort_order,
             extended_warranty_enabled, margin_wholesale, margin_reseller,
             created_at, updated_at
      FROM categories
@@ -189,8 +189,119 @@ fastify.get('/categories', async (req, reply) => {
     ...r,
     config: typeof r.config === 'string' ? JSON.parse(r.config) : r.config,
   }));
-  reply.header('Cache-Control', 'public, max-age=300, s-maxage=600');
+  reply.header('Cache-Control', 'public, max-age=60, s-maxage=120');
   return result;
+});
+
+// POST /categories — criar nova categoria
+fastify.post('/categories', { preHandler: requireSyncKey }, async (req, reply) => {
+  const b = req.body;
+  if (!b.id || !b.name) return reply.code(400).send({ error: 'id e name são obrigatórios' });
+
+  const slug = b.slug || b.name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+  await pool.query(
+    `INSERT INTO categories (id, parent_id, name, slug, config, warranty_days, production_days,
+       sort_order, extended_warranty_enabled, margin_wholesale, margin_reseller, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+     ON DUPLICATE KEY UPDATE
+       parent_id = VALUES(parent_id), name = VALUES(name), slug = VALUES(slug),
+       config = VALUES(config), warranty_days = VALUES(warranty_days),
+       production_days = VALUES(production_days), sort_order = VALUES(sort_order),
+       extended_warranty_enabled = VALUES(extended_warranty_enabled),
+       margin_wholesale = VALUES(margin_wholesale), margin_reseller = VALUES(margin_reseller),
+       updated_at = NOW()`,
+    [
+      b.id, b.parent_id || null, b.name, slug,
+      jsonStr(b.config || {}),
+      b.warranty_days || 90, b.production_days || 0, b.sort_order || 0,
+      b.extended_warranty_enabled ? 1 : 0,
+      b.margin_wholesale || null, b.margin_reseller || null,
+    ]
+  );
+  reply.code(201).send({ ok: true, id: b.id });
+});
+
+// PUT /categories/:id — atualizar categoria
+fastify.put('/categories/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { id } = req.params;
+  const b = req.body;
+
+  const slug = b.slug || (b.name ? b.name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : undefined);
+
+  await pool.query(
+    `UPDATE categories SET
+       parent_id = ?, name = ?, slug = ?, config = ?, warranty_days = ?,
+       production_days = ?, sort_order = ?, extended_warranty_enabled = ?,
+       margin_wholesale = ?, margin_reseller = ?, updated_at = NOW()
+     WHERE id = ?`,
+    [
+      b.parent_id !== undefined ? (b.parent_id || null) : null,
+      b.name, slug, jsonStr(b.config || {}),
+      b.warranty_days || 90, b.production_days || 0, b.sort_order ?? 0,
+      b.extended_warranty_enabled ? 1 : 0,
+      b.margin_wholesale || null, b.margin_reseller || null,
+      id,
+    ]
+  );
+  reply.send({ ok: true });
+});
+
+// DELETE /categories/:id — excluir categoria
+fastify.delete('/categories/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { id } = req.params;
+  await pool.query('DELETE FROM categories WHERE id = ?', [id]);
+  reply.send({ ok: true });
+});
+
+// PATCH /categories/sort-order — reordenar múltiplas categorias e/ou reparentar
+fastify.patch('/categories/sort-order', { preHandler: requireSyncKey }, async (req, reply) => {
+  const updates = req.body; // Array<{ id, sort_order, parent_id? }>
+  if (!Array.isArray(updates) || updates.length === 0) return reply.code(400).send({ error: 'Array esperado' });
+
+  await Promise.all(updates.map(u =>
+    pool.query(
+      `UPDATE categories SET sort_order = ?, parent_id = ?, updated_at = NOW() WHERE id = ?`,
+      [u.sort_order ?? 0, u.parent_id !== undefined ? (u.parent_id || null) : null, u.id]
+    )
+  ));
+  reply.send({ ok: true, updated: updates.length });
+});
+
+// ─── Produtos por categoria (painel admin de categorias) ───────────────────
+fastify.get('/products/by-category/:categoryId', async (req, reply) => {
+  const { categoryId } = req.params;
+  const page  = Math.max(1, parseInt(req.query.page  || '1'));
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20')));
+  const offset = (page - 1) * limit;
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM products WHERE category_id = ?`,
+    [categoryId]
+  );
+
+  const [rows] = await pool.query(
+    `SELECT
+       id, name, sku, brand, category_id, status,
+       price_retail, stock_quantity,
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS thumbnail,
+       1 AS is_primary_category
+     FROM products
+     WHERE category_id = ?
+     ORDER BY name ASC
+     LIMIT ? OFFSET ?`,
+    [categoryId, limit, offset]
+  );
+
+  return {
+    items: rows,
+    total: Number(total),
+    page,
+    limit,
+    hasMore: offset + rows.length < Number(total),
+  };
 });
 
 // ─── Category product counts (para navegação do catálogo) ──────────────────
@@ -738,6 +849,44 @@ fastify.patch('/products/bulk-category', { preHandler: requireSyncKey }, async (
   return { ok: true, updated: ids.length };
 });
 
+// ─── Product Categories (multi-category) ──────────────────────────────────────
+// POST /product-categories — adiciona produto a categoria extra
+fastify.post('/product-categories', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { product_id, category_id } = req.body || {};
+  if (!product_id || !category_id) {
+    return reply.code(400).send({ error: 'product_id and category_id required' });
+  }
+  await pool.query(
+    `INSERT IGNORE INTO product_categories (product_id, category_id) VALUES (?, ?)`,
+    [product_id, category_id]
+  );
+  return { ok: true };
+});
+
+// DELETE /product-categories/:product_id/:category_id — remove produto de categoria extra
+fastify.delete('/product-categories/:product_id/:category_id', { preHandler: requireSyncKey }, async (req, reply) => {
+  await pool.query(
+    `DELETE FROM product_categories WHERE product_id = ? AND category_id = ?`,
+    [req.params.product_id, req.params.category_id]
+  );
+  return { ok: true };
+});
+
+// PATCH /products/:id/category — move produto para outra categoria principal
+fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { category_id } = req.body || {};
+  if (!category_id) return reply.code(400).send({ error: 'category_id required' });
+  await pool.query(
+    `UPDATE products SET category_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [category_id, req.params.id]
+  );
+  // Remove da tabela extra caso estivesse lá para evitar duplicata visual
+  await pool.query(
+    `DELETE FROM product_categories WHERE product_id = ? AND category_id = ?`,
+    [req.params.id, category_id]
+  );
+  return { ok: true };
+});
 
 // ─── Combos (write) ─────────────────────────────────────────────────────────
 
