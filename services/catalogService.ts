@@ -12,6 +12,8 @@ const CACHE_KEY_PREFIX = '@mv:catalog:';
 const getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
 
 export const catalogService = {
+    _lastVpsRaw: null as any,
+    _lastMappedResult: null as any[] | null,
     /**
      * Buscar produtos do catálogo com filtros
      */
@@ -56,7 +58,8 @@ export const catalogService = {
                     vpsApiService.getCategories(),
                     vpsApiService.getProducts({
                         category: filters.categories.join(','),
-                        search: filters?.search,
+                        // Removido search aqui para não fazer a filtragem com acentos no backend, 
+                        // e deixar o filtro local sem-acentos resolver.
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
                         limit: 2000,
@@ -66,7 +69,6 @@ export const catalogService = {
                 [vpsCats, vpsRaw] = await Promise.all([
                     vpsApiService.getCategories(),
                     vpsApiService.getProducts({
-                        search: filters?.search,
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
                         limit: 1000,
@@ -87,21 +89,41 @@ export const catalogService = {
                 (vpsCats || []).map((c: any) => [c.id, c.slug])
             );
 
-            let result = (vpsRaw as any[]).map((p: any) => {
-                const normalized = normalizeProduct(p);
-                return { ...normalized, category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined };
-            });
+            let result: any[];
+            if (catalogService._lastVpsRaw === vpsRaw && catalogService._lastMappedResult) {
+                // IMPORTANT: create a new array to avoid mutating the cached mapping!
+                result = [...catalogService._lastMappedResult];
+            } else {
+                result = (vpsRaw as any[]).map((p: any) => {
+                    const normalized = normalizeProduct(p);
+                    
+                    // Pré-calcula uma string de busca sem acentos para este produto
+                    const removeAccents = (str: any) => {
+                        if (!str || typeof str !== 'string') return '';
+                        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                    };
+
+                    const searchStr = removeAccents(p.name) + ' ' + 
+                                      removeAccents(p.brand) + ' ' + 
+                                      removeAccents(p.model) + ' ' + 
+                                      removeAccents(p.sku);
+                    
+                    return { 
+                        ...normalized, 
+                        category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
+                        _search_string: searchStr
+                     };
+                });
+                catalogService._lastVpsRaw = vpsRaw;
+                // Save the mapped result to prevent duplicate work, but NEXT TIME clone it
+                catalogService._lastMappedResult = result;
+                result = [...result]; // and clone for this run as well
+            }
 
             if (filters?.search && filters.search.trim() !== '') {
-                const removeAccents = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                const query = removeAccents(filters.search.toLowerCase().trim());
-                result = result.filter(p =>
-                    (p.name && removeAccents(p.name.toLowerCase()).includes(query)) ||
-                    (p.brand && removeAccents(p.brand.toLowerCase()).includes(query)) ||
-                    ((p as any).model && removeAccents((p as any).model.toLowerCase()).includes(query)) ||
-                    (p.sku && removeAccents(p.sku.toLowerCase()).includes(query)) ||
-                    (p.description && typeof p.description === 'string' && removeAccents(p.description.toLowerCase()).includes(query))
-                );
+                const removeAccents = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                const query = removeAccents(filters.search.trim());
+                result = result.filter(p => (p as any)._search_string.includes(query));
             }
 
             if (settings.hide_inactive && !filters?.search) {

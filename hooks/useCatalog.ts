@@ -86,6 +86,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     }, [catalogSettings]);
 
     const activeRequestRef = useRef<number>(0);
+    const productsCountRef = useRef<number>(0); // Store length to avoid dependency loop
 
     // Carregar produtos
     const loadProducts = useCallback(async (reset = false, forcePage?: number) => {
@@ -104,7 +105,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
             });
 
             // Primeira carga: mostra spinner (lista vazia). Recargas: silencioso (mantém produtos).
-            if (isFirstLoad.current || products.length === 0) {
+            if (isFirstLoad.current || productsCountRef.current === 0 || reset) {
                 setLoading(true);
             } else {
                 setFetching(true);
@@ -130,10 +131,6 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 total: response.total
             });
 
-            // catalogService já aplica as regras de visibilidade em ambos os caminhos (VPS e Supabase).
-            // NÃO reaplicar aqui para evitar dupla filtragem que elimina produtos válidos.
-            console.log('[useCatalog] Products ready (visibility already applied by catalogService):', response.products.length);
-
             // Se uma requisição mais nova foi iniciada, ignorar esta resposta obsoleta.
             if (activeRequestRef.current !== requestId) {
                 console.log(`[useCatalog] Ignorando resposta obsoleta (reqId: ${requestId})`);
@@ -142,10 +139,18 @@ export function useCatalog(options: UseCatalogOptions = {}) {
 
             if (reset) {
                 setProducts(response.products);
+                productsCountRef.current = response.products.length;
                 setPage(1);
                 pageRef.current = 1;
             } else {
-                setProducts((prev) => [...prev, ...response.products]);
+                setProducts((prev) => {
+                    // Prevent duplicates that can cause react key mapping issues
+                    const existingIds = new Set(prev.map(p => p.id));
+                    const newProducts = response.products.filter(p => !existingIds.has(p.id));
+                    const combined = [...prev, ...newProducts];
+                    productsCountRef.current = combined.length;
+                    return combined;
+                });
             }
 
             setHasMore(response.hasMore);
@@ -153,7 +158,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
         } catch (err: any) {
             if (activeRequestRef.current !== requestId) return; // Ignorar erros se abortado
 
-            // Ignore abort errors - they're expected when requests are cancelled
+            // Ignore abort errors
             if (err.name === 'AbortError' || err.message === 'AbortError' || err.message?.includes('aborted')) {
                 console.log('[useCatalog] Request was aborted (expected behavior)');
                 return;
@@ -167,15 +172,14 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 setFetching(false);
             }
         }
-    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache, products.length]);
+    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache, effectiveCustomerId]);
 
     // Recarregar quando filtros, busca ou configurações mudarem
     useEffect(() => {
         if (!settingsLoading) {
             loadProducts(true);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchQuery, filters, catalogSettings, settingsLoading]);
+    }, [searchQuery, filters, catalogSettings, settingsLoading, loadProducts]);
 
     // Carregar mais produtos
     const loadMore = useCallback(() => {

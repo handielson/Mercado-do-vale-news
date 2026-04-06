@@ -100,6 +100,25 @@ function CatalogContent() {
         bypassCache
     });
 
+    // Sincronizar a busca do estado com a URL para permitir compartilhamento do link de busca
+    useEffect(() => {
+        setSearchParams(prevParams => {
+            const newParams = new URLSearchParams(prevParams);
+            const currentSearch = newParams.get('search') ?? '';
+            const newSearch = searchQuery.trim();
+            
+            if (currentSearch !== newSearch) {
+               if (newSearch) {
+                   newParams.set('search', newSearch);
+               } else {
+                   newParams.delete('search');
+               }
+               return newParams;
+            }
+            return prevParams;
+        }, { replace: true });
+    }, [searchQuery, setSearchParams]);
+
     const productsPerPage = catalogSettings?.products_per_page || 12;
     const [visibleCount, setVisibleCount] = useState(productsPerPage);
 
