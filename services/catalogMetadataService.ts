@@ -1,15 +1,10 @@
-/**
- * catalogMetadataService — Fonte única: VPS MySQL via /catalog/metadata
- *
- * Antes: 3-4 queries separadas ao Supabase (full table scans, sem cache adequado)
- * Depois: 1 chamada à VPS que executa 4 queries MySQL em paralelo com cache de 5 min
- */
+import { supabase } from './supabase';
 
 const VPS_BASE_URL = (import.meta as any).env?.DEV
     ? '/vps-proxy'
     : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
 
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const CACHE_TTL = 30 * 1000; // 30 segundos (evita ficar muito tempo com stale data na UI)
 
 interface MetadataCache {
     categories: Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count: number }>;
@@ -29,10 +24,16 @@ async function fetchMetadata(): Promise<MetadataCache | null> {
         try {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), 10000);
+            
+            // Bypass completo de cache de CDN e Browser
             const timestamp = Date.now();
-            const res = await fetch(`${VPS_BASE_URL}/catalog/metadata?t=${timestamp}`, {
+            const res = await fetch(`${VPS_BASE_URL}/catalog/metadata?_t=${timestamp}`, {
                 signal: controller.signal,
-                headers: { Accept: 'application/json' },
+                headers: { 
+                    Accept: 'application/json',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache'
+                },
                 cache: 'no-store',
             });
             clearTimeout(timer);
@@ -60,13 +61,7 @@ async function getMetadata(): Promise<MetadataCache | null> {
         return metadataCache;
     }
 
-    // SWR: se tiver cache stale, serve imediatamente e revalida em background
-    if (metadataCache) {
-        fetchMetadata().then(fresh => { if (fresh) metadataCache = fresh; });
-        return metadataCache;
-    }
-
-    // Primeira carga: aguarda
+    // Primeira carga ou expirado (bloqueia e traz fresco em vez de stale pra n ter flicker)
     const fresh = await fetchMetadata();
     if (fresh) metadataCache = fresh;
     return fresh;
@@ -89,11 +84,31 @@ export const catalogMetadataService = {
 
     /**
      * Buscar todas as categorias com contagem de produtos
-     * Fonte: VPS /catalog/metadata (sem Supabase)
+     * Fonte de Nomes: Supabase | Fonte de Contagem: VPS
      */
     getAllCategories: async (): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count: number }>> => {
-        const meta = await getMetadata();
-        return meta?.categories || [];
+        try {
+            // Contagens vêm da VPS para altíssima velocidade
+            const meta = await getMetadata();
+            const vpsCounts = new Map(meta?.categories?.map(c => [c.id, { count: c.count || 0, in_stock_count: c.in_stock_count || 0 }]) || []);
+
+            // Nomes e hierarquia vêm do Supabase (A fonte da Verdade que nunca falha)
+            const { data, error } = await supabase.from('categories').select('id, name, parent_id').order('sort_order', { ascending: true });
+            
+            if (error || !data) return meta?.categories || [];
+
+            return data.map(c => ({
+                id: c.id,
+                name: c.name,
+                parent_id: c.parent_id,
+                count: vpsCounts.get(c.id)?.count || 0,
+                in_stock_count: vpsCounts.get(c.id)?.in_stock_count || 0,
+            }));
+        } catch(e) {
+            console.error('Erro getAllCategories:', e);
+            const meta = await getMetadata();
+            return meta?.categories || [];
+        }
     },
 
     /**

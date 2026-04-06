@@ -9,7 +9,7 @@ const VPS_BASE_URL = (import.meta as any).env?.DEV
     : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const WRITE_TIMEOUT_MS = 15000;
-const CACHE_DURATION = 5 * 60 * 1000;
+const CACHE_DURATION = 60 * 1000; // 1 min (reduzido de 5min para evitar UI stale)
 const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
 
 interface CacheEntry<T> {
@@ -57,11 +57,18 @@ class VpsApiService {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-      const res = await fetch(`${VPS_BASE_URL}${path}`, {
+      
+      const separator = path.includes('?') ? '&' : '?';
+      const fullUrl = `${VPS_BASE_URL}${path}${separator}_t=${Date.now()}`;
+      
+      const res = await fetch(fullUrl, {
         signal: controller.signal,
-        headers: { Accept: 'application/json' },
-        // Não forçamos 'no-store': o browser/CDN pode usar Cache-Control da VPS.
-        // O cache in-memory (this.cache, 5 min) já previne requisições duplicadas na sessão.
+        headers: { 
+          Accept: 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+        cache: 'no-store',
       });
       clearTimeout(timer);
       if (!res.ok) return null;
