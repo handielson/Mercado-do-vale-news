@@ -1,18 +1,18 @@
-# Agent Instructions
+# Instruções para Agentes
 
-## Package Manager
+## Gerenciador de Pacotes
 Use **npm**: `npm install`, `npm run dev`, `npm run build`
 
-## File-Scoped Commands
-| Task | Command |
-|------|---------|
-| Typecheck | `npx tsc --noEmit path/to/file.ts` |
-| Lint | No linter configured |
-| Test | No test runner configured |
+## Comandos por Arquivo
+| Tarefa | Comando |
+|--------|---------|
+| Verificação de Tipos | `npx tsc --noEmit caminho/para/arquivo.ts` |
+| Lint | Nenhum linter configurado |
+| Teste | Nenhum executor de testes configurado |
 
-## Commit Attribution
-AI commits MUST include:
+## Atribuição de Commit
+Commits de IA DEVEM incluir:
 ```
-Co-Authored-By: (the agent model's name and attribution byline)
+Co-Authored-By: (o nome do modelo do agente e linha de atribuição)
 ```
-Example: `Co-Authored-By: Claude Sonnet 4 <noreply@example.com>`
+Exemplo: `Co-Authored-By: Claude Sonnet 4 <noreply@example.com>`
