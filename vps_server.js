@@ -376,7 +376,17 @@ fastify.get('/products', async (req, reply) => {
   // When search is provided without explicit status → no status filter (allows finding by SKU/EAN regardless of status)
   // status=all: retorna todos os status (admin)
 
-  if (category)           { sql += ' AND category_id = ?';   params.push(category); }
+  if (category) {
+    const categoryIds = String(category).split(',').map(id => id.trim()).filter(Boolean);
+    if (categoryIds.length === 1) {
+      sql += ' AND category_id = ?';
+      params.push(categoryIds[0]);
+    } else if (categoryIds.length > 1) {
+      const placeholders = categoryIds.map(() => '?').join(',');
+      sql += ` AND category_id IN (${placeholders})`;
+      params.push(...categoryIds);
+    }
+  }
   if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ? OR slug LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
   if (req.query.parent_id){ sql += ' AND parent_id = ?';     params.push(req.query.parent_id); }
   if (req.query.sku)      { sql += ' AND sku = ?';           params.push(req.query.sku); }
