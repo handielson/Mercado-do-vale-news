@@ -1062,8 +1062,15 @@ export async function importBlingProducts(
     };
 
     const extractMissingColumn = (message: string): string | null => {
-        const match = message.match(/column\s+"([^"]+)"\s+of\s+relation\s+"products"\s+does\s+not\s+exist/i);
-        return match?.[1] || null;
+        // PostgreSQL direto: column "image_url" of relation "products" does not exist
+        const pgMatch = message.match(/column\s+"([^"]+)"\s+of\s+relation\s+"products"\s+does\s+not\s+exist/i);
+        if (pgMatch?.[1]) return pgMatch[1];
+
+        // PostgREST (PGRST204): Could not find the 'image_url' column of 'products' in the schema cache
+        const postgrestMatch = message.match(/could\s+not\s+find\s+the\s+'([^']+)'\s+column\s+of\s+'products'\s+in\s+the\s+schema\s+cache/i);
+        if (postgrestMatch?.[1]) return postgrestMatch[1];
+
+        return null;
     };
 
     const updateWithColumnFallback = async (id: string, initialFields: Record<string, any>): Promise<void> => {
