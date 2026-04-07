@@ -15,7 +15,7 @@ export default defineConfig({
       '/vps-proxy': {
         target: 'https://api.xiaomipetrolina.com.br',
         changeOrigin: true,
-        secure: true,
+        secure: false, // Permitir requisições mesmo com cert inválido em dev
         rewrite: (path) => path.replace(/^\/vps-proxy/, ''),
       },
     }
