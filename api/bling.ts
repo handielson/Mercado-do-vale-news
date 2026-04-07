@@ -7,6 +7,7 @@
  * Roteamento via query: ?resource=products|categories|stock|stock-sync|product-detail|finance|exchange|webhook
  */
 import { createClient } from '@supabase/supabase-js';
+import blingWebhookHandler from './bling-webhook';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!;
 const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
@@ -389,189 +390,28 @@ export default async function handler(req: any, res: any) {
     //   }
     // }
     if (resource === 'webhook') {
-        if (req.method === 'GET') return res.status(200).json({ ok: true });
+        // Compatibilidade: mantém a URL legada ativa, mas com processamento centralizado
+        // no handler dedicado `api/bling-webhook.ts` para evitar drift entre endpoints.
+        if (req.method === 'GET') {
+            return res.status(200).json({ ok: true, mode: 'legacy-proxy', target: '/api/bling-webhook' });
+        }
         if (req.method !== 'POST') return res.status(405).end();
         try {
-            const payload = req.body;
-
-            // Usa service role key lida em runtime (bypassa RLS para UPDATE)
             const srKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
                 || process.env.SUPABASE_SERVICE_ROLE_KEY
                 || process.env.VITE_SUPABASE_ANON_KEY
                 || process.env.SUPABASE_ANON_KEY!;
             const supabase = createClient(supabaseUrl, srKey);
-
-            // Decodifica JWT para confirmar o role real (sem verificação criptográfica)
-            let jwtRole = 'unknown';
+            // Mantém histórico dos POSTs que chegam pela URL legada para diagnóstico.
             try {
-                const parts = srKey.split('.');
-                if (parts.length === 3) {
-                    const payload64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-                    const decoded = JSON.parse(Buffer.from(payload64, 'base64').toString('utf8'));
-                    jwtRole = decoded.role || 'unknown';
-                }
+                await supabase.from('webhook_logs').insert({
+                    source: 'bling-legacy',
+                    payload: req.body,
+                    received_at: new Date().toISOString(),
+                });
             } catch (_) { }
 
-
-            // Salva log do payload para diagnóstico (fire-and-forget correto)
-            try { await supabase.from('webhook_logs').insert({ source: 'bling', payload, received_at: new Date().toISOString() }); } catch (_) { }
-
-
-            // Identifica o tipo de evento
-            const event: string | undefined = payload?.event;
-            if (typeof event !== 'string') {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_event' });
-            }
-
-            // ── Evento de PRODUTO (price_retail e nome) ────────────────────────────────
-            if (event.startsWith('product.')) {
-                const blingId: number | undefined = payload?.data?.id;
-                const preco: number | undefined = payload?.data?.preco;
-                const sku: string | undefined = payload?.data?.codigo;
-                const nome: string | undefined = payload?.data?.nome;
-
-                if (!blingId || preco === undefined) {
-                    return res.status(200).json({ ok: true, ignored: true, reason: 'missing_product_fields', blingId, preco });
-                }
-
-                // Busca por bling_id (ou por SKU como fallback)
-                let found2 = (await supabase.from('products').select('id, sku').eq('bling_id', blingId)).data;
-                if (!found2?.length && sku) {
-                    found2 = (await supabase.from('products').select('id, sku').eq('sku', sku)).data;
-                }
-
-                const pId = found2?.[0]?.id;
-                if (!pId) {
-                    return res.status(200).json({ ok: true, updated: false, reason: 'product_not_found', blingId, sku });
-                }
-
-                const updateData: any = { price_retail: Math.round(preco * 100) };
-                if (nome) {
-                    updateData.name = nome;
-                }
-
-                const { data: upd, error: upErr } = await supabase
-                    .from('products')
-                    .update(updateData)
-                    .eq('id', pId)
-                    .select('id, sku, price_retail, name');
-
-                if (upErr) return res.status(200).json({ ok: false, error: upErr.message });
-
-                // Sync updated fields to VPS MySQL (fire-and-forget)
-                const vpsBase = 'https://api.xiaomipetrolina.com.br';
-                const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || '';
-                if (syncKey && pId) {
-                    fetch(`${vpsBase}/products/${pId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
-                        body: JSON.stringify(updateData),
-                    }).catch(e => console.warn('[webhook] VPS sync failed:', e));
-                }
-
-                return res.status(200).json({
-                    ok: true,
-                    updated: (upd?.length ?? 0) > 0,
-                    event,
-                    blingId,
-                    preco,
-                    rows: upd?.length ?? 0,
-                    jwtRole,
-                });
-            }
-
-            // ── Evento de ESTOQUE (stock_quantity) ──────────────────────────────
-            if (!event.startsWith('stock.') && !event.startsWith('virtual_stock.')) {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'unhandled_event', event });
-            }
-
-
-            // Identifica o produto pelo id (inteiro, conforme documentação)
-            const blingProductId: number | undefined = payload?.data?.produto?.id;
-            // saldoFisicoTotal = saldo total somando todos os depósitos (campo correto)
-            const saldoFisicoTotal: number | undefined = payload?.data?.saldoFisicoTotal ?? payload?.data?.saldoVirtualTotal;
-
-            if (blingProductId === undefined) {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_produto_id' });
-            }
-            if (saldoFisicoTotal === undefined) {
-                return res.status(200).json({ ok: true, ignored: true, reason: 'missing_saldoFisicoTotal' });
-            }
-
-            // Diagnóstico: SELECT antes do UPDATE para identificar bling_id mismatch vs RLS
-            const { data: found, error: selErr } = await supabase
-                .from('products')
-                .select('id, sku, bling_id, stock_quantity, name')
-                .eq('bling_id', blingProductId);
-
-            // Usa o UUID do produto encontrado para o UPDATE (contorna issue de tipo no bling_id)
-            const productId = found?.[0]?.id;
-            const productName = found?.[0]?.name;
-            if (!productId) {
-                return res.status(200).json({
-                    ok: true,
-                    updated: false,
-                    blingProductId,
-                    saldoFisicoTotal,
-                    rows: 0,
-                    selectFound: 0,
-                    selectError: selErr?.message,
-                });
-            }
-
-            const newStock = Math.max(0, Math.round(saldoFisicoTotal));
-            const { data: rows, error } = await supabase
-                .from('products')
-                .update({ stock_quantity: newStock })
-                .eq('id', productId)
-                .select('id, sku, name');
-
-            if (error) return res.status(200).json({ ok: false, error: error.message });
-
-            // Sync updated stock to VPS MySQL (fire-and-forget)
-            const vpsBase = 'https://api.xiaomipetrolina.com.br';
-            const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || '';
-            if (syncKey && productId) {
-                // Fetch the existing product to prevent PUT from overwriting other fields with nulls
-                fetch(`${vpsBase}/products/${productId}`, {
-                    headers: { 'X-Sync-Key': syncKey }
-                })
-                .then(res => {
-                    if (!res.ok) throw new Error(`VPS GET returned ${res.status}`);
-                    return res.json();
-                })
-                .then(existingProduct => {
-                    // VPS might return the product directly or `{ product: ... }`
-                    const baseProduct = existingProduct?.product || existingProduct || {};
-                    const updatePayload: any = { ...baseProduct, stock_quantity: newStock, stock: newStock };
-                    if (productName) updatePayload.name = productName;
-
-                    return fetch(`${vpsBase}/products/${productId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
-                        body: JSON.stringify(updatePayload),
-                    });
-                })
-                .then(res => {
-                    if (!res.ok) throw new Error(`VPS PUT returned ${res.status}`);
-                })
-                .catch(e => console.warn('[webhook] VPS stock sync failed:', e));
-            }
-
-            return res.status(200).json({
-                ok: true,
-                updated: (rows?.length ?? 0) > 0,
-                blingProductId,
-                saldoFisicoTotal,
-                rows: rows?.length ?? 0,
-                selectFound: found?.length ?? 0,
-                productId,
-                jwtRole,
-
-            });
-
-
-
+            return await blingWebhookHandler(req, res);
         } catch (err: any) {
             return res.status(200).json({ ok: false, error: err.message });
         }
