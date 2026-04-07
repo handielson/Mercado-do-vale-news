@@ -14,6 +14,11 @@ const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SU
 
 export default async function handler(req: any, res: any) {
     const resource = req.query.resource as string;
+    const safeRedirect = (location: string, statusCode = 302) => {
+        res.statusCode = statusCode;
+        res.setHeader('Location', location);
+        return res.end();
+    };
 
     // ─── OAUTH-CALLBACK: recebe o code do Bling e troca por access_token ───────
     // Chamado via rewrite: /api/auth/callback/bling → /api/bling?resource=oauth-callback
@@ -22,23 +27,23 @@ export default async function handler(req: any, res: any) {
 
         if (oauthError) {
             console.error('Bling OAuth error:', oauthError, error_description);
-            return res.redirect(302, `/admin/settings/bling?error=${encodeURIComponent(String(oauthError))}`);
+            return safeRedirect(`/admin/settings/bling?error=${encodeURIComponent(String(oauthError))}`);
         }
         if (!code) {
-            return res.redirect(302, '/admin/settings/bling?error=missing_code');
+            return safeRedirect('/admin/settings/bling?error=missing_code');
         }
 
         const supabaseUrl2 = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
         const supabaseKey2 = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
         if (!supabaseUrl2 || !supabaseKey2) {
-            return res.redirect(302, '/admin/settings/bling?error=server_config');
+            return safeRedirect('/admin/settings/bling?error=server_config');
         }
         let supaOAuth;
         try {
             supaOAuth = createClient(supabaseUrl2, supabaseKey2, { auth: { persistSession: false, autoRefreshToken: false } });
         } catch (clientErr: any) {
             console.error('Supabase client init error:', clientErr);
-            return res.redirect(302, '/admin/settings/bling?error=server_config');
+            return safeRedirect('/admin/settings/bling?error=server_config');
         }
 
         const { data: settings2, error: settingsError2 } = await supaOAuth
@@ -48,7 +53,7 @@ export default async function handler(req: any, res: any) {
             .maybeSingle();
 
         if (settingsError2 || !settings2?.bling_client_id || !settings2?.bling_client_secret) {
-            return res.redirect(302, '/admin/settings/bling?error=missing_credentials');
+            return safeRedirect('/admin/settings/bling?error=missing_credentials');
         }
 
         const callbackUrl2 = settings2.bling_callback_url ? 
@@ -63,7 +68,7 @@ export default async function handler(req: any, res: any) {
             });
             if (!tokenRes2.ok) {
                 const errText2 = await tokenRes2.text();
-                return res.redirect(302, `/admin/settings/bling?error=token_exchange_failed&status=${tokenRes2.status}`);
+                return safeRedirect(`/admin/settings/bling?error=token_exchange_failed&status=${tokenRes2.status}`);
             }
             const tokenData2 = await tokenRes2.json();
             const expiresAt2 = new Date(Date.now() + (tokenData2.expires_in || 3600) * 1000).toISOString();
@@ -74,12 +79,12 @@ export default async function handler(req: any, res: any) {
             }).eq('id', settings2.id);
             if (updateError) {
                 console.error('Supabase update error:', updateError);
-                return res.redirect(302, `/admin/settings/bling?error=database_error&detail=${encodeURIComponent(updateError.message)}`);
+                return safeRedirect(`/admin/settings/bling?error=database_error&detail=${encodeURIComponent(updateError.message)}`);
             }
-            return res.redirect(302, '/admin/settings/bling?connected=true');
+            return safeRedirect('/admin/settings/bling?connected=true');
         } catch (fetchErr2: any) {
             console.error('OAuth callback error:', fetchErr2);
-            return res.redirect(302, `/admin/settings/bling?error=network_error&detail=${encodeURIComponent(fetchErr2.message)}`);
+            return safeRedirect(`/admin/settings/bling?error=network_error&detail=${encodeURIComponent(fetchErr2.message)}`);
         }
     }
 
