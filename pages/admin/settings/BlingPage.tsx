@@ -997,7 +997,7 @@ export default function BlingPage() {
                                                         value={blingSearch}
                                                         onChange={e => setBlingSearch(e.target.value)}
                                                         onKeyDown={e => e.key === 'Enter' && handleFetchBlingProducts()}
-                                                        placeholder="Pesquisar produto no Bling (Início do Nome ou SKU)..."
+                                                        placeholder="Pesquisar por nome, SKU ou código de barras..."
                                                         className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                                     />
                                                 </div>
