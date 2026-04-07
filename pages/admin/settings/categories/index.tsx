@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Edit2, Plus, GripVertical, BookMarked, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { Category } from '../../../../types/category';
@@ -28,10 +28,65 @@ export default function CategorySettingsPage() {
     const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
     const [hoveredCategoryId, setHoveredCategoryId] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
+    const lastDragClientYRef = useRef<number | null>(null);
+    const dragScrollFrameRef = useRef<number | null>(null);
 
     useEffect(() => {
         loadCategories();
     }, []);
+
+    useEffect(() => {
+        const isDragging = Boolean(draggedProduct || draggedCategoryId);
+
+        if (!isDragging) {
+            lastDragClientYRef.current = null;
+            if (dragScrollFrameRef.current !== null) {
+                cancelAnimationFrame(dragScrollFrameRef.current);
+                dragScrollFrameRef.current = null;
+            }
+            return;
+        }
+
+        const edgeThreshold = 140;
+        const maxScrollStep = 24;
+
+        const handleWindowDragOver = (event: DragEvent) => {
+            lastDragClientYRef.current = event.clientY;
+        };
+
+        const tick = () => {
+            const clientY = lastDragClientYRef.current;
+            if (clientY != null) {
+                const viewportHeight = window.innerHeight;
+                let delta = 0;
+
+                if (clientY < edgeThreshold) {
+                    const intensity = (edgeThreshold - clientY) / edgeThreshold;
+                    delta = -Math.ceil(intensity * maxScrollStep);
+                } else if (clientY > viewportHeight - edgeThreshold) {
+                    const intensity = (clientY - (viewportHeight - edgeThreshold)) / edgeThreshold;
+                    delta = Math.ceil(intensity * maxScrollStep);
+                }
+
+                if (delta !== 0) {
+                    window.scrollBy({ top: delta, behavior: 'auto' });
+                }
+            }
+
+            dragScrollFrameRef.current = window.requestAnimationFrame(tick);
+        };
+
+        window.addEventListener('dragover', handleWindowDragOver);
+        dragScrollFrameRef.current = window.requestAnimationFrame(tick);
+
+        return () => {
+            window.removeEventListener('dragover', handleWindowDragOver);
+            if (dragScrollFrameRef.current !== null) {
+                cancelAnimationFrame(dragScrollFrameRef.current);
+                dragScrollFrameRef.current = null;
+            }
+        };
+    }, [draggedProduct, draggedCategoryId]);
 
     const loadCategories = async () => {
         try {
@@ -115,6 +170,7 @@ export default function CategorySettingsPage() {
     const onDragOver = (e: React.DragEvent, id: string | null) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
+        lastDragClientYRef.current = e.clientY;
 
         if (id === null) {
             if (hoveredCategoryId !== null) setHoveredCategoryId(null);
@@ -264,7 +320,7 @@ export default function CategorySettingsPage() {
                 <div className="mb-4 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 flex items-center gap-2">
                     <span className="font-semibold">"{draggedProduct.product.name}"</span>
                     <span>sendo arrastado • Solte em outra categoria para mover</span>
-                    <span className="ml-auto text-xs bg-blue-100 px-2 py-0.5 rounded">Ctrl + Soltar = Adicionar também</span>
+                    <span className="ml-auto text-xs bg-blue-100 px-2 py-0.5 rounded">Aproxime do topo ou rodapé para rolar</span>
                 </div>
             )}
 
@@ -443,7 +499,7 @@ export default function CategorySettingsPage() {
                 </div>
                 <p className="text-xs text-slate-400 mt-2">
                     💡 <b>Dica:</b> Arraste um produto para outra categoria para <b>movê-lo</b>.
-                    Segure <b>Ctrl</b> ao soltar para <b>adicionar em múltiplas categorias</b> sem remover da original.
+                    Durante o arrasto, aproxime o cursor do topo ou do rodapé para a tela rolar sozinha.
                 </p>
             </div>
 
