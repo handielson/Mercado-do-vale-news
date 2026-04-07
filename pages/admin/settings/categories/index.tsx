@@ -93,12 +93,10 @@ export default function CategorySettingsPage() {
 
     // --- Product drag callbacks ---
     const handleProductDragStart = useCallback((product: DraggedProduct['product'], sourceCategoryId: string) => {
-        console.log('[CategoriesPage] Produto sendo arrastado:', { product: product.name, sourceCategoryId });
         setDraggedProduct({ product, sourceCategoryId });
     }, []);
 
     const handleProductDragEnd = useCallback(() => {
-        console.log('[CategoriesPage] Drag end - limpando draggedProduct');
         setDraggedProduct(null);
     }, []);
 

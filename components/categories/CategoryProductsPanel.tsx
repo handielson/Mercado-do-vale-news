@@ -73,11 +73,7 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
         setIsDropTarget(false);
-        console.log('[CategoryProductsPanel] Drop recebido:', { draggedProduct, categoryId });
-        if (!draggedProduct || draggedProduct.sourceCategoryId === categoryId) {
-            console.log('[CategoryProductsPanel] Drop ignorado: sem produto arrastado ou mesma categoria');
-            return;
-        }
+        if (!draggedProduct || draggedProduct.sourceCategoryId === categoryId) return;
 
         const { product, sourceCategoryId } = draggedProduct;
         const isCtrl = e.ctrlKey || e.metaKey;
@@ -122,10 +118,6 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
     };
 
     const isDraggingFromOther = draggedProduct && draggedProduct.sourceCategoryId !== categoryId;
-
-    useEffect(() => {
-        console.log(`[CategoryProductsPanel ${categoryId}] draggedProduct atualizado:`, draggedProduct);
-    }, [draggedProduct, categoryId]);
 
     return (
         <div
@@ -172,12 +164,10 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                             key={product.id}
                             draggable
                             onDragStart={e => {
-                                console.log('[CategoryProductsPanel] Iniciando drag:', product.name);
                                 e.dataTransfer.effectAllowed = 'move';
                                 onDragStart(product, categoryId);
                             }}
                             onDragEnd={() => {
-                                console.log('[CategoryProductsPanel] Drag finalizado (NÃO limpando draggedProduct ainda)');
                                 // NÃO chamar onDragEnd aqui! Deixar a página limpar quando o drop terminar
                             }}
                             className="flex items-center gap-3 px-4 py-2.5 hover:bg-white transition-colors cursor-grab active:cursor-grabbing group"
