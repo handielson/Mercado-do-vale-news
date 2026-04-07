@@ -58,14 +58,19 @@ export default async function handler(req: any, res: any) {
             }
             const tokenData2 = await tokenRes2.json();
             const expiresAt2 = new Date(Date.now() + (tokenData2.expires_in || 3600) * 1000).toISOString();
-            await supaOAuth.from('company_settings').update({
+            const { error: updateError } = await supaOAuth.from('company_settings').update({
                 bling_access_token: tokenData2.access_token,
                 bling_refresh_token: tokenData2.refresh_token || null,
                 bling_token_expires_at: expiresAt2,
             }).eq('id', settings2.id);
+            if (updateError) {
+                console.error('Supabase update error:', updateError);
+                return res.redirect(302, `/admin/settings/bling?error=database_error&detail=${encodeURIComponent(updateError.message)}`);
+            }
             return res.redirect(302, '/admin/settings/bling?connected=true');
         } catch (fetchErr2: any) {
-            return res.redirect(302, '/admin/settings/bling?error=network_error');
+            console.error('OAuth callback error:', fetchErr2);
+            return res.redirect(302, `/admin/settings/bling?error=network_error&detail=${encodeURIComponent(fetchErr2.message)}`);
         }
     }
 
@@ -168,7 +173,8 @@ export default async function handler(req: any, res: any) {
                 if (tokenRes.ok) {
                     const tokenData = await tokenRes.json();
                     accessToken = tokenData.access_token;
-                    await supabase.from('company_settings').update({ bling_access_token: tokenData.access_token, bling_refresh_token: tokenData.refresh_token, bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString() }).eq('id', settings.id ?? 1);
+                    const { error: updateErr } = await supabase.from('company_settings').update({ bling_access_token: tokenData.access_token, bling_refresh_token: tokenData.refresh_token, bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString() }).eq('id', settings.id ?? 1);
+                    if (updateErr) console.error('Token refresh update failed:', updateErr);
                 }
             }
             authHeader = `Bearer ${accessToken}`;
@@ -238,7 +244,8 @@ export default async function handler(req: any, res: any) {
                 if (tokenRes.ok) {
                     const tokenData = await tokenRes.json();
                     accessToken = tokenData.access_token;
-                    await supabase.from('company_settings').update({ bling_access_token: tokenData.access_token, bling_refresh_token: tokenData.refresh_token, bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString() }).eq('id', settings.id ?? 1);
+                    const { error: updateErr } = await supabase.from('company_settings').update({ bling_access_token: tokenData.access_token, bling_refresh_token: tokenData.refresh_token, bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString() }).eq('id', settings.id ?? 1);
+                    if (updateErr) console.error('Token refresh (finance) update failed:', updateErr);
                 }
             }
 
@@ -359,7 +366,8 @@ export default async function handler(req: any, res: any) {
                 if (tokenRes.ok) {
                     const tokenData = await tokenRes.json();
                     accessToken = tokenData.access_token;
-                    await supabase.from('company_settings').update({ bling_access_token: tokenData.access_token, bling_refresh_token: tokenData.refresh_token, bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString() }).eq('id', settings.id ?? 1);
+                    const { error: updateErr } = await supabase.from('company_settings').update({ bling_access_token: tokenData.access_token, bling_refresh_token: tokenData.refresh_token, bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString() }).eq('id', settings.id ?? 1);
+                    if (updateErr) console.error('Token refresh (stock) update failed:', updateErr);
                 }
             }
             const depRes = await fetch('https://api.bling.com.br/Api/v3/depositos?pagina=1&limite=1', { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
@@ -781,11 +789,12 @@ export default async function handler(req: any, res: any) {
                 if (tokenRes.ok) {
                     const tokenData = await tokenRes.json();
                     accessToken = tokenData.access_token;
-                    await supabase.from('company_settings').update({
+                    const { error: updateErr } = await supabase.from('company_settings').update({
                         bling_access_token: tokenData.access_token,
                         bling_refresh_token: tokenData.refresh_token,
                         bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
                     }).eq('id', settings.id);
+                    if (updateErr) console.error('Token refresh (product-detail) update failed:', updateErr);
                 }
             }
 
