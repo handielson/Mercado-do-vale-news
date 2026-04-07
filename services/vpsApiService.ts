@@ -102,8 +102,13 @@ class VpsApiService {
         body: hasBody ? JSON.stringify(body) : undefined,
       });
       clearTimeout(timer);
-      return res.ok;
-    } catch {
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        throw new Error(`[VPS ${method} ${path}] ${res.status} ${errorText}`.trim());
+      }
+      return true;
+    } catch (error) {
+      console.error('[vpsApiService.writeSafe] erro:', error);
       return false;
     }
   }

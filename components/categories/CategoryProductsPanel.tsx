@@ -83,32 +83,22 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
             return;
         }
 
-        const { product, sourceCategoryId } = draggedProduct;
-        const isCtrl = e.ctrlKey || e.metaKey;
+        const { product } = draggedProduct;
 
         onDragEnd();
 
-        const toastId = toast.loading(
-            isCtrl
-                ? `Adicionando "${product.name}" também em ${categoryName}...`
-                : `Movendo "${product.name}" para ${categoryName}...`
-        );
+        const toastId = toast.loading(`Movendo "${product.name}" para ${categoryName}...`);
 
         try {
-            if (isCtrl) {
-                // Adicionar como categoria extra
-                await vpsApiService.addProductCategory(product.id, categoryId);
-                toast.success(`"${product.name}" agora aparece em ${categoryName} também!`, { id: toastId });
-            } else {
-                // Mover (altera categoria principal)
-                await vpsApiService.moveProductCategory(product.id, categoryId);
-                toast.success(`"${product.name}" movido para ${categoryName}!`, { id: toastId });
-                // Invalida cache da categoria de origem
-                vpsApiService.clearCache();
+            const ok = await vpsApiService.moveProductCategory(product.id, categoryId);
+            if (!ok) {
+                throw new Error('Falha ao mover produto na VPS');
             }
-            // Recarrega esta category
-            load(1, true);
-        } catch {
+            vpsApiService.clearCache();
+            await load(1, true);
+            toast.success(`"${product.name}" movido para ${categoryName}!`, { id: toastId });
+        } catch (error) {
+            console.error('[CategoryProductsPanel.handleDrop] erro ao mover:', error);
             toast.error('Erro ao mover produto', { id: toastId });
         }
     };
@@ -148,8 +138,8 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                 }`}>
                     <Plus className="w-4 h-4" />
                     {isDropTarget
-                        ? `Soltar aqui para ${draggedProduct!.product && 'Ctrl' ? 'adicionar também' : 'mover'} para ${categoryName}`
-                        : `Solte aqui para mover • Com Ctrl = adicionar também`
+                        ? `Soltar aqui para mover para ${categoryName}`
+                        : `Solte aqui para mover`
                     }
                 </div>
             )}
