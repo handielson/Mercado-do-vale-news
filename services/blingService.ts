@@ -7,6 +7,7 @@ import { vpsApiService } from './vpsApiService';
 
 const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
+const parentDetailCache = new Map<number, any>();
 
 // ------- Types -------
 
@@ -127,7 +128,8 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
                 if (res.status !== 429) return res;
                 lastRes = res;
                 // Exponential backoff leve para respeitar limite do Bling
-                const waitMs = 350 * attempt;
+                const retryAfterHeader = Number(res.headers.get('retry-after') || 0);
+                const waitMs = retryAfterHeader > 0 ? retryAfterHeader * 1000 : 500 * attempt;
                 await new Promise(resolve => setTimeout(resolve, waitMs));
             }
             return lastRes as Response;
@@ -143,10 +145,18 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         const parentId: number | undefined = data.variacao?.produtoPai?.id;
         let parentData: any = null;
         if (parentId) {
-            const parentRes = await fetchWith429Retry(`/api/bling?resource=product-detail&id=${parentId}`, {
-                headers: { 'Authorization': `Bearer ${accessToken}` },
-            });
-            if (parentRes.ok) parentData = await parentRes.json();
+            const cachedParent = parentDetailCache.get(parentId);
+            if (cachedParent) {
+                parentData = cachedParent;
+            } else {
+                const parentRes = await fetchWith429Retry(`/api/bling?resource=product-detail&id=${parentId}`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
+                });
+                if (parentRes.ok) {
+                    parentData = await parentRes.json();
+                    parentDetailCache.set(parentId, parentData);
+                }
+            }
         }
 
         // Merge field-by-field: filho tem prioridade, pai preenche os nulos
@@ -1089,6 +1099,28 @@ export async function importBlingProducts(
             if (!error) return { id: insertedData?.id };
 
             const fullMsg = formatSupabaseError(error);
+
+            // Unique conflicts comuns na importação de variações
+            if (fullMsg.toLowerCase().includes('duplicate key') || fullMsg.toLowerCase().includes('unique')) {
+                if (fullMsg.toLowerCase().includes('ean')) {
+                    row.ean = null;
+                    row.alternative_eans = [];
+                    console.warn('[bling:import-fallback] conflito de EAN detectado, removendo EAN para continuar importação', { blingId: row.bling_id });
+                    continue;
+                }
+                if (fullMsg.toLowerCase().includes('slug')) {
+                    const baseSlug = String(row.slug || 'produto').replace(/-+$/, '');
+                    row.slug = `${baseSlug}-${row.bling_id || Date.now()}-${attempt}`;
+                    console.warn('[bling:import-fallback] conflito de slug detectado, regenerando slug', { slug: row.slug });
+                    continue;
+                }
+                if (fullMsg.toLowerCase().includes('sku') || fullMsg.toLowerCase().includes('codigo')) {
+                    row.sku = null;
+                    console.warn('[bling:import-fallback] conflito de SKU detectado, removendo SKU para continuar importação', { blingId: row.bling_id });
+                    continue;
+                }
+            }
+
             const missingColumn = extractMissingColumn(fullMsg);
             if (!missingColumn || !(missingColumn in row)) {
                 throw new Error(fullMsg);
