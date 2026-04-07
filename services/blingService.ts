@@ -120,7 +120,20 @@ export interface BlingProductDetail extends BlingProduct {
 export async function fetchBlingProductDetail(productId: number): Promise<BlingProductDetail | null> {
     try {
         const accessToken = await getValidToken();
-        const res = await fetch(`/api/bling?resource=product-detail&id=${productId}`, {
+        const fetchWith429Retry = async (url: string, init: RequestInit, maxAttempts = 4): Promise<Response> => {
+            let lastRes: Response | null = null;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                const res = await fetch(url, init);
+                if (res.status !== 429) return res;
+                lastRes = res;
+                // Exponential backoff leve para respeitar limite do Bling
+                const waitMs = 350 * attempt;
+                await new Promise(resolve => setTimeout(resolve, waitMs));
+            }
+            return lastRes as Response;
+        };
+
+        const res = await fetchWith429Retry(`/api/bling?resource=product-detail&id=${productId}`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         if (!res.ok) return null;
@@ -130,7 +143,7 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
         const parentId: number | undefined = data.variacao?.produtoPai?.id;
         let parentData: any = null;
         if (parentId) {
-            const parentRes = await fetch(`/api/bling?resource=product-detail&id=${parentId}`, {
+            const parentRes = await fetchWith429Retry(`/api/bling?resource=product-detail&id=${parentId}`, {
                 headers: { 'Authorization': `Bearer ${accessToken}` },
             });
             if (parentRes.ok) parentData = await parentRes.json();
@@ -1032,6 +1045,62 @@ export async function importBlingProducts(
     const total = selectedProducts.length;
     const vpsRows: any[] = []; // collect successful rows for batch VPS sync
 
+    const formatSupabaseError = (error: any): string => {
+        if (!error) return 'Erro desconhecido no Supabase';
+        const parts = [error.message, error.details, error.hint, error.code].filter(Boolean);
+        return parts.join(' | ');
+    };
+
+    const extractMissingColumn = (message: string): string | null => {
+        const match = message.match(/column\s+"([^"]+)"\s+of\s+relation\s+"products"\s+does\s+not\s+exist/i);
+        return match?.[1] || null;
+    };
+
+    const updateWithColumnFallback = async (id: string, initialFields: Record<string, any>): Promise<void> => {
+        let fields = { ...initialFields };
+        for (let attempt = 1; attempt <= 4; attempt++) {
+            const { error } = await supabase
+                .from('products')
+                .update(fields)
+                .eq('id', id);
+            if (!error) return;
+
+            const fullMsg = formatSupabaseError(error);
+            const missingColumn = extractMissingColumn(fullMsg);
+            if (!missingColumn || !(missingColumn in fields)) {
+                throw new Error(fullMsg);
+            }
+
+            console.warn('[bling:import-fallback] removendo coluna ausente no update:', { missingColumn });
+            delete fields[missingColumn];
+        }
+
+        throw new Error('Falha ao atualizar produto após fallback de colunas.');
+    };
+
+    const insertWithColumnFallback = async (initialRow: Record<string, any>): Promise<{ id: string }> => {
+        let row = { ...initialRow };
+        for (let attempt = 1; attempt <= 6; attempt++) {
+            const { data: insertedData, error } = await supabase
+                .from('products')
+                .insert(row)
+                .select('id')
+                .single();
+            if (!error) return { id: insertedData?.id };
+
+            const fullMsg = formatSupabaseError(error);
+            const missingColumn = extractMissingColumn(fullMsg);
+            if (!missingColumn || !(missingColumn in row)) {
+                throw new Error(fullMsg);
+            }
+
+            console.warn('[bling:import-fallback] removendo coluna ausente no insert:', { missingColumn });
+            delete row[missingColumn];
+        }
+
+        throw new Error('Falha ao inserir produto após fallback de colunas.');
+    };
+
     // Resolve brand and model name for use as fallback values
     let modelBrandName: string | null = null;
     let modelName: string | null = null;
@@ -1268,21 +1337,12 @@ export async function importBlingProducts(
                 // NOTA: specs (cor, ram, storage) é INCLUÍDO para que mudanças de variação
                 // no Bling (ex: "vinho escuro" → "vinho") sejam refletidas ao reimportar.
                 const { company_id, bling_id, stock_quantity, track_inventory, is_gift, warranty_type, ...updateFields } = dbRow;
-                const { error } = await supabase
-                    .from('products')
-                    .update(updateFields)
-                    .eq('id', existing.id);
-                if (error) throw new Error(error.message);
+                await updateWithColumnFallback(existing.id, updateFields);
                 result.updated++;
                 vpsRows.push({ ...dbRow, id: existing.id });
             } else {
                 operation = 'criação';
-                const { data: insertedData, error } = await supabase
-                    .from('products')
-                    .insert(dbRow)
-                    .select('id')
-                    .single();
-                if (error) throw new Error(error.message);
+                const insertedData = await insertWithColumnFallback(dbRow);
                 result.created++;
                 vpsRows.push({ ...dbRow, id: insertedData?.id });
             }
