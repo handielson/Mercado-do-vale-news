@@ -123,6 +123,10 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
 
     const isDraggingFromOther = draggedProduct && draggedProduct.sourceCategoryId !== categoryId;
 
+    useEffect(() => {
+        console.log(`[CategoryProductsPanel ${categoryId}] draggedProduct atualizado:`, draggedProduct);
+    }, [draggedProduct, categoryId]);
+
     return (
         <div
             ref={dropRef}
