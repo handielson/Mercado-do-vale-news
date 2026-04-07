@@ -29,11 +29,18 @@ export default async function handler(req: any, res: any) {
         }
 
         const supabaseUrl2 = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-        const supabaseKey2 = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+        const supabaseKey2 = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
         if (!supabaseUrl2 || !supabaseKey2) {
             return res.redirect(302, '/admin/settings/bling?error=server_config');
         }
-        const supaOAuth = createClient(supabaseUrl2, supabaseKey2, { auth: { persistSession: false, autoRefreshToken: false } });
+        let supaOAuth;
+        try {
+            supaOAuth = createClient(supabaseUrl2, supabaseKey2, { auth: { persistSession: false, autoRefreshToken: false } });
+        } catch (clientErr: any) {
+            console.error('Supabase client init error:', clientErr);
+            return res.redirect(302, '/admin/settings/bling?error=server_config');
+        }
+
         const { data: settings2, error: settingsError2 } = await supaOAuth
             .from('company_settings')
             .select('id, bling_client_id, bling_client_secret, bling_callback_url')
