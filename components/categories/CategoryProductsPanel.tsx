@@ -60,6 +60,10 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
         load(1, true);
     }, [load]);
 
+    useEffect(() => {
+        console.log(`%c[CategoryProductsPanel ${categoryId}] draggedProduct:`, 'color:blue;font-weight:bold', draggedProduct);
+    }, [draggedProduct, categoryId]);
+
     // --- Drop handlers ---
     const handleDragOver = (e: React.DragEvent) => {
         if (!draggedProduct || draggedProduct.sourceCategoryId === categoryId) return;
@@ -73,7 +77,11 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
         setIsDropTarget(false);
-        if (!draggedProduct || draggedProduct.sourceCategoryId === categoryId) return;
+        console.log('%c[DROP] Recebido em categoria:', 'color:green;font-weight:bold', { categoryId, draggedProduct });
+        if (!draggedProduct || draggedProduct.sourceCategoryId === categoryId) {
+            console.log('%c[DROP] Ignorado', 'color:red;font-weight:bold');
+            return;
+        }
 
         const { product, sourceCategoryId } = draggedProduct;
         const isCtrl = e.ctrlKey || e.metaKey;
@@ -164,10 +172,12 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                             key={product.id}
                             draggable
                             onDragStart={e => {
+                                console.log('%c[DRAG START]', 'color:orange;font-weight:bold', product.name);
                                 e.dataTransfer.effectAllowed = 'move';
                                 onDragStart(product, categoryId);
                             }}
                             onDragEnd={() => {
+                                console.log('%c[DRAG END]', 'color:orange;font-weight:bold');
                                 // NÃO chamar onDragEnd aqui! Deixar a página limpar quando o drop terminar
                             }}
                             className="flex items-center gap-3 px-4 py-2.5 hover:bg-white transition-colors cursor-grab active:cursor-grabbing group"
