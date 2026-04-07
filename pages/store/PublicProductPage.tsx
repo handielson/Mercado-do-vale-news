@@ -23,6 +23,7 @@ import type { CompanySettings } from '@/types/companySettings';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { shippingService } from '@/services/shippingService';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
+import { normalizeProduct } from '@/services/productNormalizer';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -133,7 +134,14 @@ export const PublicProductPage: React.FC = () => {
                 // (cobre produtos que existem na VPS mas não têm o campo slug preenchido)
                 if (!data || data.error) {
                     try {
-                        const searchResults = await vpsApiService.getProducts({ search: slug, status: 'active', limit: 5 });
+                        const searchTerms = Array.from(new Set([slug, slug.replace(/-/g, ' ')]));
+                        let searchResults: any[] | null = null;
+
+                        for (const term of searchTerms) {
+                            searchResults = await vpsApiService.getProducts({ search: term, status: 'active', limit: 5 });
+                            if (searchResults && searchResults.length > 0) break;
+                        }
+
                         if (searchResults && searchResults.length > 0) {
                             // Prioriza match exato de slug, depois sku, depois primeiro resultado
                             const exactMatch = searchResults.find(p =>
@@ -172,14 +180,6 @@ export const PublicProductPage: React.FC = () => {
                         console.warn('Falha ao tentar recuperar marca do Supabase', e);
                     }
                 }
-
-                // Normaliza arrays JSON caso a stringificação tenha vazado
-                let parsedImages = data.images;
-                if (typeof parsedImages === 'string') {
-                    try { parsedImages = JSON.parse(parsedImages); } catch { parsedImages = []; }
-                }
-                if (!Array.isArray(parsedImages)) parsedImages = [];
-                data.images = parsedImages;
 
                 let parsedSpecs = data.specs;
                 if (typeof parsedSpecs === 'string') {
@@ -249,7 +249,7 @@ export const PublicProductPage: React.FC = () => {
                 // Migração do Supabase → VPS concluída em 31/03/2026 (568 produtos).
                 
                 const formattedProduct = {
-                    ...data, 
+                    ...normalizeProduct(data),
                     // Garante que o frontend ache que tem uma string de marca
                     brand: typeof data.brand === 'object' ? data.brand?.name : (data.brand || ''),
                 };
@@ -269,12 +269,7 @@ export const PublicProductPage: React.FC = () => {
                 if (data.model_id && String(data.model_id) !== '0' && String(data.model_id) !== 'null') {
                     const sibs = await vpsApiService.getProducts({ model_id: data.model_id, status: 'active', limit: 50 });
                     if (sibs) {
-                        const cleanSibs = sibs.map(s => {
-                            let imgs = s.images;
-                            if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
-                            if (!Array.isArray(imgs)) imgs = [];
-                            return { ...s, images: imgs };
-                        }).filter(s =>
+                        const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
                             String(s.id) !== String(data.id) &&
                             String(s.model_id) === String(data.model_id)  // ← validação: só produtos do mesmo modelo
                         );
@@ -283,12 +278,7 @@ export const PublicProductPage: React.FC = () => {
                 } else if (data.parent_id && String(data.parent_id) !== '0' && String(data.parent_id) !== 'null') {
                     const sibs = await vpsApiService.getProducts({ parent_id: data.parent_id, status: 'active', limit: 50 });
                     if (sibs) {
-                        const cleanSibs = sibs.map(s => {
-                            let imgs = s.images;
-                            if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
-                            if (!Array.isArray(imgs)) imgs = [];
-                            return { ...s, images: imgs };
-                        }).filter(s =>
+                        const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
                             String(s.id) !== String(data.id) &&
                             String(s.parent_id) === String(data.parent_id)  // ← validação: só produtos do mesmo pai
                         );
@@ -302,12 +292,7 @@ export const PublicProductPage: React.FC = () => {
                     if (searchStr.trim().length > 2) {
                         const searchResults = await vpsApiService.getProducts({ search: searchStr, status: 'active', limit: 50 });
                         if (searchResults) {
-                            const cleanSibs = searchResults.map(s => {
-                                let imgs = s.images;
-                                if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
-                                if (!Array.isArray(imgs)) imgs = [];
-                                return { ...s, images: imgs };
-                            }).filter(s =>
+                            const cleanSibs = searchResults.map(s => normalizeProduct(s)).filter(s =>
                                 String(s.id) !== String(data.id) &&
                                 generateGroupKey(s as unknown as CatalogProduct) === myGroupKey
                             );
@@ -320,12 +305,7 @@ export const PublicProductPage: React.FC = () => {
                 if (data.category_id) {
                     const related = await vpsApiService.getProducts({ category: data.category_id, status: 'active', limit: 5 });
                     if (related) {
-                        const cleanRelated = related.map(s => {
-                            let imgs = s.images;
-                            if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
-                            if (!Array.isArray(imgs)) imgs = [];
-                            return { ...s, images: imgs };
-                        }).filter(s => s.id !== data.id).slice(0, 4);
+                        const cleanRelated = related.map(s => normalizeProduct(s)).filter(s => s.id !== data.id).slice(0, 4);
                         setRelatedProducts(cleanRelated as unknown as CatalogProduct[]);
                     }
                 }
@@ -339,12 +319,7 @@ export const PublicProductPage: React.FC = () => {
                     if (firstTag) {
                         const crossSells = await vpsApiService.getProducts({ search: firstTag.trim(), status: 'active', limit: 8 });
                         if (crossSells) {
-                            const cleanCross = crossSells.map(s => {
-                                let imgs = s.images;
-                                if (typeof imgs === 'string') try { imgs = JSON.parse(imgs); } catch { imgs = []; }
-                                if (!Array.isArray(imgs)) imgs = [];
-                                return { ...s, images: imgs };
-                            })
+                            const cleanCross = crossSells.map(s => normalizeProduct(s))
                             // Evita sugerir os que já são relacionados da msm categoria
                             .filter(s => s.id !== data.id && s.category_id !== data.category_id)
                             .slice(0, 4);

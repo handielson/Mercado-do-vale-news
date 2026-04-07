@@ -3,7 +3,6 @@ import { modelColorImagesService } from './model-color-images';
 import { modelService } from './models';
 import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
-import { compressImage } from '../utils/image-compression';
 import { vpsApiService } from './vpsApiService';
 
 const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
@@ -67,7 +66,16 @@ export function resolveCategoryId(blingCategoryId: number | undefined, fallbackI
     if (!blingCategoryId) return fallbackId;
     const mappings = loadCategoryMappings();
     const found = mappings.find(m => m.blingCategoryId === blingCategoryId);
-    return found ? found.ourCategoryId : fallbackId;
+    // Se houver mapeamento sem categoria definida, usa a categoria padrão selecionada.
+    const resolved = found?.ourCategoryId ? found.ourCategoryId : fallbackId;
+    console.warn('[bling:category-map]', {
+        blingCategoryId,
+        mappedCategoryId: found?.ourCategoryId || null,
+        mappedCategoryName: found?.ourCategoryName || null,
+        fallbackCategoryId: fallbackId,
+        resolvedCategoryId: resolved,
+    });
+    return resolved;
 }
 
 export interface BlingProduct {
@@ -591,6 +599,14 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
     const trib = item.tributacao || {};
     const imagens = item.midia?.imagens?.internas || item.imagens || [];
     const firstImg = imagens[0]?.link || imagens[0]?.url || (typeof imagens[0] === 'string' ? imagens[0] : null);
+    const slug = (nomeLimpo || item.codigo || item.id || 'produto')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/-{2,}/g, '-');
 
     // pesoBruto pode estar no root do item (não dentro de dimensoes) — API Bling v3
     const pesoBruto = dim.pesoBruto || item.pesoBruto || null;
@@ -609,6 +625,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         bling_parent_id: parentId ?? null,
         // Básico
         name: nomeLimpo,
+        slug,
         sku: item.codigo && !['PCS', 'UN', 'PC', 'CX'].includes(item.codigo.toUpperCase()) ? item.codigo : null,
         ean: item.gtin || null,
         alternative_eans: item.gtin ? [item.gtin] : [],
@@ -643,6 +660,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
             .slice(0, 5)
             .map((img: any) => img?.link || img?.url || (typeof img === 'string' ? img : null))
             .filter(Boolean),
+        image_url: firstImg,
         // Modelo padrão (quando selecionado na importação)
         ...(modelId ? { model_id: modelId } : {}),
         // Defaults
@@ -915,27 +933,12 @@ function humanizeImportError(operation: string, rawMessage: string): string {
     return `Falha na ${operation}: ${rawMessage}`;
 }
 
-// Helper: Baixa a imagem via proxy, converte pra blob, comprime e retorna base64
-async function fetchAndCompressImage(url: string): Promise<string | null> {
-    try {
-        const proxyUrl = `/api/bling?resource=image-proxy&url=${encodeURIComponent(url)}`;
-        const res = await fetch(proxyUrl);
-        if (!res.ok) return null;
-        
-        const blob = await res.blob();
-        const file = new File([blob], 'bling-image.jpg', { type: blob.type || 'image/jpeg' });
-        
-        const compressed = await compressImage(file);
-        return new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(compressed);
-        });
-    } catch (e) {
-        console.warn('Failed to fetch/compress Bling image:', e);
-        return null;
-    }
+function normalizeExternalImageUrls(images: unknown[]): string[] {
+    return images
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map(value => value.trim())
+        .filter(value => /^https?:\/\//i.test(value))
+        .slice(0, 5);
 }
 
 export async function importBlingProducts(
@@ -947,12 +950,75 @@ export async function importBlingProducts(
     autoCreateModel: boolean = false
 ): Promise<ImportResult> {
     const companyId = await getCompanyId();
+    const categoryMappings = loadCategoryMappings();
+    console.warn('[bling:import-start]', {
+        defaultCategoryId: categoryId,
+        mappingsCount: categoryMappings.length,
+        mappingsWithCategory: categoryMappings.filter(m => !!m.ourCategoryId).length,
+        sampleMappings: categoryMappings.slice(0, 10),
+    });
+
+    // Garante que todos os category_ids (principal + mapeados) existem no Supabase para evitar FK violation.
+    // Categorias novas criadas pos-migracao existem apenas na VPS; precisamos espelha-las no Supabase.
+    const { supabase } = await import('./supabase');
+    const { categoryService } = await import('./categories');
+    const allVpsCategories = await categoryService.list();
+    const validVpsCategoryIds = new Set(allVpsCategories.map(c => c.id));
+
+    async function ensureCategoryInSupabase(catId: string): Promise<void> {
+        if (!catId) return;
+        const { data: exists } = await supabase
+            .from('categories')
+            .select('id')
+            .eq('id', catId)
+            .eq('company_id', companyId)
+            .maybeSingle();
+        if (exists) {
+            console.log('[bling:category-sync] already-exists', { catId, companyId });
+            return;
+        }
+
+        const allCats = await categoryService.list();
+        const cat = allCats.find(c => c.id === catId);
+        if (!cat) {
+            throw new Error(`Categoria ${catId} nao encontrada na VPS para espelhamento.`);
+        }
+
+        console.log('[bling:category-sync] syncing-from-vps', {
+            catId,
+            companyId,
+            catName: cat.name,
+        });
+
+        const { error: syncError } = await supabase.from('categories').upsert({
+            id: cat.id,
+            company_id: companyId,
+            name: cat.name,
+            slug: cat.slug,
+            config: cat.config || {},
+            warranty_days: cat.warranty_days || 90,
+            extended_warranty_enabled: cat.extended_warranty_enabled ?? false,
+            margin_wholesale: cat.margin_wholesale || null,
+            margin_reseller: cat.margin_reseller || null,
+        }, { onConflict: 'id', ignoreDuplicates: false });
+
+        if (syncError) {
+            throw new Error(`Falha ao espelhar categoria ${catId} no Supabase: ${syncError.message}`);
+        }
+
+        console.log('[bling:category-sync] synced-ok', { catId, companyId });
+    }
+
+    // Sincroniza categoryId principal e todos os IDs mapeados para categorias do Bling
+    const allMappedCatIds = new Set<string>();
+    if (categoryId) allMappedCatIds.add(categoryId);
+    loadCategoryMappings().forEach(m => { if (m.ourCategoryId) allMappedCatIds.add(m.ourCategoryId); });
+    await Promise.all(Array.from(allMappedCatIds).map(id => ensureCategoryInSupabase(id)));
 
     // Fetch Category Margins
     let marginWholesale = 0;
     let marginReseller = 0;
     if (categoryId) {
-        const { supabase } = await import('./supabase');
         const { data: catData } = await supabase
             .from('categories')
             .select('margin_wholesale, margin_reseller')
@@ -988,6 +1054,7 @@ export async function importBlingProducts(
 
         const item = selectedProducts[i];
         let operation = 'verificação';
+        let resolvedCategoryForDebug: string | null = null;
         try {
             // Busca detalhe completo: herda campos do pai quando for variação
             const detail = await fetchBlingProductDetail(item.id);
@@ -1019,6 +1086,44 @@ export async function importBlingProducts(
             } : item;
 
             const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId, marginWholesale, marginReseller);
+
+            // Se o mapeamento local estiver desatualizado (categoria removida/trocada), cai para a categoria padrão.
+            if (!row.category_id || !validVpsCategoryIds.has(row.category_id)) {
+                console.warn('[bling:category-fallback]', {
+                    productId: item.id,
+                    productName: item.nome,
+                    blingCategoryId: enriched?.categoria?.id ?? null,
+                    mappedCategoryId: row.category_id || null,
+                    fallbackCategoryId: categoryId,
+                });
+                row.category_id = categoryId;
+            }
+
+            resolvedCategoryForDebug = row.category_id || null;
+
+            // Debug hard-stop: mostra exatamente quando category_id resolvido nao existe no Supabase
+            if (row.category_id) {
+                const { data: resolvedCategory, error: resolvedCategoryError } = await supabase
+                    .from('categories')
+                    .select('id, name')
+                    .eq('id', row.category_id)
+                    .eq('company_id', companyId)
+                    .maybeSingle();
+
+                if (resolvedCategoryError || !resolvedCategory) {
+                    throw new Error(
+                        `category_sync_missing: resolved_category_id=${row.category_id}; default_category_id=${categoryId}; bling_category_id=${enriched?.categoria?.id ?? 'null'}; product_id=${item.id}; product_name=${item.nome}`
+                    );
+                }
+
+                console.log('[bling:category-resolved-ok]', {
+                    productId: item.id,
+                    productName: item.nome,
+                    blingCategoryId: enriched?.categoria?.id ?? null,
+                    resolvedCategoryId: row.category_id,
+                    resolvedCategoryName: (resolvedCategory as any).name,
+                });
+            }
             
             operation = 'verificação de duplicata';
             const { data: existing, error: checkError } = await supabase
@@ -1090,7 +1195,17 @@ export async function importBlingProducts(
                 let resolvedModelId = modelCache.get(cacheKey);
                 if (!resolvedModelId) {
                     const models = await modelService.list();
-                    const existingModel = models.find(m => m.name.toLowerCase() === newModelName.toLowerCase());
+                    const normalizeSlug = (value: string) => value
+                        .toLowerCase()
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-+|-+$/g, '');
+                    const modelSlug = normalizeSlug(newModelName);
+                    const existingModel = models.find(m =>
+                        (m.slug && m.slug === modelSlug) ||
+                        normalizeSlug(m.name) === modelSlug
+                    );
                     
                     if (existingModel) {
                         resolvedModelId = existingModel.id;
@@ -1140,28 +1255,9 @@ export async function importBlingProducts(
             if (!row.brand && modelBrandName && finalModelId === modelId) row.brand = modelBrandName;
 
             row.model_id = finalModelId || null;
-
-
-            // Fetch e Compress de todas as imagens antes do Upsert (limite de 5 foi aplicado no mapBlingToDb)
-            if (row.images && row.images.length > 0) {
-                operation = 'download de imagens';
-                const processedImages: string[] = [];
-                for (const imgUrl of row.images) {
-                    if (imgUrl && imgUrl.startsWith('http')) {
-                        const base64 = await fetchAndCompressImage(imgUrl);
-                        if (base64) {
-                            processedImages.push(base64);
-                        } else {
-                            // Se falhar o download/compressão, mantém a URL original para que o front ainda tente renderizar
-                            processedImages.push(imgUrl);
-                        }
-                    } else if (imgUrl) {
-                        // Já é base64 ou URL local
-                        processedImages.push(imgUrl);
-                    }
-                }
-                row.images = processedImages;
-            }
+            // Mantem apenas URLs HTTP vindas do Bling; nao persiste mais base64 no banco.
+            row.images = normalizeExternalImageUrls(Array.isArray(row.images) ? row.images : []);
+            row.image_url = row.images[0] || row.image_url || null;
 
             // Extrai _color_id auxiliar antes de enviar para o banco
             const { _color_id: resolvedColorId, ...dbRow } = row;
@@ -1205,10 +1301,19 @@ export async function importBlingProducts(
                 }
             }
         } catch (err: any) {
+            const rawMessage = err?.message || String(err);
+            console.error('[bling:import-error-raw]', {
+                operation,
+                productId: item.id,
+                productName: item.nome,
+                productSku: item.codigo,
+                resolvedCategoryId: resolvedCategoryForDebug,
+                rawMessage,
+            });
             result.errors.push({
                 name: item.nome,
                 sku: item.codigo,
-                reason: humanizeImportError(operation, err.message || ''),
+                reason: humanizeImportError(operation, rawMessage),
             });
         }
 
@@ -1399,17 +1504,10 @@ export async function reimportModelProductsFromBling(modelId: string): Promise<n
         const extractedUrls = imagens.slice(0, 5).map((img: any) => img?.link || img?.url || (typeof img === 'string' ? img : null)).filter(Boolean);
 
         if (extractedUrls.length > 0) {
-            const processedImages = [];
-            for (const imgUrl of extractedUrls) {
-                if (imgUrl && imgUrl.startsWith('http')) {
-                    const base64 = await fetchAndCompressImage(imgUrl);
-                    processedImages.push(base64 || imgUrl);
-                } else {
-                    processedImages.push(imgUrl);
-                }
-            }
+            const processedImages = normalizeExternalImageUrls(extractedUrls);
             if (processedImages.length > 0) {
                 updateData.images = processedImages;
+                updateData.image_url = processedImages[0];
                 
                 // Também atualiza a galeria compartilhada da cor da PRIMEIRA foto se houver
                 const colorId = resolveColorId(p.specs?.color);

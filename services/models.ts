@@ -140,6 +140,46 @@ async function create(input: ModelInput): Promise<Model> {
     const companyId = await getCompanyId();
     const slug = generateSlug(input.name);
 
+    const toModel = (row: any): Model => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        brand_id: row.brand_id,
+        active: true,
+        created: row.created_at,
+        updated: row.updated_at,
+        category_id: row.category_id,
+        description: row.description,
+        template_values: row.template_values,
+        eans: row.eans,
+    });
+
+    // Evita 409 previsivel: se o modelo ja existir, reaproveita.
+    const { data: existingBeforeInsert, error: existingBeforeInsertError } = await supabase
+        .from('models')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('slug', slug)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    if (!existingBeforeInsertError && existingBeforeInsert && existingBeforeInsert.length > 0) {
+        return toModel(existingBeforeInsert[0]);
+    }
+
+    // Fallback por nome para cenarios legados com slug divergente
+    const { data: existingByName, error: existingByNameError } = await supabase
+        .from('models')
+        .select('*')
+        .eq('company_id', companyId)
+        .ilike('name', input.name)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    if (!existingByNameError && existingByName && existingByName.length > 0) {
+        return toModel(existingByName[0]);
+    }
+
     const { data, error } = await supabase
         .from('models')
         .insert({
@@ -157,23 +197,40 @@ async function create(input: ModelInput): Promise<Model> {
         .select()
         .single();
 
-    if (error) throw new Error(`Failed to create model: ${error.message}`);
+    if (error) {
+        const msg = (error.message || '').toLowerCase();
+        const isConflict = error.code === '23505' || msg.includes('duplicate') || msg.includes('unique') || msg.includes('409');
 
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        brand_id: data.brand_id,
-        active: true,
-        created: data.created_at,
-        updated: data.updated_at,
-        // Template fields
-        category_id: data.category_id,
-        description: data.description,
-        template_values: data.template_values,
-        // EAN codes
-        eans: data.eans
-    };
+        if (isConflict) {
+            const { data: existingAfterConflict, error: existingAfterConflictError } = await supabase
+                .from('models')
+                .select('*')
+                .eq('company_id', companyId)
+                .eq('slug', slug)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (!existingAfterConflictError && existingAfterConflict && existingAfterConflict.length > 0) {
+                return toModel(existingAfterConflict[0]);
+            }
+
+            const { data: existingAfterConflictByName, error: existingAfterConflictByNameError } = await supabase
+                .from('models')
+                .select('*')
+                .eq('company_id', companyId)
+                .ilike('name', input.name)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (!existingAfterConflictByNameError && existingAfterConflictByName && existingAfterConflictByName.length > 0) {
+                return toModel(existingAfterConflictByName[0]);
+            }
+        }
+
+        throw new Error(`Failed to create model: ${error.message}`);
+    }
+
+    return toModel(data);
 }
 
 /**

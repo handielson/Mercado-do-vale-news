@@ -101,6 +101,11 @@ export function ProductCard({
             return product.images;
         }
 
+        // Fallback VPS-first: alguns endpoints compactos retornam apenas image_url
+        if (typeof (product as any).image_url === 'string' && (product as any).image_url) {
+            return (product as any).image_url;
+        }
+
         // Fallback genérico baseado na marca
         const brandName = product.brand || 'Produto';
         return `data:image/svg+xml;charset=UTF-8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><rect width='400' height='300' fill='%233B82F6'/><text x='200' y='155' font-family='Arial' font-size='18' fill='white' text-anchor='middle'>${encodeURIComponent(brandName)}</text></svg>`;

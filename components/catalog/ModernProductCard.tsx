@@ -77,6 +77,14 @@ export function ModernProductCard({
 
     // Store installment values for each variant
     const [variantInstallments, setVariantInstallments] = useState<Map<number, string>>(new Map());
+    const [displayImageUrl, setDisplayImageUrl] = useState<string>('');
+
+    const hasMedia = (p: CatalogProduct) => {
+        if (Array.isArray(p.images) && p.images.some(img => typeof img === 'string' && img.trim().length > 0)) {
+            return true;
+        }
+        return typeof (p as any).image_url === 'string' && (p as any).image_url.trim().length > 0;
+    };
 
     // Calculate total stock across all variants/colors
     const totalGroupStock = useMemo(() => {
@@ -244,7 +252,7 @@ export function ModernProductCard({
     // Get primary image — uses currentProduct (selected variant/color) not the representative product
     const getImageUrl = () => {
         const productToUse = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
-            ? selectedVariant.products[0]
+            ? (selectedVariant.products.find(hasMedia) || selectedVariant.products[0])
             : currentProduct;
 
         // Handle images as string array (from Product type)
@@ -254,6 +262,10 @@ export function ModernProductCard({
             if (typeof firstImage === 'string' && firstImage.length > 0) {
                 return firstImage;
             }
+        }
+
+        if (typeof (productToUse as any).image_url === 'string' && (productToUse as any).image_url) {
+            return (productToUse as any).image_url;
         }
 
         // Fallback to professional placeholder
@@ -287,8 +299,8 @@ export function ModernProductCard({
 
     const handleTitleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
-        // Use slug if available, otherwise just use id
-        navigate(`/produto/${product.slug || product.id}`);
+        const targetProduct = currentProduct || product;
+        navigate(`/produto/${targetProduct.slug || targetProduct.id}`);
     };
 
     const handleInfoClick = (e: React.MouseEvent) => {
@@ -330,6 +342,9 @@ export function ModernProductCard({
                 const imgUrl = typeof colorProduct.images[0] === 'string' ? colorProduct.images[0] : imageUrl;
                 return getCacheBustedUrl(imgUrl, colorProduct.updated || colorProduct.created);
             }
+            if (colorProduct && typeof (colorProduct as any).image_url === 'string' && (colorProduct as any).image_url) {
+                return getCacheBustedUrl((colorProduct as any).image_url, colorProduct.updated || colorProduct.created);
+            }
             return imageUrl; // Fallback to default image
         });
     }, [selectedVariant, variants, imageUrl]);
@@ -363,6 +378,40 @@ export function ModernProductCard({
     const currentImage = currentColorIndex === -1
         ? imageUrl
         : (colorImages[currentColorIndex] || imageUrl);
+
+    useEffect(() => {
+        let objectUrl: string | null = null;
+        let cancelled = false;
+
+        const applyImage = async () => {
+            if (!currentImage) {
+                setDisplayImageUrl('/product-placeholder.png');
+                return;
+            }
+
+            if (typeof currentImage === 'string' && currentImage.startsWith('data:image')) {
+                try {
+                    const response = await fetch(currentImage);
+                    const blob = await response.blob();
+                    objectUrl = URL.createObjectURL(blob);
+                    if (!cancelled) setDisplayImageUrl(objectUrl);
+                    return;
+                } catch {
+                    if (!cancelled) setDisplayImageUrl(currentImage);
+                    return;
+                }
+            }
+
+            setDisplayImageUrl(currentImage);
+        };
+
+        applyImage();
+
+        return () => {
+            cancelled = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [currentImage]);
 
     const productForDisplay = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
         ? selectedVariant.products[0]
@@ -429,7 +478,7 @@ export function ModernProductCard({
                     {/* Imagem */}
                     <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-slate-100">
                         <img
-                            src={currentImage}
+                            src={displayImageUrl || currentImage}
                             alt={productForDisplay.name}
                             onError={() => setImageError(true)}
                             className="w-full h-full object-contain"
@@ -484,7 +533,7 @@ export function ModernProductCard({
                     onClick={handleTitleClick}
                 >
                     <img
-                        src={currentImage}
+                        src={displayImageUrl || currentImage}
                         alt={[
                             productForDisplay.name || product.name,
                             currentColorIndex !== -1 ? variants?.colors[currentColorIndex]?.name : '',

@@ -24,6 +24,7 @@ export function PaymentFeesPage() {
     const [saving, setSaving] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [editedFees, setEditedFees] = useState<Map<string, PaymentFee>>(new Map());
+    const [inputDrafts, setInputDrafts] = useState<Map<string, string>>(new Map());
 
     useEffect(() => {
         loadFees();
@@ -111,6 +112,7 @@ export function PaymentFeesPage() {
         try {
             const data = await paymentFeesService.list();
             setFees(data);
+            setInputDrafts(new Map());
         } catch (error) {
             toast.error('Erro ao carregar taxas');
         } finally {
@@ -132,6 +134,13 @@ export function PaymentFeesPage() {
                 }
                 return f;
             });
+
+            // Valida apenas as linhas que o usuário editou
+            const invalidFee = updatedFees.find(f => editedFees.has(f.id) && (f.applied_fee ?? 0) < (f.operator_fee ?? 0));
+            if (invalidFee) {
+                toast.error(`Taxa aplicada (${invalidFee.applied_fee}%) não pode ser menor que a operadora (${invalidFee.operator_fee}%)`);
+                return;
+            }
             
             if (changedCount > 0) {
                 await paymentFeesService.replaceAll(updatedFees);
@@ -139,9 +148,10 @@ export function PaymentFeesPage() {
             
             toast.success('Taxas atualizadas com sucesso e salvas no sistema!');
             setEditedFees(new Map());
+            setInputDrafts(new Map());
             await loadFees();
-        } catch (error) {
-            toast.error('Erro ao salvar taxas');
+        } catch (error: any) {
+            toast.error('Erro ao salvar taxas: ' + (error?.message || 'tente novamente'));
         } finally {
             setSaving(false);
         }
@@ -151,11 +161,6 @@ export function PaymentFeesPage() {
         // Pega a taxa atual já editada (ou a original se ainda não mexeu)
         const currentFee = editedFees.get(fee.id) || fee;
         const updated = { ...currentFee, [field]: value };
-        
-        if (field === 'applied_fee' && updated.applied_fee < (updated.operator_fee ?? 0)) {
-            toast.error('Taxa aplicada deve ser maior ou igual à taxa operadora');
-            return;
-        }
         
         const newEdited = new Map(editedFees);
         newEdited.set(fee.id, updated);
@@ -169,6 +174,48 @@ export function PaymentFeesPage() {
 
     function isChanged(fee?: PaymentFee) {
         return fee ? editedFees.has(fee.id) : false;
+    }
+
+    function getDraftKey(feeId: string, field: 'operator_fee' | 'applied_fee') {
+        return `${feeId}_${field}`;
+    }
+
+    function formatFeeValue(value: number | undefined) {
+        return String(value ?? 0).replace('.', ',');
+    }
+
+    function parseFeeInput(rawValue: string) {
+        const normalized = rawValue.trim().replace(',', '.').replace(/[^\d.\-]/g, '');
+        const parsed = Number.parseFloat(normalized);
+        if (!Number.isFinite(parsed)) return 0;
+        return Math.max(0, Math.min(100, parsed));
+    }
+
+    function getInputValue(fee: PaymentFee, field: 'operator_fee' | 'applied_fee') {
+        const key = getDraftKey(fee.id, field);
+        if (inputDrafts.has(key)) return inputDrafts.get(key) ?? '';
+        const edited = getEdited(fee);
+        return formatFeeValue((edited?.[field] as number | undefined) ?? 0);
+    }
+
+    function onFeeInputChange(fee: PaymentFee, field: 'operator_fee' | 'applied_fee', rawValue: string) {
+        const key = getDraftKey(fee.id, field);
+        const newDrafts = new Map(inputDrafts);
+        newDrafts.set(key, rawValue);
+        setInputDrafts(newDrafts);
+    }
+
+    function onFeeInputBlur(fee: PaymentFee, field: 'operator_fee' | 'applied_fee') {
+        const key = getDraftKey(fee.id, field);
+        const rawValue = inputDrafts.get(key);
+        if (rawValue === undefined) return;
+
+        const parsedValue = parseFeeInput(rawValue);
+        updateFee(fee, field, parsedValue);
+
+        const newDrafts = new Map(inputDrafts);
+        newDrafts.delete(key);
+        setInputDrafts(newDrafts);
     }
 
     // Shared input styles
@@ -295,26 +342,26 @@ export function PaymentFeesPage() {
                                             </td>
                                             <td className="px-3 py-2">
                                                 {pres
-                                                    ? <input type="number" step="0.01" min="0" max="100" value={pres.operator_fee ?? 0} onChange={e => updateFee(row.presencial!, 'operator_fee', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusAmber}`} />
+                                                    ? <input type="text" inputMode="decimal" value={getInputValue(row.presencial!, 'operator_fee')} onChange={e => onFeeInputChange(row.presencial!, 'operator_fee', e.target.value)} onBlur={() => onFeeInputBlur(row.presencial!, 'operator_fee')} className={`w-18 ${inputBase} ${focusAmber}`} />
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
                                             <td className="px-3 py-2">
                                                 {pres
-                                                    ? <input type="number" step="0.01" min="0" max="100" value={pres.applied_fee ?? 0} onChange={e => updateFee(row.presencial!, 'applied_fee', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusAmber}`} />
+                                                    ? <input type="text" inputMode="decimal" value={getInputValue(row.presencial!, 'applied_fee')} onChange={e => onFeeInputChange(row.presencial!, 'applied_fee', e.target.value)} onBlur={() => onFeeInputBlur(row.presencial!, 'applied_fee')} className={`w-18 ${inputBase} ${focusAmber}`} />
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
 
                                             {/* ── MP Online ── */}
                                             <td className="px-3 py-2 border-l border-slate-100 bg-sky-50/40">
                                                 {mp
-                                                    ? <input type="number" step="0.01" min="0" max="100" value={mp.operator_fee ?? 0} onChange={e => updateFee(row.online_mp!, 'operator_fee', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusBlue}`} />
+                                                    ? <input type="text" inputMode="decimal" value={getInputValue(row.online_mp!, 'operator_fee')} onChange={e => onFeeInputChange(row.online_mp!, 'operator_fee', e.target.value)} onBlur={() => onFeeInputBlur(row.online_mp!, 'operator_fee')} className={`w-18 ${inputBase} ${focusBlue}`} />
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
 
                                             {/* ── PS Online ── */}
                                             <td className="px-3 py-2 border-l border-slate-100">
                                                 {ps
-                                                    ? <input type="number" step="0.01" min="0" max="100" value={ps.operator_fee ?? 0} onChange={e => updateFee(row.online_ps!, 'operator_fee', parseFloat(e.target.value) || 0)} className={`w-18 ${inputBase} ${focusGreen}`} />
+                                                    ? <input type="text" inputMode="decimal" value={getInputValue(row.online_ps!, 'operator_fee')} onChange={e => onFeeInputChange(row.online_ps!, 'operator_fee', e.target.value)} onBlur={() => onFeeInputBlur(row.online_ps!, 'operator_fee')} className={`w-18 ${inputBase} ${focusGreen}`} />
                                                     : <span className="text-slate-300">—</span>}
                                             </td>
 

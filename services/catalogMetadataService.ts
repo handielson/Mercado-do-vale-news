@@ -82,38 +82,12 @@ export const catalogMetadataService = {
 
     /**
      * Buscar todas as categorias com contagem de produtos
-     * Fonte de Nomes: Supabase | Fonte de Contagem: VPS
+     * Fonte: VPS /catalog/metadata (inclui agregação pai/filhos e in_stock_count)
      */
     getAllCategories: async (): Promise<Array<{ id: string; name: string; parent_id?: string | null; count: number; in_stock_count: number }>> => {
         try {
-            // VPS é a única fonte de verdade para categorias
-            const timestamp = Date.now();
-            const [catsRes, countsRes] = await Promise.all([
-                fetch(`${VPS_BASE_URL}/categories?_t=${timestamp}`, {
-                    headers: { 'Cache-Control': 'no-cache, no-store' }, cache: 'no-store'
-                }),
-                fetch(`${VPS_BASE_URL}/products/category-counts?_t=${timestamp}`, {
-                    headers: { 'Cache-Control': 'no-cache, no-store' }, cache: 'no-store'
-                }),
-            ]);
-
-            if (!catsRes.ok) {
-                const meta = await getMetadata();
-                return meta?.categories || [];
-            }
-
-            const cats: any[] = await catsRes.json();
-            const rawCounts: any[] = countsRes.ok ? await countsRes.json() : [];
-
-            const countMap = new Map(rawCounts.map(c => [c.category_id, { count: Number(c.count) || 0, in_stock_count: Number(c.in_stock_count) || 0 }]));
-
-            return cats.map(c => ({
-                id: c.id,
-                name: c.name,
-                parent_id: c.parent_id || null,
-                count: countMap.get(c.id)?.count || 0,
-                in_stock_count: countMap.get(c.id)?.in_stock_count || 0,
-            }));
+            const meta = await getMetadata();
+            return meta?.categories || [];
         } catch(e) {
             console.error('Erro getAllCategories:', e);
             const meta = await getMetadata();

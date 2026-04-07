@@ -6,7 +6,7 @@ import { normalizeProduct } from '@/services/productNormalizer';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 30 * 1000; // 30 segundos (evita cache obsoleto prolongado na UI)
-const CACHE_KEY_PREFIX = '@mv:catalog:v5:';
+const CACHE_KEY_PREFIX = '@mv:catalog:v7:';
 
 // Helper to safely access localStorage (prevents SSR errors)
 const getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
@@ -52,8 +52,10 @@ export const catalogService = {
         const fetchFromVps = async () => {
             let vpsRaw: any = null;
             let vpsCats: any[] = [];
+            const useCompactPayload = true;
 
-            // compact: true descarta base64 e retorna apenas URLs HTTP (~5MB vs 90MB)
+            // Depois da migracao de base64 para URLs HTTP na VPS, o payload compacto
+            // volta a ser suficiente para os cards do catalogo.
             if (filters?.categories && filters.categories.length > 0 && !filters?.search) {
                 [vpsCats, vpsRaw] = await Promise.all([
                     vpsApiService.getCategories(),
@@ -62,7 +64,7 @@ export const catalogService = {
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
                         limit: 2000,
-                        compact: true,
+                        compact: useCompactPayload,
                     }),
                 ]);
             } else {
@@ -72,13 +74,12 @@ export const catalogService = {
                         favoritesOnly: filters?.favoritesOnly,
                         customerId: filters?.customerId,
                         limit: 1000,
-                        compact: true,
+                        compact: useCompactPayload,
                     }),
                 ]);
             }
 
             if (vpsRaw === null) return null;
-
             const settings = {
                 hide_inactive: true,
                 hide_zero_price: false,
@@ -121,6 +122,61 @@ export const catalogService = {
                 result = [...result]; // and clone for this run as well
             }
 
+            // Fallback de imagem para catálogo geral:
+            // quando a VPS devolve images vazias, usa a galeria de modelo/cor já cadastrada.
+            const productsNeedingImages = result.filter(
+                (p: any) => (!Array.isArray(p.images) || p.images.length === 0) && p.model_id
+            );
+
+            if (productsNeedingImages.length > 0) {
+                const modelIds = [...new Set(productsNeedingImages.map((p: any) => p.model_id))];
+                const colorNames = [...new Set(
+                    productsNeedingImages.map((p: any) => p.specs?.color).filter(Boolean) as string[]
+                )];
+
+                const [{ data: modelImages }, { data: colorRows }] = await Promise.all([
+                    supabase
+                        .from('model_color_images')
+                        .select('model_id, color_id, images')
+                        .in('model_id', modelIds),
+                    colorNames.length > 0
+                        ? supabase.from('colors').select('id, name').in('name', colorNames)
+                        : Promise.resolve({ data: [] })
+                ]);
+
+                if (modelImages && modelImages.length > 0) {
+                    const colorNameToId = new Map<string, string>(
+                        (colorRows || []).map(c => [c.name, c.id])
+                    );
+
+                    result = result.map((product: any) => {
+                        if (Array.isArray(product.images) && product.images.length > 0) return product;
+                        if (!product.model_id) return product;
+
+                        const entriesForModel = modelImages.filter(mi => mi.model_id === product.model_id);
+                        if (entriesForModel.length === 0) return product;
+
+                        const colorName = product.specs?.color;
+                        const colorId = colorName ? colorNameToId.get(colorName) : undefined;
+                        let chosen = colorId
+                            ? entriesForModel.find(mi => mi.color_id === colorId)
+                            : undefined;
+
+                        if (!chosen) chosen = entriesForModel[0];
+
+                        if (chosen?.images?.length > 0) {
+                            return {
+                                ...product,
+                                images: chosen.images,
+                                image_url: product.image_url || chosen.images[0]
+                            };
+                        }
+
+                        return product;
+                    });
+                }
+            }
+
             if (filters?.search && filters.search.trim() !== '') {
                 const removeAccents = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
                 const query = removeAccents(filters.search.trim());
@@ -159,7 +215,53 @@ export const catalogService = {
 
             const from = (page - 1) * pageSize;
             const paginated = result.slice(from, from + pageSize);
-            return { products: paginated as unknown as CatalogProduct[], total: result.length, hasMore: paginated.length === pageSize };
+
+            // Em compact=true a VPS remove imagens base64 para economizar payload.
+            // Para cards visíveis sem mídia, hidrata via /products/:id (payload completo).
+            const hasMedia = (product: any) => {
+                if (Array.isArray(product.images) && product.images.some((img: any) => typeof img === 'string' && img.trim().length > 0)) {
+                    return true;
+                }
+                return typeof product.image_url === 'string' && product.image_url.trim().length > 0;
+            };
+
+            const missingMedia = paginated
+                .filter((product: any) => product?.id && !hasMedia(product))
+                .slice(0, 24);
+
+            let hydratedPaginated = paginated;
+            if (missingMedia.length > 0) {
+                const fullRows = await Promise.all(
+                    missingMedia.map(async (product: any) => {
+                        const full = await vpsApiService.getProductById(product.id, true);
+                        if (!full) return null;
+                        const normalized = normalizeProduct(full as any);
+                        if (!hasMedia(normalized)) return null;
+                        return {
+                            id: product.id,
+                            images: normalized.images,
+                            image_url: normalized.image_url || normalized.images?.[0] || null,
+                        };
+                    })
+                );
+
+                const mediaById = new Map(
+                    fullRows
+                        .filter(Boolean)
+                        .map((row: any) => [row.id, row])
+                );
+
+                hydratedPaginated = paginated.map((product: any) => {
+                    const media = mediaById.get(product.id);
+                    if (!media) return product;
+                    return {
+                        ...product,
+                        images: media.images,
+                        image_url: media.image_url,
+                    };
+                });
+            }
+            return { products: hydratedPaginated as unknown as CatalogProduct[], total: result.length, hasMore: paginated.length === pageSize };
         };
 
         // ── SWR (Stale-While-Revalidate) ──────────────────────────────────────

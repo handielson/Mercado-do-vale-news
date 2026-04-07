@@ -36,6 +36,10 @@ export const PublicHeader: React.FC = () => {
         navigate('/');
     };
 
+    const handleLogoRefresh = () => {
+        window.location.reload();
+    };
+
     const getCustomerTypeBadge = () => {
         if (!customer) return null;
 
@@ -92,7 +96,13 @@ export const PublicHeader: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
                 {/* Logo */}
                 <div className="flex items-center gap-2">
-                    <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                    <button
+                        type="button"
+                        onClick={handleLogoRefresh}
+                        className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
+                        title="Atualizar página"
+                        aria-label="Atualizar página"
+                    >
                         {themeSettings.logo_main ? (
                             <img
                                 src={themeSettings.logo_main}
@@ -105,7 +115,7 @@ export const PublicHeader: React.FC = () => {
                                 <h1 className="text-2xl font-bold text-slate-800">{themeSettings.company_name}</h1>
                             </>
                         )}
-                    </Link>
+                    </button>
                     {/* Badge anos — só no desktop */}
                     <div className="hidden sm:flex">{getStoreAgeBadge()}</div>
                     {/* Clima — só no desktop */}

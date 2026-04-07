@@ -66,21 +66,6 @@ export interface NormalizedProduct {
   [key: string]: unknown;
 }
 
-/**
- * Gera slug a partir de qualquer string (pt-BR safe)
- * Ex: "Caneta Stylus / iOS" → "caneta-stylus-ios"
- */
-function slugify(text: string): string {
-  return text
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, ' ')  // caracteres especiais → espaço
-    .trim()
-    .replace(/\s+/g, '-')           // espaços → hífens
-    .replace(/-{2,}/g, '-');         // hífens duplos → simples
-}
-
-
 export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
   // ── Status ─────────────────────────────────────────────────────────────────
   // VPS: 'active' | 'inactive' | 'ativo' | 'a' | 'disponível' | 'disponivel'
@@ -128,15 +113,36 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
   }
 
   // ── Imagens ─────────────────────────────────────────────────────────────────
-  // VPS pode retornar como array ou como string JSON
+  // VPS pode retornar como array, string JSON ou até uma URL única em string.
   let images: string[] = [];
   if (Array.isArray(p.images)) {
-    images = p.images;
-  } else if (typeof p.images === 'string' && p.images) {
-    try { images = JSON.parse(p.images); } catch { images = []; }
+    images = p.images.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  } else if (typeof p.images === 'string' && p.images.trim()) {
+    const rawImages = p.images.trim();
+
+    if (rawImages.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(rawImages);
+        if (Array.isArray(parsed)) {
+          images = parsed.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+        }
+      } catch {
+        images = [];
+      }
+    } else {
+      images = [rawImages];
+    }
   }
 
-  const image_url = images.length > 0 ? images[0] : (p.image_url ?? null);
+  const fallbackImageUrl = typeof p.image_url === 'string' && p.image_url.trim()
+    ? p.image_url.trim()
+    : null;
+
+  if (images.length === 0 && fallbackImageUrl) {
+    images = [fallbackImageUrl];
+  }
+
+  const image_url = images.length > 0 ? images[0] : fallbackImageUrl;
 
   return {
     ...p, // preserva campos extras sem perder dados
@@ -146,7 +152,9 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     sku: String(p.sku || ''),
     ean,
     name: String(p.name || ''),
-    slug: p.slug || slugify(String(p.name || p.sku || p.id || '')),
+    // Nao inventa slug no frontend: se a VPS ainda nao persistiu slug,
+    // a navegacao deve cair para o id real do produto.
+    slug: (typeof p.slug === 'string' && p.slug.trim()) ? p.slug : undefined,
     status,
     price_retail,
     price_cost: p.price_cost !== undefined ? parseFloat(String(p.price_cost)) || 0 : undefined,

@@ -10,6 +10,15 @@ export interface ColorOption {
     hex?: string;
 }
 
+function hasProductMedia(product: CatalogProduct): boolean {
+    if (Array.isArray(product.images) && product.images.some(img => typeof img === 'string' && img.trim().length > 0)) {
+        return true;
+    }
+
+    const imageUrl = (product as any).image_url;
+    return typeof imageUrl === 'string' && imageUrl.trim().length > 0;
+}
+
 /**
  * Filter products that are available for sale
  * Only products with status = 'active'
@@ -228,8 +237,8 @@ export function groupProductsByVariants(products: CatalogProduct[], includeOutOf
             return storageA - storageB;
         });
 
-        // Use first product as representative
-        const representative = modelProducts[0];
+        // Prioriza representante com imagem para evitar placeholder em cards agrupados.
+        const representative = modelProducts.find(hasProductMedia) || modelProducts[0];
         // Derive clean display name from product.name (strip RAM/Storage variant suffix)
         const cleanName = (representative.name || representative.model || '')
             .replace(/,?\s*\d+GB\/\d+GB/gi, '')

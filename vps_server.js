@@ -306,12 +306,48 @@ fastify.get('/products/by-category/:categoryId', async (req, reply) => {
 
 // ─── Category product counts (para navegação do catálogo) ──────────────────
 fastify.get('/products/category-counts', async (req, reply) => {
-  const [rows] = await pool.query(
-    `SELECT category_id, COUNT(*) as count
-     FROM products
-     WHERE status = 'active' AND category_id IS NOT NULL
-     GROUP BY category_id`
-  );
+  const [[categories], [counts]] = await Promise.all([
+    pool.query(
+      `SELECT id, parent_id
+       FROM categories`
+    ),
+    pool.query(
+      `SELECT
+         category_id,
+         COUNT(*) AS count,
+         SUM(CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 1 ELSE 0 END) AS in_stock_count
+       FROM products
+       WHERE status = 'active' AND category_id IS NOT NULL
+       GROUP BY category_id`
+    ),
+  ]);
+
+  const countMap = {};
+  for (const row of counts) {
+    countMap[row.category_id] = {
+      count: Number(row.count) || 0,
+      in_stock_count: Number(row.in_stock_count) || 0,
+    };
+  }
+
+  categories.forEach(cat => {
+    if (!countMap[cat.id]) countMap[cat.id] = { count: 0, in_stock_count: 0 };
+  });
+
+  categories.filter(c => !c.parent_id).forEach(parent => {
+    const children = categories.filter(c => c.parent_id === parent.id);
+    for (const child of children) {
+      countMap[parent.id].count += countMap[child.id]?.count || 0;
+      countMap[parent.id].in_stock_count += countMap[child.id]?.in_stock_count || 0;
+    }
+  });
+
+  const rows = categories.map(cat => ({
+    category_id: cat.id,
+    count: countMap[cat.id]?.count || 0,
+    in_stock_count: countMap[cat.id]?.in_stock_count || 0,
+  }));
+
   reply.header('Cache-Control', 'public, max-age=60, s-maxage=180');
   return rows;
 });
