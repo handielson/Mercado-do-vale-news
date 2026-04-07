@@ -4,9 +4,7 @@
  * Escrita: sync fire-and-forget após writes no Supabase (autenticado com X-Sync-Key).
  */
 
-const VPS_BASE_URL = (import.meta as any).env?.DEV
-    ? '/vps-proxy'
-    : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+const VPS_BASE_URL = ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 60 * 1000; // 1 min (reduzido de 5min para evitar UI stale)
