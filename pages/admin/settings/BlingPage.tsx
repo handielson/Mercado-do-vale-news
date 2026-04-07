@@ -249,7 +249,11 @@ export default function BlingPage() {
             return;
         }
 
-        const callbackUrl = credentials.bling_callback_url.trim() || `${window.location.origin}/admin/settings/bling/callback`;
+        let callbackUrl = credentials.bling_callback_url.trim() || `${window.location.origin}/admin/settings/bling/callback`;
+        // Ensure callback URL is always absolute
+        if (!callbackUrl.startsWith('http')) {
+            callbackUrl = `${window.location.origin}${callbackUrl}`;
+        }
         const authUrl = new URL('https://www.bling.com.br/Api/v3/oauth/authorize');
         authUrl.searchParams.set('response_type', 'code');
         authUrl.searchParams.set('client_id', credentials.bling_client_id.trim());

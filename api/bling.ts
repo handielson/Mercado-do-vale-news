@@ -44,7 +44,9 @@ export default async function handler(req: any, res: any) {
             return res.redirect(302, '/admin/settings/bling?error=missing_credentials');
         }
 
-        const callbackUrl2 = settings2.bling_callback_url || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}/api/auth/callback/bling`;
+        const callbackUrl2 = settings2.bling_callback_url ? 
+            (settings2.bling_callback_url.startsWith('http') ? settings2.bling_callback_url : `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}${settings2.bling_callback_url}`)
+            : `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}/api/auth/callback/bling`;
         try {
             const credentials2 = Buffer.from(`${settings2.bling_client_id}:${settings2.bling_client_secret}`).toString('base64');
             const tokenRes2 = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
