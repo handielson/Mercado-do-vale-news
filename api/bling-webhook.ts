@@ -70,10 +70,21 @@ export default async function handler(req: any, res: any) {
                     }).eq('id', settings.id);
                     console.log('[bling-webhook] Token renovado via refresh_token');
                 } else {
-                    console.warn('[bling-webhook] Falha ao renovar token:', await tokenRes.text());
+                    const failBody = await tokenRes.text();
+                    console.warn('[bling-webhook] Falha ao renovar token:', failBody);
+                    // refresh_token inválido/expirado → limpa o access_token para que o painel
+                    // exiba "Desconectado" e o admin saiba que precisa reconectar.
+                    if (tokenRes.status === 400 || tokenRes.status === 401) {
+                        await supabase.from('company_settings').update({
+                            bling_access_token: null,
+                        }).eq('id', settings.id);
+                        console.warn('[bling-webhook] ⚠️ Token inválido — bling_access_token limpo. Admin deve reconectar em Configurações → Bling.');
+                    }
+                    accessToken = null;
                 }
             } catch (refreshErr: any) {
                 console.warn('[bling-webhook] Erro no refresh de token:', refreshErr.message);
+                accessToken = null;
             }
         }
 
@@ -143,11 +154,12 @@ export default async function handler(req: any, res: any) {
                 }
             }
 
-            // Resolve SKU via VPS MySQL (produtos estão no MySQL, não no Supabase)
+            // Resolve SKU do payload (usado para Supabase e logs; VPS aceita bling_id diretamente)
             let resolvedSku = sku;
             if (!resolvedSku && blingId) {
                 try {
-                    const vpsRes = await fetch(`${VPS_BASE_URL}/products?bling_id=${blingId}&limit=1`);
+                    // VPS agora suporta ?bling_id= como filtro (filtro adicionado em BUG-004)
+                    const vpsRes = await fetch(`${VPS_BASE_URL}/products?bling_id=${blingId}&limit=1&status=all`);
                     if (vpsRes.ok) {
                         const vpsProducts = await vpsRes.json();
                         resolvedSku = Array.isArray(vpsProducts) && vpsProducts[0]?.sku
@@ -155,16 +167,19 @@ export default async function handler(req: any, res: any) {
                             : undefined;
                     }
                 } catch (_) {
-                    // fallback silencioso — o erro será capturado abaixo
+                    // fallback silencioso
                 }
             }
 
-            if (!resolvedSku) {
-                return res.status(200).json({ ok: false, message: 'SKU não encontrado para bling_id: ' + blingId });
+            if (!blingId && !resolvedSku) {
+                return res.status(200).json({ ok: false, message: 'SKU/bling_id não encontrado no evento de estoque' });
             }
 
-            // Atualiza VPS
-            const vpsUpdated = await patchVps('/products/stock', { sku: resolvedSku, stock_quantity: stockQty });
+            // Atualiza VPS: prefere bling_id (1 roundtrip, sem lookup de SKU)
+            const vpsPayload = blingId
+                ? { bling_id: blingId, stock_quantity: stockQty }
+                : { sku: resolvedSku, stock_quantity: stockQty };
+            const vpsUpdated = await patchVps('/products/stock', vpsPayload);
 
             // Atualiza Supabase
             const supaFilter = blingId
@@ -172,8 +187,8 @@ export default async function handler(req: any, res: any) {
                 : supabase.from('products').update({ stock_quantity: stockQty }).eq('sku', resolvedSku);
             await supaFilter;
 
-            console.log(`[bling-webhook] Stock → SKU=${resolvedSku} qty=${stockQty} source=${stockSource} VPS=${vpsUpdated}`);
-            return res.status(200).json({ ok: true, event, sku: resolvedSku, stock_quantity: stockQty, vpsUpdated });
+            console.log(`[bling-webhook] Stock → SKU=${resolvedSku ?? '?'} blingId=${blingId} qty=${stockQty} source=${stockSource} VPS=${vpsUpdated}`);
+            return res.status(200).json({ ok: true, event, sku: resolvedSku, bling_id: blingId, stock_quantity: stockQty, vpsUpdated });
         }
 
         // ── Evento de PRODUTO (nome/dados atualizados no Bling) ───────────────

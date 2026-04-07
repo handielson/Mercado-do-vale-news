@@ -490,10 +490,16 @@ export default function BlingPage() {
                     <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Integração Bling</h1>
                     <p className="text-sm text-slate-500">Conecte e sincronize seus produtos com o Bling ERP</p>
                 </div>
-                {isConnected && (
+                {isConnected && !tokenExpired && (
                     <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-100 px-3 py-1.5 rounded-full">
                         <CheckCircle className="w-3.5 h-3.5" />
-                        {tokenExpired ? 'Token expirado' : 'Conectado'}
+                        Conectado
+                    </span>
+                )}
+                {(tokenExpired || !isConnected) && (
+                    <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-red-700 bg-red-100 px-3 py-1.5 rounded-full">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {tokenExpired ? 'Token expirado' : 'Desconectado'}
                     </span>
                 )}
             </div>
@@ -618,6 +624,24 @@ export default function BlingPage() {
 
                 {/* Conteúdo Principal */}
                 <div className="flex-1 min-w-0 space-y-6">
+                    {/* Alerta de reconexão necessária */}
+                    {(!isConnected || tokenExpired) && (
+                        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-sm">
+                            <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="font-semibold text-red-800">
+                                    {!isConnected
+                                        ? '⚠️ Bling desconectado — webhook de estoque parado'
+                                        : '⚠️ Token OAuth expirado — webhook de estoque parado'}
+                                </p>
+                                <p className="text-red-700 mt-0.5">
+                                    {!isConnected
+                                        ? 'O token foi invalidado (possivelmente expirado sem conseguir renovar). Clique em "Conectar com Bling" na aba Configuração para reconectar. Após reconectar, verifique se o webhook está cadastrado no Bling em Configurações → Integrações → Webhooks.'
+                                        : 'O token expirou e não foi renovado automaticamente. Clique em "Conectar com Bling" para reautenticar.'}
+                                </p>
+                            </div>
+                        </div>
+                    )}
                     {/* ══════════════════════════════════════ */}
                     {/* TAB: CONFIGURAÇÃO                      */}
                     {/* ══════════════════════════════════════ */}

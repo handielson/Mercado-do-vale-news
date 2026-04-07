@@ -161,4 +161,136 @@ const save = (patch) => {
 
 ---
 
-*Última atualização: 2026-03-19*
+---
+
+## BUG-004 — Webhook de estoque do Bling para de dar baixa automaticamente (problema recorrente)
+
+**Data:** 2026-05-28  
+**Sintoma:** Ao processar pedidos no Bling, o estoque deixa de ser atualizado automaticamente na loja. O webhook recebe os eventos, mas a baixa não é aplicada.  
+**Área afetada:** `api/bling-webhook.ts` (Vercel serverless), `vps_server.js`
+
+---
+
+### Causas raízes (encadeadas e recorrentes)
+
+#### 1. Token OAuth expirado sem conseguir auto-renovar ← causa principal da recorrência
+
+- O `access_token` do Bling expira em ~1h. O webhook tenta renovar via `refresh_token` automaticamente.
+- **Problema:** O `refresh_token` do Bling também expira (~30–90 dias), ou é invalidado quando o usuário re-autentica.
+- Quando o refresh falha (HTTP 400/401), o webhook continuava com o token antigo → chamada à API Bling retorna 401 → `fetchBlingStock` retorna `null` → proteção contra zero entra em ação → **estoque não atualizado**.
+- O sistema ficava silenciosamente quebrado sem nenhum alerta visível no painel.
+
+**Correção aplicada** (2026-05-28):
+- Quando refresh retorna 400/401 → `bling_access_token` é **limpo no Supabase** → painel admin exibe banner vermelho "Bling desconectado — webhook de estoque parado".
+- Antes: erro era apenas logado no console da Vercel (invisível para o admin).
+
+```ts
+// api/bling-webhook.ts — novo comportamento ao falhar refresh
+if (tokenRes.status === 400 || tokenRes.status === 401) {
+    await supabase.from('company_settings').update({ bling_access_token: null }).eq('id', settings.id);
+    console.warn('[bling-webhook] ⚠️ Token inválido — bling_access_token limpo. Admin deve reconectar.');
+}
+accessToken = null;
+```
+
+---
+
+#### 2. VPS não suportava `?bling_id=` como filtro no GET /products
+
+- O webhook usa `bling_id` para localizar o produto quando o payload Bling não inclui o `codigo` (SKU).
+- O endpoint `GET /products?bling_id=X&limit=1` **ignorava o parâmetro** e retornava o primeiro produto ativo alfabeticamente → SKU errado → estoque atualizado no produto errado!
+
+**Correção aplicada** (2026-05-28) em `vps_server.js`:
+```js
+// Adicionado filtro bling_id ao GET /products
+if (req.query.bling_id) { sql += ' AND bling_id = ?'; params.push(req.query.bling_id); }
+```
+
+---
+
+#### 3. PATCH /products/stock exigia SKU (SKU nem sempre está no payload)
+
+- O endpoint `PATCH /products/stock` só aceitava `sku` como identificador.
+- Quando o evento Bling de estoque não inclui o `codigo`, o webhook precisava de um lookup extra para resolver o SKU. Como esse lookup estava quebrado (causa 2), o update falhava.
+
+**Correção aplicada** (2026-05-28) em `vps_server.js`:
+```js
+// PATCH /products/stock agora aceita bling_id OU sku
+const { sku, bling_id, stock_quantity } = req.body || {};
+if (!sku && !bling_id) return reply.code(400).send({ error: 'sku or bling_id required' });
+// Atualiza por bling_id se disponível (mais direto)
+if (sku) {
+    await pool.query('UPDATE products SET stock_quantity=? WHERE sku=?', [qty, sku]);
+} else {
+    await pool.query('UPDATE products SET stock_quantity=? WHERE bling_id=?', [qty, String(bling_id)]);
+}
+```
+
+O webhook agora passa `bling_id` diretamente para a VPS — sem roundtrip extra para resolver o SKU:
+```ts
+// api/bling-webhook.ts — stock update prefere bling_id
+const vpsPayload = blingId
+    ? { bling_id: blingId, stock_quantity: stockQty }
+    : { sku: resolvedSku, stock_quantity: stockQty };
+await patchVps('/products/stock', vpsPayload);
+```
+
+---
+
+#### 4. Webhook não estava cadastrado (ou foi removido) no painel do Bling
+
+- Ao reconectar o OAuth, o Bling **não** mantém os webhooks cadastrados — eles são configurados separadamente.
+- Se o webhook não estiver registrado no Bling, nenhum evento chega ao Vercel.
+
+**Verificar/Resolver:** No painel do Bling → Configurações → Integrações → Webhooks → verificar se a URL está cadastrada:
+```
+URL: https://mercadodovale.com.br/api/bling-webhook
+Eventos: estoque (e/ou: movimentacaoEstoque, stock.created, virtual_stock.updated)
+```
+
+---
+
+### Procedimento completo de recuperação (quando o webhook parar)
+
+1. **Identificar o problema:** Acesse Admin → Configurações → Bling. Se aparecer o banner vermelho "Bling desconectado", o token expirou.
+
+2. **Reconectar o OAuth:**
+   - Aba "Configuração" → botão **"Conectar com Bling"**
+   - Será redirecionado para o Bling para autenticação
+   - Ao voltar, o banner deve sumir e aparecer "✔ Conectado"
+
+3. **Verificar o webhook no Bling:**
+   - Acesse [bling.com.br](https://www.bling.com.br) → Configurações → Integrações → Webhooks
+   - Confirmar que existe um webhook com URL `https://mercadodovale.com.br/api/bling-webhook`
+   - Se não existir: criar com os eventos `estoque` e `movimentacaoEstoque`
+   - Se estiver desativado: ativar
+
+4. **Testar o webhook:**
+   - Admin → Configurações → Bling → aba "Webhook" → botão "Testar Webhook"
+   - Deve retornar `ok: true`
+
+5. **Sincronizar estoque manualmente** (para corrigir diferenças acumuladas durante o período sem webhook):
+   - Admin → Configurações → Bling → aba "Produtos" → buscar produto → usar sincronização individual
+   - OU: executar o sync completo de estoque se disponível
+
+---
+
+### Proteção anti-zero (comportamento esperado)
+
+O webhook possui proteção que **aborta** a atualização de estoque quando a API Bling falha E o payload retorna 0. Isso é intencional para evitar zerar o estoque incorretamente por falha temporária.
+
+> Quando ver no log: `🛑 ABORTADO: API falhou e payload=0` — isso é correto. O estoque real deve ser sincronizado manualmente ou aguardar o próximo evento válido.
+
+---
+
+### Checklist de diagnóstico
+
+1. **Banner no painel?** → Admin → Configurações → Bling → verificar status (vermelho = desconectado)
+2. **Webhook cadastrado no Bling?** → Configurações → Integrações → Webhooks
+3. **Logs da Vercel** → [vercel.com/dashboard](https://vercel.com) → Projeto → Functions → `api/bling-webhook` → ver logs recentes
+4. **Token válido no Supabase?** → Tabela `company_settings` → campo `bling_access_token` (null = desconectado)
+5. **VPS respondendo?** → `curl https://api.xiaomipetrolina.com.br/health`
+
+---
+
+*Última atualização: 2026-05-28*
