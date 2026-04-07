@@ -22,6 +22,7 @@ export default function CategorySettingsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
     const [draggedProduct, setDraggedProduct] = useState<DraggedProduct | null>(null);
+    const [productsRefreshKey, setProductsRefreshKey] = useState(0);
 
     // States for Category Drag & Drop
     const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
@@ -98,6 +99,10 @@ export default function CategorySettingsPage() {
 
     const handleProductDragEnd = useCallback(() => {
         setDraggedProduct(null);
+    }, []);
+
+    const handleProductsChanged = useCallback(() => {
+        setProductsRefreshKey(prev => prev + 1);
     }, []);
 
     // ------------- CATEGORY DRAG & DROP LOGIC -------------
@@ -396,6 +401,8 @@ export default function CategorySettingsPage() {
                                                             onDragStart={handleProductDragStart}
                                                             draggedProduct={draggedProduct}
                                                             onDragEnd={handleProductDragEnd}
+                                                            refreshKey={productsRefreshKey}
+                                                            onProductsChanged={handleProductsChanged}
                                                         />
                                                     </td>
                                                 </tr>

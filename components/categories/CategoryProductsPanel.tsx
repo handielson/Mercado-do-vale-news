@@ -24,6 +24,8 @@ interface CategoryProductsPanelProps {
     // Dados do produto sendo arrastado de outra categoria
     draggedProduct: { product: CategoryProduct; sourceCategoryId: string } | null;
     onDragEnd: () => void;
+    refreshKey?: number;
+    onProductsChanged?: () => void;
 }
 
 export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
@@ -32,6 +34,8 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
     onDragStart,
     draggedProduct,
     onDragEnd,
+    refreshKey = 0,
+    onProductsChanged,
 }) => {
     const [items, setItems] = useState<CategoryProduct[]>([]);
     const [total, setTotal] = useState(0);
@@ -58,11 +62,7 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
 
     useEffect(() => {
         load(1, true);
-    }, [load]);
-
-    useEffect(() => {
-        console.log(`%c[CategoryProductsPanel ${categoryId}] draggedProduct:`, 'color:blue;font-weight:bold', draggedProduct);
-    }, [draggedProduct, categoryId]);
+    }, [load, refreshKey]);
 
     // --- Drop handlers ---
     const handleDragOver = (e: React.DragEvent) => {
@@ -77,9 +77,7 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
         setIsDropTarget(false);
-        console.log('%c[DROP] Recebido em categoria:', 'color:green;font-weight:bold', { categoryId, draggedProduct });
         if (!draggedProduct || draggedProduct.sourceCategoryId === categoryId) {
-            console.log('%c[DROP] Ignorado', 'color:red;font-weight:bold');
             return;
         }
 
@@ -95,7 +93,7 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                 throw new Error('Falha ao mover produto na VPS');
             }
             vpsApiService.clearCache();
-            await load(1, true);
+            onProductsChanged?.();
             toast.success(`"${product.name}" movido para ${categoryName}!`, { id: toastId });
         } catch (error) {
             console.error('[CategoryProductsPanel.handleDrop] erro ao mover:', error);
@@ -107,8 +105,8 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
         const toastId = toast.loading(`Removendo de ${categoryName}...`);
         try {
             await vpsApiService.removeProductCategory(product.id, categoryId);
-            setItems(prev => prev.filter(p => p.id !== product.id));
-            setTotal(prev => prev - 1);
+            vpsApiService.clearCache();
+            onProductsChanged?.();
             toast.success('Removido desta categoria', { id: toastId });
         } catch {
             toast.error('Erro ao remover', { id: toastId });
@@ -162,13 +160,11 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                             key={product.id}
                             draggable
                             onDragStart={e => {
-                                console.log('%c[DRAG START]', 'color:orange;font-weight:bold', product.name);
                                 e.dataTransfer.effectAllowed = 'move';
                                 onDragStart(product, categoryId);
                             }}
                             onDragEnd={() => {
-                                console.log('%c[DRAG END]', 'color:orange;font-weight:bold');
-                                // NÃO chamar onDragEnd aqui! Deixar a página limpar quando o drop terminar
+                                // Nao chamar onDragEnd aqui; a pagina limpa no drop.
                             }}
                             className="flex items-center gap-3 px-4 py-2.5 hover:bg-white transition-colors cursor-grab active:cursor-grabbing group"
                         >
