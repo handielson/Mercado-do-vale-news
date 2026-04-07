@@ -177,8 +177,8 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                                 onDragStart(product, categoryId);
                             }}
                             onDragEnd={() => {
-                                console.log('[CategoryProductsPanel] Drag finalizado');
-                                onDragEnd();
+                                console.log('[CategoryProductsPanel] Drag finalizado (NÃO limpando draggedProduct ainda)');
+                                // NÃO chamar onDragEnd aqui! Deixar a página limpar quando o drop terminar
                             }}
                             className="flex items-center gap-3 px-4 py-2.5 hover:bg-white transition-colors cursor-grab active:cursor-grabbing group"
                         >
