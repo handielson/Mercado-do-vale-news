@@ -23,6 +23,7 @@ interface ReceiptPreviewProps {
     deliveryCostCustomer: number;
     payments: PaymentMethod[];
     promotionalDiscount?: number;
+    finalAdjustmentDiscount?: number;
     orderNumber?: number;
     onFinalizeSale: () => void;
 }
@@ -35,6 +36,7 @@ export default function ReceiptPreview({
     deliveryCostCustomer,
     payments,
     promotionalDiscount,
+    finalAdjustmentDiscount,
     orderNumber,
     onFinalizeSale
 }: ReceiptPreviewProps) {
@@ -82,7 +84,7 @@ export default function ReceiptPreview({
     }, 0);
 
     // Total = Subtotal - Brindes - Promoção + Entrega + Juros
-    const total = itemsTotal - giftDiscount - (promotionalDiscount || 0) + deliveryCostCustomer + totalFees;
+    const total = itemsTotal - giftDiscount - (promotionalDiscount || 0) - (finalAdjustmentDiscount || 0) + deliveryCostCustomer + totalFees;
 
     // Total pago (já inclui os juros no amount de cada pagamento)
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
@@ -327,7 +329,7 @@ export default function ReceiptPreview({
                 </div>
 
                 {/* Descontos - C */}
-                {(giftDiscount > 0 || (promotionalDiscount && promotionalDiscount > 0) || deliveryCostStore > 0) && (
+                {(giftDiscount > 0 || (promotionalDiscount && promotionalDiscount > 0) || (finalAdjustmentDiscount && finalAdjustmentDiscount > 0) || deliveryCostStore > 0) && (
                     <div className="border-b border-slate-200 pb-4">
                         <div className="flex items-center gap-2 mb-3">
                             <DollarSign size={16} className="text-slate-600" />
@@ -338,6 +340,12 @@ export default function ReceiptPreview({
                                 <div className="flex justify-between">
                                     <span>Desconto Promocional:</span>
                                     <span className="font-mono text-red-600">-{formatCurrency(promotionalDiscount)}</span>
+                                </div>
+                            ) : null}
+                            {finalAdjustmentDiscount && finalAdjustmentDiscount > 0 ? (
+                                <div className="flex justify-between">
+                                    <span>Desconto Ajuste Final:</span>
+                                    <span className="font-mono text-red-600">-{formatCurrency(finalAdjustmentDiscount)}</span>
                                 </div>
                             ) : null}
                             {giftDiscount > 0 && (
@@ -354,7 +362,7 @@ export default function ReceiptPreview({
                             )}
                             <div className="pt-2 mt-2 border-t border-slate-300 text-sm text-right">
                                 <span className="text-xs text-slate-500">Subtotal (C): </span>
-                                <span className="font-mono font-semibold text-red-600">-{formatCurrency((promotionalDiscount || 0) + giftDiscount + deliveryCostStore)}</span>
+                                <span className="font-mono font-semibold text-red-600">-{formatCurrency((promotionalDiscount || 0) + (finalAdjustmentDiscount || 0) + giftDiscount + deliveryCostStore)}</span>
                             </div>
                         </div>
                     </div>
@@ -400,7 +408,7 @@ export default function ReceiptPreview({
                         <div className="flex justify-between font-bold text-lg">
                             <span className="text-slate-800">TOTAL A PAGAR:</span>
                             <span className="font-mono text-blue-600">
-                                {formatCurrency((itemsTotal + deliveryCostCustomer + deliveryCostStore) - (giftDiscount + (promotionalDiscount || 0) + deliveryCostStore))}
+                                {formatCurrency((itemsTotal + deliveryCostCustomer + deliveryCostStore) - (giftDiscount + (promotionalDiscount || 0) + (finalAdjustmentDiscount || 0) + deliveryCostStore))}
                             </span>
                         </div>
                     </div>

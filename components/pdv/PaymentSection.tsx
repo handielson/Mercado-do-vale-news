@@ -23,6 +23,10 @@ interface PaymentSectionProps {
     // Props opcionais para desconto promocional
     promotionalDiscount?: number;
     onPromotionalDiscountChange?: (discount: number) => void;
+    // Props opcionais para desconto extra final (aplicado por ultimo)
+    finalAdjustmentDiscount?: number;
+    maxFinalAdjustmentDiscount?: number;
+    onFinalAdjustmentDiscountChange?: (discount: number) => void;
 }
 
 export default function PaymentSection({
@@ -33,11 +37,15 @@ export default function PaymentSection({
     paymentFees,
     onSelectInstallment,
     promotionalDiscount,
-    onPromotionalDiscountChange
+    onPromotionalDiscountChange,
+    finalAdjustmentDiscount,
+    maxFinalAdjustmentDiscount,
+    onFinalAdjustmentDiscountChange
 }: PaymentSectionProps) {
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('money');
     const [paymentAmount, setPaymentAmount] = useState('');
     const [discountInput, setDiscountInput] = useState('');
+    const [finalAdjustmentInput, setFinalAdjustmentInput] = useState('');
 
     const totalPaid = calculateTotalPaid(payments);
     const remaining = calculateRemaining(total, payments);
@@ -164,6 +172,69 @@ export default function PaymentSection({
                     </p>
                 )}
             </div>
+
+            {/* Desconto de Ajuste Final - aplicado por ultimo */}
+            {!isComplete && onFinalAdjustmentDiscountChange && (
+                <div className="mb-4 p-4 bg-rose-50 border-2 border-rose-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-rose-800 mb-2 flex items-center gap-2">
+                        <span className="text-lg">🧾</span>
+                        Desconto de Ajuste Final
+                    </h4>
+                    <p className="text-xs text-rose-700 mb-3">
+                        Aplicado por ultimo, apos todos os calculos (frete, juros e descontos anteriores).
+                    </p>
+                    <div className="flex gap-2">
+                        <div className="flex-1">
+                            <input
+                                type="text"
+                                value={finalAdjustmentInput}
+                                onChange={(e) => {
+                                    const rawValue = e.target.value.replace(/[^\d,.]/g, '');
+                                    setFinalAdjustmentInput(rawValue);
+                                }}
+                                onBlur={() => {
+                                    const cleanValue = finalAdjustmentInput.replace(',', '.');
+                                    const parsedValue = parseFloat(cleanValue) * 100;
+                                    const safeValue = isNaN(parsedValue) || parsedValue < 0 ? 0 : Math.round(parsedValue);
+                                    const maxValue = Math.max(0, maxFinalAdjustmentDiscount ?? Number.MAX_SAFE_INTEGER);
+                                    onFinalAdjustmentDiscountChange(Math.min(safeValue, maxValue));
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        const cleanValue = finalAdjustmentInput.replace(',', '.');
+                                        const parsedValue = parseFloat(cleanValue) * 100;
+                                        const safeValue = isNaN(parsedValue) || parsedValue < 0 ? 0 : Math.round(parsedValue);
+                                        const maxValue = Math.max(0, maxFinalAdjustmentDiscount ?? Number.MAX_SAFE_INTEGER);
+                                        onFinalAdjustmentDiscountChange(Math.min(safeValue, maxValue));
+                                        e.currentTarget.blur();
+                                    }
+                                }}
+                                placeholder="0,00"
+                                className="w-full px-4 py-2 border border-rose-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                            />
+                        </div>
+                        <button
+                            onClick={() => {
+                                setFinalAdjustmentInput('');
+                                onFinalAdjustmentDiscountChange(0);
+                            }}
+                            className="px-4 py-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium"
+                        >
+                            Limpar
+                        </button>
+                    </div>
+                    {maxFinalAdjustmentDiscount !== undefined && (
+                        <p className="text-xs text-rose-700 mt-2">
+                            Maximo permitido: {formatCurrency(Math.max(0, maxFinalAdjustmentDiscount))}
+                        </p>
+                    )}
+                    {(finalAdjustmentDiscount || 0) > 0 && (
+                        <p className="text-xs text-rose-700 mt-1">
+                            Ajuste final aplicado: {formatCurrency(finalAdjustmentDiscount || 0)}
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* Pagamentos Adicionados */}
             {payments.length > 0 && (

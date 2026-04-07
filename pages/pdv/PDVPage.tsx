@@ -63,6 +63,8 @@ export default function PDVPage() {
 
     // Estado do desconto promocional (inclui desconto de cupom)
     const [promotionalDiscount, setPromotionalDiscount] = useState(0);
+    // Desconto de ajuste final (aplicado por ultimo no fechamento)
+    const [finalAdjustmentDiscount, setFinalAdjustmentDiscount] = useState(0);
 
     // Estado do cupom
     const [couponCode, setCouponCode] = useState('');
@@ -114,7 +116,10 @@ export default function PDVPage() {
     const { total: itemsTotal } = calculateSaleTotals(cartItems);
     const giftDiscount = cartItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
     const totalFees = payments.reduce((sum, p) => sum + (p.fee_amount || 0), 0);
-    const total = itemsTotal - giftDiscount - promotionalDiscount + deliveryCostCustomer + totalFees;
+    const totalBeforeFinalAdjustment = itemsTotal - giftDiscount - promotionalDiscount + deliveryCostCustomer + totalFees;
+    const maxFinalAdjustmentDiscount = Math.max(0, totalBeforeFinalAdjustment);
+    const appliedFinalAdjustmentDiscount = Math.min(finalAdjustmentDiscount, maxFinalAdjustmentDiscount);
+    const total = Math.max(0, totalBeforeFinalAdjustment - appliedFinalAdjustmentDiscount);
     const totalPaid = calculateTotalPaid(payments);
     const remainingBalance = total - totalPaid;
 
@@ -288,6 +293,7 @@ export default function PDVPage() {
         if (window.confirm('Deseja realmente limpar o carrinho?')) {
             setCartItems([]);
             setPayments([]);
+            setFinalAdjustmentDiscount(0);
             toast.info('Carrinho limpo');
         }
     };
@@ -356,7 +362,7 @@ export default function PDVPage() {
             delivery_cost_store: deliveryCostStore,
             delivery_cost_customer: deliveryCostCustomer,
             delivery_total: deliveryTotal,
-            promotional_discount: promotionalDiscount,
+            promotional_discount: promotionalDiscount + appliedFinalAdjustmentDiscount,
             referral_code: referralCode.trim() || undefined
         };
 
@@ -374,7 +380,7 @@ export default function PDVPage() {
                 const couponDiscount = appliedCoupon
                     ? (totals.subtotal * ((appliedCoupon as any).discount_percent ?? 0)) / 100
                     : 0;
-                const finalPaid = Math.max(0, totals.subtotal - couponDiscount + deliveryCostCustomer);
+                const finalPaid = Math.max(0, totals.subtotal - couponDiscount + deliveryCostCustomer - appliedFinalAdjustmentDiscount);
                 // finalPaid is in cents, earnCoinsForPurchase expects Reais
                 const coinsEarned = await earnCoinsForPurchase(selectedCustomer.id, finalPaid / 100, sale.id);
                 if (coinsEarned > 0) {
@@ -434,7 +440,9 @@ export default function PDVPage() {
                     valor: `R$ ${(total / 100).toFixed(2).replace('.', ',')}`,
                     lucro: `R$ ${(profitMargin / 100).toFixed(2).replace('.', ',')}`,
                     pagamento: paymentMethodsList,
-                    desconto: promotionalDiscount > 0 ? `R$ ${(promotionalDiscount / 100).toFixed(2).replace('.', ',')}` : 'Nenhum',
+                    desconto: (promotionalDiscount + appliedFinalAdjustmentDiscount) > 0
+                        ? `R$ ${((promotionalDiscount + appliedFinalAdjustmentDiscount) / 100).toFixed(2).replace('.', ',')}`
+                        : 'Nenhum',
                     estoque: isMultiple ? '-' : String(newStock),
                     entregador: entregadorNome,
                     entregador_pix: entregadorPix,
@@ -463,6 +471,7 @@ export default function PDVPage() {
             setDeliveryCostStore(0);
             setDeliveryCostCustomer(0);
             setPromotionalDiscount(0);
+            setFinalAdjustmentDiscount(0);
             setReferralCode('');
             handleClearCoupon();
         } catch (error) {
@@ -733,6 +742,9 @@ export default function PDVPage() {
                             onSelectInstallment={handleSelectInstallment}
                             promotionalDiscount={promotionalDiscount}
                             onPromotionalDiscountChange={setPromotionalDiscount}
+                            finalAdjustmentDiscount={appliedFinalAdjustmentDiscount}
+                            maxFinalAdjustmentDiscount={maxFinalAdjustmentDiscount}
+                            onFinalAdjustmentDiscountChange={setFinalAdjustmentDiscount}
                         />
                     </div>
 
@@ -746,6 +758,7 @@ export default function PDVPage() {
                             deliveryCostCustomer={deliveryCostCustomer}
                             payments={payments}
                             promotionalDiscount={promotionalDiscount}
+                            finalAdjustmentDiscount={appliedFinalAdjustmentDiscount}
                             onFinalizeSale={handleFinalizeSale}
                         />
                     </div>
