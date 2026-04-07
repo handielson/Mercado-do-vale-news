@@ -1911,11 +1911,11 @@ export default function BlingPage() {
                                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
                                     <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
                                         <Activity className="w-5 h-5 text-blue-600" />
-                                        URL do Webhook de Estoque
+                                        URL do Webhook do Bling
                                     </h2>
                                     <p className="text-sm text-slate-500">
                                         Configure esta URL no seu app Bling em <strong>Configurar &rarr; Webhooks &rarr; Servidores</strong>,
-                                        depois marque o recurso <strong>Estoque &rarr; updated</strong>.
+                                        depois marque os eventos de <strong>nome, estoque e valor</strong> conforme checklist abaixo.
                                     </p>
                                     <div className="flex items-center gap-2">
                                         <code className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-mono text-slate-800 break-all">
@@ -1954,9 +1954,11 @@ export default function BlingPage() {
                                     </h2>
                                     <ul className="space-y-3 text-sm">
                                         {[
-                                            { label: 'URL do webhook cadastrada no Bling (Aplicativo → Webhooks → Servidores)', tip: 'Use a URL acima. O Bling faz um GET de verificação — certifique-se que retorna 200.' },
-                                            { label: 'Recurso "Estoque" com ação "updated" marcado no app Bling', tip: 'Sem isso, o Bling não envia notificações quando o estoque muda.' },
-                                            { label: 'Versão do payload: versão 1 (formato recomendado)', tip: 'O sistema suporta v3 (event: stock.updated) e v2 (evento: Estoque).' },
+                                            { label: 'URL do webhook cadastrada no Bling (Aplicativo → Webhooks → Servidores)', tip: 'Use a URL acima. O Bling faz um GET de verificação, então ela precisa responder 200.' },
+                                            { label: 'Webhook de estoque habilitado (stock.updated / virtual_stock.updated / movimentacaoEstoque)', tip: 'Sem os eventos de estoque, não há baixa automática na loja.' },
+                                            { label: 'Webhook de nome habilitado (product.updated / produto)', tip: 'Sem evento de produto, mudanças de nome no Bling não refletem na loja.' },
+                                            { label: 'Webhook de valor habilitado (product.updated com preço)', tip: 'Sem evento de produto/preço, alterações de valor no Bling não sincronizam.' },
+                                            { label: 'Versão do payload: versão 1 (formato recomendado)', tip: 'O sistema suporta v3 (event em inglês) e legado em português.' },
                                             { label: 'App Bling tem escopo de Estoques habilitado', tip: 'Sem esse escopo, o recurso de Webhook de Estoque não aparece nas opções.' },
                                             { label: 'Produto importado pelo Bling (tem bling_id salvo)', tip: 'Produtos criados manualmente não têm bling_id — o webhook não consegue associá-los.' },
                                         ].map((item, i) => (

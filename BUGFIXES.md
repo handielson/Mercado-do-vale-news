@@ -242,11 +242,16 @@ await patchVps('/products/stock', vpsPayload);
 - Ao reconectar o OAuth, o Bling **não** mantém os webhooks cadastrados — eles são configurados separadamente.
 - Se o webhook não estiver registrado no Bling, nenhum evento chega ao Vercel.
 
-**Verificar/Resolver:** No painel do Bling → Configurações → Integrações → Webhooks → verificar se a URL está cadastrada:
+**Verificar/Resolver:** No painel do Bling → Configurações → Integrações → Webhooks → verificar se as URLs/eventos estão cadastrados:
 ```
-URL: https://mercadodovale.com.br/api/bling-webhook
-Eventos: estoque (e/ou: movimentacaoEstoque, stock.created, virtual_stock.updated)
+Webhook de estoque/nome (novo): https://mercadodovale.com.br/api/bling-webhook
+    Eventos: stock.created, stock.updated, virtual_stock.updated, movimentacaoEstoque, produto/product.updated
+
+Webhook legado (valor e logs do painel): https://mercadodovale.com.br/api/bling?resource=webhook
+    Eventos: product.updated (preço/nome) e stock.updated/virtual_stock.updated
 ```
+
+> Observação: hoje existem 3 fluxos lógicos de webhook no negócio (nome, estoque, valor). Eles podem ser atendidos por uma ou mais URLs, desde que todos os eventos necessários estejam habilitados.
 
 ---
 
@@ -259,10 +264,12 @@ Eventos: estoque (e/ou: movimentacaoEstoque, stock.created, virtual_stock.update
    - Será redirecionado para o Bling para autenticação
    - Ao voltar, o banner deve sumir e aparecer "✔ Conectado"
 
-3. **Verificar o webhook no Bling:**
+3. **Verificar os webhooks no Bling:**
    - Acesse [bling.com.br](https://www.bling.com.br) → Configurações → Integrações → Webhooks
-   - Confirmar que existe um webhook com URL `https://mercadodovale.com.br/api/bling-webhook`
-   - Se não existir: criar com os eventos `estoque` e `movimentacaoEstoque`
+    - Confirmar que existem entradas cobrindo os 3 fluxos: `estoque`, `nome` e `valor`
+    - Confirmar URL do webhook novo: `https://mercadodovale.com.br/api/bling-webhook`
+    - Confirmar URL do webhook legado (compatibilidade): `https://mercadodovale.com.br/api/bling?resource=webhook`
+    - Se faltar algum: criar e associar eventos de `product.updated` e `stock.updated/virtual_stock.updated`
    - Se estiver desativado: ativar
 
 4. **Testar o webhook:**
@@ -286,8 +293,8 @@ O webhook possui proteção que **aborta** a atualização de estoque quando a A
 ### Checklist de diagnóstico
 
 1. **Banner no painel?** → Admin → Configurações → Bling → verificar status (vermelho = desconectado)
-2. **Webhook cadastrado no Bling?** → Configurações → Integrações → Webhooks
-3. **Logs da Vercel** → [vercel.com/dashboard](https://vercel.com) → Projeto → Functions → `api/bling-webhook` → ver logs recentes
+2. **Webhooks cadastrados no Bling?** → Configurações → Integrações → Webhooks (nome, estoque e valor)
+3. **Logs da Vercel** → [vercel.com/dashboard](https://vercel.com) → Projeto → Functions → `api/bling-webhook` e `api/bling` → ver logs recentes
 4. **Token válido no Supabase?** → Tabela `company_settings` → campo `bling_access_token` (null = desconectado)
 5. **VPS respondendo?** → `curl https://api.xiaomipetrolina.com.br/health`
 
