@@ -7,7 +7,7 @@
  * Roteamento via query: ?resource=products|categories|stock|stock-sync|product-detail|finance|exchange|webhook
  */
 import { createClient } from '@supabase/supabase-js';
-import blingWebhookHandler from './bling-webhook';
+import blingWebhookHandler from './bling-webhook.js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!;
 const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
