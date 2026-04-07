@@ -15,8 +15,13 @@ export default defineConfig({
       '/vps-proxy': {
         target: 'https://api.xiaomipetrolina.com.br',
         changeOrigin: true,
-        secure: false, // Permitir requisições mesmo com cert inválido em dev
+        secure: false,
         rewrite: (path) => path.replace(/^\/vps-proxy/, ''),
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxyReq.setHeader('x-sync-key', process.env.VITE_VPS_SYNC_KEY || '');
+          });
+        },
       },
     }
   },
