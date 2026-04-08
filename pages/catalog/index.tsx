@@ -352,7 +352,7 @@ function CatalogContent() {
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Buscar produtos..."
+                            placeholder="Buscar por nome, marca ou EAN..."
                             className="w-full pl-9 pr-8 py-2 text-sm bg-slate-100 rounded-xl border-0 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                         />
                         {searchQuery && (
@@ -600,7 +600,7 @@ function CatalogContent() {
                             <SearchBar
                                 onSearch={setSearchQuery}
                                 initialValue={searchQuery}
-                                placeholder="Buscar por nome ou marca..."
+                                placeholder="Buscar por nome, marca ou EAN..."
                             />
                             {/* Indicador sutil de busca em progresso */}
                             {fetching && (

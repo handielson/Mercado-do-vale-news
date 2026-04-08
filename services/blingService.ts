@@ -412,7 +412,11 @@ export async function getValidToken(): Promise<string> {
         const expiresAt = new Date(data.bling_token_expires_at).getTime();
         const now = Date.now() + 5 * 60 * 1000; // 5 min buffer
         if (expiresAt <= now && data.bling_refresh_token) {
-            return refreshToken(data as BlingTokenData);
+            try {
+                return await refreshToken(data as BlingTokenData);
+            } catch (err) {
+                console.warn('[bling] refresh token failed, keeping current access token', err);
+            }
         }
     }
 

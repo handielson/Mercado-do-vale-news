@@ -105,10 +105,16 @@ export const catalogService = {
                         return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
                     };
 
+                    const alternativeEans = Array.isArray(p.alternative_eans)
+                        ? p.alternative_eans.join(' ')
+                        : (typeof p.alternative_eans === 'string' ? p.alternative_eans : '');
+
                     const searchStr = removeAccents(p.name) + ' ' + 
                                       removeAccents(p.brand) + ' ' + 
                                       removeAccents(p.model) + ' ' + 
-                                      removeAccents(p.sku);
+                                      removeAccents(p.sku) + ' ' +
+                                      removeAccents(p.ean) + ' ' +
+                                      removeAccents(alternativeEans);
                     
                     return { 
                         ...normalized, 

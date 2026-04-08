@@ -72,19 +72,13 @@ export default async function handler(req: any, res: any) {
                 } else {
                     const failBody = await tokenRes.text();
                     console.warn('[bling-webhook] Falha ao renovar token:', failBody);
-                    // refresh_token inválido/expirado → limpa o access_token para que o painel
-                    // exiba "Desconectado" e o admin saiba que precisa reconectar.
-                    if (tokenRes.status === 400 || tokenRes.status === 401) {
-                        await supabase.from('company_settings').update({
-                            bling_access_token: null,
-                        }).eq('id', settings.id);
-                        console.warn('[bling-webhook] ⚠️ Token inválido — bling_access_token limpo. Admin deve reconectar em Configurações → Bling.');
-                    }
-                    accessToken = null;
+                    // Não desconecta automaticamente: mantemos o vínculo salvo e
+                    // tentamos novamente na próxima execução.
+                    accessToken = settings?.bling_access_token || null;
                 }
             } catch (refreshErr: any) {
                 console.warn('[bling-webhook] Erro no refresh de token:', refreshErr.message);
-                accessToken = null;
+                accessToken = settings?.bling_access_token || null;
             }
         }
 

@@ -469,7 +469,8 @@ export default function BlingPage() {
     // Derived
     // ─────────────────────────────────────────────────────
 
-    const tokenExpired = tokenExpiresAt ? new Date(tokenExpiresAt) < new Date() : false;
+    // Mantemos o vínculo como conectado e deixamos a renovação acontecer automaticamente.
+    const tokenExpired = false;
 
     if (loading) {
         return (
