@@ -2024,10 +2024,10 @@ async function runMigrations() {
   console.log('[migration] product_categories table: OK');
 
   // Prazo de produção: por categoria (padrão) e por produto (override)
-  await pool.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS production_days INT NOT NULL DEFAULT 0`);
+  await addColumnIfMissing('categories', 'production_days', 'INT NOT NULL DEFAULT 0');
   console.log('[migration] categories.production_days: OK');
 
-  await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS production_days INT DEFAULT NULL`);
+  await addColumnIfMissing('products', 'production_days', 'INT DEFAULT NULL');
   console.log('[migration] products.production_days: OK');
 }
 
