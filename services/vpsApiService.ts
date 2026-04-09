@@ -168,8 +168,8 @@ class VpsApiService {
 
   // ── READ ──────────────────────────────────────────────────────────────
 
-  async getCategories(): Promise<any[] | null> {
-    return this.fetchSafe<any[]>('/categories');
+  async getCategories(noCache = false): Promise<any[] | null> {
+    return this.fetchSafe<any[]>('/categories', noCache);
   }
 
   async getCategoryCounts(): Promise<{ category_id: string; count: number; in_stock_count: number }[] | null> {

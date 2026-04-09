@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Settings, Package, Save, Eye, EyeOff, CheckCircle, AlertCircle,
     Copy, ExternalLink, Download, Loader2, Search, RefreshCw, Link2, Webhook, Activity, ShieldCheck, Info
@@ -62,6 +62,90 @@ function formatCacheAge(timestamp: number): string {
     return `há ${mins} min`;
 }
 
+interface CategoryTreeOption {
+    id: string;
+    name: string;
+    path: string;
+    depth: number;
+    searchable: string;
+}
+
+function normalizeCategoryName(name: string): string {
+    return (name || '').trim().replace(/\s+/g, ' ');
+}
+
+function sortCategories(categories: Category[]): Category[] {
+    return [...categories].sort((a, b) => {
+        const orderA = a.sort_order ?? 9999;
+        const orderB = b.sort_order ?? 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        return normalizeCategoryName(a.name).localeCompare(normalizeCategoryName(b.name), 'pt-BR', { sensitivity: 'base' });
+    });
+}
+
+function buildCategoryTreeOptions(categories: Category[]): CategoryTreeOption[] {
+    if (!categories.length) return [];
+
+    const normalizedCategories = categories.map(cat => ({
+        ...cat,
+        name: normalizeCategoryName(cat.name),
+    }));
+
+    const byId = new Map(normalizedCategories.map(cat => [cat.id, cat]));
+    const childrenByParent = new Map<string, Category[]>();
+    const roots: Category[] = [];
+
+    for (const cat of normalizedCategories) {
+        const parentId = cat.parent_id && byId.has(cat.parent_id) ? cat.parent_id : null;
+        if (!parentId) {
+            roots.push(cat);
+            continue;
+        }
+        const current = childrenByParent.get(parentId) || [];
+        current.push(cat);
+        childrenByParent.set(parentId, current);
+    }
+
+    const result: CategoryTreeOption[] = [];
+
+    const walk = (cat: Category, depth: number, parentPath: string) => {
+        const currentPath = parentPath ? `${parentPath} > ${cat.name}` : cat.name;
+        result.push({
+            id: cat.id,
+            name: cat.name,
+            path: currentPath,
+            depth,
+            searchable: `${cat.name} ${currentPath}`.toLowerCase(),
+        });
+
+        const children = sortCategories(childrenByParent.get(cat.id) || []);
+        for (const child of children) {
+            walk(child, depth + 1, currentPath);
+        }
+    };
+
+    for (const root of sortCategories(roots)) {
+        walk(root, 0, '');
+    }
+
+    return result;
+}
+
+function getLatestCreatedCategoryId(categories: Category[]): string | null {
+    const withCreatedAt = categories
+        .filter(cat => !!cat.created_at)
+        .map(cat => ({
+            id: cat.id,
+            ts: new Date(cat.created_at as string).getTime(),
+        }))
+        .filter(item => Number.isFinite(item.ts))
+        .sort((a, b) => b.ts - a.ts);
+
+    if (withCreatedAt.length > 0) return withCreatedAt[0].id;
+    if (categories.length > 0) return categories[categories.length - 1].id;
+    return null;
+}
+
 // ─────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────
@@ -95,6 +179,8 @@ export default function BlingPage() {
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
     const [cacheInfo, setCacheInfo] = useState<{ timestamp: number } | null>(null);
     const [categories, setCategories] = useState<Category[]>([]);
+    const [refreshingCategories, setRefreshingCategories] = useState(false);
+    const [categoryFilter, setCategoryFilter] = useState('');
     const [importCategoryId, setImportCategoryId] = useState('');
     const [models, setModels] = useState<Model[]>([]);
     const [importModelId, setImportModelId] = useState('');
@@ -131,6 +217,13 @@ export default function BlingPage() {
     const [loadingLogs, setLoadingLogs] = useState(false);
     const [logsTableExists, setLogsTableExists] = useState<boolean | null>(null);
 
+    const categoryTreeOptions = useMemo(() => buildCategoryTreeOptions(categories), [categories]);
+    const filteredCategoryTreeOptions = useMemo(() => {
+        const q = categoryFilter.trim().toLowerCase();
+        if (!q) return categoryTreeOptions;
+        return categoryTreeOptions.filter(opt => opt.searchable.includes(q));
+    }, [categoryFilter, categoryTreeOptions]);
+
     // ── Fiscal Sync ──
     const [fiscalSku, setFiscalSku] = useState('');
     const [fiscalNcm, setFiscalNcm] = useState('');
@@ -144,9 +237,7 @@ export default function BlingPage() {
 
     useEffect(() => {
         loadCredentials();
-        categoryService.list().then(cats => {
-            setCategories(cats);
-        }).catch(() => { });
+        refreshCategories();
         modelService.list().then(mods => {
             const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             setModels(sorted);
@@ -172,6 +263,26 @@ export default function BlingPage() {
         }
     }, []);
 
+    useEffect(() => {
+        const handleFocus = () => {
+            refreshCategories();
+        };
+
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refreshCategories();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
     async function loadCredentials() {
         try {
             const { data, error } = await supabase
@@ -194,6 +305,40 @@ export default function BlingPage() {
             toast.error('Erro ao carregar configurações: ' + err.message);
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function refreshCategories(options: { selectLatestCreated?: boolean; showToast?: boolean } = {}) {
+        const { selectLatestCreated = false, showToast = false } = options;
+        setRefreshingCategories(true);
+        try {
+            const cats = await categoryService.list(true);
+            setCategories(cats);
+
+            const available = new Set(cats.map(c => c.id));
+            setImportCategoryId(prev => {
+                if (selectLatestCreated) {
+                    const latestId = getLatestCreatedCategoryId(cats);
+                    if (latestId && available.has(latestId)) return latestId;
+                    return '';
+                }
+                if (prev && available.has(prev)) return prev;
+                return '';
+            });
+
+            if (showToast) {
+                const latestId = getLatestCreatedCategoryId(cats);
+                const latestName = cats.find(c => c.id === latestId)?.name;
+                toast.success(
+                    latestName
+                        ? `Categorias atualizadas. Selecionada: ${latestName}`
+                        : 'Categorias atualizadas.'
+                );
+            }
+        } catch (err: any) {
+            toast.error('Erro ao atualizar categorias: ' + (err?.message || 'Tente novamente.'));
+        } finally {
+            setRefreshingCategories(false);
         }
     }
 
@@ -891,37 +1036,57 @@ export default function BlingPage() {
                                         </div>
 
                                         {/* Default category selector */}
-                                        <div className={`flex items-center gap-2 p-3 rounded-xl border ${!importCategoryId ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
-                                            <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📂 Categoria padrão:</label>
-                                            <select
-                                                value={importCategoryId}
-                                                onChange={e => setImportCategoryId(e.target.value)}
-                                                className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                            >
-                                                <option value="">-- Selecione uma categoria --</option>
-                                                {categories.map(c => (
-                                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                                ))}
-                                            </select>
-                                            {/* Atualizar lista */}
-                                            <button
-                                                type="button"
-                                                title="Atualizar categorias"
-                                                onClick={() => categoryService.list().then(cats => { setCategories(cats); }).catch(() => { })}
-                                                className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
-                                            >
-                                                <RefreshCw className="w-3.5 h-3.5" />
-                                            </button>
-                                            {/* Atalho para criar categoria */}
-                                            <a
-                                                href="/admin/settings/categories"
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                title="Cadastrar nova categoria (abre em nova aba)"
-                                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-colors text-xs font-semibold text-blue-600 whitespace-nowrap flex-shrink-0"
-                                            >
-                                                + Categoria
-                                            </a>
+                                        <div className={`p-3 rounded-xl border ${!importCategoryId ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'} space-y-2`}>
+                                            <div className="flex items-center gap-2">
+                                                <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">📂 Categoria padrão:</label>
+                                                <select
+                                                    value={importCategoryId}
+                                                    onChange={e => setImportCategoryId(e.target.value)}
+                                                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                >
+                                                    <option value="">-- Selecione uma categoria --</option>
+                                                    {filteredCategoryTreeOptions.map(c => (
+                                                        <option key={c.id} value={c.id}>{`${'-- '.repeat(c.depth)}${c.name}`}</option>
+                                                    ))}
+                                                </select>
+                                                {/* Atualizar lista */}
+                                                <button
+                                                    type="button"
+                                                    title="Atualizar categorias"
+                                                    onClick={() => refreshCategories({ selectLatestCreated: true, showToast: true })}
+                                                    disabled={refreshingCategories}
+                                                    className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0 disabled:opacity-50"
+                                                >
+                                                    <RefreshCw className={`w-3.5 h-3.5 ${refreshingCategories ? 'animate-spin' : ''}`} />
+                                                </button>
+                                                {/* Atalho para criar categoria */}
+                                                <a
+                                                    href="/admin/settings/categories"
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    title="Cadastrar nova categoria (abre em nova aba)"
+                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-colors text-xs font-semibold text-blue-600 whitespace-nowrap flex-shrink-0"
+                                                >
+                                                    + Categoria
+                                                </a>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={categoryFilter}
+                                                    onChange={e => setCategoryFilter(e.target.value)}
+                                                    placeholder="Filtrar categoria por nome ou caminho..."
+                                                    className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                />
+                                                <span className="text-[11px] text-slate-500 whitespace-nowrap">
+                                                    {filteredCategoryTreeOptions.length}/{categoryTreeOptions.length}
+                                                </span>
+                                            </div>
+                                            {importCategoryId && (
+                                                <p className="text-[11px] text-slate-500">
+                                                    Caminho selecionado: {categoryTreeOptions.find(c => c.id === importCategoryId)?.path || 'N/A'}
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Default model selector */}
@@ -1576,8 +1741,8 @@ export default function BlingPage() {
                                                                             className={`w-full text-sm border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${mapping.ourCategoryId ? 'border-green-300 bg-green-50' : 'border-slate-300 bg-white'}`}
                                                                         >
                                                                             <option value="">-- Sem mapeamento (usa padrao) --</option>
-                                                                            {categories.map(c => (
-                                                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                                                            {categoryTreeOptions.map(c => (
+                                                                                <option key={c.id} value={c.id}>{`${'-- '.repeat(c.depth)}${c.path}`}</option>
                                                                             ))}
                                                                         </select>
                                                                     </td>

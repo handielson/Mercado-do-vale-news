@@ -220,11 +220,12 @@ function CatalogContent() {
     const isAdmin = customer?.customer_type === 'ADMIN';
 
     // Group products by variants (Brand + Model + RAM + Storage)
-    // Pass includeOutOfStock=true for admin so zero-stock SKUs still get grouped
+    // Admin só pode ver esgotados quando a configuração global permitir.
     const productGroups = useMemo(() => {
-        const groups = groupProductsByVariants(products, isAdmin);
+        const includeOutOfStockForView = isAdmin && !catalogSettings.hide_out_of_stock;
+        const groups = groupProductsByVariants(products, includeOutOfStockForView);
         return groups;
-    }, [products, isAdmin]);
+    }, [products, isAdmin, catalogSettings.hide_out_of_stock]);
 
 
     const visibleGroups = useMemo(() => {

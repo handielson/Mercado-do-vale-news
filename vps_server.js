@@ -231,21 +231,40 @@ fastify.put('/categories/:id', { preHandler: requireSyncKey }, async (req, reply
   const slug = b.slug || (b.name ? b.name.toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : undefined);
 
-  await pool.query(
-    `UPDATE categories SET
-       parent_id = ?, name = ?, slug = ?, config = ?, warranty_days = ?,
-       production_days = ?, sort_order = ?, extended_warranty_enabled = ?,
-       margin_wholesale = ?, margin_reseller = ?, updated_at = NOW()
-     WHERE id = ?`,
-    [
-      b.parent_id !== undefined ? (b.parent_id || null) : null,
-      b.name, slug, jsonStr(b.config || {}),
-      b.warranty_days || 90, b.production_days || 0, b.sort_order ?? 0,
-      b.extended_warranty_enabled ? 1 : 0,
-      b.margin_wholesale || null, b.margin_reseller || null,
-      id,
-    ]
-  );
+  const hasParentId = Object.prototype.hasOwnProperty.call(b, 'parent_id');
+
+  if (hasParentId) {
+    await pool.query(
+      `UPDATE categories SET
+         parent_id = ?, name = ?, slug = ?, config = ?, warranty_days = ?,
+         production_days = ?, sort_order = ?, extended_warranty_enabled = ?,
+         margin_wholesale = ?, margin_reseller = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [
+        b.parent_id || null,
+        b.name, slug, jsonStr(b.config || {}),
+        b.warranty_days || 90, b.production_days || 0, b.sort_order ?? 0,
+        b.extended_warranty_enabled ? 1 : 0,
+        b.margin_wholesale || null, b.margin_reseller || null,
+        id,
+      ]
+    );
+  } else {
+    await pool.query(
+      `UPDATE categories SET
+         name = ?, slug = ?, config = ?, warranty_days = ?,
+         production_days = ?, sort_order = ?, extended_warranty_enabled = ?,
+         margin_wholesale = ?, margin_reseller = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [
+        b.name, slug, jsonStr(b.config || {}),
+        b.warranty_days || 90, b.production_days || 0, b.sort_order ?? 0,
+        b.extended_warranty_enabled ? 1 : 0,
+        b.margin_wholesale || null, b.margin_reseller || null,
+        id,
+      ]
+    );
+  }
   reply.send({ ok: true });
 });
 
@@ -261,12 +280,20 @@ fastify.patch('/categories/sort-order', { preHandler: requireSyncKey }, async (r
   const updates = req.body; // Array<{ id, sort_order, parent_id? }>
   if (!Array.isArray(updates) || updates.length === 0) return reply.code(400).send({ error: 'Array esperado' });
 
-  await Promise.all(updates.map(u =>
-    pool.query(
-      `UPDATE categories SET sort_order = ?, parent_id = ?, updated_at = NOW() WHERE id = ?`,
-      [u.sort_order ?? 0, u.parent_id !== undefined ? (u.parent_id || null) : null, u.id]
-    )
-  ));
+  await Promise.all(updates.map(u => {
+    const hasParentId = Object.prototype.hasOwnProperty.call(u, 'parent_id');
+    if (hasParentId) {
+      return pool.query(
+        `UPDATE categories SET sort_order = ?, parent_id = ?, updated_at = NOW() WHERE id = ?`,
+        [u.sort_order ?? 0, u.parent_id || null, u.id]
+      );
+    }
+
+    return pool.query(
+      `UPDATE categories SET sort_order = ?, updated_at = NOW() WHERE id = ?`,
+      [u.sort_order ?? 0, u.id]
+    );
+  }));
   reply.send({ ok: true, updated: updates.length });
 });
 

@@ -91,7 +91,7 @@ fastify.post('/admin/migrate/production-days', { preHandler: requireSyncKey }, a
 
 fastify.get('/categories', async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT id, name, slug, config, warranty_days, production_days, sort_order,
+    `SELECT id, parent_id, name, slug, config, warranty_days, production_days, sort_order,
             extended_warranty_enabled, margin_wholesale, margin_reseller,
             created_at, updated_at
      FROM categories

@@ -37,8 +37,8 @@ function mapRow(row: any): Category {
     };
 }
 
-async function list(): Promise<Category[]> {
-    const result = await vpsApiService.getCategories();
+async function list(noCache = false): Promise<Category[]> {
+    const result = await vpsApiService.getCategories(noCache);
     if (!result) throw new Error('Falha ao carregar categorias da VPS');
     const cats = (result as any[]).map(mapRow);
     cats.sort((a, b) => {
@@ -78,8 +78,7 @@ async function getById(id: string): Promise<Category | null> {
 
 async function update(id: string, input: CategoryInput): Promise<Category> {
     const slug = input.slug || generateSlug(input.name);
-    const ok = await vpsApiService.updateCategory(id, {
-        parent_id: input.parent_id || null,
+    const payload: Record<string, unknown> = {
         name: input.name,
         slug,
         config: input.config || {},
@@ -89,6 +88,14 @@ async function update(id: string, input: CategoryInput): Promise<Category> {
         extended_warranty_enabled: input.extended_warranty_enabled ?? false,
         margin_wholesale: input.margin_wholesale || null,
         margin_reseller: input.margin_reseller || null,
+    };
+
+    if (Object.prototype.hasOwnProperty.call(input, 'parent_id')) {
+        payload.parent_id = input.parent_id || null;
+    }
+
+    const ok = await vpsApiService.updateCategory(id, {
+        ...payload,
     });
     if (!ok) throw new Error('Falha ao atualizar categoria na VPS');
     const updated = await getById(id);
@@ -101,7 +108,7 @@ async function remove(id: string): Promise<void> {
     if (!ok) throw new Error('Falha ao excluir categoria na VPS');
 }
 
-async function updateSortOrder(orders: { id: string; sort_order: number }[]): Promise<void> {
+async function updateSortOrder(orders: { id: string; sort_order: number; parent_id?: string | null }[]): Promise<void> {
     const SYNC_KEY = (import.meta as any).env?.VITE_VPS_SYNC_KEY || '';
     await fetch(`${VPS_BASE_URL}/categories/sort-order`, {
         method: 'PATCH',

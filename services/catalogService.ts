@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { CatalogProduct } from '@/types/catalog';
 import { vpsApiService } from '@/services/vpsApiService';
 import { normalizeProduct } from '@/services/productNormalizer';
+import { catalogConfigService } from '@/services/catalogConfigService';
 
 
 // Persistent Cache (Stale-While-Revalidate pattern)
@@ -80,12 +81,7 @@ export const catalogService = {
             }
 
             if (vpsRaw === null) return null;
-            const settings = {
-                hide_inactive: true,
-                hide_zero_price: false,
-                hide_out_of_stock: false,
-                min_stock_to_show: 0,
-            };
+            const settings = await catalogConfigService.getSettings();
 
             const catSlugMap = new Map<string, string>(
                 (vpsCats || []).map((c: any) => [c.id, c.slug])
@@ -189,9 +185,9 @@ export const catalogService = {
                 result = result.filter(p => (p as any)._search_string.includes(query));
             }
 
-            if (settings.hide_inactive && !filters?.search) {
-                result = result.filter(p => p.status === 'active');
-            }
+            // Aplica as regras globais configuradas no catálogo (estoque, inativos, preço, etc.)
+            result = catalogConfigService.applyVisibilityRules(result, settings);
+
             if (filters?.inStockOnly) {
                 result = result.filter(p => !p.track_inventory || (p.stock_quantity || 0) > 0);
             }
