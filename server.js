@@ -105,6 +105,145 @@ fastify.get('/categories', async (req, reply) => {
   return result;
 });
 
+// Presets de campos de categoria
+fastify.get('/field-presets', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT id, name, description, config, created_at, updated_at
+     FROM field_presets
+     ORDER BY name ASC`
+  );
+  return rows.map(r => ({
+    ...r,
+    config: typeof r.config === 'string' ? JSON.parse(r.config) : r.config,
+  }));
+});
+
+fastify.post('/field-presets', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { name, description, config } = req.body || {};
+  if (!name || !config) return reply.code(400).send({ error: 'name and config required' });
+  await pool.query(
+    `INSERT INTO field_presets (id, name, description, config)
+     VALUES (UUID(), ?, ?, ?)`,
+    [name, description || null, jsonStr(config)]
+  );
+  const [rows] = await pool.query('SELECT * FROM field_presets WHERE id = (SELECT id FROM field_presets ORDER BY created_at DESC LIMIT 1)');
+  const row = rows[0];
+  return { ...row, config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config };
+});
+
+fastify.put('/field-presets/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { name, description, config } = req.body || {};
+  if (!name || !config) return reply.code(400).send({ error: 'name and config required' });
+  await pool.query(
+    `UPDATE field_presets SET name=?, description=?, config=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [name, description || null, jsonStr(config), req.params.id]
+  );
+  return { ok: true };
+});
+
+fastify.delete('/field-presets/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  await pool.query('DELETE FROM field_presets WHERE id=?', [req.params.id]);
+  return { ok: true };
+});
+
+// Category CRUD
+fastify.post('/categories', { preHandler: requireSyncKey }, async (req, reply) => {
+  const b = req.body;
+  if (!b.id || !b.name) return reply.code(400).send({ error: 'id e name sao obrigatorios' });
+
+  const slug = b.slug || b.name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+  await pool.query(
+    `INSERT INTO categories (id, parent_id, name, slug, config, warranty_days, production_days,
+       sort_order, extended_warranty_enabled, margin_wholesale, margin_reseller, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+     ON DUPLICATE KEY UPDATE
+       parent_id = VALUES(parent_id), name = VALUES(name), slug = VALUES(slug),
+       config = VALUES(config), warranty_days = VALUES(warranty_days),
+       production_days = VALUES(production_days), sort_order = VALUES(sort_order),
+       extended_warranty_enabled = VALUES(extended_warranty_enabled),
+       margin_wholesale = VALUES(margin_wholesale), margin_reseller = VALUES(margin_reseller),
+       updated_at = NOW()`,
+    [
+      b.id, b.parent_id || null, b.name, slug,
+      jsonStr(b.config || {}),
+      b.warranty_days || 90, b.production_days || 0, b.sort_order || 0,
+      b.extended_warranty_enabled ? 1 : 0,
+      b.margin_wholesale || null, b.margin_reseller || null,
+    ]
+  );
+  reply.code(201).send({ ok: true, id: b.id });
+});
+
+fastify.put('/categories/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { id } = req.params;
+  const b = req.body;
+  const slug = b.slug || (b.name ? b.name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : undefined);
+  const hasParentId = Object.prototype.hasOwnProperty.call(b, 'parent_id');
+
+  if (hasParentId) {
+    await pool.query(
+      `UPDATE categories SET
+         parent_id = ?, name = ?, slug = ?, config = ?, warranty_days = ?,
+         production_days = ?, sort_order = ?, extended_warranty_enabled = ?,
+         margin_wholesale = ?, margin_reseller = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [
+        b.parent_id || null,
+        b.name, slug, jsonStr(b.config || {}),
+        b.warranty_days || 90, b.production_days || 0, b.sort_order ?? 0,
+        b.extended_warranty_enabled ? 1 : 0,
+        b.margin_wholesale || null, b.margin_reseller || null,
+        id,
+      ]
+    );
+  } else {
+    await pool.query(
+      `UPDATE categories SET
+         name = ?, slug = ?, config = ?, warranty_days = ?,
+         production_days = ?, sort_order = ?, extended_warranty_enabled = ?,
+         margin_wholesale = ?, margin_reseller = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [
+        b.name, slug, jsonStr(b.config || {}),
+        b.warranty_days || 90, b.production_days || 0, b.sort_order ?? 0,
+        b.extended_warranty_enabled ? 1 : 0,
+        b.margin_wholesale || null, b.margin_reseller || null,
+        id,
+      ]
+    );
+  }
+  return { ok: true };
+});
+
+fastify.delete('/categories/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  await pool.query('DELETE FROM categories WHERE id = ?', [req.params.id]);
+  return { ok: true };
+});
+
+fastify.patch('/categories/sort-order', { preHandler: requireSyncKey }, async (req, reply) => {
+  const updates = req.body;
+  if (!Array.isArray(updates) || updates.length === 0) return reply.code(400).send({ error: 'Array esperado' });
+
+  await Promise.all(updates.map(u => {
+    const hasParentId = Object.prototype.hasOwnProperty.call(u, 'parent_id');
+    if (hasParentId) {
+      return pool.query(
+        `UPDATE categories SET sort_order = ?, parent_id = ?, updated_at = NOW() WHERE id = ?`,
+        [u.sort_order ?? 0, u.parent_id || null, u.id]
+      );
+    }
+
+    return pool.query(
+      `UPDATE categories SET sort_order = ?, updated_at = NOW() WHERE id = ?`,
+      [u.sort_order ?? 0, u.id]
+    );
+  }));
+  return { ok: true, updated: updates.length };
+});
+
 // ─── Category product counts (para navegação do catálogo) ──────────────────
 fastify.get('/products/category-counts', async (req, reply) => {
   const [rows] = await pool.query(
@@ -2009,6 +2148,18 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] payment_fees table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS field_presets (
+      id          CHAR(36)     PRIMARY KEY DEFAULT (UUID()),
+      name        VARCHAR(100) NOT NULL,
+      description TEXT,
+      config      JSON         NOT NULL,
+      created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] field_presets table: OK');
 
   // Tabela de multi-categoria (produtos em mais de uma categoria)
   await pool.query(`
