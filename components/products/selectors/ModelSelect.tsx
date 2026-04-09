@@ -99,12 +99,12 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
     };
 
     return (
-        <div className="space-y-2">
-            <div className="flex items-center gap-2">
+        <div className="space-y-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
                 <select
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
-                    className={`flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${isLoading ? 'opacity-60 cursor-wait' : ''}`}
+                    className={`min-w-0 w-full flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${isLoading ? 'opacity-60 cursor-wait' : ''}`}
                 >
                     <option value="">Selecione um modelo</option>
                     

@@ -150,7 +150,8 @@ async function create(input: ProductInput): Promise<Product> {
     if (modelError) throw new Error(`Failed to fetch model: ${modelError.message}`);
 
     const brand = (modelData.brand as any)?.[0]?.name || input.brand;
-    const category_id = modelData.category_id || input.category_id;
+    // Respeita override manual de categoria no formulário.
+    const category_id = input.category_id || modelData.category_id;
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
 
@@ -266,7 +267,8 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     if (modelError) throw new Error(`Failed to fetch model: ${modelError.message}`);
 
     const brand = (modelData.brand as any)?.[0]?.name || input.brand;
-    const category_id = modelData.category_id || input.category_id;
+    // Respeita override manual de categoria no formulário.
+    const category_id = input.category_id || modelData.category_id;
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
 
