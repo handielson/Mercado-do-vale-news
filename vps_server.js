@@ -55,6 +55,30 @@ fastify.register(require('@fastify/compress'), {
   encodings: ['gzip', 'deflate'],
 });
 
+// Security headers for API responses
+fastify.register(require('@fastify/helmet'), {
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+});
+
+// Basic per-IP rate limit to reduce brute-force and abuse on public endpoints
+fastify.register(require('@fastify/rate-limit'), {
+  global: true,
+  max: Number(process.env.RATE_LIMIT_MAX || 600),
+  timeWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
+  allowList: (req) => {
+    const ip = req.ip || '';
+    return ip === '127.0.0.1' || ip === '::1';
+  },
+  errorResponseBuilder: function (_req, context) {
+    return {
+      error: 'Too many requests',
+      statusCode: 429,
+      retryAfter: context.after,
+    };
+  },
+});
+
 
 // ─── Auth middleware for write endpoints ───────────────────────────────────
 function requireSyncKey(request, reply, done) {
