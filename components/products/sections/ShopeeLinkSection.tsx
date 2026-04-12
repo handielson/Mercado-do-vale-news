@@ -41,6 +41,10 @@ export function ShopeeLinkSection({ productId, shopeeItemId, onLink, onUnlink }:
             if (res.ok && data.item_id) {
                 toast.success('Produto enviado com sucesso para a Shopee!', { id: 'shopee-sync' });
                 onLink(data.item_id);
+            } else if (res.status === 409 && data.item_id) {
+                // O backend já identificou vínculo existente; apenas refletir isso na UI.
+                toast.success('Produto já estava vinculado na Shopee. Vínculo atualizado no formulário.', { id: 'shopee-sync' });
+                onLink(Number(data.item_id));
             } else {
                 toast.error(data.error || 'Erro ao sincronizar com a Shopee.', { id: 'shopee-sync' });
                 console.error("Shopee Sync Error:", data);
