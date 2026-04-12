@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
-    Upload, Check, X, Loader2, Tag, Download, Calculator, ShoppingBag, Printer, DollarSign
+    Upload, Check, X, Loader2, Tag, Download, Calculator, ShoppingBag, Printer, DollarSign, Pencil
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
@@ -84,6 +84,9 @@ export default function ShopeePage() {
     const [linkInput, setLinkInput] = useState('');
     const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
     const [expandStock, setExpandStock] = useState<Record<string, number>>({});
+    const [renamingProductId, setRenamingProductId] = useState<string | null>(null);
+    const [renameInput, setRenameInput] = useState('');
+    const [savingRenameProductId, setSavingRenameProductId] = useState<string | null>(null);
 
     useEffect(() => { loadData(); }, []);
 
@@ -406,6 +409,66 @@ export default function ShopeePage() {
         } catch { toast.error('Erro ao atualizar preço.'); }
     };
 
+    const handleQuickRename = async (p: ShopeeProduct) => {
+        if (!p.shopee_item_id) {
+            toast.error('Produto sem vínculo com Item Shopee.');
+            return;
+        }
+
+        const newName = renameInput.trim();
+        if (!newName || newName.length < 3) {
+            toast.error('Digite um nome válido com pelo menos 3 caracteres.');
+            return;
+        }
+
+        setSavingRenameProductId(p.product_id);
+        try {
+            const shopeeRes = await fetch('/api/shopee-catalog?action=update_item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: p.shopee_item_id,
+                    item_name: newName,
+                }),
+            });
+            const shopeeData = await shopeeRes.json();
+
+            if (!shopeeRes.ok || (shopeeData.error && shopeeData.error !== '')) {
+                throw new Error(shopeeData.message || shopeeData.error || 'Falha ao atualizar nome na Shopee.');
+            }
+
+            const currentVpsProduct = await vpsApiService.getProductById(p.product_id, true);
+            if (currentVpsProduct) {
+                const ok = await vpsApiService.updateProduct(p.product_id, {
+                    ...currentVpsProduct,
+                    name: newName,
+                });
+                if (!ok) {
+                    toast.warning('Nome atualizado na Shopee, mas não foi possível atualizar na VPS.');
+                }
+            }
+
+            await supabase
+                .from('shopee_products')
+                .update({ last_synced_at: new Date().toISOString() })
+                .eq('product_id', p.product_id);
+
+            setProducts(prev => prev.map(prod =>
+                prod.product_id === p.product_id
+                    ? { ...prod, name: newName, last_synced_at: new Date().toISOString() }
+                    : prod
+            ));
+
+            toast.success('Nome atualizado e sincronizado com a Shopee!');
+            setRenamingProductId(null);
+            setRenameInput('');
+        } catch (e: any) {
+            toast.error(`Erro ao sincronizar nome: ${e.message}`);
+        } finally {
+            setSavingRenameProductId(null);
+        }
+    };
+
     if (loading) return (
         <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
@@ -656,7 +719,35 @@ export default function ShopeePage() {
                                                             </div>
                                                         )}
                                                         <div className="min-w-0">
-                                                            {p.shopee_item_id ? (
+                                                            {renamingProductId === p.product_id ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <input
+                                                                        autoFocus
+                                                                        type="text"
+                                                                        value={renameInput}
+                                                                        onChange={e => setRenameInput(e.target.value)}
+                                                                        onKeyDown={e => e.key === 'Enter' && handleQuickRename(p)}
+                                                                        className="w-64 max-w-full px-2 py-1 border border-orange-300 rounded-lg text-sm focus:ring-1 focus:ring-orange-500"
+                                                                        placeholder="Novo nome do produto"
+                                                                    />
+                                                                    <button
+                                                                        onClick={() => handleQuickRename(p)}
+                                                                        disabled={savingRenameProductId === p.product_id}
+                                                                        className="p-1 rounded bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+                                                                        title="Salvar e sincronizar"
+                                                                    >
+                                                                        {savingRenameProductId === p.product_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setRenamingProductId(null); setRenameInput(''); }}
+                                                                        disabled={savingRenameProductId === p.product_id}
+                                                                        className="p-1 rounded bg-slate-200 text-slate-600 hover:bg-slate-300 disabled:opacity-50"
+                                                                        title="Cancelar"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : p.shopee_item_id ? (
                                                                 <a
                                                                     href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
                                                                     target="_blank"
@@ -722,6 +813,18 @@ export default function ShopeePage() {
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2 justify-end">
                                                         {/* Toggle ativo/inativo */}
+                                                        {p.shopee_item_id && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setRenamingProductId(p.product_id);
+                                                                    setRenameInput(p.name || '');
+                                                                }}
+                                                                title="Editar somente nome e sincronizar"
+                                                                className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500"
+                                                            >
+                                                                <Pencil className="w-4 h-4 text-orange-500" />
+                                                            </button>
+                                                        )}
                                                         {p.shopee_item_id && (
                                                             <button onClick={() => handleToggleStatus(p)} title={p.status === 'active' ? 'Desativar' : 'Ativar'}
                                                                 className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500">

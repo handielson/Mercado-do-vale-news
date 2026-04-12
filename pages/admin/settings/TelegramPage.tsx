@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Save, Send, AlertCircle, Info, Plus, Trash2, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { telegramSettingsService, TelegramSettings, TelegramTemplate } from '../../../services/telegramSettings';
@@ -43,6 +43,12 @@ const DUMMY_PREVIEW_DATA = {
     nome_cliente: 'Maria Oliveira',
     telefone_cliente: '(11) 98888-7777',
     tipo_cliente: 'Atacado'
+    ,
+    id_pedido_completo: '4f2deaf2-8fc1-49f3-9a4d-8c8f55f94aab',
+    email: 'cliente@exemplo.com',
+    preco_compra: 'R$ 1.800,00',
+    preco_venda: 'R$ 2.650,00',
+    data_pagamento: '12/04/2026 18:42:01'
 };
 
 const processPreviewText = (templateText: string) => {
@@ -59,6 +65,7 @@ export default function TelegramPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
+    const messageEditorRef = useRef<HTMLTextAreaElement | null>(null);
 
     // Estado para gerenciar qual template está ativo na tela
     const [activeTemplateId, setActiveTemplateId] = useState<string>('sale_template');
@@ -73,8 +80,9 @@ export default function TelegramPage() {
             const data = await telegramSettingsService.getSettings();
             setSettings(data);
             if (data.templates && data.templates.length > 0) {
-                // Tenta achar o sale_template, senao pega o primeiro
-                const found = data.templates.find((t: TelegramTemplate) => t.id === 'sale_template');
+                // Tenta abrir primeiro o template de pedido online para facilitar edição do alerta mais sensível.
+                const found = data.templates.find((t: TelegramTemplate) => t.id === 'online_order_template')
+                    || data.templates.find((t: TelegramTemplate) => t.id === 'sale_template');
                 setActiveTemplateId(found ? found.id : data.templates[0].id);
             }
         } catch (err: any) {
@@ -85,7 +93,7 @@ export default function TelegramPage() {
     }
 
     // --- DICIONÁRIO E LÓGICA DE VARIÁVEIS INTELIGENTES ---
-    const getTagsForTemplate = (templateType?: 'action' | 'scheduled', actionType?: 'sale' | 'new_customer' | 'online_order' | null) => {
+    const getTagsForTemplate = (templateType?: 'action' | 'scheduled', actionType?: 'sale' | 'new_customer' | 'online_order' | 'online_order_paid' | null) => {
         if (templateType === 'scheduled') {
             return [
                 { tag: '{qtd_vendas}', desc: 'Ex: 15 (Soma de vendas do dia)' },
@@ -123,6 +131,24 @@ export default function TelegramPage() {
                 { tag: '{pagamento}', desc: 'Forma de Pagamento' },
                 { tag: '{entrega}', desc: 'Tipo de Entrega' },
                 { tag: '{endereco}', desc: 'Endereço de Entrega' }
+            ];
+        }
+
+        if (actionType === 'online_order_paid') {
+            return [
+                { tag: '{id_pedido}', desc: 'ID curto do pedido' },
+                { tag: '{id_pedido_completo}', desc: 'UUID completo do pedido' },
+                { tag: '{cliente}', desc: 'Nome do cliente' },
+                { tag: '{telefone}', desc: 'Telefone do cliente' },
+                { tag: '{email}', desc: 'Email do cliente' },
+                { tag: '{itens}', desc: 'Itens pagos no pedido' },
+                { tag: '{preco_compra}', desc: 'Soma do custo dos produtos' },
+                { tag: '{preco_venda}', desc: 'Total pago no pedido' },
+                { tag: '{lucro}', desc: 'Lucro (venda - compra)' },
+                { tag: '{pagamento}', desc: 'Método de pagamento' },
+                { tag: '{entrega}', desc: 'Retirada/entrega' },
+                { tag: '{endereco}', desc: 'Endereço de entrega' },
+                { tag: '{data_pagamento}', desc: 'Data e hora da confirmação' }
             ];
         }
 
@@ -300,6 +326,14 @@ export default function TelegramPage() {
             toast.error('O template de Relatório Diário não pode ser excluído, apenas editado.');
             return;
         }
+        if (idToDelete === 'online_order_template') {
+            toast.error('O template de Pedido Online não pode ser excluído, apenas editado.');
+            return;
+        }
+        if (idToDelete === 'online_order_paid_template') {
+            toast.error('O template de Pedido Pago não pode ser excluído, apenas editado.');
+            return;
+        }
 
         const filtered = settings.templates.filter(t => t.id !== idToDelete);
         setSettings({
@@ -336,6 +370,8 @@ export default function TelegramPage() {
         setSettings({ ...settings, templates: updated });
     };
 
+    const activeTemplate = settings?.templates.find(t => t.id === activeTemplateId) || settings?.templates[0];
+
     if (loading) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -344,10 +380,8 @@ export default function TelegramPage() {
         );
     }
 
-    const activeTemplate = settings?.templates.find(t => t.id === activeTemplateId) || settings?.templates[0];
-
     return (
-        <div className="animate-in fade-in duration-500 max-w-6xl mx-auto space-y-6">
+        <div className="telegram-page-scrollless animate-in fade-in duration-500 max-w-6xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold flex items-center gap-3">
@@ -374,10 +408,10 @@ export default function TelegramPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
                     {/* LADO ESQUERDO: Credenciais e Lista de Templates (4 Colunas) */}
-                    <div className="lg:col-span-4 space-y-6">
+                    <div className="telegram-left-column lg:col-span-4 space-y-6">
 
                         {/* Bloco 1: Master Switch & Credenciais */}
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 overflow-visible h-auto">
                             <div className="flex items-center justify-between mb-4">
                                 <h2 className="text-base font-bold flex items-center gap-2">
                                     <AlertCircle className="w-4 h-4 text-indigo-500" />
@@ -447,7 +481,10 @@ export default function TelegramPage() {
                         </div>
 
                         {/* Bloco 2: Lista de Templates Editáveis */}
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div
+                            className="telegram-templates-card bg-white rounded-xl shadow-sm border border-slate-200 p-5"
+                            style={{ overflow: 'visible', maxHeight: 'none', height: 'auto' }}
+                        >
                             <div className="flex items-center justify-between mb-4">
                                 <h2 className="text-base font-bold flex items-center gap-2">
                                     <MessageCircle className="w-4 h-4 text-blue-500" />
@@ -462,7 +499,10 @@ export default function TelegramPage() {
                                 </button>
                             </div>
 
-                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                            <div
+                                className="telegram-templates-list space-y-2 pr-1 max-h-none overflow-visible"
+                                style={{ overflow: 'visible', maxHeight: 'none', height: 'auto' }}
+                            >
                                 {settings.templates.map(t => (
                                     <div
                                         key={t.id}
@@ -483,6 +523,12 @@ export default function TelegramPage() {
                                             {t.id === 'daily_report_template' && (
                                                 <p className="text-[10px] text-green-600 uppercase tracking-wider font-bold mt-0.5">Automático ({t.schedule_time})</p>
                                             )}
+                                            {t.id === 'online_order_template' && (
+                                                <p className="text-[10px] text-blue-600 uppercase tracking-wider font-bold mt-0.5">Gatilho Pedido Online</p>
+                                            )}
+                                            {t.id === 'online_order_paid_template' && (
+                                                <p className="text-[10px] text-emerald-600 uppercase tracking-wider font-bold mt-0.5">Gatilho Pedido Pago</p>
+                                            )}
                                             {t.id !== 'sale_template' && t.id !== 'new_customer_template' && t.id !== 'daily_report_template' && (
                                                 <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mt-0.5">
                                                     {t.type === 'action' ? 'Gatilho Customizado' : `Agendado (${t.schedule_time})`}
@@ -500,7 +546,7 @@ export default function TelegramPage() {
                                                     <Send className="w-4 h-4" />
                                                 </button>
                                             )}
-                                            {t.id !== 'sale_template' && t.id !== 'new_customer_template' && t.id !== 'daily_report_template' && (
+                                            {t.id !== 'sale_template' && t.id !== 'new_customer_template' && t.id !== 'daily_report_template' && t.id !== 'online_order_template' && t.id !== 'online_order_paid_template' && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(t.id); }}
                                                     className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
@@ -568,9 +614,14 @@ export default function TelegramPage() {
 
                                     <p className="text-xs font-semibold text-slate-600 uppercase mb-2">Editor de Mensagem</p>
                                     <textarea
+                                        ref={messageEditorRef}
                                         value={activeTemplate.content}
-                                        onChange={(e) => updateActiveTemplateContent(e.target.value)}
-                                        className="w-full flex-1 min-h-[300px] px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-slate-50 resize-y font-mono text-sm leading-relaxed"
+                                        onChange={(e) => {
+                                            updateActiveTemplateContent(e.target.value);
+                                            e.currentTarget.style.height = 'auto';
+                                            e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                                        }}
+                                        className="w-full flex-1 min-h-[300px] px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-slate-50 resize-none overflow-hidden font-mono text-sm leading-relaxed"
                                         placeholder="Construa seu template aqui..."
                                     />
 

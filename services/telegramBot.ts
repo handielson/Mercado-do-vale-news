@@ -32,6 +32,22 @@ export interface OnlineOrderNotificationData {
     endereco: string;     // endereço completo ou '-'
 }
 
+export interface OnlineOrderPaidNotificationData {
+    id_pedido: string;
+    id_pedido_completo: string;
+    cliente: string;
+    telefone: string;
+    email: string;
+    itens: string;
+    preco_compra: string;
+    preco_venda: string;
+    lucro: string;
+    pagamento: string;
+    entrega: string;
+    endereco: string;
+    data_pagamento: string;
+}
+
 export const telegramBotService = {
 
     // Função para processar o template e enviar a requisição de forma assíncrona ("fire and forget").
@@ -57,6 +73,14 @@ export const telegramBotService = {
         setTimeout(() => {
             this._processAndSend('online_order_template', 'online_order', data).catch(err => {
                 console.error('[Telegram Bot] Falha silenciosa no envio do alerta de pedido online:', err);
+            });
+        }, 50);
+    },
+
+    notifyOnlineOrderPaid(data: OnlineOrderPaidNotificationData) {
+        setTimeout(() => {
+            this._processAndSend('online_order_paid_template', 'online_order_paid', data).catch(err => {
+                console.error('[Telegram Bot] Falha silenciosa no envio do alerta de pedido pago:', err);
             });
         }, 50);
     },

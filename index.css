@@ -129,4 +129,34 @@
 
 .animate-slide-up {
     animation: slideUpIn 0.28s ease-out both;
-}
+}
+
+/* Telegram settings: ensure template list never shows internal scrollbar */
+.telegram-templates-card,
+.telegram-templates-list {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+.telegram-templates-card::-webkit-scrollbar,
+.telegram-templates-list::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+}
+
+/* Telegram page: hide visual scrollbars while keeping scroll behavior */
+.telegram-page-scrollless,
+.telegram-page-scrollless * {
+    scrollbar-width: none;
+}
+
+.telegram-page-scrollless::-webkit-scrollbar,
+.telegram-page-scrollless *::-webkit-scrollbar,
+.telegram-left-column::-webkit-scrollbar,
+.telegram-left-column *::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+}

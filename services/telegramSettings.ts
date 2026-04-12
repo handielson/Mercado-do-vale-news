@@ -5,7 +5,7 @@ export interface TelegramTemplate {
     name: string; // Ex: 'Venda Padrão (PDV)'
     content: string; // O corpo da mensagem
     type: 'action' | 'scheduled';
-    action_type?: 'sale' | 'new_customer' | 'online_order' | null;
+    action_type?: 'sale' | 'new_customer' | 'online_order' | 'online_order_paid' | null;
     schedule_time?: string | null; // HH:MM format like '19:00'
 }
 
@@ -38,7 +38,14 @@ const DEFAULT_TEMPLATES: TelegramTemplate[] = [
         name: 'Pedido Online',
         type: 'action',
         action_type: 'online_order',
-        content: '🛒 *Novo Pedido Online!* (#\{id_pedido\})\n\n👤 *Cliente:* {cliente}\n📞 *Telefone:* {telefone}\n\n📦 *Itens:*\n{itens}\n💰 *Total:* {valor}\n💳 *Pagamento:* {pagamento}\n🚚 *Entrega:* {entrega}\n📍 *Endereço:* {endereco}'
+        content: '🛒 *Novo Pedido Online!* (#{id_pedido})\n\n👤 *Cliente:* {cliente}\n📞 *Telefone:* {telefone}\n\n📦 *Itens:*\n{itens}\n💰 *Total:* {valor}\n💳 *Pagamento:* {pagamento}\n🚚 *Entrega:* {entrega}\n📍 *Endereço:* {endereco}'
+    },
+    {
+        id: 'online_order_paid_template',
+        name: 'Pedido Pago (Tempo Real)',
+        type: 'action',
+        action_type: 'online_order_paid',
+        content: '✅ *Pedido Pago Confirmado!* (#{id_pedido})\n\n👤 *Cliente:* {cliente}\n📞 *Telefone:* {telefone}\n📧 *Email:* {email}\n\n📦 *Itens:*\n{itens}\n\n💸 *Preço de Compra:* {preco_compra}\n💰 *Preço de Venda:* {preco_venda}\n📈 *Lucro:* {lucro}\n\n💳 *Pagamento:* {pagamento}\n🚚 *Entrega:* {entrega}\n📍 *Endereço:* {endereco}\n🕒 *Pago em:* {data_pagamento}\n🔎 *Pedido completo:* {id_pedido_completo}'
     },
     {
         id: 'daily_report_template',

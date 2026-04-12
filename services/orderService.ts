@@ -70,6 +70,74 @@ function buildOrderNotificationData(
     };
 }
 
+function getDeliveryLabel(deliveryType: string) {
+    return deliveryType === 'pickup' ? 'Retirada na loja' : 'Entrega em casa';
+}
+
+function getAddressLabel(shippingAddress: any) {
+    if (!shippingAddress) return 'Retirada presencial';
+    return `${shippingAddress.street}${shippingAddress.number ? ', ' + shippingAddress.number : ''}${shippingAddress.complement ? ' — ' + shippingAddress.complement : ''} — ${shippingAddress.neighborhood}, ${shippingAddress.city}/${shippingAddress.state}`;
+}
+
+function getPaymentLabel(paymentMethod: string) {
+    if (paymentMethod === 'pix') return 'PIX';
+    if (paymentMethod === 'credit_card') return 'Cartão de crédito';
+    if (paymentMethod === 'debit_card') return 'Cartão de débito';
+    if (paymentMethod === 'on_delivery') return 'Pagamento na entrega/retirada';
+    return paymentMethod || 'Não informado';
+}
+
+async function calculateOrderCostAndProfit(items: Array<{ product_id?: string; quantity?: number }>, totalSale: number) {
+    const productIds = Array.from(
+        new Set(items.map(i => i.product_id).filter(Boolean) as string[])
+    );
+
+    let totalCost = 0;
+    if (productIds.length > 0) {
+        const { data: productRows } = await supabase
+            .from('products')
+            .select('id, price_cost')
+            .in('id', productIds);
+
+        const costMap = new Map((productRows || []).map((p: any) => [String(p.id), Number(p.price_cost) || 0]));
+        totalCost = items.reduce((acc, item) => {
+            const qty = Number(item.quantity) || 0;
+            const cost = costMap.get(String(item.product_id || '')) || 0;
+            return acc + (cost * qty);
+        }, 0);
+    }
+
+    return {
+        totalCost,
+        totalSale,
+        profit: totalSale - totalCost,
+    };
+}
+
+async function notifyPaidOrderTelegram(order: any, items: any[]) {
+    const financial = await calculateOrderCostAndProfit(items, Number(order.total) || 0);
+    const itemsText = (items || []).map((i: any) => {
+        const subtotal = Number(i.subtotal) || ((Number(i.unit_price) || 0) * (Number(i.quantity) || 0));
+        return `• ${i.product_name || 'Item'} x${i.quantity || 0} — ${formatCurrency(subtotal)}`;
+    }).join('\n');
+
+    telegramBotService.notifyOnlineOrderPaid({
+        id_pedido: String(order.id || '').slice(0, 8),
+        id_pedido_completo: String(order.id || '-'),
+        cliente: order.customer_name || '-',
+        telefone: order.customer_phone || '-',
+        email: order.customer_email || '-',
+        itens: itemsText || 'Sem itens detalhados',
+        preco_compra: formatCurrency(financial.totalCost),
+        preco_venda: formatCurrency(financial.totalSale),
+        lucro: formatCurrency(financial.profit),
+        pagamento: getPaymentLabel(order.payment_method),
+        entrega: getDeliveryLabel(order.delivery_type),
+        endereco: getAddressLabel(order.shipping_address),
+        data_pagamento: new Date().toLocaleString('pt-BR'),
+    });
+}
+
 async function getCompanyId(): Promise<string> {
     const { data, error } = await supabase
         .from('companies')
@@ -142,6 +210,7 @@ async function releaseOrderUnits(orderId: string): Promise<void> {
 
 export async function createOrder(input: OrderInput): Promise<Order> {
     const companyId = await getCompanyId();
+    const cardFormData = (input as any).card_form_data;
 
     const subtotal = input.items.reduce((sum, item) => sum + item.subtotal, 0);
     const couponDisc = input.coupon_discount ?? 0;
@@ -216,13 +285,6 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         throw new Error(itemsError.message);
     }
 
-    // Notifica Telegram imediatamente para pedidos on_delivery
-    if (orderData.payment_method === 'on_delivery') {
-        telegramBotService.notifyOnlineOrder(
-            buildOrderNotificationData({ ...orderData, id: order.id }, input.items)
-        );
-    }
-
     // ─── GATEWAY INTEGRATION BLOCK ──────────────────────────────────────────
     if (orderData.payment_gateway === 'mercado_pago' && orderData.payment_method === 'pix') {
         try {
@@ -277,7 +339,6 @@ export async function createOrder(input: OrderInput): Promise<Order> {
             }
 
             // Verifica se veio um token do Brick (checkout transparente)
-            const cardFormData = (input as any).card_form_data;
 
             if (cardFormData?.token) {
                 // ── Checkout Transparente (Brick) ──
@@ -303,18 +364,6 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                         );
                     }
                 }
-
-                // Notifica Telegram se cartão aprovado imediatamente
-                if (mpResponse.status === 'approved') {
-                    telegramBotService.notifyOnlineOrder(
-                        buildOrderNotificationData({ ...orderData, id: order.id }, input.items, {
-                            installments: cardFormData.installments ?? 1,
-                            cardBrand: cardFormData.payment_method_id,
-                        })
-                    );
-                }
-
-
                 if (mpResponse.status === 'rejected') {
                     await supabase.from('orders').delete().eq('id', order.id);
                     const MP_REJECTION_MESSAGES: Record<string, string> = {
@@ -439,7 +488,7 @@ export async function confirmPayment(
 ): Promise<void> {
     const { data: order, error: fetchError } = await supabase
         .from('orders')
-        .select('id, subtotal, discount, referral_code, customer_id, customer_name, items:order_items(product_id, quantity)')
+        .select('id, subtotal, discount, total, customer_phone, customer_email, payment_method, delivery_type, shipping_address, referral_code, customer_id, customer_name, items:order_items(product_id, product_name, quantity, unit_price, subtotal)')
         .eq('gateway_payment_id', gatewayPaymentId)
         .single();
 
@@ -472,10 +521,11 @@ export async function confirmPayment(
         });
     }
 
-    // Notifica Telegram: pagamento online confirmado (PIX/webhook)
     const items = (order as any).items || [];
-    telegramBotService.notifyOnlineOrder(
-        buildOrderNotificationData({ ...order, status: 'paid' }, items)
+
+    // Alerta em tempo real: somente quando o pedido foi pago.
+    notifyPaidOrderTelegram(order, items).catch((e) =>
+        console.error('[orderService] Falha no alerta Telegram de pedido pago:', e)
     );
 
     // Deduz estoque numérico dos itens
@@ -502,7 +552,7 @@ export async function confirmPayment(
 export async function completeOnDeliveryOrder(id: string): Promise<void> {
     const { data: order, error: fetchError } = await supabase
         .from('orders')
-        .select('id, subtotal, discount, referral_code, customer_id, customer_name, items:order_items(product_id, quantity)')
+        .select('id, subtotal, discount, total, customer_phone, customer_email, payment_method, delivery_type, shipping_address, referral_code, customer_id, customer_name, items:order_items(product_id, product_name, quantity, unit_price, subtotal)')
         .eq('id', id)
         .single();
 
@@ -537,6 +587,12 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
 
     // Deduz estoque numérico dos itens
     const items = (order as any).items || [];
+
+    // Alerta em tempo real para pagamento confirmado na entrega/retirada.
+    notifyPaidOrderTelegram(order, items).catch((e) =>
+        console.error('[orderService] Falha no alerta Telegram de pedido pago na entrega:', e)
+    );
+
     for (const item of items) {
         if (!item.product_id) continue;
         const { error: stockError } = await supabase.rpc('decrement_stock', {
