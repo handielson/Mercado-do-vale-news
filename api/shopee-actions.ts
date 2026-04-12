@@ -318,6 +318,30 @@ export default async function handler(req: any, res: any) {
             if (!vpsReq.ok) return res.status(404).json({ error: 'Produto não encontrado na VPS' });
             const product = await vpsReq.json();
 
+            // Não tentar criar novamente na Shopee quando já há vínculo.
+            if (product?.shopee_item_id) {
+                return res.status(409).json({
+                    error: 'Produto já vinculado à Shopee',
+                    item_id: Number(product.shopee_item_id),
+                });
+            }
+
+            // Fallback: alguns fluxos antigos gravam vínculo em shopee_products.
+            const { data: linked } = await supabase
+                .from('shopee_products')
+                .select('shopee_item_id')
+                .eq('product_id', product_id)
+                .not('shopee_item_id', 'is', null)
+                .limit(1)
+                .maybeSingle();
+
+            if (linked?.shopee_item_id) {
+                return res.status(409).json({
+                    error: 'Produto já vinculado à Shopee',
+                    item_id: Number(linked.shopee_item_id),
+                });
+            }
+
             // 2. Upload das imagens para a Shopee
             const imageIdList: string[] = [];
             for (let imgUrl of product.images || []) {
