@@ -80,9 +80,31 @@ function transformFromDB(row: any): Product {
 // ─── READ ──────────────────────────────────────────────────────────────────
 
 async function list(): Promise<Product[]> {
-    const data = await vpsApiService.getProducts({ status: 'all', limit: 5000 });
-    if (!data) throw new Error('Falha ao carregar produtos da VPS');
-    return data.map(transformFromDB);
+    const pageSize = 500;
+    const maxRecords = 10000;
+    const rows: any[] = [];
+
+    for (let offset = 0; offset < maxRecords; offset += pageSize) {
+        const page = await vpsApiService.getProducts({
+            status: 'all',
+            limit: pageSize,
+            offset,
+            noCache: offset > 0,
+        });
+
+        if (!page) {
+            if (offset === 0) {
+                throw new Error('Falha ao carregar produtos da VPS');
+            }
+            console.warn('[products.list] Interrompido por falha parcial ao carregar página da VPS em offset:', offset);
+            break;
+        }
+
+        rows.push(...page);
+        if (page.length < pageSize) break;
+    }
+
+    return rows.map(transformFromDB);
 }
 
 async function getById(id: string): Promise<Product | null> {
