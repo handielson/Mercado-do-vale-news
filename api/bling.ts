@@ -572,7 +572,7 @@ export default async function handler(req: any, res: any) {
 
             // Sync brand to VPS (fire-and-forget)
             const vpsBase = 'https://api.xiaomipetrolina.com.br';
-            const syncKey = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
+            const syncKey = process.env.VPS_SYNC_KEY || '';
             if (syncKey && brandRow) {
                 const vpsBrandPayload = { ...brandRow, company_id: companyId };
                 if (wasCreated) {
@@ -713,7 +713,7 @@ export default async function handler(req: any, res: any) {
                 || supabaseKey;
             const supabase = createClient(supabaseUrl, srKey);
             const vpsBase = 'https://api.xiaomipetrolina.com.br';
-            const syncKey = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
+            const syncKey = process.env.VPS_SYNC_KEY || '';
             if (!syncKey) return res.status(500).json({ error: 'VPS_SYNC_KEY not configured' });
 
             const pageSize = 50;
