@@ -661,13 +661,13 @@ export default function ShopeePage() {
                                                                     href={`https://shopee.com.br/product/${shopeeShopId}/${p.shopee_item_id}`}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    className="font-medium text-slate-800 hover:text-orange-600 truncate max-w-[200px] flex items-center gap-1 transition-colors"
+                                                                    className="font-medium text-slate-800 hover:text-orange-600 whitespace-normal break-words flex items-start gap-1 transition-colors"
                                                                 >
-                                                                    <span className="truncate max-w-[185px]">{p.name}</span>
+                                                                    <span className="whitespace-normal break-words">{p.name}</span>
                                                                     <ExternalLink className="w-3 h-3 shrink-0 text-slate-400" />
                                                                 </a>
                                                             ) : (
-                                                                <p className="font-medium text-slate-800 truncate max-w-[200px]">{p.name}</p>
+                                                                <p className="font-medium text-slate-800 whitespace-normal break-words">{p.name}</p>
                                                             )}
                                                             <p className="text-xs text-slate-400 font-mono">{p.sku || '—'}</p>
                                                         </div>
