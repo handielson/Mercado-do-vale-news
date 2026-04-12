@@ -1,10 +1,20 @@
 import imageCompression from 'browser-image-compression';
+import { supabase } from './supabase';
 
 const VPS_PROXY_BASE = '/api/vps-proxy';
 
 function proxyUrl(path: string): string {
     const normalized = path.startsWith('/') ? path : `/${path}`;
     return `${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`;
+}
+
+async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...extra,
+    };
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -140,6 +150,7 @@ export async function uploadImagesToBank(
 
             const res = await fetch(proxyUrl('/images/upload'), {
                 method: 'POST',
+                headers: await authHeaders(),
                 body: formData,
             });
 
@@ -159,7 +170,10 @@ export async function uploadImagesToBank(
 /** Lista todas as imagens do banco (VPS filesystem) */
 export async function listAllBankImages(): Promise<ImageBankEntry[]> {
     try {
-        const res = await fetch(proxyUrl('/images/list?prefix=products'), { cache: 'no-store' });
+        const res = await fetch(proxyUrl('/images/list?prefix=products'), {
+            cache: 'no-store',
+            headers: await authHeaders(),
+        });
         if (!res.ok) return [];
         const files: { path: string; url: string; filename: string }[] = await res.json();
         return files.map(f => {
@@ -176,7 +190,10 @@ export async function listAllBankImages(): Promise<ImageBankEntry[]> {
 /** Lista imagens de um SKU específico (VPS filesystem) */
 export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
     try {
-        const res = await fetch(proxyUrl(`/images/list?prefix=products/${sku.toUpperCase()}`), { cache: 'no-store' });
+        const res = await fetch(proxyUrl(`/images/list?prefix=products/${sku.toUpperCase()}`), {
+            cache: 'no-store',
+            headers: await authHeaders(),
+        });
         if (!res.ok) return [];
         const files: { path: string; url: string; filename: string }[] = await res.json();
         return files.map(f => {
@@ -192,7 +209,7 @@ export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
 export async function deleteImageFromBank(filePath: string): Promise<void> {
     const res = await fetch(proxyUrl('/images/file'), {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ path: filePath }),
     });
     if (!res.ok) {

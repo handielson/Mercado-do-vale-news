@@ -70,6 +70,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         e.target.value = '';
 
         const path = '/synology/upload?folder=videos';
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
         
         setIsUploadingVideo(true);
         try {
@@ -81,6 +83,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
             const res = await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
                 method: 'POST',
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                 body: formData,
             });
 

@@ -4,6 +4,8 @@
  * Escrita: sync fire-and-forget após writes no Supabase (autenticado com X-Sync-Key).
  */
 
+import { supabase } from './supabase';
+
 const VPS_PROXY_BASE = '/api/vps-proxy';
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const WRITE_TIMEOUT_MS = 15000;
@@ -37,6 +39,15 @@ export interface FieldPresetInput {
 class VpsApiService {
   private cache = new Map<string, CacheEntry<unknown>>();
 
+  private async authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...extra,
+    };
+  }
+
   private isCached<T>(key: string): T | null {
     const entry = this.cache.get(key) as CacheEntry<T> | undefined;
     if (!entry) return null;
@@ -65,11 +76,11 @@ class VpsApiService {
       
       const res = await fetch(proxyUrl(fullPath), {
         signal: controller.signal,
-        headers: { 
+        headers: await this.authHeaders({
           Accept: 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache'
-        },
+        }),
         cache: 'no-store',
       });
       clearTimeout(timer);
@@ -92,10 +103,10 @@ class VpsApiService {
       const res = await fetch(proxyUrl(path), {
         method,
         signal: controller.signal,
-        headers: {
+        headers: await this.authHeaders({
           ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
           Accept: 'application/json',
-        },
+        }),
         body: hasBody ? JSON.stringify(body) : undefined,
       });
       clearTimeout(timer);
@@ -128,7 +139,7 @@ class VpsApiService {
     try {
       const res = await fetch(proxyUrl('/field-presets'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(data),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
@@ -141,7 +152,7 @@ class VpsApiService {
     try {
       const res = await fetch(proxyUrl(`/field-presets/${id}`), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(data),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
@@ -153,6 +164,7 @@ class VpsApiService {
     try {
       const res = await fetch(proxyUrl(`/field-presets/${id}`), {
         method: 'DELETE',
+        headers: await this.authHeaders(),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
       return res.ok;
@@ -206,7 +218,7 @@ class VpsApiService {
     try {
       const res = await fetch(proxyUrl('/products/images'), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ sku, images }),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
@@ -243,7 +255,7 @@ class VpsApiService {
     try {
       const res = await fetch(proxyUrl('/products/batch'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify([data]),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
@@ -278,7 +290,7 @@ class VpsApiService {
     try {
       const res = await fetch(proxyUrl('/combos'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
         body: JSON.stringify(payload)
       });
       if (!res.ok) return { ok: false };
@@ -291,7 +303,7 @@ class VpsApiService {
     try {
       const res = await fetch(proxyUrl(`/combos/${id}`), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
         body: JSON.stringify(payload)
       });
       if (!res.ok) return { ok: false };
@@ -317,9 +329,7 @@ class VpsApiService {
     try {
       const response = await fetch(proxyUrl('/cart/sync'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ customerId, items }),
       });
       if (!response.ok) return { ok: false };
@@ -363,7 +373,7 @@ class VpsApiService {
       try {
         const res = await fetch(proxyUrl('/products/batch'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(chunk),
           signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
         });
@@ -387,7 +397,7 @@ class VpsApiService {
     try {
       const res = await fetch(proxyUrl('/products/bulk-category'), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ ids, category_id, specs }),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });

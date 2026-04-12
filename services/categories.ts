@@ -1,5 +1,6 @@
 import { Category, CategoryInput } from '../types/category';
 import { vpsApiService } from './vpsApiService';
+import { supabase } from './supabase';
 
 /**
  * CATEGORY SERVICE — VPS-only implementation
@@ -112,10 +113,13 @@ async function remove(id: string): Promise<void> {
 }
 
 async function updateSortOrder(orders: { id: string; sort_order: number; parent_id?: string | null }[]): Promise<void> {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
     await fetch(proxyUrl('/categories/sort-order'), {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(orders),
     });

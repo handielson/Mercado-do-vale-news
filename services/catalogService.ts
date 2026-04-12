@@ -464,9 +464,14 @@ export const catalogService = {
     addToFavorites: async (productId: string, customerId: string): Promise<void> => {
         try {
             const path = `/customers/${customerId}/favorites`;
+            const { data } = await supabase.auth.getSession();
+            const token = data.session?.access_token;
             await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 body: JSON.stringify({ productId }),
             });
         } catch (error: any) {
@@ -481,8 +486,11 @@ export const catalogService = {
     removeFromFavorites: async (productId: string, customerId: string): Promise<void> => {
         try {
             const path = `/customers/${customerId}/favorites/${productId}`;
+            const { data } = await supabase.auth.getSession();
+            const token = data.session?.access_token;
             await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
                 method: 'DELETE',
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             });
         } catch (error: any) {
             console.error('Error removing from favorites:', error);
@@ -496,8 +504,13 @@ export const catalogService = {
     getUserFavorites: async (customerId: string): Promise<string[]> => {
         try {
             const path = `/customers/${customerId}/favorites`;
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData.session?.access_token;
             const res = await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
-                headers: { Accept: 'application/json' },
+                headers: {
+                    Accept: 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 signal: AbortSignal.timeout(5000),
             });
             if (!res.ok) return [];

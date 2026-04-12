@@ -461,9 +461,14 @@ export default function BlingPage() {
             // 3. Sincroniza também na VPS MySQL (fire-and-forget)
             if (product.id) {
                 const fiscalPath = `/products/${product.id}/fiscal`;
+                const { data } = await supabase.auth.getSession();
+                const token = data.session?.access_token;
                 fetch(`/api/vps-proxy?path=${encodeURIComponent(fiscalPath)}`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
                     body: JSON.stringify({ ncm: ncm || undefined, cest: fiscalCest.trim() || undefined }),
                 }).catch(() => {});
             }

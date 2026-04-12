@@ -32,6 +32,7 @@ import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
+import { supabase } from '../../services/supabase';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
@@ -385,6 +386,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             })();
 
             const proxyBase = '/api/vps-proxy';
+            const { data } = await supabase.auth.getSession();
+            const token = data.session?.access_token;
 
             for (const file of filesToProcess) {
                 const compressed = await compressImage(file);
@@ -395,6 +398,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 const uploadPath = `/products/${productId}/upload-image`;
                 const res = await fetch(`${proxyBase}?path=${encodeURIComponent(uploadPath)}`, {
                     method: 'POST',
+                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                     body: form,
                 });
                 if (res.ok) {
