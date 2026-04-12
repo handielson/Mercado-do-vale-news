@@ -1125,7 +1125,7 @@ fastify.delete('/images/file', { preHandler: requireSyncKey }, async (req, reply
 });
 
 // ─── Company Settings ──────────────────────────────────────────────────────
-fastify.get('/company-settings', async (req, reply) => {
+fastify.get('/company-settings', { preHandler: requireSyncKey }, async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
   reply.header('Cache-Control', 'no-store');
   return rows[0] || null;

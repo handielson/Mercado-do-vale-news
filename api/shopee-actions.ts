@@ -31,7 +31,9 @@ export default async function handler(req: any, res: any) {
     let settings = null;
     try {
         const vpsUrl = process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br';
-        const vpsRes = await fetch(`${vpsUrl}/company-settings`);
+        const vpsRes = await fetch(`${vpsUrl}/company-settings`, {
+            headers: { 'x-sync-key': process.env.VPS_SYNC_KEY || '' }
+        });
         if (vpsRes.ok) {
             settings = await vpsRes.json();
         }
