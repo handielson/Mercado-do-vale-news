@@ -16,10 +16,32 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL |
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
+
+// Valida assinatura HMAC-SHA256 do Bling para prevenir webhooks forjados.
+// Configura BLING_WEBHOOK_SECRET no painel Bling e nas variáveis de ambiente da Vercel.
+function verifyBlingSignature(rawBody: string, signature: string | undefined): boolean {
+    const secret = process.env.BLING_WEBHOOK_SECRET;
+    if (!secret || !signature) return false;
+    const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    try {
+        return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    } catch {
+        return false;
+    }
+}
 
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    // Validação de assinatura — rejeita callbacks não autenticados pelo Bling
+    const signature = req.headers['x-bling-signature'] as string | undefined;
+    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    if (process.env.BLING_WEBHOOK_SECRET && !verifyBlingSignature(rawBody, signature)) {
+        console.warn('[bling-webhook] assinatura inválida — rejeitado');
+        return res.status(401).json({ error: 'Invalid signature' });
     }
 
     try {

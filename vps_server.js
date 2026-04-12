@@ -31,7 +31,7 @@ const CORS_ORIGINS = [
 
 fastify.register(require('@fastify/cors'), {
   origin: (origin, cb) => {
-    if (!origin || CORS_ORIGINS.some(o => origin.startsWith(o))) return cb(null, true);
+    if (!origin || CORS_ORIGINS.includes(origin)) return cb(null, true);
     cb(new Error('Not allowed'), false);
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
