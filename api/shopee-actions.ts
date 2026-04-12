@@ -23,8 +23,15 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const action = req.method === 'GET' ? req.query.action : req.body.action;
-    const payload = req.method === 'GET' ? req.query : req.body.payload;
+    const query = req.query && typeof req.query === 'object' ? req.query : {};
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const actionRaw = req.method === 'GET' ? query.action : body.action;
+    const action = typeof actionRaw === 'string' ? actionRaw.trim() : '';
+    if (!action) {
+        return res.status(400).json({ error: 'action obrigatória' });
+    }
+
+    const payload = req.method === 'GET' ? query : (body.payload ?? body);
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Buscar configurações da empresa primariamente pelo VPS
@@ -66,7 +73,6 @@ export default async function handler(req: any, res: any) {
 
     try {
         const shopeeApiUrl = getShopeeBaseUrl(partnerId);
-        const payload = req.method === 'POST' ? req.body : req.query;
 
         if (action === 'refresh_token') {
             if (!settings?.shopee_refresh_token || !settings?.id) {
