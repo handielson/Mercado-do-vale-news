@@ -96,7 +96,7 @@ function requireSyncKey(request, reply, done) {
 const jsonStr = (v) => v == null ? null : (typeof v === 'string' ? v : JSON.stringify(v));
 
 // ─── Health ────────────────────────────────────────────────────────────────
-fastify.get('/health', async () => ({
+fastify.get('/health', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async () => ({
   status: 'ok',
   timestamp: new Date().toISOString(),
   db: 'mysql'
@@ -203,7 +203,7 @@ fastify.delete('/field-presets/:id', { preHandler: requireSyncKey }, async (req,
 });
 
 // ─── Categories ────────────────────────────────────────────────────────────
-fastify.get('/categories', async (req, reply) => {
+fastify.get('/categories', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT id, parent_id, name, slug, config, warranty_days, production_days, sort_order,
             extended_warranty_enabled, margin_wholesale, margin_reseller,
@@ -358,7 +358,7 @@ fastify.get('/products/by-category/:categoryId', async (req, reply) => {
 });
 
 // ─── Category product counts (para navegação do catálogo) ──────────────────
-fastify.get('/products/category-counts', async (req, reply) => {
+fastify.get('/products/category-counts', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [[categories], [counts]] = await Promise.all([
     pool.query(
       `SELECT id, parent_id
@@ -407,7 +407,7 @@ fastify.get('/products/category-counts', async (req, reply) => {
 
 // ─── Catalog Metadata (1 chamada = categorias+counts+marcas+preços) ─────────
 // Substitui 3-4 queries separadas ao Supabase. Resultado cacheável por 5 min.
-fastify.get('/catalog/metadata', async (req, reply) => {
+fastify.get('/catalog/metadata', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [[categories], [counts], [brands], [priceRow]] = await Promise.all([
     // 1. Todas as categorias com parent_id e sort_order
     pool.query(
@@ -488,7 +488,7 @@ fastify.get('/catalog/metadata', async (req, reply) => {
 
 
 // ─── Brands (read) ─────────────────────────────────────────────────────────
-fastify.get('/brands', async (req, reply) => {
+fastify.get('/brands', { config: { rateLimit: { max: 180, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT id, name, slug, logo_url, warranty_days, active FROM brands ORDER BY name`
   );
@@ -525,7 +525,7 @@ fastify.delete('/brands/:id', { preHandler: requireSyncKey }, async (req, reply)
 });
 
 // ─── Products (read) ───────────────────────────────────────────────────────
-fastify.get('/products', async (req, reply) => {
+fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;
   const category = req.query.category;
@@ -638,7 +638,7 @@ fastify.get('/products', async (req, reply) => {
 
 });
 
-fastify.get('/products/:id', async (req, reply) => {
+fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT *,
       (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
@@ -2299,7 +2299,7 @@ fastify.delete('/customers/:id/favorites/:productId', { preHandler: requireSyncK
 // GET /check-video?sku=PI153D
 // Verifica se existe um vídeo no Synology NAS para o SKU informado.
 // Rota sem prefixo /public/ para evitar conflito com regras Nginx/CDN.
-fastify.get('/check-video', async (req, reply) => {
+fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 minute' } } }, async (req, reply) => {
   reply.header('Cache-Control', 'public, max-age=300');
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required', exists: false });
