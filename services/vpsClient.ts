@@ -4,16 +4,16 @@
  * Substitui chamadas ao Supabase gradualmente conforme as tabelas migram.
  */
 
-const VPS_BASE = import.meta.env.DEV
-    ? '/vps-proxy'
-    : (import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+const VPS_PROXY_BASE = '/api/vps-proxy';
 
-const VPS_KEY = import.meta.env.VITE_VPS_SYNC_KEY;
+function buildProxyUrl(path: string): string {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    return `${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`;
+}
 
 function buildHeaders(extra?: Record<string, string>): HeadersInit {
     return {
         'Content-Type': 'application/json',
-        'x-sync-key': VPS_KEY ?? '', // servidor VPS verifica este header em requireSyncKey
         ...extra,
     };
 }
@@ -31,7 +31,7 @@ export const vpsClient = {
      * GET /resource
      */
     get: async <T>(path: string): Promise<T> => {
-        const res = await fetch(`${VPS_BASE}${path}`, {
+        const res = await fetch(buildProxyUrl(path), {
             headers: buildHeaders(),
             cache: 'no-store',
         });
@@ -42,7 +42,7 @@ export const vpsClient = {
      * POST /resource  (body JSON)
      */
     post: async <T>(path: string, body: unknown): Promise<T> => {
-        const res = await fetch(`${VPS_BASE}${path}`, {
+        const res = await fetch(buildProxyUrl(path), {
             method: 'POST',
             headers: buildHeaders(),
             body: JSON.stringify(body),
@@ -54,7 +54,7 @@ export const vpsClient = {
      * PATCH /resource/:id  (body JSON)
      */
     patch: async <T>(path: string, body: unknown): Promise<T> => {
-        const res = await fetch(`${VPS_BASE}${path}`, {
+        const res = await fetch(buildProxyUrl(path), {
             method: 'PATCH',
             headers: buildHeaders(),
             body: JSON.stringify(body),
@@ -66,7 +66,7 @@ export const vpsClient = {
      * PUT /resource/:id  (body JSON)
      */
     put: async <T>(path: string, body: unknown): Promise<T> => {
-        const res = await fetch(`${VPS_BASE}${path}`, {
+        const res = await fetch(buildProxyUrl(path), {
             method: 'PUT',
             headers: buildHeaders(),
             body: JSON.stringify(body),
@@ -78,9 +78,8 @@ export const vpsClient = {
      * DELETE /resource/:id
      */
     delete: async (path: string): Promise<void> => {
-        const res = await fetch(`${VPS_BASE}${path}`, {
+        const res = await fetch(buildProxyUrl(path), {
             method: 'DELETE',
-            headers: { 'x-sync-key': VPS_KEY ?? '' }, // sem Content-Type para evitar FST_ERR_CTP_EMPTY_JSON_BODY
         });
         if (!res.ok) {
             const text = await res.text().catch(() => res.statusText);
@@ -93,9 +92,8 @@ export const vpsClient = {
      * Usado para upload de banners e imagens.
      */
     upload: async <T>(path: string, formData: FormData): Promise<T> => {
-        const res = await fetch(`${VPS_BASE}${path}`, {
+        const res = await fetch(buildProxyUrl(path), {
             method: 'POST',
-            headers: { 'x-sync-key': VPS_KEY ?? '' }, // sem Content-Type, browser define o boundary
             body: formData,
         });
         return handleResponse<T>(res);
@@ -108,8 +106,7 @@ export const vpsClient = {
     uploadWithProgress: <T>(path: string, formData: FormData, onProgress: (pct: number, phase: 'sending' | 'processing') => void): Promise<T> => {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
-            xhr.open('POST', `${VPS_BASE}${path}`);
-            xhr.setRequestHeader('x-sync-key', VPS_KEY ?? '');
+            xhr.open('POST', buildProxyUrl(path));
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100), 'sending');
             };

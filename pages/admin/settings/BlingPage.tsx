@@ -459,11 +459,11 @@ export default function BlingPage() {
             }
 
             // 3. Sincroniza também na VPS MySQL (fire-and-forget)
-            const syncKey = import.meta.env.VITE_VPS_SYNC_KEY || '';
-            if (syncKey && product.id) {
-                fetch(`${vpsBase}/products/${product.id}/fiscal`, {
+            if (product.id) {
+                const fiscalPath = `/products/${product.id}/fiscal`;
+                fetch(`/api/vps-proxy?path=${encodeURIComponent(fiscalPath)}`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ncm: ncm || undefined, cest: fiscalCest.trim() || undefined }),
                 }).catch(() => {});
             }

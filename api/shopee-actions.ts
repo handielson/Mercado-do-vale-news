@@ -409,7 +409,7 @@ export default async function handler(req: any, res: any) {
 
             // 4. Salvar na VPS
             // Não deletamos payload e mandamos o upsert via PUT
-            const syncKey = process.env.VITE_VPS_SYNC_KEY || '';
+            const syncKey = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
             const updateVpsReq = await fetch(`https://api.xiaomipetrolina.com.br/products/${product_id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },

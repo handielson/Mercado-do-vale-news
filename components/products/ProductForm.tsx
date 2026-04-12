@@ -384,29 +384,26 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 return tid;
             })();
 
-            const VPS_BASE = import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-            const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY;
+            const proxyBase = '/api/vps-proxy';
 
             for (const file of filesToProcess) {
                 const compressed = await compressImage(file);
 
-                if (SYNC_KEY) {
-                    // Upload direto para VPS — salva como URL HTTP (não base64)
-                    const form = new FormData();
-                    form.append('file', compressed, file.name);
-                    const res = await fetch(`${VPS_BASE}/products/${productId}/upload-image`, {
-                        method: 'POST',
-                        headers: { 'x-sync-key': SYNC_KEY },
-                        body: form,
-                    });
-                    if (res.ok) {
-                        const { url } = await res.json();
-                        processedImages.push(url);
-                        continue;
-                    }
+                // Upload direto para VPS via proxy server-side — salva como URL HTTP (não base64)
+                const form = new FormData();
+                form.append('file', compressed, file.name);
+                const uploadPath = `/products/${productId}/upload-image`;
+                const res = await fetch(`${proxyBase}?path=${encodeURIComponent(uploadPath)}`, {
+                    method: 'POST',
+                    body: form,
+                });
+                if (res.ok) {
+                    const { url } = await res.json();
+                    processedImages.push(url);
+                    continue;
                 }
 
-                // Fallback: base64 (caso upload falhe ou SYNC_KEY ausente)
+                // Fallback: base64 (caso upload falhe)
                 const reader = new FileReader();
                 const base64 = await new Promise<string>((resolve, reject) => {
                     reader.onload = () => resolve(reader.result as string);

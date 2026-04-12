@@ -5,8 +5,7 @@ import {
     Rows, LayoutList, Plus, Trash2, Pencil, Upload, Download, X, Save, AlertTriangle
 } from 'lucide-react';
 
-const VPS_API = 'https://api.xiaomipetrolina.com.br';
-const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
+const VPS_PROXY_BASE = '/api/vps-proxy';
 const PAGE_SIZE = 50;
 
 // Tabelas somente-leitura (sistema interno — sem CRUD)
@@ -21,9 +20,10 @@ type Tab = 'schema' | 'data';
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 async function apiFetch(path: string, options?: RequestInit) {
-    const r = await fetch(`${VPS_API}${path}`, {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    const r = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`, {
         ...options,
-        headers: { 'x-sync-key': SYNC_KEY, 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
+        headers: { 'Content-Type': 'application/json', ...(options?.headers ?? {}) },
     });
     if (!r.ok) {
         const err = await r.json().catch(() => ({ error: r.statusText }));

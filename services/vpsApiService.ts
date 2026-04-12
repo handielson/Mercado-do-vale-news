@@ -4,13 +4,15 @@
  * Escrita: sync fire-and-forget após writes no Supabase (autenticado com X-Sync-Key).
  */
 
-const VPS_BASE_URL = (import.meta as any).env?.DEV
-    ? '/vps-proxy'
-    : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+const VPS_PROXY_BASE = '/api/vps-proxy';
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 60 * 1000; // 1 min (reduzido de 5min para evitar UI stale)
-const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
+
+function proxyUrl(path: string): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return `${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`;
+}
 
 interface CacheEntry<T> {
   data: T;
@@ -59,9 +61,9 @@ class VpsApiService {
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
       
       const separator = path.includes('?') ? '&' : '?';
-      const fullUrl = `${VPS_BASE_URL}${path}${separator}_t=${Date.now()}`;
+      const fullPath = `${path}${separator}_t=${Date.now()}`;
       
-      const res = await fetch(fullUrl, {
+      const res = await fetch(proxyUrl(fullPath), {
         signal: controller.signal,
         headers: { 
           Accept: 'application/json',
@@ -83,21 +85,16 @@ class VpsApiService {
   }
 
   private async writeSafe(method: 'POST' | 'PUT' | 'DELETE' | 'PATCH', path: string, body?: unknown): Promise<boolean> {
-    if (!SYNC_KEY) {
-      console.warn('[vpsApiService] VITE_VPS_SYNC_KEY não configurado');
-      return false;
-    }
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), WRITE_TIMEOUT_MS);
       const hasBody = body != null;
-      const res = await fetch(`${VPS_BASE_URL}${path}`, {
+      const res = await fetch(proxyUrl(path), {
         method,
         signal: controller.signal,
         headers: {
           ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
           Accept: 'application/json',
-          'X-Sync-Key': SYNC_KEY,
         },
         body: hasBody ? JSON.stringify(body) : undefined,
       });
@@ -128,11 +125,10 @@ class VpsApiService {
   }
 
   async createFieldPreset(data: FieldPresetInput): Promise<FieldPreset | null> {
-    if (!SYNC_KEY) return null;
     try {
-      const res = await fetch(`${VPS_BASE_URL}/field-presets`, {
+      const res = await fetch(proxyUrl('/field-presets'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
@@ -142,11 +138,10 @@ class VpsApiService {
   }
 
   async updateFieldPreset(id: string, data: FieldPresetInput): Promise<boolean> {
-    if (!SYNC_KEY) return false;
     try {
-      const res = await fetch(`${VPS_BASE_URL}/field-presets/${id}`, {
+      const res = await fetch(proxyUrl(`/field-presets/${id}`), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
@@ -155,11 +150,9 @@ class VpsApiService {
   }
 
   async deleteFieldPreset(id: string): Promise<boolean> {
-    if (!SYNC_KEY) return false;
     try {
-      const res = await fetch(`${VPS_BASE_URL}/field-presets/${id}`, {
+      const res = await fetch(proxyUrl(`/field-presets/${id}`), {
         method: 'DELETE',
-        headers: { 'X-Sync-Key': SYNC_KEY },
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
       return res.ok;
@@ -210,11 +203,10 @@ class VpsApiService {
   /** Atualiza o array de imagens de um produto pelo SKU (image bank sync).
    * Retorna o número de linhas afetadas. 0 = produto ainda não existe no MySQL VPS. */
   async updateProductImagesBySku(sku: string, images: string[]): Promise<number> {
-    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return 0; }
     try {
-      const res = await fetch(`${VPS_BASE_URL}/products/images`, {
+      const res = await fetch(proxyUrl('/products/images'), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sku, images }),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
@@ -247,12 +239,11 @@ class VpsApiService {
 
   /** Cria ou upserta um produto na VPS MySQL */
   async createProduct(data: any): Promise<{ upserted: number; errors: any[] }> {
-    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return { upserted: 0, errors: [] }; }
     this.invalidateProductCache();
     try {
-      const res = await fetch(`${VPS_BASE_URL}/products/batch`, {
+      const res = await fetch(proxyUrl('/products/batch'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify([data]),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });
@@ -283,12 +274,11 @@ class VpsApiService {
   // ── WRITE (fire-and-forget após Supabase) ─────────────────────────────
 
   async createCombo(payload: unknown): Promise<{ok: boolean, id?: string}> {
-    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return {ok:false}; }
     this.invalidateProductCache();
     try {
-      const res = await fetch(`${VPS_BASE_URL}/combos`, {
+      const res = await fetch(proxyUrl('/combos'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Sync-Key': SYNC_KEY },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload)
       });
       if (!res.ok) return { ok: false };
@@ -297,12 +287,11 @@ class VpsApiService {
   }
 
   async updateCombo(id: string, payload: unknown): Promise<{ok: boolean}> {
-    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return {ok:false}; }
     this.invalidateProductCache();
     try {
-      const res = await fetch(`${VPS_BASE_URL}/combos/${id}`, {
+      const res = await fetch(proxyUrl(`/combos/${id}`), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Sync-Key': SYNC_KEY },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload)
       });
       if (!res.ok) return { ok: false };
@@ -326,11 +315,10 @@ class VpsApiService {
 
   async syncCart(customerId: string, items: {product_id: string, quantity: number}[]): Promise<{ok: boolean, synced?: number}> {
     try {
-      const response = await fetch(`${VPS_BASE_URL}/cart/sync`, {
+      const response = await fetch(proxyUrl('/cart/sync'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Sync-Key': import.meta.env.VITE_VPS_SYNC_KEY || ''
         },
         body: JSON.stringify({ customerId, items }),
       });
@@ -364,7 +352,6 @@ class VpsApiService {
   /** Envia apenas preço + estoque (sem imagens) em lotes de 50 — evita 413 e é muito mais rápido */
   async bulkSyncPricesStock(products: any[]): Promise<{ ok: boolean; sent: number }> {
     if (!products?.length) return { ok: true, sent: 0 };
-    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return { ok: false, sent: 0 }; }
     this.invalidateProductCache();
 
     const CHUNK = 50;
@@ -374,9 +361,9 @@ class VpsApiService {
     for (let i = 0; i < products.length; i += CHUNK) {
       const chunk = products.slice(i, i + CHUNK);
       try {
-        const res = await fetch(`${VPS_BASE_URL}/products/batch`, {
+        const res = await fetch(proxyUrl('/products/batch'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(chunk),
           signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
         });
@@ -396,12 +383,11 @@ class VpsApiService {
   }
 
   async bulkUpdateCategory(ids: string[], category_id: string, specs?: Record<string, any>): Promise<{ ok: boolean; updated: number }> {
-    if (!SYNC_KEY) { console.warn('[vpsApiService] SYNC_KEY ausente'); return { ok: false, updated: 0 }; }
     this.invalidateProductCache();
     try {
-      const res = await fetch(`${VPS_BASE_URL}/products/bulk-category`, {
+      const res = await fetch(proxyUrl('/products/bulk-category'), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, category_id, specs }),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
       });

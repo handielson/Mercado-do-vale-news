@@ -463,11 +463,10 @@ export const catalogService = {
      */
     addToFavorites: async (productId: string, customerId: string): Promise<void> => {
         try {
-            const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
-            const VPS_URL = 'https://api.xiaomipetrolina.com.br';
-            await fetch(`${VPS_URL}/customers/${customerId}/favorites`, {
+            const path = `/customers/${customerId}/favorites`;
+            await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_KEY },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ productId }),
             });
         } catch (error: any) {
@@ -481,11 +480,9 @@ export const catalogService = {
      */
     removeFromFavorites: async (productId: string, customerId: string): Promise<void> => {
         try {
-            const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
-            const VPS_URL = 'https://api.xiaomipetrolina.com.br';
-            await fetch(`${VPS_URL}/customers/${customerId}/favorites/${productId}`, {
+            const path = `/customers/${customerId}/favorites/${productId}`;
+            await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
                 method: 'DELETE',
-                headers: { 'X-Sync-Key': SYNC_KEY },
             });
         } catch (error: any) {
             console.error('Error removing from favorites:', error);
@@ -498,10 +495,9 @@ export const catalogService = {
      */
     getUserFavorites: async (customerId: string): Promise<string[]> => {
         try {
-            const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
-            const VPS_URL = 'https://api.xiaomipetrolina.com.br';
-            const res = await fetch(`${VPS_URL}/customers/${customerId}/favorites`, {
-                headers: { Accept: 'application/json', 'X-Sync-Key': SYNC_KEY },
+            const path = `/customers/${customerId}/favorites`;
+            const res = await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
+                headers: { Accept: 'application/json' },
                 signal: AbortSignal.timeout(5000),
             });
             if (!res.ok) return [];

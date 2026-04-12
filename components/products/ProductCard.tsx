@@ -69,8 +69,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         // Reset input value to allow uploading the same file again if it fails
         e.target.value = '';
 
-        const VPS_BASE = import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-        const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
+        const path = '/synology/upload?folder=videos';
         
         setIsUploadingVideo(true);
         try {
@@ -80,9 +79,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             const renamedFile = new File([file], fileName, { type: file.type });
             formData.append('file', renamedFile);
 
-            const res = await fetch(`${VPS_BASE}/synology/upload?folder=videos`, {
+            const res = await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
                 method: 'POST',
-                headers: { 'X-Sync-Key': SYNC_KEY },
                 body: formData,
             });
 

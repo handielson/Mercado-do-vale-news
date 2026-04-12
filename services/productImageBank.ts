@@ -1,7 +1,11 @@
 import imageCompression from 'browser-image-compression';
 
-const VPS_BASE  = import.meta.env.VITE_VPS_BASE_URL  || 'https://api.xiaomipetrolina.com.br';
-const SYNC_KEY  = import.meta.env.VITE_VPS_SYNC_KEY  || '';
+const VPS_PROXY_BASE = '/api/vps-proxy';
+
+function proxyUrl(path: string): string {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    return `${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`;
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -134,9 +138,8 @@ export async function uploadImagesToBank(
             formData.append('file', webpNamed);
             formData.append('path', storagePath);
 
-            const res = await fetch(`${VPS_BASE}/images/upload`, {
+            const res = await fetch(proxyUrl('/images/upload'), {
                 method: 'POST',
-                headers: { 'X-Sync-Key': SYNC_KEY },
                 body: formData,
             });
 
@@ -156,7 +159,7 @@ export async function uploadImagesToBank(
 /** Lista todas as imagens do banco (VPS filesystem) */
 export async function listAllBankImages(): Promise<ImageBankEntry[]> {
     try {
-        const res = await fetch(`${VPS_BASE}/images/list?prefix=products`, { cache: 'no-store' });
+        const res = await fetch(proxyUrl('/images/list?prefix=products'), { cache: 'no-store' });
         if (!res.ok) return [];
         const files: { path: string; url: string; filename: string }[] = await res.json();
         return files.map(f => {
@@ -173,7 +176,7 @@ export async function listAllBankImages(): Promise<ImageBankEntry[]> {
 /** Lista imagens de um SKU específico (VPS filesystem) */
 export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
     try {
-        const res = await fetch(`${VPS_BASE}/images/list?prefix=products/${sku.toUpperCase()}`, { cache: 'no-store' });
+        const res = await fetch(proxyUrl(`/images/list?prefix=products/${sku.toUpperCase()}`), { cache: 'no-store' });
         if (!res.ok) return [];
         const files: { path: string; url: string; filename: string }[] = await res.json();
         return files.map(f => {
@@ -187,9 +190,9 @@ export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
 
 /** Deleta uma imagem da VPS pelo path */
 export async function deleteImageFromBank(filePath: string): Promise<void> {
-    const res = await fetch(`${VPS_BASE}/images/file`, {
+    const res = await fetch(proxyUrl('/images/file'), {
         method: 'DELETE',
-        headers: { 'X-Sync-Key': SYNC_KEY, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath }),
     });
     if (!res.ok) {

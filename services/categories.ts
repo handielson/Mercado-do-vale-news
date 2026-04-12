@@ -6,9 +6,12 @@ import { vpsApiService } from './vpsApiService';
  * A VPS é a única fonte de verdade para categorias.
  */
 
-const VPS_BASE_URL = (import.meta as any).env?.DEV
-    ? '/vps-proxy'
-    : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+const VPS_PROXY_BASE = '/api/vps-proxy';
+
+function proxyUrl(path: string): string {
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    return `${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`;
+}
 
 function generateSlug(name: string): string {
     return name
@@ -109,12 +112,10 @@ async function remove(id: string): Promise<void> {
 }
 
 async function updateSortOrder(orders: { id: string; sort_order: number; parent_id?: string | null }[]): Promise<void> {
-    const SYNC_KEY = (import.meta as any).env?.VITE_VPS_SYNC_KEY || '';
-    await fetch(`${VPS_BASE_URL}/categories/sort-order`, {
+    await fetch(proxyUrl('/categories/sort-order'), {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
-            'X-Sync-Key': SYNC_KEY,
         },
         body: JSON.stringify(orders),
     });
