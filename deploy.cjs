@@ -47,7 +47,7 @@ conn.on('ready', () => {
           const localServerPath = path.join(__dirname, 'server.js');
           const remoteServerPath = appDir + '/server.js';
 
-          console.log(`📤 Enviando vps_server.js para ${remoteFilePath}...`);
+          console.log(`📤 Enviando vps_server.js para ${remoteFilePath} e ${remoteServerPath}...`);
           
           sftp.fastPut(localFilePath, remoteFilePath, (err) => {
             if (err) {
@@ -57,12 +57,12 @@ conn.on('ready', () => {
             }
             console.log('✅ vps_server.js enviado com sucesso!');
             
-            console.log(`📤 Enviando server.js para ${remoteServerPath}...`);
-            sftp.fastPut(localServerPath, remoteServerPath, (err) => {
+            // server.js é o entry point do PM2 — sempre sincronizar com vps_server.js
+            sftp.fastPut(localFilePath, remoteServerPath, (err) => {
               if (err) {
-                 console.log('⚠️ Erro ao enviar server.js (se nao usa, td bem):', err);
+                 console.log('⚠️ Erro ao enviar server.js:', err);
               } else {
-                 console.log('✅ server.js enviado com sucesso!');
+                 console.log('✅ server.js (entry PM2) sincronizado com vps_server.js!');
               }
               
               const restartCmd = `pm2 restart ${apiProc.name}`;
