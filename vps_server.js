@@ -2233,7 +2233,7 @@ fastify.delete('/synology/file', { preHandler: requireSyncKey }, async (req, rep
 
 // ─── Customer Favorites ────────────────────────────────────────────────────────
 
-fastify.get('/customers/:id/favorites', async (req, reply) => {
+fastify.get('/customers/:id/favorites', { preHandler: requireSyncKey }, async (req, reply) => {
   const { id } = req.params;
   try {
     const [rows] = await pool.query('SELECT product_id FROM customer_favorites WHERE customer_id = ?', [id]);
@@ -2245,7 +2245,7 @@ fastify.get('/customers/:id/favorites', async (req, reply) => {
   }
 });
 
-fastify.post('/customers/:id/favorites', async (req, reply) => {
+fastify.post('/customers/:id/favorites', { preHandler: requireSyncKey }, async (req, reply) => {
   const { id } = req.params;
   const { productId } = req.body;
   if (!productId) return reply.code(400).send({ error: 'Missing productId' });
@@ -2258,7 +2258,7 @@ fastify.post('/customers/:id/favorites', async (req, reply) => {
   }
 });
 
-fastify.delete('/customers/:id/favorites/:productId', async (req, reply) => {
+fastify.delete('/customers/:id/favorites/:productId', { preHandler: requireSyncKey }, async (req, reply) => {
   const { id, productId } = req.params;
   try {
     await pool.query('DELETE FROM customer_favorites WHERE customer_id = ? AND product_id = ?', [id, productId]);

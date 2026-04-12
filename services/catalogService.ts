@@ -498,9 +498,10 @@ export const catalogService = {
      */
     getUserFavorites: async (customerId: string): Promise<string[]> => {
         try {
+            const SYNC_KEY = import.meta.env.VITE_VPS_SYNC_KEY || '';
             const VPS_URL = 'https://api.xiaomipetrolina.com.br';
             const res = await fetch(`${VPS_URL}/customers/${customerId}/favorites`, {
-                headers: { Accept: 'application/json' },
+                headers: { Accept: 'application/json', 'X-Sync-Key': SYNC_KEY },
                 signal: AbortSignal.timeout(5000),
             });
             if (!res.ok) return [];
