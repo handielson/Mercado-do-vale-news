@@ -80,17 +80,28 @@ function transformFromDB(row: any): Product {
 // ─── READ ──────────────────────────────────────────────────────────────────
 
 async function list(): Promise<Product[]> {
-    const pageSize = 500;
+    const pageSize = 300;
     const maxRecords = 10000;
     const rows: any[] = [];
 
+    const fetchPageWithRetry = async (offset: number, retries = 2): Promise<any[] | null> => {
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            const page = await vpsApiService.getProducts({
+                status: 'all',
+                limit: pageSize,
+                offset,
+                noCache: true,
+            });
+            if (page) return page;
+            if (attempt < retries) {
+                await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+            }
+        }
+        return null;
+    };
+
     for (let offset = 0; offset < maxRecords; offset += pageSize) {
-        const page = await vpsApiService.getProducts({
-            status: 'all',
-            limit: pageSize,
-            offset,
-            noCache: offset > 0,
-        });
+        const page = await fetchPageWithRetry(offset);
 
         if (!page) {
             if (offset === 0) {
