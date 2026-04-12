@@ -64,9 +64,11 @@ fastify.register(require('@fastify/helmet'), {
 // Basic per-IP rate limit to reduce brute-force and abuse on public endpoints
 fastify.register(require('@fastify/rate-limit'), {
   global: true,
-  max: Number(process.env.RATE_LIMIT_MAX || 600),
+  max: Number(process.env.RATE_LIMIT_MAX || 300),
   timeWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
   allowList: (req) => {
+    const syncKey = req.headers['x-sync-key'] || req.headers['x-api-key'];
+    if (syncKey && syncKey === process.env.SYNC_SECRET) return true;
     const ip = req.ip || '';
     return ip === '127.0.0.1' || ip === '::1';
   },
