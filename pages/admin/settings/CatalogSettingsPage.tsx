@@ -6,6 +6,13 @@ import type { CatalogSettings } from '@/types/catalogSettings';
 import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
 import toast from 'react-hot-toast';
 
+function sanitizeCatalogSettingsForSave(settings: CatalogSettings): Partial<CatalogSettings> {
+    const sanitized = { ...settings } as Record<string, unknown>;
+    // Campo legado em algumas bases que nao existe em catalog_settings
+    delete sanitized.catalog_footer_text;
+    return sanitized as Partial<CatalogSettings>;
+}
+
 export const CatalogSettingsPage: React.FC = () => {
     const navigate = useNavigate();
     const [settings, setSettings] = useState<CatalogSettings>({
@@ -39,7 +46,8 @@ export const CatalogSettingsPage: React.FC = () => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await catalogConfigService.saveSettings(settings);
+            const sanitized = sanitizeCatalogSettingsForSave(settings);
+            await catalogConfigService.saveSettings(sanitized);
             toast.success('Configurações salvas com sucesso!');
         } catch (error) {
             console.error('Erro ao salvar:', error);

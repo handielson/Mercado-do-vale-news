@@ -9,6 +9,7 @@ import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
 import { supabase } from '../../services/supabase';
+import { VPS_PROXY_BASE } from '../../services/vpsProxyBase';
 
 interface ProductCardProps {
     product: Product;
@@ -81,7 +82,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             const renamedFile = new File([file], fileName, { type: file.type });
             formData.append('file', renamedFile);
 
-            const res = await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
+            const res = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
                 method: 'POST',
                 headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                 body: formData,

@@ -3,6 +3,7 @@ import type { CatalogProduct } from '@/types/catalog';
 import { vpsApiService } from '@/services/vpsApiService';
 import { normalizeProduct } from '@/services/productNormalizer';
 import { catalogConfigService } from '@/services/catalogConfigService';
+import { VPS_PROXY_BASE } from '@/services/vpsProxyBase';
 
 
 // Persistent Cache (Stale-While-Revalidate pattern)
@@ -466,7 +467,7 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites`;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
+            await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -488,7 +489,7 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites/${productId}`;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
+            await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
                 method: 'DELETE',
                 headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             });
@@ -506,7 +507,7 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites`;
             const { data: sessionData } = await supabase.auth.getSession();
             const token = sessionData.session?.access_token;
-            const res = await fetch(`/api/vps-proxy?path=${encodeURIComponent(path)}`, {
+            const res = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
                 headers: {
                     Accept: 'application/json',
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),

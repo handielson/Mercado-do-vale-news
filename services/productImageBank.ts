@@ -1,7 +1,6 @@
 import imageCompression from 'browser-image-compression';
 import { supabase } from './supabase';
-
-const VPS_PROXY_BASE = '/api/vps-proxy';
+import { VPS_PROXY_BASE } from './vpsProxyBase';
 
 function proxyUrl(path: string): string {
     const normalized = path.startsWith('/') ? path : `/${path}`;

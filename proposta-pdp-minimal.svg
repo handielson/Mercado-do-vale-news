@@ -1,0 +1,74 @@
+<svg width="1440" height="1024" viewBox="0 0 1440 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1440" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#EEF2F7"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="2000" height="2000" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#0F172A" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="1440" height="1024" fill="url(#bg)"/>
+
+  <rect x="60" y="30" width="1320" height="72" rx="20" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="92" y="74" fill="#0F172A" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Mercado do Vale</text>
+  <rect x="980" y="46" width="180" height="38" rx="19" fill="#F97316"/>
+  <text x="1038" y="70" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="700">Promoções</text>
+  <rect x="1176" y="46" width="168" height="38" rx="19" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="1216" y="70" fill="#334155" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600">Ver como Varejo</text>
+
+  <text x="88" y="152" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="15">Início</text>
+  <text x="136" y="152" fill="#94A3B8" font-family="Segoe UI, Arial, sans-serif" font-size="15">/</text>
+  <text x="154" y="152" fill="#2563EB" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="600">Caixas de Som</text>
+  <text x="263" y="152" fill="#94A3B8" font-family="Segoe UI, Arial, sans-serif" font-size="15">/</text>
+  <text x="280" y="152" fill="#0F172A" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="600">Mini Caixa Bluetooth KTS-129</text>
+
+  <g filter="url(#shadow)">
+    <rect x="80" y="180" width="620" height="730" rx="28" fill="#FFFFFF"/>
+  </g>
+  <rect x="110" y="212" width="560" height="560" rx="22" fill="#F8FAFC" stroke="#E2E8F0"/>
+  <rect x="210" y="312" width="360" height="360" rx="26" fill="#E2E8F0"/>
+  <text x="280" y="500" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">Imagem/Vídeo do Produto</text>
+
+  <rect x="110" y="804" width="86" height="86" rx="16" fill="#DBEAFE" stroke="#93C5FD"/>
+  <text x="136" y="853" fill="#1D4ED8" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700">VÍDEO</text>
+  <rect x="210" y="804" width="86" height="86" rx="16" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="226" y="820" width="54" height="54" rx="10" fill="#E2E8F0"/>
+  <rect x="310" y="804" width="86" height="86" rx="16" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="326" y="820" width="54" height="54" rx="10" fill="#E2E8F0"/>
+  <rect x="410" y="804" width="86" height="86" rx="16" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <rect x="426" y="820" width="54" height="54" rx="10" fill="#E2E8F0"/>
+
+  <g filter="url(#shadow)">
+    <rect x="740" y="180" width="620" height="730" rx="28" fill="#FFFFFF"/>
+  </g>
+
+  <text x="776" y="256" fill="#0F172A" font-family="Segoe UI, Arial, sans-serif" font-size="52" font-weight="800">Mini Caixa Bluetooth</text>
+  <text x="776" y="314" fill="#0F172A" font-family="Segoe UI, Arial, sans-serif" font-size="52" font-weight="800">KTS-129</text>
+
+  <text x="776" y="358" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="17">SKU: KTS-129AZU</text>
+  <text x="940" y="358" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="17">|</text>
+  <text x="964" y="358" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="17">Marca: Kts</text>
+
+  <rect x="776" y="388" width="548" height="178" rx="24" fill="#F8FAFC" stroke="#E2E8F0"/>
+  <rect x="776" y="388" width="548" height="42" rx="24" fill="#EF4444"/>
+  <text x="955" y="415" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="700">Últimas unidades em estoque</text>
+
+  <text x="808" y="492" fill="#0F172A" font-family="Segoe UI, Arial, sans-serif" font-size="58" font-weight="900">R$ 65,90</text>
+  <text x="808" y="534" fill="#16A34A" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="600">ou em até 12x de R$ 5,49 sem juros</text>
+
+  <rect x="776" y="590" width="548" height="76" rx="20" fill="#2563EB"/>
+  <text x="936" y="636" fill="white" font-family="Segoe UI, Arial, sans-serif" font-size="33" font-weight="800">Adicionar ao Carrinho</text>
+
+  <rect x="776" y="686" width="548" height="76" rx="20" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="920" y="734" fill="#334155" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Consultar Frete e Prazo</text>
+
+  <rect x="776" y="782" width="362" height="62" rx="16" fill="#F8FAFC" stroke="#CBD5E1"/>
+  <text x="808" y="821" fill="#94A3B8" font-family="Segoe UI, Arial, sans-serif" font-size="24">Digite seu CEP</text>
+  <rect x="1150" y="782" width="174" height="62" rx="16" fill="#E2E8F0"/>
+  <text x="1210" y="821" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Calcular</text>
+
+  <rect x="60" y="942" width="1320" height="58" rx="18" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="86" y="978" fill="#64748B" font-family="Segoe UI, Arial, sans-serif" font-size="22">Proposta visual: minimalista, tipografia forte, cards limpos, contraste suave.</text>
+</svg>

@@ -1,13 +1,12 @@
 import { Category, CategoryInput } from '../types/category';
 import { vpsApiService } from './vpsApiService';
 import { supabase } from './supabase';
+import { VPS_PROXY_BASE } from './vpsProxyBase';
 
 /**
  * CATEGORY SERVICE — VPS-only implementation
  * A VPS é a única fonte de verdade para categorias.
  */
-
-const VPS_PROXY_BASE = '/api/vps-proxy';
 
 function proxyUrl(path: string): string {
     const normalized = path.startsWith('/') ? path : `/${path}`;

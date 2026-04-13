@@ -1,0 +1,201 @@
+<svg viewBox="0 0 1440 1600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1117;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1a1f2e;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="heroGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f7931e;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="ctaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b35;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff8c42;stop-opacity:1" />
+    </linearGradient>
+    
+    <filter id="glowEffect">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="shadowDeep">
+      <feDropShadow dx="0" dy="24" stdDeviation="16" flood-opacity="0.3" flood-color="#000"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1440" height="1600" fill="url(#bgGradient)"/>
+
+  <!-- Top Navigation Bar -->
+  <rect width="1440" height="72" fill="#0a0e16" opacity="0.8"/>
+  <line x1="0" y1="72" x2="1440" y2="72" stroke="#2a2f3f" stroke-width="1"/>
+  
+  <!-- Logo placeholder -->
+  <circle cx="72" cy="36" r="20" fill="#ff6b35"/>
+  <text x="110" y="42" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">MDV</text>
+
+  <!-- Search bar -->
+  <rect x="280" y="18" width="520" height="36" rx="18" fill="#1a1f2e" stroke="#2a2f3f" stroke-width="1"/>
+  <text x="300" y="42" font-family="Arial, sans-serif" font-size="14" fill="#7a7f8f">Buscar produtos...</text>
+
+  <!-- Cart icon -->
+  <circle cx="1350" cy="36" r="20" fill="#ff6b35" opacity="0.1" stroke="#ff6b35" stroke-width="2"/>
+  <text x="1345" y="42" font-family="Arial, sans-serif" font-size="14" fill="#ff6b35">🛒</text>
+
+  <!-- Breadcrumb -->
+  <text x="72" y="120" font-family="Arial, sans-serif" font-size="13" fill="#7a7f8f">Início / Caixas de Som / Soundbar Plus</text>
+
+  <!-- HERO SECTION - Large Product Image Area -->
+  <rect x="0" y="140" width="1440" height="520" fill="url(#heroGradient)" opacity="0.15"/>
+  
+  <!-- Hero number badge (top right) -->
+  <rect x="1250" y="200" width="140" height="140" rx="20" fill="#ff6b35" opacity="0.1" stroke="#ff6b35" stroke-width="2"/>
+  <text x="1270" y="260" font-family="Georgia, serif" font-size="72" font-weight="bold" fill="#ff6b35" opacity="0.5">#1</text>
+  <text x="1280" y="320" font-family="Arial, sans-serif" font-size="11" fill="#ff6b35" letter-spacing="2">MAIS VENDIDO</text>
+
+  <!-- Product image area (premium placeholder) -->
+  <rect x="100" y="180" width="600" height="400" rx="16" fill="#1a1f2e" stroke="#2a2f3f" stroke-width="2"/>
+  
+  <!-- Fake product silhouette (rotated for dynamic feel) -->
+  <g transform="translate(400, 380) rotate(-12)">
+    <ellipse cx="0" cy="0" rx="90" ry="120" fill="#ff6b35" opacity="0.2"/>
+    <path d="M -50 -80 Q -80 -60 -70 20 Q -50 80 0 100 Q 50 80 70 20 Q 80 -60 50 -80 Z" fill="#ff8c42" opacity="0.3"/>
+  </g>
+
+  <!-- Overlay gradient on hero image -->
+  <rect x="100" y="180" width="600" height="400" rx="16" fill="url(#heroGradient)" opacity="0.08"/>
+
+  <!-- Image indicators (thumbnails positioned differently) -->
+  <g id="thumbnails-hero">
+    <rect x="110" y="600" width="70" height="70" rx="8" fill="#ff6b35" stroke="#ff6b35" stroke-width="2"/>
+    <rect x="195" y="600" width="70" height="70" rx="8" fill="#2a2f3f" stroke="#3a3f4f" stroke-width="1" opacity="0.6"/>
+    <rect x="280" y="600" width="70" height="70" rx="8" fill="#2a2f3f" stroke="#3a3f4f" stroke-width="1" opacity="0.6"/>
+    <rect x="365" y="600" width="70" height="70" rx="8" fill="#2a2f3f" stroke="#3a3f4f" stroke-width="1" opacity="0.6"/>
+    <rect x="450" y="600" width="70" height="70" rx="8" fill="#2a2f3f" stroke="#3a3f4f" stroke-width="1" opacity="0.6"/>
+  </g>
+
+  <!-- RIGHT COLUMN - Product Info (Premium Style) -->
+  
+  <!-- Category tag -->
+  <rect x="850" y="180" width="160" height="36" rx="18" fill="#ff6b35" opacity="0.15" stroke="#ff6b35" stroke-width="1"/>
+  <text x="870" y="203" font-family="Arial, sans-serif" font-size="12" fill="#ff6b35" font-weight="500">🔊 CAIXAS DE SOM</text>
+
+  <!-- Product Name (Ultra Large) -->
+  <text x="850" y="240" font-family="Georgia, serif" font-size="48" font-weight="bold" fill="#ffffff" letter-spacing="-1">Soundbar</text>
+  <text x="850" y="290" font-family="Georgia, serif" font-size="48" font-weight="bold" fill="#ff6b35">Premium</text>
+  <text x="850" y="325" font-family="Arial, sans-serif" font-size="14" fill="#7a7f8f">Tecnologia Dolby Atmos com Driver Titanium</text>
+
+  <!-- Rating -->
+  <g id="rating">
+    <text x="850" y="365" font-family="Arial, sans-serif" font-size="28" fill="#ff6b35">★★★★★</text>
+    <text x="1000" y="365" font-family="Arial, sans-serif" font-size="13" fill="#7a7f8f">(2.847 avaliações)</text>
+  </g>
+
+  <!-- PRICE SECTION - Premium styling -->
+  <rect x="850" y="390" width="560" height="180" rx="16" fill="#0a0e16" stroke="#2a2f3f" stroke-width="2"/>
+  
+  <!-- Price highlight stripe (animated effect in design) -->
+  <rect x="850" y="390" width="560" height="8" rx="16" fill="url(#ctaGradient)"/>
+  
+  <!-- Old price (strikethrough) -->
+  <text x="870" y="430" font-family="Arial, sans-serif" font-size="13" fill="#7a7f8f">De</text>
+  <text x="1020" y="430" font-family="Arial, sans-serif" font-size="16" fill="#7a7f8f" text-decoration="line-through">R$ 2.499,00</text>
+
+  <!-- Main price -->
+  <text x="870" y="470" font-family="Arial, sans-serif" font-size="14" fill="#7a7f8f">Por apenas</text>
+  <text x="870" y="520" font-family="Georgia, serif" font-size="56" font-weight="bold" fill="#ff6b35">R$ 1.899</text>
+  <text x="1200" y="510" font-family="Arial, sans-serif" font-size="18" fill="#7a7f8f">,90</text>
+
+  <!-- Installment info -->
+  <text x="870" y="550" font-family="Arial, sans-serif" font-size="12" fill="#7a7f8f">ou em até 12x de R$ 158,25 s/ juros</text>
+
+  <!-- Stock status -->
+  <circle cx="870" cy="580" r="6" fill="#4ade80"/>
+  <text x="885" y="585" font-family="Arial, sans-serif" font-size="12" fill="#4ade80">Em estoque (48 unidades)</text>
+
+  <!-- CTA Button - Premium -->
+  <rect x="850" y="640" width="560" height="72" rx="16" fill="url(#ctaGradient)" filter="url(#shadowDeep)"/>
+  <text x="1130" y="682" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">Adicionar ao Carrinho</text>
+
+  <!-- Secondary CTA -->
+  <rect x="850" y="730" width="560" height="56" rx="14" fill="none" stroke="#ff6b35" stroke-width="2"/>
+  <text x="1130" y="766" font-family="Arial, sans-serif" font-size="16" font-weight="500" fill="#ff6b35" text-anchor="middle">❤️ Adicionar aos Favoritos</text>
+
+  <!-- SPECIFICATIONS SECTION -->
+  <text x="850" y="830" font-family="Georgia, serif" font-size="24" font-weight="bold" fill="#ffffff">Especificações Principais</text>
+
+  <g id="specs">
+    <!-- Spec item 1 -->
+    <rect x="850" y="860" width="560" height="80" rx="12" fill="#1a1f2e" stroke="#2a2f3f" stroke-width="1"/>
+    <text x="1430" y="885" font-family="Arial, sans-serif" font-size="28" text-anchor="end" fill="#ff6b35">🔊</text>
+    <text x="870" y="890" font-family="Arial, sans-serif" font-size="14" fill="#ffffff" font-weight="500">Potência</text>
+    <text x="870" y="915" font-family="Arial, sans-serif" font-size="13" fill="#7a7f8f">200W RMS com Dolby Atmos</text>
+    <text x="870" y="930" font-family="Arial, sans-serif" font-size="12" fill="#5a5f6f">Sistema de som envolvente 7.1.2</text>
+
+    <!-- Spec item 2 -->
+    <rect x="850" y="960" width="560" height="80" rx="12" fill="#1a1f2e" stroke="#2a2f3f" stroke-width="1"/>
+    <text x="1430" y="985" font-family="Arial, sans-serif" font-size="28" text-anchor="end" fill="#ff6b35">📱</text>
+    <text x="870" y="990" font-family="Arial, sans-serif" font-size="14" fill="#ffffff" font-weight="500">Conectividade</text>
+    <text x="870" y="1015" font-family="Arial, sans-serif" font-size="13" fill="#7a7f8f">Bluetooth 5.3, WiFi 6E, AirPlay 2</text>
+    <text x="870" y="1030" font-family="Arial, sans-serif" font-size="12" fill="#5a5f6f">HDMI eARC, Entrada Óptica</text>
+
+    <!-- Spec item 3 -->
+    <rect x="850" y="1060" width="560" height="80" rx="12" fill="#1a1f2e" stroke="#2a2f3f" stroke-width="1"/>
+    <text x="1430" y="1085" font-family="Arial, sans-serif" font-size="28" text-anchor="end" fill="#ff6b35">⚙️</text>
+    <text x="870" y="1090" font-family="Arial, sans-serif" font-size="14" fill="#ffffff" font-weight="500">Dimensões</text>
+    <text x="870" y="1115" font-family="Arial, sans-serif" font-size="13" fill="#7a7f8f">1200mm x 120mm x 150mm</text>
+    <text x="870" y="1130" font-family="Arial, sans-serif" font-size="12" fill="#5a5f6f">Peso: 8,5kg | Cores: Preto, Prata</text>
+  </g>
+
+  <!-- TRUST BADGES SECTION -->
+  <text x="72" y="1230" font-family="Georgia, serif" font-size="24" font-weight="bold" fill="#ffffff">Por que Confiar?</text>
+
+  <g id="trust-badges">
+    <!-- Badge 1 -->
+    <rect x="72" y="1260" width="360" height="100" rx="12" fill="#0a0e16" border-color="#ff6b35" stroke="#2a2f3f" stroke-width="1"/>
+    <circle cx="112" cy="1300" r="24" fill="#ff6b35" opacity="0.2"/>
+    <text x="112" y="1307" font-family="Arial, sans-serif" font-size="32" text-anchor="middle" fill="#ff6b35">✓</text>
+    <text x="150" y="1295" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff">Garantia 2 Anos</text>
+    <text x="150" y="1315" font-family="Arial, sans-serif" font-size="12" fill="#7a7f8f">Cobertura completa incluída</text>
+    <text x="150" y="1330" font-family="Arial, sans-serif" font-size="11" fill="#5a5f6f">Reparo ou reposição</text>
+
+    <!-- Badge 2 -->
+    <rect x="540" y="1260" width="360" height="100" rx="12" fill="#0a0e16" stroke="#2a2f3f" stroke-width="1"/>
+    <circle cx="580" cy="1300" r="24" fill="#ff6b35" opacity="0.2"/>
+    <text x="580" y="1310" font-family="Arial, sans-serif" font-size="28" text-anchor="middle" fill="#ff6b35">🚚</text>
+    <text x="618" y="1295" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff">Frete Grátis</text>
+    <text x="618" y="1315" font-family="Arial, sans-serif" font-size="12" fill="#7a7f8f">Entrega em todo Brasil</text>
+    <text x="618" y="1330" font-family="Arial, sans-serif" font-size="11" fill="#5a5f6f">Em 7-10 dias úteis</text>
+
+    <!-- Badge 3 -->
+    <rect x="1008" y="1260" width="360" height="100" rx="12" fill="#0a0e16" stroke="#2a2f3f" stroke-width="1"/>
+    <circle cx="1048" cy="1300" r="24" fill="#ff6b35" opacity="0.2"/>
+    <text x="1048" y="1308" font-family="Arial, sans-serif" font-size="28" text-anchor="middle" fill="#ff6b35">💳</text>
+    <text x="1086" y="1295" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#ffffff">Segurança 100%</text>
+    <text x="1086" y="1315" font-family="Arial, sans-serif" font-size="12" fill="#7a7f8f">Certificação SSL e PCI</text>
+    <text x="1086" y="1330" font-family="Arial, sans-serif" font-size="11" fill="#5a5f6f">Dados protegidos</text>
+  </g>
+
+  <!-- RECOMMENDATION SECTION -->
+  <rect x="72" y="1410" width="1296" height="140" rx="16" fill="#0a0e16" stroke="#ff6b35" stroke-width="2" opacity="0.6"/>
+  
+  <text x="100" y="1440" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff">⭐ Recomendado para você</text>
+  
+  <!-- Related products preview -->
+  <rect x="100" y="1465" width="140" height="70" rx="8" fill="#1a1f2e" stroke="#2a2f3f" stroke-width="1"/>
+  <text x="170" y="1505" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#7a7f8f">Cabo HDMI</text>
+
+  <rect x="260" y="1465" width="140" height="70" rx="8" fill="#1a1f2e" stroke="#2a2f3f" stroke-width="1"/>
+  <text x="330" y="1505" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#7a7f8f">Suporte TV</text>
+
+  <rect x="420" y="1465" width="140" height="70" rx="8" fill="#1a1f2e" stroke="#2a2f3f" stroke-width="1"/>
+  <text x="490" y="1505" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#7a7f8f">Protetor Surto</text>
+
+  <!-- Footer mention -->
+  <text x="100" y="1565" font-family="Arial, sans-serif" font-size="12" fill="#ff6b35" font-weight="500">→ Ver mais produtos recomendados</text>
+</svg>

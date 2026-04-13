@@ -5,8 +5,8 @@
  */
 
 import { supabase } from './supabase';
+import { VPS_PROXY_BASE } from './vpsProxyBase';
 
-const VPS_PROXY_BASE = '/api/vps-proxy';
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 60 * 1000; // 1 min (reduzido de 5min para evitar UI stale)
@@ -281,6 +281,11 @@ class VpsApiService {
 
   async getShippingSettings(): Promise<any | null> {
     return this.fetchSafe<any>('/shipping/settings');
+  }
+
+  async checkVideoBySku(sku: string): Promise<{ exists: boolean; url?: string } | null> {
+    if (!sku?.trim()) return null;
+    return this.fetchSafe<{ exists: boolean; url?: string }>(`/check-video?sku=${encodeURIComponent(sku.trim())}`, true);
   }
 
   // ── WRITE (fire-and-forget após Supabase) ─────────────────────────────

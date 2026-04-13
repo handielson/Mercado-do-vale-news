@@ -24,6 +24,9 @@ import { toTitleCase } from '@/utils/stringFormatters';
 import { shippingService } from '@/services/shippingService';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { normalizeProduct } from '@/services/productNormalizer';
+import { catalogConfigService } from '@/services/catalogConfigService';
+import type { CatalogSettings } from '@/types/catalogSettings';
+import { vpsApiService } from '@/services/vpsApiService';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -49,6 +52,7 @@ export const PublicProductPage: React.FC = () => {
     const [cashbackSettings, setCashbackSettings] = useState<CashbackSettings | null>(null);
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
     const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
+    const [catalogTheme, setCatalogTheme] = useState<Pick<CatalogSettings, 'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'card_background' | 'text_primary' | 'text_secondary'> | null>(null);
     const [comboChildren, setComboChildren] = useState<any[]>([]);
     const [selectedKitQuantity, setSelectedKitQuantity] = useState<number>(1);
 
@@ -59,12 +63,19 @@ export const PublicProductPage: React.FC = () => {
 
     // Resolved video URL: prioridade video_url → HEAD check automático por SKU
     const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(null);
+    const primaryColor = catalogTheme?.primary_color || '#2563eb';
+    const secondaryColor = catalogTheme?.secondary_color || '#1d4ed8';
+    const accentColor = catalogTheme?.accent_color || '#10b981';
+    const backgroundColor = catalogTheme?.background_color || '#f8fafc';
+    const cardBackground = catalogTheme?.card_background || '#ffffff';
+    const textPrimary = catalogTheme?.text_primary || '#0f172a';
+    const textSecondary = catalogTheme?.text_secondary || '#64748b';
 
     useEffect(() => {
         let cancelled = false;
 
         const resolveVideoUrl = async () => {
-            // 1. Se o produto tem video_url explícita, usa direto
+            // 1. Se o produto tem video_url explícita, usa a URL salva
             if (product?.video_url) {
                 setEffectiveVideoUrl(product.video_url);
                 return;
@@ -76,13 +87,11 @@ export const PublicProductPage: React.FC = () => {
                 return;
             }
 
-            // 3. Verifica via VPS (evita bloqueio CORS do HEAD direto ao Synology)
+            // 3. Verifica via VPS proxy (evita bloqueio CORS)
             try {
-                const VPS_BASE = import.meta.env.VITE_VPS_API_URL || 'https://api.xiaomipetrolina.com.br';
-                const resp = await fetch(`${VPS_BASE}/check-video?sku=${encodeURIComponent(product.sku.trim())}`, { cache: 'no-store' });
-                if (!cancelled && resp.ok) {
-                    const json = await resp.json();
-                    setEffectiveVideoUrl(json.exists ? json.url : null);
+                const json = await vpsApiService.checkVideoBySku(product.sku.trim());
+                if (!cancelled) {
+                    setEffectiveVideoUrl(json?.exists ? json.url || null : null);
                 }
             } catch {
                 if (!cancelled) setEffectiveVideoUrl(null);
@@ -100,6 +109,18 @@ export const PublicProductPage: React.FC = () => {
         getCashbackSettings().then(setCashbackSettings).catch(console.error);
         companySettingsService.get().then(setCompanySettings).catch(console.error);
         paymentFeesService.list().then(setPaymentFees).catch(console.error);
+        catalogConfigService
+            .getSettings(customer?.user_id)
+            .then((settings) => setCatalogTheme({
+                primary_color: settings.primary_color || '#2563eb',
+                secondary_color: settings.secondary_color || '#1d4ed8',
+                accent_color: settings.accent_color || '#10b981',
+                background_color: settings.background_color || '#f8fafc',
+                card_background: settings.card_background || '#ffffff',
+                text_primary: settings.text_primary || '#0f172a',
+                text_secondary: settings.text_secondary || '#64748b',
+            }))
+            .catch(console.error);
         if (!slug) {
             navigate('/');
             return;
@@ -270,7 +291,6 @@ export const PublicProductPage: React.FC = () => {
                     const sibs = await vpsApiService.getProducts({ model_id: data.model_id, status: 'active', limit: 50 });
                     if (sibs) {
                         const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
-                            String(s.id) !== String(data.id) &&
                             String(s.model_id) === String(data.model_id)  // ← validação: só produtos do mesmo modelo
                         );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
@@ -279,7 +299,6 @@ export const PublicProductPage: React.FC = () => {
                     const sibs = await vpsApiService.getProducts({ parent_id: data.parent_id, status: 'active', limit: 50 });
                     if (sibs) {
                         const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
-                            String(s.id) !== String(data.id) &&
                             String(s.parent_id) === String(data.parent_id)  // ← validação: só produtos do mesmo pai
                         );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
@@ -293,7 +312,6 @@ export const PublicProductPage: React.FC = () => {
                         const searchResults = await vpsApiService.getProducts({ search: searchStr, status: 'active', limit: 50 });
                         if (searchResults) {
                             const cleanSibs = searchResults.map(s => normalizeProduct(s)).filter(s =>
-                                String(s.id) !== String(data.id) &&
                                 generateGroupKey(s as unknown as CatalogProduct) === myGroupKey
                             );
                             setSiblings(cleanSibs as unknown as CatalogProduct[]);
@@ -337,7 +355,7 @@ export const PublicProductPage: React.FC = () => {
         };
 
         fetchProduct();
-    }, [slug, navigate]);
+    }, [slug, navigate, customer?.user_id]);
 
     if (loading) {
         return (
@@ -396,8 +414,42 @@ export const PublicProductPage: React.FC = () => {
     const taxaAplicada12x = presencial12x?.applied_fee_pct || 0;
     const value12x = (displayPrice * (1 + taxaAplicada12x / 100)) / 12;
 
+    const resolvedDescription = (() => {
+        const candidates: unknown[] = [
+            product.description,
+            (product as any).long_description,
+            (product as any).descricao,
+            product.specs?.description,
+            product.specs?.descricao,
+        ];
+
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.trim()) {
+                return candidate;
+            }
+        }
+        return '';
+    })();
+
+    const resolvedTechnicalSpecifications = (() => {
+        const candidates: unknown[] = [
+            (product as any).technical_specifications,
+            (product as any).technicalSpecifications,
+            product.specs?.technical_specifications,
+            product.specs?.technicalSpecifications,
+            product.specs?.ficha_tecnica,
+        ];
+
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && candidate.trim()) {
+                return candidate;
+            }
+        }
+        return '';
+    })();
+
     const title = product.meta_title || `${toTitleCase(product.name)} | Mercado do Vale`;
-    const description = product.meta_description || product.description || `Compre ${product.name} no Mercado do Vale.`;
+    const description = product.meta_description || resolvedDescription || `Compre ${product.name} no Mercado do Vale.`;
 
     const handleAddToCart = () => {
         addItem(product, selectedKitQuantity);
@@ -425,13 +477,15 @@ export const PublicProductPage: React.FC = () => {
         }
     };
 
-    // Generate available variants (hoisted so we can use it in share text)
+    // Monta o grupo completo de variacoes e evita desaparecimento ao trocar variante
     const allVariants = [product as CatalogProduct, ...siblings];
-    const availableVariants = allVariants.filter(
-        item => !item.track_inventory || (item.stock_quantity && item.stock_quantity > 0)
-    );
+    const variantsById = new Map<string, CatalogProduct>();
+    allVariants.forEach((item) => {
+        if (item?.id) variantsById.set(String(item.id), item);
+    });
+    const variantPool = Array.from(variantsById.values());
 
-    availableVariants.forEach(item => {
+    variantPool.forEach(item => {
         const labelPieces = [];
         if (item.specs?.color) labelPieces.push(item.specs.color);
         if (item.specs?.storage) labelPieces.push(item.specs.storage);
@@ -451,7 +505,7 @@ export const PublicProductPage: React.FC = () => {
 
     const uniqueVariants: CatalogProduct[] = [];
     const _seenLabels = new Set<string>();
-    availableVariants.forEach(item => {
+    variantPool.forEach(item => {
         const lbl = (item as any)._displayLabel;
         if (!_seenLabels.has(lbl)) {
             _seenLabels.add(lbl);
@@ -498,10 +552,25 @@ export const PublicProductPage: React.FC = () => {
     };
 
     const handleVariantChange = (sib: CatalogProduct) => {
-        // Altera os dados instantaneamente sem reload de página
-        setProduct(sib);
-        if (sib.images && sib.images.length > 0) {
-            setSelectedImage(sib.images[0]);
+        // Altera os dados instantaneamente sem reload de página.
+        // Algumas variantes podem vir "compactas" sem descrição/ficha completa.
+        // Faz merge com o produto atual para não sumir conteúdo textual.
+        const mergedVariant = {
+            ...sib,
+            description: sib.description || product.description,
+            meta_title: sib.meta_title || product.meta_title,
+            meta_description: sib.meta_description || product.meta_description,
+            specs: (sib.specs && Object.keys(sib.specs).length > 0) ? sib.specs : product.specs,
+            technical_specifications:
+                (sib as any).technical_specifications ||
+                (sib as any).technicalSpecifications ||
+                (product as any).technical_specifications ||
+                (product as any).technicalSpecifications,
+        } as CatalogProduct;
+
+        setProduct(mergedVariant);
+        if (mergedVariant.images && mergedVariant.images.length > 0) {
+            setSelectedImage(mergedVariant.images[0]);
         }
 
         // Atualiza a URL na barra do navegador (sem triggerar novo fetch)
@@ -548,8 +617,59 @@ export const PublicProductPage: React.FC = () => {
         }
     };
 
+    const themeVars = {
+        '--mdv-primary': primaryColor,
+        '--mdv-secondary': secondaryColor,
+        '--mdv-accent': accentColor,
+        '--mdv-bg': backgroundColor,
+        '--mdv-card': cardBackground,
+        '--mdv-text-primary': textPrimary,
+        '--mdv-text-secondary': textSecondary,
+        '--mdv-primary-soft': `${primaryColor}22`,
+        '--mdv-primary-soft-2': `${primaryColor}14`,
+    } as React.CSSProperties;
+
     return (
-        <div className="min-h-screen bg-slate-50 pb-20">
+        <div className="min-h-screen pb-20 mdv-theme-runtime" style={{ ...themeVars, backgroundColor }}>
+            <style>{`
+                .mdv-theme-runtime .mdv-text-primary{color:var(--mdv-text-primary)!important;}
+                .mdv-theme-runtime .mdv-text-secondary{color:var(--mdv-text-secondary)!important;}
+                .mdv-theme-runtime .mdv-text-primary-color{color:var(--mdv-primary)!important;}
+                .mdv-theme-runtime .mdv-border-primary{border-color:var(--mdv-primary)!important;}
+                .mdv-theme-runtime .mdv-bg-primary-soft{background-color:var(--mdv-primary-soft)!important;}
+                .mdv-theme-runtime .mdv-bg-primary-soft-2{background-color:var(--mdv-primary-soft-2)!important;}
+                .mdv-theme-runtime .mdv-card{background-color:var(--mdv-card)!important;}
+
+                .mdv-theme-runtime .text-slate-900{color:var(--mdv-text-primary)!important;}
+                .mdv-theme-runtime .text-slate-700,
+                .mdv-theme-runtime .text-slate-600,
+                .mdv-theme-runtime .text-slate-500,
+                .mdv-theme-runtime .text-slate-400{color:var(--mdv-text-secondary)!important;}
+
+                .mdv-theme-runtime .text-blue-900,
+                .mdv-theme-runtime .text-blue-800,
+                .mdv-theme-runtime .text-blue-700,
+                .mdv-theme-runtime .text-blue-600{color:var(--mdv-primary)!important;}
+
+                .mdv-theme-runtime .hover\:text-blue-600:hover,
+                .mdv-theme-runtime .hover\:text-blue-700:hover{color:var(--mdv-primary)!important;}
+
+                .mdv-theme-runtime .bg-blue-700,
+                .mdv-theme-runtime .bg-blue-600{background-color:var(--mdv-primary)!important;}
+                .mdv-theme-runtime .bg-blue-100,
+                .mdv-theme-runtime .bg-blue-50{background-color:var(--mdv-primary-soft)!important;}
+
+                .mdv-theme-runtime .border-blue-600,
+                .mdv-theme-runtime .border-blue-100{border-color:var(--mdv-primary)!important;}
+
+                .mdv-theme-runtime .ring-blue-600{--tw-ring-color:var(--mdv-primary)!important;}
+                .mdv-theme-runtime .focus\:border-blue-500:focus{border-color:var(--mdv-primary)!important;}
+                .mdv-theme-runtime .focus\:ring-blue-500\/20:focus{--tw-ring-color:var(--mdv-primary-soft)!important;}
+
+                .mdv-theme-runtime .bg-white{background-color:var(--mdv-card)!important;}
+                .mdv-theme-runtime .bg-slate-100,
+                .mdv-theme-runtime .bg-slate-50{background-color:var(--mdv-bg)!important;}
+            `}</style>
             <Helmet>
                 <title>{title}</title>
                 <meta name="description" content={description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 160)} />
@@ -613,7 +733,13 @@ export const PublicProductPage: React.FC = () => {
                     {product.category && (
                         <>
                             <span>/</span>
-                            <span className="text-slate-700">{typeof product.category === 'string' ? product.category : 'Categoria'}</span>
+                            <a
+                                href={`/?categoria=${encodeURIComponent(typeof product.category === 'string' ? product.category : 'Categoria')}`}
+                                className="hover:text-blue-600 transition-colors"
+                                title="Ver produtos desta categoria"
+                            >
+                                {typeof product.category === 'string' ? product.category : 'Categoria'}
+                            </a>
                         </>
                     )}
                     <span>/</span>
@@ -773,6 +899,7 @@ export const PublicProductPage: React.FC = () => {
                                         return uniqueVariants.map((sib) => {
                                             const isCurrent = sib.id === product.id;
                                             const variantLabel = (sib as any)._displayLabel;
+                                            const isOutOfStock = Boolean(sib.track_inventory) && ((sib.stock_quantity || 0) <= 0);
 
                                             return (
                                                 <button
@@ -781,9 +908,9 @@ export const PublicProductPage: React.FC = () => {
                                                     className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-300 ${isCurrent
                                                         ? 'border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-600 scale-[1.03] shadow-sm transform'
                                                         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                                                        }`}
+                                                        } ${isOutOfStock ? 'opacity-70' : ''}`}
                                                 >
-                                                    {variantLabel}
+                                                    {variantLabel}{isOutOfStock ? ' (esgotado)' : ''}
                                                 </button>
                                             );
                                         })
@@ -1040,7 +1167,8 @@ export const PublicProductPage: React.FC = () => {
                                     <button
                                         onClick={handleAddToCart}
                                         disabled={!product.track_inventory ? false : (product.stock_quantity || 0) <= 0}
-                                        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-xl transition-colors shadow-blue-600/20 shadow-lg text-lg"
+                                        style={(!product.track_inventory ? false : (product.stock_quantity || 0) <= 0) ? undefined : { backgroundColor: primaryColor, boxShadow: `0 10px 24px -10px ${primaryColor}66` }}
+                                        className="w-full flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-xl transition-opacity hover:opacity-90 shadow-lg text-lg"
                                     >
                                         <ShoppingCart size={24} />
                                         {(!product.track_inventory || (product.stock_quantity || 0) > 0) ? 'Adicionar ao Carrinho' : 'Fora de Estoque'}
@@ -1051,7 +1179,7 @@ export const PublicProductPage: React.FC = () => {
                             {/* Calculadora de Frete */}
                             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-6">
                                 <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                                    <Truck size={16} className="text-blue-600" /> Consultar Frete e Prazo
+                                    <Truck size={16} style={{ color: primaryColor }} /> Consultar Frete e Prazo
                                 </h3>
                                 <div className="flex gap-2">
                                     <input
@@ -1079,7 +1207,7 @@ export const PublicProductPage: React.FC = () => {
                                                     <p className="font-bold text-slate-900">{res.name}</p>
                                                     <p className="text-xs text-slate-500">{res.days}</p>
                                                 </div>
-                                                <div className="font-bold text-blue-600">
+                                                <div className="font-bold" style={{ color: primaryColor }}>
                                                     {res.price === 'Grátis' ? 'Grátis' : `R$ ${res.price}`}
                                                 </div>
                                             </div>
@@ -1120,31 +1248,31 @@ export const PublicProductPage: React.FC = () => {
                 </div>
 
                 {/* ── Seção full-width: Descrição + Especificações ── */}
-                {(product.description || (product as any).technical_specifications || (product.specs && Object.keys(product.specs).length > 0)) && (
+                {(resolvedDescription || resolvedTechnicalSpecifications || (product.specs && Object.keys(product.specs).length > 0)) && (
                     <div className="mt-10 space-y-8">
 
                         {/* Descrição Longa */}
-                        {product.description && (
+                        {resolvedDescription && (
                             <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
                                 <h3 className="text-xl font-bold text-slate-900 mb-5 pb-3 border-b border-slate-100">
                                     Descrição do Produto
                                 </h3>
                                 <div
                                     className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed"
-                                    dangerouslySetInnerHTML={{ __html: product.description }}
+                                    dangerouslySetInnerHTML={{ __html: resolvedDescription }}
                                 />
                             </div>
                         )}
 
                         {/* Especificações Técnicas Longas */}
-                        {(product as any).technical_specifications && (
+                        {resolvedTechnicalSpecifications && resolvedTechnicalSpecifications !== resolvedDescription && (
                             <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
                                 <h3 className="text-xl font-bold text-slate-900 mb-5 pb-3 border-b border-slate-100">
                                     Ficha Técnica
                                 </h3>
                                 <div
                                     className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed"
-                                    dangerouslySetInnerHTML={{ __html: (product as any).technical_specifications }}
+                                    dangerouslySetInnerHTML={{ __html: resolvedTechnicalSpecifications }}
                                 />
                             </div>
                         )}
@@ -1372,12 +1500,13 @@ export const PublicProductPage: React.FC = () => {
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:hidden z-40 flex items-center gap-4">
                 <div className="flex-1">
                     <p className="text-xs text-slate-500 uppercase font-bold">Total à vista</p>
-                    <p className="text-xl font-extrabold text-blue-600">R$ {displayPrice.toFixed(2).replace('.', ',')}</p>
+                    <p className="text-xl font-extrabold" style={{ color: primaryColor }}>R$ {displayPrice.toFixed(2).replace('.', ',')}</p>
                 </div>
                 <button
                     onClick={handleAddToCart}
                     disabled={!product.track_inventory ? false : (product.stock_quantity || 0) <= 0}
-                    className="flex-shrink-0 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-lg"
+                    style={(!product.track_inventory ? false : (product.stock_quantity || 0) <= 0) ? undefined : { backgroundColor: primaryColor, boxShadow: `0 10px 24px -10px ${primaryColor}66` }}
+                    className="flex-shrink-0 flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-opacity hover:opacity-90 shadow-lg"
                 >
                     <ShoppingCart size={20} />
                     {(!product.track_inventory || (product.stock_quantity || 0) > 0) ? 'Comprar' : 'Esgotado'}

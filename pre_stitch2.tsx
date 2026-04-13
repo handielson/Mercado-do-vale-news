@@ -60,7 +60,7 @@ export const PublicProductPage: React.FC = () => {
         let cancelled = false;
 
         const resolveVideoUrl = async () => {
-            // 1. Se o produto tem video_url explícita, usa direto
+            // 1. Se o produto tem video_url explícita, usa a URL salva
             if (product?.video_url) {
                 setEffectiveVideoUrl(product.video_url);
                 return;

@@ -9,6 +9,7 @@ import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchB
 import { categoryService } from '../../../services/categories';
 import { modelService } from '../../../services/models-new';
 import { colorService } from '../../../services/colors';
+import { VPS_PROXY_BASE } from '../../../services/vpsProxyBase';
 import { Category } from '../../../types/category';
 import { Model } from '../../../types/model-architecture';
 import { Color } from '../../../types/color';
@@ -463,7 +464,7 @@ export default function BlingPage() {
                 const fiscalPath = `/products/${product.id}/fiscal`;
                 const { data } = await supabase.auth.getSession();
                 const token = data.session?.access_token;
-                fetch(`/api/vps-proxy?path=${encodeURIComponent(fiscalPath)}`, {
+                fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(fiscalPath)}`, {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',

@@ -10,6 +10,7 @@ import { BulkActionBar } from '../../../components/products/BulkActionBar';
 import { BulkCategoryModal } from '../../../components/products/BulkCategoryModal';
 import { supabase } from '../../../services/supabase';
 import { toast } from 'sonner';
+import { buildProductVideoUrl } from '../../../utils/video-url';
 
 /**
  * ProductListPage
@@ -108,7 +109,6 @@ export const ProductListPage: React.FC = () => {
             }
 
             const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
-            const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
 
             const { data: eligibleProducts, error: fetchError } = await supabase
                 .from('products')
@@ -130,7 +130,7 @@ export const ProductListPage: React.FC = () => {
             for (const prod of eligibleProducts) {
                 if (!prod.sku) continue;
                 
-                const candidateUrl = `${baseUrl}${prod.sku.replace(/\s+/g, '')}${ext}`;
+                const candidateUrl = buildProductVideoUrl(videoBaseUrl, prod.sku, ext);
                 const { error: updateError } = await supabase
                     .from('products')
                     .update({ video_url: candidateUrl })

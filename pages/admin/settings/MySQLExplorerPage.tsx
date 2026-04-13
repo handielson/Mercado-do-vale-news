@@ -5,8 +5,7 @@ import {
     Rows, LayoutList, Plus, Trash2, Pencil, Upload, Download, X, Save, AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
-
-const VPS_PROXY_BASE = '/api/vps-proxy';
+import { VPS_PROXY_BASE } from '../../../services/vpsProxyBase';
 const PAGE_SIZE = 50;
 
 // Tabelas somente-leitura (sistema interno — sem CRUD)

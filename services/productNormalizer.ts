@@ -16,6 +16,8 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import { toBrowserSafeMediaUrl } from '@/utils/media-url';
+
 export interface NormalizedProduct {
   id: string;
   sku: string;
@@ -116,7 +118,9 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
   // VPS pode retornar como array, string JSON ou até uma URL única em string.
   let images: string[] = [];
   if (Array.isArray(p.images)) {
-    images = p.images.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    images = p.images
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => toBrowserSafeMediaUrl(value));
   } else if (typeof p.images === 'string' && p.images.trim()) {
     const rawImages = p.images.trim();
 
@@ -124,18 +128,20 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
       try {
         const parsed = JSON.parse(rawImages);
         if (Array.isArray(parsed)) {
-          images = parsed.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+          images = parsed
+            .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+            .map((value) => toBrowserSafeMediaUrl(value));
         }
       } catch {
         images = [];
       }
     } else {
-      images = [rawImages];
+      images = [toBrowserSafeMediaUrl(rawImages)];
     }
   }
 
   const fallbackImageUrl = typeof p.image_url === 'string' && p.image_url.trim()
-    ? p.image_url.trim()
+    ? toBrowserSafeMediaUrl(p.image_url.trim())
     : null;
 
   if (images.length === 0 && fallbackImageUrl) {
@@ -167,7 +173,7 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
     track_inventory,
     images,
     image_url,
-    video_url: p.video_url ?? null,
+    video_url: p.video_url ? toBrowserSafeMediaUrl(p.video_url) : null,
     category_id: p.category_id,
     brand: p.brand,
     model_id: p.model_id,

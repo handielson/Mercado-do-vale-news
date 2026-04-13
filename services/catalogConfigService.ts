@@ -62,23 +62,57 @@ class CatalogConfigService {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Usuário não autenticado');
 
+            // Envia apenas colunas que existem em catalog_settings (evita erro de schema cache)
+            const allowedKeys: Array<keyof CatalogSettings> = [
+                'catalog_name', 'catalog_description', 'catalog_subtitle', 'welcome_message',
+                'hide_out_of_stock', 'hide_zero_price', 'hide_inactive', 'min_stock_to_show',
+                'hide_empty_categories', 'hide_categories_no_stock', 'show_product_count',
+                'show_prices', 'show_old_price', 'show_discount_badge', 'price_format',
+                'show_stock', 'show_stock_quantity', 'low_stock_threshold', 'show_low_stock_warning',
+                'show_product_images', 'image_quality', 'enable_image_zoom', 'show_image_gallery',
+                'products_per_page', 'enable_infinite_scroll', 'default_sort', 'enable_sort_options',
+                'show_filters', 'show_category_filter', 'show_brand_filter', 'show_price_filter',
+                'show_stock_filter', 'enable_search', 'search_placeholder',
+                'layout_mode', 'grid_columns_mobile', 'grid_columns_tablet', 'grid_columns_desktop', 'grid_columns_wide', 'card_style',
+                'theme_mode', 'primary_color', 'secondary_color', 'accent_color',
+                'background_color', 'card_background', 'text_primary', 'text_secondary',
+                'category_display_style', 'category_icon_size', 'show_category_icons', 'show_category_images', 'category_layout',
+                'enable_favorites', 'enable_share', 'enable_whatsapp_share', 'enable_product_comparison', 'enable_quick_view', 'show_related_products',
+                'show_new_badge', 'new_product_days', 'show_featured_badge', 'show_out_of_stock_badge', 'show_low_stock_badge',
+                'meta_title', 'meta_description', 'meta_keywords', 'og_image', 'enable_seo_friendly_urls',
+                'enable_public_catalog', 'catalog_slug', 'require_login', 'enable_qr_code',
+                'track_views', 'track_clicks', 'track_shares', 'google_analytics_id',
+                'notify_low_stock', 'notify_out_of_stock', 'notification_email',
+                'custom_css', 'custom_header_html', 'custom_footer_html', 'enable_cache', 'cache_duration_minutes'
+            ];
+
+            const dataToSave: Record<string, unknown> = {
+                user_id: user.id,
+                updated_at: new Date().toISOString()
+            };
+
+            for (const key of allowedKeys) {
+                const value = settings[key];
+                if (value !== undefined) {
+                    dataToSave[key] = value;
+                }
+            }
+
             const { error } = await supabase
                 .from('catalog_settings')
-                .upsert({
-                    ...settings,
-                    user_id: user.id,
-                    updated_at: new Date().toISOString()
-                }, {
-                    onConflict: 'user_id'
-                });
+                .upsert(dataToSave, { onConflict: 'user_id' });
 
-            if (error) throw error;
+            if (error) {
+                console.error('❌ Erro:', error?.message, error?.code);
+                throw error;
+            }
 
-            // Limpar cache
+            console.log('✅ Salvo com sucesso!');
             this.cache.delete(`settings_${user.id}`);
-        } catch (error) {
-            console.error('Erro ao salvar configurações:', error);
-            throw error;
+            this.cache.delete('settings_global');
+        } catch (error: any) {
+            console.error('❌ Erro ao salvar configurações:', error);
+            throw new Error(error?.message || 'Erro ao salvar configurações');
         }
     }
 

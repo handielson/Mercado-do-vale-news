@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { vpsClient } from './vpsClient';
 import { USE_VPS } from '@/config/migration';
 import type { Banner } from '@/types/catalog';
+import { toBrowserSafeMediaUrl } from '@/utils/media-url';
 
 // ─── Adapters VPS <-> Supabase ────────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ function mapFromVPS(vpsBanner: any): Banner {
 
     return {
         ...vpsBanner,
+        image_url: toBrowserSafeMediaUrl(vpsBanner.image_url),
         is_active: vpsBanner.active ?? false,
         link_target: vpsBanner.link_url,
         link_type,

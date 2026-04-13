@@ -1726,7 +1726,7 @@ fastify.delete('/battery-healths/:id', { preHandler: requireSyncKey }, async (re
 const videoExistenceCache = new Map();
 const VIDEO_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutos
 
-// GET /public/check-video?sku=SKU — verifica existência via HEAD no CDN de vídeos
+// GET /public/check-video?sku=SKU — verifica existência via Synology FileStation
 fastify.get('/public/check-video', async (req, reply) => {
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required' });
@@ -1742,31 +1742,27 @@ fastify.get('/public/check-video', async (req, reply) => {
     return reply.send({ exists: cached.exists, ...(cached.url ? { url: cached.url } : {}) });
   }
 
-  const VPS_PUBLIC = process.env.VPS_PUBLIC_URL || 'https://api.xiaomipetrolina.com.br';
-  const cdnBase = 'https://videos.mercadodovale.com.br';
-  const cdnUrl = `${cdnBase}/${encodeURIComponent(fileName)}`;
-  const proxyUrl = `${VPS_PUBLIC}/video/${encodeURIComponent(fileName)}`;
+  const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
 
-  // Verifica existência via HEAD no CDN (sem Synology DSM)
-  const exists = await new Promise((resolve) => {
-    const https = require('https');
-    const r = https.request(cdnUrl, { method: 'HEAD', timeout: 8000 }, (res) => {
-      resolve(res.statusCode >= 200 && res.statusCode < 400);
-    });
-    r.on('error', () => resolve(null));
-    r.on('timeout', () => { r.destroy(); resolve(null); });
-    r.end();
-  });
-
-  // Se o CDN não respondeu: fallback otimista (mostra botão como antes)
-  if (exists === null) {
-    console.error('[check-video] CDN timeout/error for', fileName, '- returning optimistic');
-    return reply.send({ exists: true, url: proxyUrl });
+  // Verifica existência via FileStation API (não depende do CDN)
+  try {
+    if (SYNO_USER && SYNO_PASS) {
+      const sid = await synoLogin();
+      const filePath = `${SYNO_FOLDERS.videos}/${fileName}`;
+      const urlObj = new URL(SYNO_URL);
+      const data = await synoHttpGet(urlObj,
+        `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`
+      );
+      const exists = data.success === true && data.data?.files?.[0]?.name != null;
+      videoExistenceCache.set(cleanSku, { exists, url: exists ? canonicalUrl : null, cachedAt: Date.now() });
+      return reply.send({ exists, ...(exists ? { url: canonicalUrl } : {}) });
+    }
+  } catch (err) {
+    console.warn('[public/check-video] Synology API error, fallback otimista:', err.message);
   }
 
-  const url = exists ? cdnUrl : null;
-  videoExistenceCache.set(cleanSku, { exists, url, cachedAt: Date.now() });
-  return reply.send({ exists, ...(url ? { url } : {}) });
+  // Fallback conservador se Synology inacessível
+  return reply.send({ exists: false });
 });
 
 fastify.get('/team', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -1802,7 +1798,22 @@ fastify.delete('/team/:id', { preHandler: requireSyncKey }, async (req, reply) =
 // Rotas para gerenciar arquivos nos CDNs do Synology NAS
 // Funciona de qualquer rede via QuickConnect (sem CORS: chamadas server-side)
 
-const SYNO_URL  = process.env.SYNOLOGY_URL  || 'https://192-168-1-2.handielson.direct.quickconnect.to:5001';
+function normalizeSynologyUrl(rawUrl) {
+  const fallback = 'https://handielson.direct.quickconnect.to:5001';
+  const input = (rawUrl || fallback).trim().replace(/^"|"$/g, '');
+  try {
+    const parsed = new URL(input);
+    const lanQuickConnectPrefix = /^(\d{1,3}-){3}\d{1,3}\./;
+    if (lanQuickConnectPrefix.test(parsed.hostname)) {
+      parsed.hostname = parsed.hostname.replace(lanQuickConnectPrefix, '');
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return fallback;
+  }
+}
+
+const SYNO_URL  = normalizeSynologyUrl(process.env.SYNOLOGY_URL || 'https://192-168-1-25.handielson.direct.quickconnect.to:5001');
 const SYNO_USER = process.env.SYNOLOGY_USER || '';
 const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
 
@@ -1824,7 +1835,15 @@ function synoHttpGet(urlObj, path) {
     const req = https.get({ hostname: urlObj.hostname, port, path, rejectUnauthorized: false }, (res) => {
       let d = '';
       res.on('data', c => d += c);
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+      res.on('end', () => { 
+        try { 
+          const parsed = JSON.parse(d);
+          resolve(parsed);
+        } catch (e) {
+          console.error('[synoHttpGet] JSON parse error. Response:', d.slice(0, 500));
+          reject(new Error(`Invalid JSON response from Synology: ${d.slice(0, 200)}`));
+        }
+      });
     });
     req.on('error', reject);
     req.setTimeout(15000, () => { req.destroy(new Error('Synology request timeout (15s)')); });
@@ -1834,9 +1853,15 @@ function synoHttpGet(urlObj, path) {
 async function synoLogin() {
   const qs = `api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(SYNO_USER)}&passwd=${encodeURIComponent(SYNO_PASS)}&session=FileStation&format=sid`;
   const urlObj = new URL(SYNO_URL);
-  const j = await synoHttpGet(urlObj, `/webapi/auth.cgi?${qs}`);
-  if (j.success) return j.data.sid;
-  throw new Error('Synology login failed: ' + JSON.stringify(j.error));
+  try {
+    const j = await synoHttpGet(urlObj, `/webapi/auth.cgi?${qs}`);
+    if (j.success) return j.data.sid;
+    console.error('[synoLogin] Auth failed:', j.error);
+    throw new Error('Synology login failed: ' + JSON.stringify(j.error || j));
+  } catch (err) {
+    console.error('[synoLogin] Error:', err.message);
+    throw err;
+  }
 }
 
 async function synoApiGet(apiPath) {
@@ -1905,31 +1930,120 @@ fastify.get('/video/:filename', async (req, reply) => {
     return reply.code(500).send({ error: 'Video unavailable' });
   }
 });
+// ⚠️ Local SynologyDrive paths (since WSL can't access network IPs)
+// ⚠️ Local SynologyDrive paths (since WSL can't access network IPs)
+// Convert Windows path to WSL path if running in WSL
+let SYNOLOGY_DRIVE_BASE = process.env.SYNOLOGY_DRIVE_BASE || 'C:\\Users\\Nitro\\SynologyDrive\\SynologyDrive';
+if (process.platform === 'linux' && SYNOLOGY_DRIVE_BASE.includes('\\')) {
+  // Convert C:\Users\... to /mnt/c/Users/...
+  const match = SYNOLOGY_DRIVE_BASE.match(/^([A-Z]):\\/);
+  if (match) {
+    const drive = match[1].toLowerCase();
+    const rest = SYNOLOGY_DRIVE_BASE.slice(3).replace(/\\/g, '/');
+    SYNOLOGY_DRIVE_BASE = `/mnt/${drive}/${rest}`;
+  }
+}
+const LOCAL_FOLDERS = {
+  imagens:  'web/imagens',
+  videos:   'web/videos',
+  arquivos: 'web/arquivos',
+};
+
+// Function to list files from local SynologyDrive folder
+function listLocalSynologyFiles(folder, limit = 10000, offset = 0) {
+  const folderPath = path.join(SYNOLOGY_DRIVE_BASE, LOCAL_FOLDERS[folder] || '');
+  
+  try {
+    if (!fs.existsSync(folderPath)) {
+      return { ok: false, error: `Folder not found: ${folder}` };
+    }
+
+    let files = fs.readdirSync(folderPath, { withFileTypes: true })
+      .filter(f => f.isFile())
+      .map(f => {
+        try {
+          const stat = fs.statSync(path.join(folderPath, f.name));
+          return {
+            name: f.name,
+            size: stat.size,
+            modified: new Date(stat.mtime).toISOString(),
+          };
+        } catch (e) {
+          return null;
+        }
+      })
+      .filter(f => f !== null)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const total = files.length;
+    const paginated = files.slice(offset, offset + limit);
+
+    return {
+      ok: true,
+      data: {
+        files: paginated,
+        total: total,
+      },
+    };
+  } catch (e) {
+    console.error(`[listLocalSynologyFiles] Error for ${folder}:`, e.message);
+    return { ok: false, error: e.message };
+  }
+}
 
 // GET /synology/files?folder=imagens|videos|arquivos
 fastify.get('/synology/files', { preHandler: requireSyncKey }, async (req, reply) => {
   const folder = req.query.folder;
   if (!SYNO_FOLDERS[folder]) return reply.code(400).send({ error: 'Invalid folder' });
-  if (!SYNO_USER || !SYNO_PASS) return reply.code(500).send({ error: 'Synology credentials not configured in .env' });
 
-  const sid = await synoLogin();
-  const data = await synoApiGet(
-    `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list&folder_path=${encodeURIComponent(SYNO_FOLDERS[folder])}&additional=%5B%22size%22%2C%22time%22%5D&_sid=${sid}`
-  );
-
-  if (!data.success) return reply.code(500).send({ error: 'Failed to list files', detail: data.error });
+  const limit = parseInt(req.query.limit) || 10000;
+  const offset = parseInt(req.query.offset) || 0;
 
   const cdn = SYNO_CDN[folder];
-  const files = (data.data?.files || [])
-    .filter(f => !f.isdir)
-    .map(f => ({
-      name: f.name,
-      size: f.additional?.size || 0,
-      modified: f.additional?.time?.mtime ? new Date(f.additional.time.mtime * 1000).toISOString() : null,
-      url: `${cdn}/${f.name}`,
-    }));
+
+  // 1) Try Synology API first (primary source of truth)
+  try {
+    if (SYNO_USER && SYNO_PASS) {
+      const sid = await synoLogin();
+      const data = await synoApiGet(
+        `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list&folder_path=${encodeURIComponent(SYNO_FOLDERS[folder])}&additional=%5B%22size%22%2C%22time%22%5D&limit=${limit}&offset=${offset}&_sid=${sid}`
+      );
+
+      if (data.success) {
+        const files = (data.data?.files || [])
+          .filter(f => !f.isdir)
+          .map(f => ({
+            name: f.name,
+            size: f.additional?.size || 0,
+            modified: f.additional?.time?.mtime ? new Date(f.additional.time.mtime * 1000).toISOString() : null,
+            url: `${cdn}/${f.name}`,
+          }));
+
+        reply.header('Cache-Control', 'no-store');
+        reply.header('X-Total-Count', String(data.data?.total || files.length));
+        return files;
+      }
+
+      console.warn(`[synology/files] API returned error for ${folder}:`, data.error);
+    }
+  } catch (err) {
+    console.warn(`[synology/files] API fallback for ${folder}:`, err.message);
+  }
+
+  // 2) Fallback to local SynologyDrive mirror
+  const result = listLocalSynologyFiles(folder, limit, offset);
+  if (!result.ok) {
+    console.error(`[synology/files] Error for ${folder}:`, result.error);
+    return reply.code(500).send({ error: result.error });
+  }
+
+  const files = result.data.files.map(f => ({
+    ...f,
+    url: `${cdn}/${f.name}`,
+  }));
 
   reply.header('Cache-Control', 'no-store');
+  reply.header('X-Total-Count', String(result.data.total || files.length));
   return files;
 });
 
@@ -2065,24 +2179,39 @@ fastify.delete('/customers/:id/favorites/:productId', { preHandler: requireSyncK
 
 // ─── Video existence check ───────────────────────────────────────────────────
 // GET /check-video?sku=PI153D
-// Verifica se existe um vídeo no Synology NAS para o SKU informado.
-// Rota sem prefixo /public/ para evitar conflito com regras Nginx/CDN.
+// Verifica se existe um vídeo no Synology NAS para o SKU informado via FileStation API.
 fastify.get('/check-video', async (req, reply) => {
   reply.header('Cache-Control', 'public, max-age=300');
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required', exists: false });
   try {
     const [[setting]] = await pool.query(
-      'SELECT synology_video_base_url, synology_video_extension FROM company_settings LIMIT 1'
-    );
-    const baseUrl = (setting && setting.synology_video_base_url) || 'https://videos.mercadodovale.com.br';
+      'SELECT synology_video_extension FROM company_settings LIMIT 1'
+    ).catch(() => [[null]]);
     const ext = (setting && setting.synology_video_extension) || '.mp4';
-    const url = `${baseUrl}/${encodeURIComponent(sku.trim())}${ext}`;
-    const headRes = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-    return { exists: headRes.ok, url };
+    const cleanSku = sku.trim().replace(/\s+/g, '');
+    const fileName = `${cleanSku}${ext}`;
+    const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
+
+    if (SYNO_USER && SYNO_PASS) {
+      try {
+        const sid = await synoLogin();
+        const filePath = `${SYNO_FOLDERS.videos}/${fileName}`;
+        const urlObj = new URL(SYNO_URL);
+        const data = await synoHttpGet(urlObj,
+          `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`
+        );
+        const exists = data.success === true && data.data?.files?.[0]?.name != null;
+        return { exists, url: canonicalUrl };
+      } catch (synoErr) {
+        console.warn('[check-video] Synology inatível, fallback otimista:', synoErr.message);
+        return { exists: false };
+      }
+    }
+
+    return { exists: false };
   } catch {
-    const url = `https://videos.mercadodovale.com.br/${encodeURIComponent(sku.trim())}.mp4`;
-    return { exists: false, url };
+    return { exists: false };
   }
 });
 

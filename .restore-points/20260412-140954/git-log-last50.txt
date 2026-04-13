@@ -1,0 +1,50 @@
+34e2ffa fix(api): restaura rotas de categorias e field-presets na VPS
+d464aeb fix(vps): compatibiliza migration production_days com mysql
+a511b0a fix(produto): persistir categoria editada e corrigir overflow no form
+fb11bf1 Apply pending catalog, categories and VPS sync fixes
+bc1c07a Improve category drag visual feedback and clear selection after drop
+cfa48d1 fix: manter Bling conectado e incluir busca por EAN no catalogo
+6460a58 Handle PostgREST missing-column errors in Bling import fallback
+01ac945 Fix Bling import for 429 and unique conflicts
+49a3439 Harden Bling import against 429 and schema mismatches
+c56e6bd Fix Vercel ESM import for bling webhook handler
+4001547 Fix OAuth callback redirects in Vercel serverless
+88ed050 Fix OAuth callback crash on missing Supabase key
+b192784 Remove unsupported gtin parameter from Bling API search
+aa0c372 Fix Bling OAuth redirect_uri mismatch
+6a94ddb Fix Supabase .update() error handling in Bling API endpoints
+8c4e5f0 Add barcode/EAN search support in Bling product import
+0294e1c Harden Bling webhooks by centralizing legacy endpoint
+771016d Clarify Bling webhook setup for name, stock and price
+16cd052 Fix Bling stock webhook recurring failure (BUG-004)
+43ef808 Fix catalog images and Bling media sync
+c343315 feat(pdv): adiciona desconto de ajuste final no fechamento
+91e762b fix: adicionar autoscroll durante arrasto de categorias e produtos
+a3e5d48 fix: recarregar painéis de categorias após mover produto
+9b87b5d fix: mover produto entre categorias sem depender de Ctrl
+e1e187e debug: adicionar console.logs visíveis em produção para drag-drop
+cbfb247 feat: implementar drag-drop de produtos entre categorias (produção)
+0987258 fix: adicionar x-sync-key header ao proxy vps em desenvolvimento
+2e45a1a fix: reverter para proxy local e desabilitar secure check em dev
+3016ca0 fix: usar URL direta da VPS em vez de proxy local para drag-drop
+9ccfbd6 fix: não limpar draggedProduct no onDragEnd do produto, deixar página limpar após drop
+5fc8649 debug: adicionar mais logs para rastrear draggedProduct
+ffb2834 debug: adicionar console.logs para debugar drag-drop de produtos
+3a202f3 build: gerar bundle atualizado para drag-drop de produtos entre categorias
+a558ca4 feat: adicionar endpoints POST/DELETE/PATCH para drag-drop de produtos entre categorias
+e9815d2 fix(catalog): suportar category_id IN (...) no endpoint /products do VPS
+19edf19 fix: puxa categorias do supabase e counts da vps
+9ecb951 fix: cache busting total e restauração das categorias via supabase
+0c06845 Bypass Edge CDN Cache fetching Categories
+e5c0002 Invalida cache de categorias para atualizar arvore mobile
+b03673d Fix catalog compact images payload and mobile subcategory tree
+1669e23 feat: upload de imagens para URL HTTP (VPS) em vez de base64
+17cffac perf: compact mode, gzip, slug fallback, HTTP cache fix
+800e1eb feat: add drag-and-drop image reordering to ProductImages
+9754f3a fix: bump catalog cache key to v2 to invalidate stale compact cache
+488ac39 fix: revert compact=true in catalogService (breaks base64 images)
+f586b1d perf: fix catalog loading speed and todos-os-produtos visibility
+3308ba8 feat(catalog): corrige infinite loop e sincroniza pesquisa com a URL
+dc41638 fix: normalizacao de busca sem acentos e correcao 404 do FreightCalculator
+f1f833d refactor: remove serverless functions de frete antigas para consolidar na Vercel
+d62b06d seo: adiciona sitemap dinamico para buscador indexar novos produtos rapidamente

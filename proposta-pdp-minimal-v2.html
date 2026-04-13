@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proposta PDP v2 - Minimal</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;600;700;800&display=swap');
+
+    :root {
+      --bg: #f3f5f7;
+      --card: #ffffff;
+      --ink: #0f1720;
+      --muted: #6b7280;
+      --line: #d8dee6;
+      --brand: #1d4ed8;
+      --brand-2: #0b1220;
+      --accent: #f97316;
+      --ok: #16a34a;
+      --danger: #ef4444;
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --shadow: 0 20px 40px rgba(15, 23, 32, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(1200px 600px at 8% -10%, #ffffff 0%, transparent 60%),
+        radial-gradient(1000px 500px at 100% 0%, #e8eefc 0%, transparent 55%),
+        var(--bg);
+      color: var(--ink);
+      font-family: 'Manrope', sans-serif;
+    }
+
+    .page {
+      max-width: 1320px;
+      margin: 28px auto;
+      padding: 0 18px 28px;
+    }
+
+    .topbar {
+      background: rgba(255,255,255,0.86);
+      border: 1px solid rgba(216,222,230,0.8);
+      backdrop-filter: blur(8px);
+      border-radius: 20px;
+      padding: 16px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 8px 22px rgba(15, 23, 32, 0.05);
+    }
+
+    .brand {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .actions { display: flex; gap: 10px; }
+
+    .pill {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 10px 16px;
+      font-weight: 700;
+      font-size: 13px;
+      background: #fff;
+      color: #334155;
+    }
+
+    .pill.hot {
+      background: linear-gradient(135deg, #fb923c, #f97316);
+      border: none;
+      color: #fff;
+    }
+
+    .crumb {
+      margin: 18px 4px 22px;
+      color: var(--muted);
+      font-size: 14px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .crumb a {
+      color: var(--brand);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 22px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid #e4e8ee;
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+    }
+
+    .gallery {
+      padding: 18px;
+    }
+
+    .stage {
+      height: 580px;
+      border-radius: 18px;
+      border: 1px solid #e5e9f0;
+      background:
+        linear-gradient(160deg, #fafcff, #f2f6fb 70%),
+        repeating-linear-gradient(45deg, rgba(29,78,216,0.03), rgba(29,78,216,0.03) 8px, transparent 8px, transparent 16px);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .mock-product {
+      width: 78%;
+      max-width: 500px;
+      aspect-ratio: 1/1;
+      border-radius: 24px;
+      background: linear-gradient(140deg, #f8fafc, #dbe4ee);
+      border: 1px solid #cfd9e6;
+      box-shadow: 0 24px 50px rgba(15, 23, 32, 0.18);
+      position: relative;
+      transform: rotate(-8deg);
+    }
+
+    .mock-product::before {
+      content: '';
+      position: absolute;
+      inset: 18% 12% 18% 12%;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #6ea8ff, #1d4ed8);
+      opacity: .26;
+    }
+
+    .mock-product::after {
+      content: 'PREVIEW';
+      position: absolute;
+      bottom: 16px;
+      right: 20px;
+      color: #0b1220;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .16em;
+    }
+
+    .thumbs {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .thumb {
+      min-width: 84px;
+      width: 84px;
+      height: 84px;
+      border-radius: 16px;
+      border: 1px solid #cfdae8;
+      background: #f8fbff;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: .2s ease;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      color: #1e3a8a;
+    }
+
+    .thumb.active { border-color: #1d4ed8; box-shadow: inset 0 0 0 2px #1d4ed8; }
+    .thumb:hover { transform: translateY(-2px); }
+
+    .info {
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(34px, 3.4vw, 52px);
+      line-height: 1.04;
+      letter-spacing: -0.03em;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .meta span.sep { color: #c2cad5; }
+
+    .price-box {
+      margin-top: 6px;
+      border: 1px solid #dce3ed;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #f9fbfe;
+    }
+
+    .stock {
+      background: linear-gradient(90deg, #f87171, #ef4444);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 8px;
+    }
+
+    .price-content { padding: 20px; }
+
+    .price {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(40px, 4.4vw, 62px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0;
+    }
+
+    .installments {
+      margin: 4px 0 0;
+      color: var(--ok);
+      font-weight: 700;
+    }
+
+    .coins {
+      margin-top: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #f5d58b;
+      background: #fff6dd;
+      color: #965c00;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .btn {
+      width: 100%;
+      border: none;
+      border-radius: 16px;
+      padding: 18px 18px;
+      font-size: 22px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: .2s ease;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      box-shadow: 0 14px 28px rgba(37,99,235,.32);
+    }
+
+    .btn.primary:hover { transform: translateY(-1px); filter: brightness(1.03); }
+
+    .ship {
+      display: grid;
+      grid-template-columns: 1fr 160px;
+      gap: 10px;
+    }
+
+    .input {
+      border: 1px solid #ccd5e2;
+      background: #fff;
+      border-radius: 14px;
+      padding: 14px 14px;
+      color: #111827;
+      font-size: 16px;
+    }
+
+    .btn.secondary {
+      background: #e2e8f0;
+      color: #475569;
+      font-size: 17px;
+      box-shadow: none;
+    }
+
+    .trust {
+      margin-top: 4px;
+      display: grid;
+      gap: 9px;
+    }
+
+    .trust-item {
+      border: 1px solid #e3e9f2;
+      border-radius: 14px;
+      background: #fff;
+      padding: 10px 12px;
+      color: #475569;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 1040px) {
+      .grid { grid-template-columns: 1fr; }
+      .stage { height: 460px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">Mercado do Vale</div>
+      <div class="actions">
+        <button class="pill hot">Promoções</button>
+        <button class="pill">Ver como Varejo</button>
+      </div>
+    </header>
+
+    <nav class="crumb">
+      <a href="#">Início</a>
+      <span>/</span>
+      <a href="#">Caixas de Som</a>
+      <span>/</span>
+      <strong style="color:#0f1720;">Mini Caixa Bluetooth KTS-129</strong>
+    </nav>
+
+    <section class="grid">
+      <article class="card gallery">
+        <div class="stage" id="stage">
+          <div class="mock-product" id="mock"></div>
+        </div>
+        <div class="thumbs">
+          <button class="thumb active" data-tone="blue">IMAGEM 1</button>
+          <button class="thumb" data-tone="green">IMAGEM 2</button>
+          <button class="thumb" data-tone="orange">IMAGEM 3</button>
+          <button class="thumb" data-tone="violet">VÍDEO</button>
+        </div>
+      </article>
+
+      <article class="card info">
+        <h1>Mini Caixa de Som<br/>Bluetooth KTS-129</h1>
+        <div class="meta">
+          <span>SKU: KTS-129AZU</span>
+          <span class="sep">|</span>
+          <span>Marca: Kts</span>
+          <span class="sep">|</span>
+          <span>Compartilhar</span>
+        </div>
+
+        <div class="price-box">
+          <div class="stock">Últimas unidades em estoque</div>
+          <div class="price-content">
+            <p class="price">R$ 65,90</p>
+            <p class="installments">ou em até 12x de R$ 5,49 sem juros</p>
+            <span class="coins">🪙 Ganhe 65 Moedas do Vale</span>
+          </div>
+        </div>
+
+        <button class="btn primary">Adicionar ao Carrinho</button>
+
+        <div class="ship">
+          <input class="input" placeholder="Digite seu CEP" />
+          <button class="btn secondary">Calcular</button>
+        </div>
+
+        <div class="trust">
+          <div class="trust-item">Garantia de 90 dias · Compra 100% segura</div>
+          <div class="trust-item">Envio rápido · Rastreamento em tempo real</div>
+          <div class="trust-item">Atendimento humano · Suporte especializado</div>
+        </div>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    const tones = {
+      blue: 'linear-gradient(145deg, #6ea8ff, #1d4ed8)',
+      green: 'linear-gradient(145deg, #6ee7b7, #059669)',
+      orange: 'linear-gradient(145deg, #fdba74, #ea580c)',
+      violet: 'linear-gradient(145deg, #c4b5fd, #7c3aed)'
+    };
+
+    const mock = document.getElementById('mock');
+    const thumbs = document.querySelectorAll('.thumb');
+
+    thumbs.forEach(t => {
+      t.addEventListener('click', () => {
+        thumbs.forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        const tone = t.dataset.tone || 'blue';
+        mock.style.background = tones[tone];
+      });
+    });
+  </script>
+</body>
+</html>

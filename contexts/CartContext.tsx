@@ -78,6 +78,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     // Sincroniza o carrinho com o backend quando logado
     useEffect(() => {
+        // Em ambiente de desenvolvimento local, evita ruído de 500 do endpoint /cart/sync
+        if (import.meta.env.DEV) return;
         if (!isHydrated || !customer?.id) return;
         
         const timeoutId = setTimeout(() => {

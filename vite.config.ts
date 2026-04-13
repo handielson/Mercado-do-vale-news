@@ -1,8 +1,25 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import * as fs from 'fs';
 
 export default defineConfig(({ mode }) => {
+  // Load env from .env.local directly to ensure VITE_VPS_SYNC_KEY is available
+  let syncKey = '';
+  try {
+    const envPath = path.join(process.cwd(), '.env.local');
+    if (fs.existsSync(envPath)) {
+      const envContent = fs.readFileSync(envPath, 'utf-8');
+      const keyMatch = envContent.match(/VITE_VPS_SYNC_KEY=(.+)/);
+      if (keyMatch && keyMatch[1]) {
+        syncKey = keyMatch[1].trim();
+        console.log('[Vite Config] ✅ Loaded VITE_VPS_SYNC_KEY from .env.local');
+      }
+    }
+  } catch (e) {
+    console.error('[Vite Config] ❌ Failed to load VITE_VPS_SYNC_KEY:', e.message);
+  }
+
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
@@ -17,12 +34,62 @@ export default defineConfig(({ mode }) => {
         },
         '/vps-proxy': {
           target: 'https://api.xiaomipetrolina.com.br',
+          router: (req) => {
+            try {
+              const requestUrl = req.url || '';
+              const parsed = new URL(`http://localhost${requestUrl}`);
+              const targetPath = decodeURIComponent(parsed.searchParams.get('path') || '');
+              const directPath = parsed.pathname || '';
+              if (targetPath.startsWith('/synology/') || directPath.startsWith('/synology/')) {
+                return env.VITE_LOCAL_VPS_URL || 'http://localhost:4000';
+              }
+            } catch (_) {
+              // Ignore parse errors and use default remote target
+            }
+            return 'https://api.xiaomipetrolina.com.br';
+          },
           changeOrigin: true,
           secure: false,
-          rewrite: (path) => path.replace(/^\/vps-proxy/, ''),
+          rewrite: (pathStr) => {
+            // Extract the ?path= query parameter and decode it
+            try {
+              const url = new URL(`http://localhost${pathStr}`);
+              const targetPath = url.searchParams.get('path');
+              if (targetPath) {
+                return decodeURIComponent(targetPath);
+              }
+            } catch (e) {
+              console.error('[Vite Proxy] Failed to parse path:', pathStr, e);
+            }
+            // Fallback: just remove /vps-proxy prefix
+            return pathStr.replace(/^\/vps-proxy/, '');
+          },
           configure: (proxy) => {
-            proxy.on('proxyReq', (proxyReq) => {
-              proxyReq.setHeader('x-sync-key', env.VITE_VPS_SYNC_KEY || '');
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              // Get the sync key (from .env.local or fallback)
+              const key = syncKey || env.VITE_VPS_SYNC_KEY || '';
+              
+              if (!key) {
+                console.warn('[Vite Proxy] ⚠️ x-sync-key is empty! Check .env.local');
+              } else {
+                console.log('[Vite Proxy] ✅ Adding x-sync-key header for', req.method, req.url);
+              }
+              
+              proxyReq.setHeader('x-sync-key', key);
+              
+              // Ensure proper headers for POST/PUT/PATCH
+              if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+                if (!proxyReq.getHeader('content-type')) {
+                  proxyReq.setHeader('content-type', 'application/json');
+                }
+              }
+            });
+
+            proxy.on('proxyRes', (proxyRes, req, res) => {
+              // Log response status for debugging
+              if (proxyRes.statusCode >= 400) {
+                console.warn(`[Vite Proxy] ⚠️ ${req.method} ${req.url} → ${proxyRes.statusCode}`);
+              }
             });
           },
         },

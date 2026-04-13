@@ -9,6 +9,13 @@ import { categoryService } from '@/services/categories';
 
 type TabType = 'display' | 'categories' | 'appearance' | 'seo' | 'sharing' | 'sections';
 
+function sanitizeCatalogSettingsForSave(settings: CatalogSettings): Partial<CatalogSettings> {
+    const sanitized = { ...settings } as Record<string, unknown>;
+    // Campos legados que podem existir no estado, mas nao existem em catalog_settings
+    delete sanitized.catalog_footer_text;
+    return sanitized as Partial<CatalogSettings>;
+}
+
 export default function CatalogConfigPage() {
     const { user } = useSupabaseAuth();
     const [activeTab, setActiveTab] = useState<TabType>('display');
@@ -26,9 +33,13 @@ export default function CatalogConfigPage() {
         try {
             setLoading(true);
             const data = await catalogConfigService.getSettings();
-            setSettings(data);
+            // Mesclar com defaults para garantir que todos os campos existem
+            const merged = { ...DEFAULT_CATALOG_SETTINGS, ...data } as CatalogSettings;
+            setSettings(merged);
         } catch (error) {
             console.error('Erro ao carregar configurações:', error);
+            // Usar defaults como fallback
+            setSettings(DEFAULT_CATALOG_SETTINGS as CatalogSettings);
         } finally {
             setLoading(false);
         }
@@ -37,12 +48,18 @@ export default function CatalogConfigPage() {
     const handleSave = async () => {
         try {
             setSaving(true);
-            await catalogConfigService.saveSettings(settings);
+            // Validar que settings tem todos os campos necessários
+            if (!user) {
+                throw new Error('Usuário não autenticado');
+            }
+            const sanitized = sanitizeCatalogSettingsForSave(settings);
+            await catalogConfigService.saveSettings(sanitized);
             setHasChanges(false);
             alert('✅ Configurações salvas com sucesso!');
-        } catch (error) {
-            console.error('Erro ao salvar:', error);
-            alert('❌ Erro ao salvar configurações');
+        } catch (error: any) {
+            console.error('❌ Erro detalhado ao salvar:', error);
+            const errorMsg = error?.message || 'Erro desconhecido ao salvar configurações. Verifique o console.';
+            alert(errorMsg);
         } finally {
             setSaving(false);
         }
@@ -534,88 +551,502 @@ function CategoriesTab({ settings, updateSetting }: TabProps) {
 
 // ==================== APPEARANCE TAB ====================
 function AppearanceTab({ settings, updateSetting }: TabProps) {
+    const [defaultState, setDefaultState] = React.useState<Partial<CatalogSettings> | null>(null);
+    const [lastSaveTime, setLastSaveTime] = React.useState<string | null>(null);
+
+    // Carregar estado padrão salvo do localStorage
+    React.useEffect(() => {
+        const saved = localStorage.getItem('catalog_appearance_default');
+        const saveTime = localStorage.getItem('catalog_appearance_default_time');
+        if (saved) {
+            try {
+                setDefaultState(JSON.parse(saved));
+                setLastSaveTime(saveTime);
+            } catch (e) {
+                console.warn('Erro ao carregar estado padrão:', e);
+            }
+        }
+    }, []);
+
+    // 💾 Salvar estado atual como padrão
+    const handleSaveAsDefault = async () => {
+        try {
+            const appearanceSettings = {
+                theme_mode: settings.theme_mode,
+                primary_color: settings.primary_color,
+                secondary_color: settings.secondary_color,
+                accent_color: settings.accent_color,
+                background_color: settings.background_color,
+                card_background: settings.card_background,
+                text_primary: settings.text_primary,
+                text_secondary: settings.text_secondary,
+                layout_mode: settings.layout_mode,
+                card_style: settings.card_style,
+                grid_columns_mobile: settings.grid_columns_mobile,
+                grid_columns_tablet: settings.grid_columns_tablet,
+                grid_columns_desktop: settings.grid_columns_desktop,
+            };
+
+            localStorage.setItem('catalog_appearance_default', JSON.stringify(appearanceSettings));
+            const now = new Date().toLocaleString('pt-BR');
+            localStorage.setItem('catalog_appearance_default_time', now);
+            setDefaultState(appearanceSettings);
+            setLastSaveTime(now);
+            alert('✅ Ponto de Restauração Salvo com Sucesso!');
+        } catch (error) {
+            console.error('Erro ao salvar padrão:', error);
+            alert('❌ Erro ao salvar ponto de restauração');
+        }
+    };
+
+    // ♻️ Restaurar para o estado padrão
+    const handleRestoreDefault = () => {
+        if (!defaultState) {
+            alert('⚠️ Nenhum ponto de restauração disponível. Salve um primeiro!');
+            return;
+        }
+
+        if (confirm('🔄 Deseja restaurar para o estado padrão salvo?')) {
+            Object.entries(defaultState).forEach(([key, value]) => {
+                updateSetting(key as keyof CatalogSettings, value as any);
+            });
+            alert('✅ Restaurado para o ponto salvo!');
+        }
+    };
+
+    // 🎨 Presets Premium de Paletas
+    const colorPresets = [
+        {
+            name: '🔥 Dark + Laranja',
+            theme_mode: 'dark',
+            primary_color: '#ff6b35',
+            secondary_color: '#f7931e',
+            accent_color: '#4ade80',
+            background_color: '#0f1117',
+            card_background: '#1a1f2e',
+            text_primary: '#ffffff',
+            text_secondary: '#a0aec0',
+        },
+        {
+            name: '💼 Light + Azul',
+            theme_mode: 'light',
+            primary_color: '#1d4ed8',
+            secondary_color: '#2563eb',
+            accent_color: '#059669',
+            background_color: '#f8fafc',
+            card_background: '#ffffff',
+            text_primary: '#1e293b',
+            text_secondary: '#64748b',
+        },
+        {
+            name: '✨ Dark + Roxo',
+            theme_mode: 'dark',
+            primary_color: '#8b5cf6',
+            secondary_color: '#a855f7',
+            accent_color: '#10b981',
+            background_color: '#1a1a2e',
+            card_background: '#16213e',
+            text_primary: '#ffffff',
+            text_secondary: '#cbd5e1',
+        },
+        {
+            name: '🌿 Light + Verde',
+            theme_mode: 'light',
+            primary_color: '#059669',
+            secondary_color: '#10b981',
+            accent_color: '#1d4ed8',
+            background_color: '#f0fdf4',
+            card_background: '#ffffff',
+            text_primary: '#064e3b',
+            text_secondary: '#6b7280',
+        },
+        {
+            name: '👑 Premium Dark',
+            theme_mode: 'dark',
+            primary_color: '#d4af37',
+            secondary_color: '#fbbf24',
+            accent_color: '#60a5fa',
+            background_color: '#111827',
+            card_background: '#1f2937',
+            text_primary: '#f3f4f6',
+            text_secondary: '#9ca3af',
+        },
+        {
+            name: '🌅 Gradient Sunset',
+            theme_mode: 'dark',
+            primary_color: '#ff6e40',
+            secondary_color: '#ff9100',
+            accent_color: '#00bcd4',
+            background_color: '#1a0033',
+            card_background: '#2d1b4e',
+            text_primary: '#ffd7b5',
+            text_secondary: '#b39ddb',
+        },
+        {
+            name: '🏙️ Urban Night',
+            theme_mode: 'dark',
+            primary_color: '#00d4ff',
+            secondary_color: '#0099cc',
+            accent_color: '#ff4081',
+            background_color: '#0a0e27',
+            card_background: '#151932',
+            text_primary: '#e0f2f1',
+            text_secondary: '#80deea',
+        },
+        {
+            name: '🌳 Nature Fresh',
+            theme_mode: 'light',
+            primary_color: '#2e7d32',
+            secondary_color: '#558b2f',
+            accent_color: '#ff6f00',
+            background_color: '#f1f8e9',
+            card_background: '#ffffff',
+            text_primary: '#1b5e20',
+            text_secondary: '#558b2f',
+        },
+    ];
+
+    const applyPreset = (preset: any) => {
+        Object.entries(preset).forEach(([key, value]) => {
+            updateSetting(key as keyof CatalogSettings, value as any);
+        });
+    };
+
+    // Calcular contraste de cores simples
+    const getContrastRatio = (color1: string, color2: string) => {
+        const hex2rgb = (hex: string) => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result 
+                ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
+                : [0, 0, 0];
+        };
+        const getLuminance = (rgb: number[]) => {
+            const [r, g, b] = rgb.map(x => x / 255);
+            return 0.299 * r + 0.587 * g + 0.114 * b;
+        };
+        const rgb1 = hex2rgb(color1);
+        const rgb2 = hex2rgb(color2);
+        const l1 = getLuminance(rgb1);
+        const l2 = getLuminance(rgb2);
+        return l1 > l2 ? ((l1 + 0.05) / (l2 + 0.05)) : ((l2 + 0.05) / (l1 + 0.05));
+    };
+
+    const contrastRatio = getContrastRatio(settings.text_primary, settings.background_color);
+    const isAccessible = contrastRatio >= 4.5;
+
     return (
         <div className="space-y-8">
-            <Section title="Tema">
+            {/* 💾 PONTOS DE RESTAURAÇÃO */}
+            <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border-3 border-emerald-400 rounded-2xl p-8 shadow-xl">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                    <Save className="w-7 h-7 text-emerald-600" />
+                    💾 Pontos de Restauração
+                </h3>
+                <p className="text-sm text-gray-600 mb-6">Salve o estado atual como padrão para restaurar depois</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    {/* Botão Salvar como Padrão */}
+                    <button
+                        onClick={handleSaveAsDefault}
+                        className="group relative py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold transition-all transform hover:scale-105 hover:shadow-2xl shadow-lg flex items-center justify-center gap-3"
+                    >
+                        <Save className="w-5 h-5" />
+                        💾 Salvar Como Padrão
+                    </button>
+
+                    {/* Botão Restaurar Padrão */}
+                    <button
+                        onClick={handleRestoreDefault}
+                        disabled={!defaultState}
+                        className={`group relative py-4 px-6 rounded-xl font-bold transition-all transform ${
+                            defaultState
+                                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:scale-105 hover:shadow-2xl shadow-lg'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        } flex items-center justify-center gap-3`}
+                    >
+                        ♻️ Restaurar Padrão
+                    </button>
+                </div>
+
+                {/* Info sobre o último save */}
+                {defaultState && lastSaveTime ? (
+                    <div className="p-3 bg-white/80 backdrop-blur rounded-lg border border-emerald-300">
+                        <p className="text-xs text-gray-600">
+                            <span className="font-bold text-emerald-700">✅ Último ponto salvo:</span> {lastSaveTime}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Contém: Cores, Tema, Layout e Grid responsivo
+                        </p>
+                    </div>
+                ) : (
+                    <div className="p-3 bg-amber-50 rounded-lg border border-amber-300">
+                        <p className="text-xs text-amber-700">
+                            <span className="font-bold">⚠️ Nenhum ponto salvo.</span> Clique em "Salvar Como Padrão" para criar um!
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* 🎨 PALETAS RÁPIDAS */}
+            <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-3 border-purple-300 rounded-2xl p-8 shadow-lg">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                    <Palette className="w-7 h-7 text-purple-600" />
+                    🎨 Paletas Premium
+                </h3>
+                <p className="text-sm text-gray-600 mb-6">Clique para aplicar instantaneamente toques profissionais</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {colorPresets.map((preset, idx) => (
+                        <button
+                            key={idx}
+                            onClick={() => applyPreset(preset)}
+                            className="group relative overflow-hidden rounded-xl shadow-md hover:shadow-2xl transition-all transform hover:scale-105"
+                            title={preset.name}
+                        >
+                            <div className="h-20 bg-gradient-to-br" style={{
+                                backgroundImage: `linear-gradient(135deg, ${preset.primary_color} 0%, ${preset.secondary_color} 50%, ${preset.accent_color} 100%)`
+                            }}>
+                                <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors" />
+                            </div>
+                            <div className="p-2 bg-white/95 backdrop-blur">
+                                <p className="text-xs font-bold text-gray-800 truncate">{preset.name}</p>
+                                <div className="flex gap-1 mt-1">
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: preset.primary_color }} />
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: preset.secondary_color }} />
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: preset.accent_color }} />
+                                </div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* MODE */}
+            <Section title="⚙️ Modo de Tema">
                 <Select
                     label="Modo do tema"
-                    description="Tema claro, escuro ou automático"
+                    description="Tema claro, escuro ou automático baseado nas preferências do usuário"
                     value={settings.theme_mode}
                     onChange={(value) => updateSetting('theme_mode', value as any)}
                     options={[
-                        { value: 'light', label: 'Claro' },
-                        { value: 'dark', label: 'Escuro' },
-                        { value: 'auto', label: 'Automático' },
+                        { value: 'light', label: '☀️ Claro' },
+                        { value: 'dark', label: '🌙 Escuro' },
+                        { value: 'auto', label: '🔄 Automático (segue sistema)' },
                     ]}
                 />
             </Section>
 
-            <Section title="Cores">
-                <ColorInput
-                    label="Cor primária"
-                    description="Cor principal do catálogo (categorias ativas)"
-                    value={settings.primary_color}
-                    onChange={(value) => updateSetting('primary_color', value)}
-                />
-                <ColorInput
-                    label="Cor secundária"
-                    description="Cor secundária (botões, links)"
-                    value={settings.secondary_color}
-                    onChange={(value) => updateSetting('secondary_color', value)}
-                />
-                <ColorInput
-                    label="Cor de destaque"
-                    description="Cor para elementos de sucesso e confirmação"
-                    value={settings.accent_color}
-                    onChange={(value) => updateSetting('accent_color', value)}
-                />
+            {/* CORES PRINCIPAIS */}
+            <Section title="🎯 Cores Principais">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <ColorInput
+                            label="Cor Primária ⭐"
+                            description="Elemento principal (categorias, ícones ativos, CTAs)"
+                            value={settings.primary_color}
+                            onChange={(value) => updateSetting('primary_color', value)}
+                        />
+                    </div>
+                    <div>
+                        <ColorInput
+                            label="Cor Secundária 🔷"
+                            description="Elementos complementares (botões, links)"
+                            value={settings.secondary_color}
+                            onChange={(value) => updateSetting('secondary_color', value)}
+                        />
+                    </div>
+                    <div>
+                        <ColorInput
+                            label="Cor de Destaque ✅"
+                            description="Confirmação, sucesso, estoque disponível"
+                            value={settings.accent_color}
+                            onChange={(value) => updateSetting('accent_color', value)}
+                        />
+                    </div>
+                </div>
             </Section>
 
-            <Section title="Layout">
+            {/* CORES DE FUNDO E TEXTO */}
+            <Section title="🖼️ Cores de Fundo e Tipografia">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <ColorInput
+                            label="Fundo da Página 📄"
+                            description="Cor de fundo geral do catálogo"
+                            value={settings.background_color}
+                            onChange={(value) => updateSetting('background_color', value)}
+                        />
+                    </div>
+                    <div>
+                        <ColorInput
+                            label="Fundo dos Cards 📦"
+                            description="Cards de produtos, seções, elementos"
+                            value={settings.card_background}
+                            onChange={(value) => updateSetting('card_background', value)}
+                        />
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <ColorInput
+                            label="Texto Primário 📝"
+                            description="Títulos, textos principais"
+                            value={settings.text_primary}
+                            onChange={(value) => updateSetting('text_primary', value)}
+                        />
+                    </div>
+                    <div>
+                        <ColorInput
+                            label="Texto Secundário 💬"
+                            description="Descrições, textos pequenos"
+                            value={settings.text_secondary}
+                            onChange={(value) => updateSetting('text_secondary', value)}
+                        />
+                    </div>
+                </div>
+            </Section>
+
+            {/* ACESSIBILIDADE - CONTRASTE */}
+            <div className={`border-2 rounded-xl p-6 ${isAccessible ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}>
+                <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+                    {isAccessible ? '✅' : '⚠️'} Contraste de Acessibilidade
+                </h3>
+                <p className="text-sm mb-2">
+                    Razão de contraste: <span className="font-bold">{contrastRatio.toFixed(2)}:1</span>
+                </p>
+                <p className={`text-sm ${isAccessible ? 'text-green-700' : 'text-amber-700'}`}>
+                    {isAccessible 
+                        ? '✅ Contraste suficiente para WCAG AA (≥4.5:1)'
+                        : '⚠️ Contraste baixo - considere ajustar as cores para melhor acessibilidade'}
+                </p>
+            </div>
+
+            {/* PREVIEW INTERATIVO */}
+            <div className="bg-white border-3 border-gray-300 rounded-2xl p-8 shadow-2xl">
+                <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                    ✨ Preview em Tempo Real
+                </h3>
+                
+                {/* Fundo */}
+                <div className="rounded-2xl p-8" style={{ backgroundColor: settings.background_color || '#f8fafc' }}>
+                    {/* Header */}
+                    <div className="mb-6 pb-4 border-b-2" style={{ borderColor: settings.primary_color }}>
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: settings.primary_color }} />
+                            <span className="font-bold text-lg" style={{ color: settings.text_primary }}>Meu Catálogo</span>
+                        </div>
+                    </div>
+
+                    {/* Cards de Produto */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        {[1, 2, 3].map((i) => (
+                            <div 
+                                key={i}
+                                className="rounded-xl p-4 border-2 transition-transform hover:scale-105" 
+                                style={{ 
+                                    backgroundColor: settings.card_background || '#ffffff',
+                                    borderColor: settings.primary_color + '30'
+                                }}
+                            >
+                                <div className="h-32 rounded-lg mb-3" style={{ backgroundColor: settings.primary_color + '20' }} />
+                                <h4 className="font-bold mb-1" style={{ color: settings.text_primary }}>Produto {i}</h4>
+                                <p className="text-sm mb-3" style={{ color: settings.text_secondary }}>Descrição breve do produto</p>
+                                
+                                <div className="flex gap-2">
+                                    <button 
+                                        className="flex-1 py-2 rounded-lg text-white font-semibold text-sm transition-opacity hover:opacity-90" 
+                                        style={{ backgroundColor: settings.primary_color }}
+                                    >
+                                        Comprar
+                                    </button>
+                                    <button 
+                                        className="px-3 py-2 rounded-lg text-white font-semibold text-sm transition-opacity hover:opacity-90" 
+                                        style={{ backgroundColor: settings.secondary_color }}
+                                    >
+                                        ❤️
+                                    </button>
+                                </div>
+                                
+                                <div className="mt-3 px-2 py-1 rounded-lg text-white text-xs font-bold text-center" style={{ backgroundColor: settings.accent_color }}>
+                                    EM ESTOQUE
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* CTA Principal */}
+                    <div className="flex gap-3">
+                        <button 
+                            className="flex-1 py-4 rounded-xl text-white font-bold text-lg transition-opacity hover:opacity-90"
+                            style={{ 
+                                backgroundColor: settings.primary_color,
+                                boxShadow: `0 4px 15px ${settings.primary_color}40`
+                            }}
+                        >
+                            Ver Todos os Produtos
+                        </button>
+                        <button 
+                            className="px-6 py-4 rounded-xl border-2 font-bold transition-opacity"
+                            style={{ 
+                                borderColor: settings.primary_color,
+                                color: settings.primary_color
+                            }}
+                        >
+                            Filtros
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* LAYOUT */}
+            <Section title="📊 Configurações de Layout">
                 <Select
-                    label="Modo de layout"
-                    description="Como os produtos serão exibidos"
+                    label="Modo de exibição"
+                    description="Como os produtos serão organizados"
                     value={settings.layout_mode}
                     onChange={(value) => updateSetting('layout_mode', value as any)}
                     options={[
-                        { value: 'grid', label: 'Grade' },
-                        { value: 'list', label: 'Lista' },
-                        { value: 'both', label: 'Ambos (usuário escolhe)' },
+                        { value: 'grid', label: '📦 Grade (recomendado)' },
+                        { value: 'list', label: '📋 Lista' },
+                        { value: 'both', label: '🔄 Ambos (usuário escolhe)' },
                     ]}
                 />
                 <Select
                     label="Estilo dos cards"
-                    description="Estilo visual dos cards de produto"
+                    description="Aparência visual dos cards de produtos"
                     value={settings.card_style}
                     onChange={(value) => updateSetting('card_style', value as any)}
                     options={[
-                        { value: 'modern', label: 'Moderno' },
-                        { value: 'classic', label: 'Clássico' },
-                        { value: 'minimal', label: 'Minimalista' },
+                        { value: 'modern', label: '🚀 Moderno (elevado, sombra)' },
+                        { value: 'classic', label: '📌 Clássico (bordas)' },
+                        { value: 'minimal', label: '✨ Minimalista (clean)' },
                     ]}
                 />
             </Section>
 
-            <Section title="Grade Responsiva">
+            {/* GRADE RESPONSIVA */}
+            <Section title="📱 Grade Responsiva (Quantas colunas?)">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-700">💡 Ajuste quantos cards aparecem em cada resolução</p>
+                </div>
                 <NumberInput
-                    label="Colunas (Mobile)"
-                    description="Número de colunas em dispositivos móveis"
+                    label="Mobile (até 640px) 📱"
+                    description="Celulares em portrait"
                     value={settings.grid_columns_mobile}
                     onChange={(value) => updateSetting('grid_columns_mobile', value)}
                     min={1}
                     max={2}
                 />
                 <NumberInput
-                    label="Colunas (Tablet)"
-                    description="Número de colunas em tablets"
+                    label="Tablet (até 1024px) 📲"
+                    description="Tablets e telas médias"
                     value={settings.grid_columns_tablet}
                     onChange={(value) => updateSetting('grid_columns_tablet', value)}
                     min={1}
                     max={4}
                 />
                 <NumberInput
-                    label="Colunas (Desktop)"
-                    description="Número de colunas em desktop"
+                    label="Desktop (1024px+) 🖥️"
+                    description="Computadores e telas grandes"
                     value={settings.grid_columns_desktop}
                     onChange={(value) => updateSetting('grid_columns_desktop', value)}
                     min={2}

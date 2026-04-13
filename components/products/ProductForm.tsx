@@ -33,9 +33,11 @@ import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
 import { supabase } from '../../services/supabase';
+import { VPS_PROXY_BASE } from '../../services/vpsProxyBase';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
+import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl } from '../../utils/video-url';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -385,7 +387,6 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 return tid;
             })();
 
-            const proxyBase = '/api/vps-proxy';
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
 
@@ -396,7 +397,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 const form = new FormData();
                 form.append('file', compressed, file.name);
                 const uploadPath = `/products/${productId}/upload-image`;
-                const res = await fetch(`${proxyBase}?path=${encodeURIComponent(uploadPath)}`, {
+                const res = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(uploadPath)}`, {
                     method: 'POST',
                     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
                     body: form,
@@ -494,8 +495,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             }
 
             const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
-            const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
-            const videoUrl = `${baseUrl}${sku.replace(/\s+/g, '')}${ext}`;
+            const videoUrl = buildProductVideoUrl(videoBaseUrl, sku, ext);
             
             setValue('video_url', videoUrl, { shouldDirty: true, shouldValidate: true });
             toast.success('Link do vídeo gerado com sucesso!');
@@ -518,16 +518,22 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 if (!videoBaseUrl) return;
 
                 const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
-                const baseUrl = videoBaseUrl.endsWith('/') ? videoBaseUrl : `${videoBaseUrl}/`;
-                const candidateUrl = `${baseUrl}${currentSkuForVideo.replace(/\s+/g, '')}${ext}`;
+                const candidateUrl = buildProductVideoUrl(videoBaseUrl, currentSkuForVideo, ext);
+                const normalizedBaseUrl = normalizeVideoBaseUrl(videoBaseUrl);
+                const normalizedCandidateUrl = normalizeProductVideoUrl(candidateUrl);
 
                 const currentVideoUrl = getValues('video_url');
+                const normalizedCurrentVideoUrl = normalizeProductVideoUrl(currentVideoUrl);
                 
                 // Se for idêntico, não faz nada
-                if (currentVideoUrl === candidateUrl) return;
+                if (currentVideoUrl === candidateUrl || normalizedCurrentVideoUrl === normalizedCandidateUrl) return;
 
                 // Se não estiver vazio e também não for do Synology (ex: link do YouTube), preserva
-                if (currentVideoUrl && !currentVideoUrl.startsWith(videoBaseUrl)) return;
+                if (
+                    currentVideoUrl &&
+                    !currentVideoUrl.startsWith(normalizedBaseUrl) &&
+                    normalizedCurrentVideoUrl !== normalizedCandidateUrl
+                ) return;
 
                 // Verifica se o arquivo realmente existe (opcional no form pra não travar)
                 const response = await fetch(candidateUrl, { method: 'HEAD', cache: 'no-store' });
@@ -1035,7 +1041,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         </button>
                         {watch('video_url') && (
                             <a
-                                href={watch('video_url')}
+                                href={normalizeProductVideoUrl(watch('video_url'))}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center shrink-0 border border-blue-200 font-medium text-sm"

@@ -15,6 +15,11 @@ interface RawPaymentFee {
     updated_at?: string;
 }
 
+const FEES_SUCCESS_TTL_MS = 5 * 60 * 1000;
+const FEES_FAILURE_TTL_MS = 60 * 1000;
+let feesCache: { data: PaymentFee[]; expiresAt: number } | null = null;
+let failureCooldownUntil = 0;
+
 /** Normaliza campos da VPS para o padrão do frontend (types/payment-fees.ts) */
 function normalize(raw: RawPaymentFee): PaymentFee {
     return {
@@ -32,8 +37,23 @@ function normalize(raw: RawPaymentFee): PaymentFee {
 
 export const paymentFeesService = {
     async list(): Promise<PaymentFee[]> {
-        const raw = await vpsClient.get<RawPaymentFee[]>('/payment-fees');
-        return raw.map(normalize);
+        if (feesCache && Date.now() < feesCache.expiresAt) {
+            return feesCache.data;
+        }
+
+        if (Date.now() < failureCooldownUntil) {
+            return feesCache?.data || [];
+        }
+
+        try {
+            const raw = await vpsClient.get<RawPaymentFee[]>('/payment-fees');
+            const normalized = raw.map(normalize);
+            feesCache = { data: normalized, expiresAt: Date.now() + FEES_SUCCESS_TTL_MS };
+            return normalized;
+        } catch (error) {
+            failureCooldownUntil = Date.now() + FEES_FAILURE_TTL_MS;
+            return feesCache?.data || [];
+        }
     },
 
     /** Replace ALL fees atomically (PUT replaces entire list) */
