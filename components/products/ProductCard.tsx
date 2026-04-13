@@ -39,7 +39,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
     const videoInputRef = useRef<HTMLInputElement>(null);
 
-    // Check video: prioridade para video_url salvo no banco; fallback por SKU no Synology
+    // Check video: prioridade para video_url salvo no banco; fallback resiliente por SKU
     useEffect(() => {
         const dbVideoUrl = (product.video_url || '').trim();
         if (dbVideoUrl) {
@@ -55,10 +55,40 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         setVideoInfo((prev) => ({ ...prev, checking: true }));
         let isMounted = true;
 
-        vpsApiService.checkVideoBySku(product.sku)
-            .then((data) => {
+        const normalizedSku = product.sku.trim().replace(/\s+/g, '').toUpperCase();
+        const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(normalizedSku)}.mp4`;
+
+        const resolveVideoInfo = async () => {
+            // Caminho principal
+            const primary = await vpsApiService.checkVideoBySku(normalizedSku);
+            if (primary?.exists) {
+                return { exists: true, url: primary.url || canonicalUrl };
+            }
+
+            // Fallback para endpoint público legado
+            try {
+                const path = `/public/check-video?sku=${encodeURIComponent(normalizedSku)}`;
+                const res = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
+                    headers: { Accept: 'application/json' },
+                    cache: 'no-store',
+                });
+                if (res.ok) {
+                    const fallback = await res.json().catch(() => null) as { exists?: boolean; url?: string } | null;
+                    if (fallback?.exists) {
+                        return { exists: true, url: fallback.url || canonicalUrl };
+                    }
+                }
+            } catch {
+                // Sem fallback adicional
+            }
+
+            return { exists: false, url: null };
+        };
+
+        resolveVideoInfo()
+            .then((info) => {
                 if (isMounted) {
-                    setVideoInfo({ exists: Boolean(data?.exists), url: data?.url || null, checking: false });
+                    setVideoInfo({ exists: info.exists, url: info.url, checking: false });
                 }
             })
             .catch(() => {
