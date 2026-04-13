@@ -11,6 +11,7 @@ const CHECKPOINT_COOLDOWN_MS = 60_000;
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
 
 let checkpointBlockedUntil = 0;
+let hasWarnedMissingSyncKey = false;
 
 function getRuntimeProxyBase(): string {
     if (typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname)) {
@@ -68,7 +69,10 @@ async function buildHeaders(extra?: Record<string, string>): Promise<HeadersInit
         ...extra,
     };
     
-    if (!syncKey) {
+    // In production usamos /api/vps-proxy, que injeta o sync key no backend.
+    // Evita spam de console no cliente quando VITE_VPS_SYNC_KEY nao esta definido.
+    if (!syncKey && !hasWarnedMissingSyncKey && import.meta.env.DEV) {
+        hasWarnedMissingSyncKey = true;
         console.warn('[vpsClient] ⚠️ x-sync-key não configurado. Verifique VITE_VPS_SYNC_KEY');
     }
     
