@@ -2003,7 +2003,9 @@ fastify.get('/public/check-video', async (req, reply) => {
 
   // Fallback otimista se Synology inacessível: mantém UX de vídeo no PDP
   // e deixa o próprio player validar a URL final (onError no frontend).
-  return reply.send({ exists: true, url: canonicalUrl });
+  // Fallback pessimista: sem Synology não dá para confirmar existência do vídeo.
+  // O botão no admin mostrará "sem vídeo" e permitirá upload.
+  return reply.send({ exists: false });
 });
 
 fastify.get('/team', { preHandler: requireSyncKey }, async (req, reply) => {

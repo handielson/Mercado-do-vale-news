@@ -359,7 +359,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 className={cn(
                                     "p-1.5 rounded-lg transition-colors group",
                                     (videoInfo.checking || isUploadingVideo) ? "opacity-50 cursor-wait" :
-                                    videoInfo.exists ? "hover:bg-blue-50" : "hover:bg-slate-100"
+                                    videoInfo.exists ? "bg-blue-100 hover:bg-blue-200" : "hover:bg-amber-50"
                                 )}
                                 title={
                                     videoInfo.checking ? "Verificando status de vídeo..." :
@@ -371,9 +371,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 {isUploadingVideo || videoInfo.checking ? (
                                     <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
                                 ) : videoInfo.exists ? (
-                                    <Video className="w-4 h-4 text-blue-500 group-hover:text-blue-700" />
+                                    <Video className="w-4 h-4 text-blue-600 group-hover:text-blue-800" />
                                 ) : (
-                                    <VideoOff className="w-4 h-4 text-slate-300 group-hover:text-amber-500" />
+                                    <VideoOff className="w-4 h-4 text-slate-400 group-hover:text-amber-500" />
                                 )}
                             </button>
                         )}
