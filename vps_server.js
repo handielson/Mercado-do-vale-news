@@ -1971,7 +1971,7 @@ fastify.get('/public/check-video', async (req, reply) => {
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required' });
 
-  const cleanSku = sku.trim().replace(/\s+/g, '');
+  const cleanSku = sku.trim().replace(/\s+/g, '').toUpperCase();
   const [rows] = await pool.query('SELECT synology_video_extension FROM company_settings LIMIT 1').catch(() => [[]]);
   const ext = rows?.[0]?.synology_video_extension || '.mp4';
   const fileName = `${cleanSku}${ext}`;
@@ -2440,7 +2440,7 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
       'SELECT synology_video_extension FROM company_settings LIMIT 1'
     ).catch(() => [[null]]);
     const ext = (setting && setting.synology_video_extension) || '.mp4';
-    const cleanSku = sku.trim().replace(/\s+/g, '');
+    const cleanSku = sku.trim().replace(/\s+/g, '').toUpperCase();
     const fileName = `${cleanSku}${ext}`;
     const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
 
