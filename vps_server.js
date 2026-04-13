@@ -2458,9 +2458,12 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
       } catch (synoErr) {
         console.warn('[check-video] Synology indisponível, tentando HEAD fallback no CDN:', synoErr.message);
         
-        // Fallback: validar existência do arquivo no CDN via HEAD request
+        // Fallback: validar existência do arquivo no CDN via HEAD request (com timeout)
         try {
-          const headResp = await fetch(canonicalUrl, { method: 'HEAD' });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
+          const headResp = await fetch(canonicalUrl, { method: 'HEAD', signal: controller.signal });
+          clearTimeout(timeoutId);
           if (headResp.ok) {
             return { exists: true, url: canonicalUrl };
           }
@@ -2475,7 +2478,10 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
 
     // Quando Synology não configurado: tenta HEAD fallback direto
     try {
-      const headResp = await fetch(canonicalUrl, { method: 'HEAD' });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
+      const headResp = await fetch(canonicalUrl, { method: 'HEAD', signal: controller.signal });
+      clearTimeout(timeoutId);
       if (headResp.ok) {
         return { exists: true, url: canonicalUrl };
       }
