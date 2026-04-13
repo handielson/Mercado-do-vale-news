@@ -43,9 +43,9 @@ fastify.register(require('@fastify/static'), {
   prefix: '/images/',
   decorateReply: false,
   setHeaders: (res) => {
-    // Allow images to be loaded cross-origin (bypass Cloudflare cache with correct CORP header)
+    // Allow images cross-origin; s-maxage=0 impede Cloudflare de cachear
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=0');
   },
 });
 
