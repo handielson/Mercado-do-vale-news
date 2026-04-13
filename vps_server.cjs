@@ -42,6 +42,11 @@ fastify.register(require('@fastify/static'), {
   root: UPLOADS_DIR,
   prefix: '/images/',
   decorateReply: false,
+  setHeaders: (res) => {
+    // Allow images to be loaded cross-origin (bypass Cloudflare cache with correct CORP header)
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=86400, must-revalidate');
+  },
 });
 
 // Multipart support for file uploads
