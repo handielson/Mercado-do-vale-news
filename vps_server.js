@@ -59,6 +59,8 @@ fastify.register(require('@fastify/compress'), {
 fastify.register(require('@fastify/helmet'), {
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
+  // Allow images to be loaded cross-origin (e.g., mercadodovale.com.br loading from api.xiaomipetrolina.com.br)
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
 });
 
 // Basic per-IP rate limit to reduce brute-force and abuse on public endpoints
