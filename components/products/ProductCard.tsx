@@ -38,8 +38,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
     const videoInputRef = useRef<HTMLInputElement>(null);
 
-    // Check video
+    // Check video: prioridade para video_url salvo no banco; fallback por SKU no Synology
     useEffect(() => {
+        const dbVideoUrl = (product.video_url || '').trim();
+        if (dbVideoUrl) {
+            setVideoInfo({ exists: true, url: dbVideoUrl, checking: false });
+            return;
+        }
+
         if (!product.sku) {
             setVideoInfo({ exists: false, url: null, checking: false });
             return;
@@ -60,7 +66,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             });
             
         return () => { isMounted = false; };
-    }, [product.sku]);
+    }, [product.sku, product.video_url]);
 
     // Handle Upload video
     const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
