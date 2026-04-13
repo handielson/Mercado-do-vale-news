@@ -10,6 +10,7 @@ import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
 import { supabase } from '../../services/supabase';
 import { VPS_PROXY_BASE } from '../../services/vpsProxyBase';
+import { vpsApiService } from '../../services/vpsApiService';
 
 interface ProductCardProps {
     product: Product;
@@ -50,15 +51,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             setVideoInfo({ exists: false, url: null, checking: false });
             return;
         }
+
+        setVideoInfo((prev) => ({ ...prev, checking: true }));
         let isMounted = true;
-        
-        const VPS_BASE = import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-        
-        fetch(`${VPS_BASE}/public/check-video?sku=${product.sku}`)
-            .then(res => res.json())
-            .then(data => {
+
+        vpsApiService.checkVideoBySku(product.sku)
+            .then((data) => {
                 if (isMounted) {
-                    setVideoInfo({ exists: Boolean(data.exists), url: data.url, checking: false });
+                    setVideoInfo({ exists: Boolean(data?.exists), url: data?.url || null, checking: false });
                 }
             })
             .catch(() => {
