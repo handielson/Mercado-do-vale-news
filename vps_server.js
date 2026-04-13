@@ -1998,13 +1998,21 @@ fastify.get('/public/check-video', async (req, reply) => {
       return reply.send({ exists, ...(exists ? { url: canonicalUrl } : {}) });
     }
   } catch (err) {
-    console.warn('[public/check-video] Synology API error, fallback otimista:', err.message);
+    console.warn('[public/check-video] Synology API error, tentando fallback via HEAD no CDN:', err.message);
+
+    // Fallback robusto: tenta validar existência do arquivo no CDN.
+    try {
+      const headResp = await fetch(canonicalUrl, { method: 'HEAD' });
+      if (headResp.ok) {
+        videoExistenceCache.set(cleanSku, { exists: true, url: canonicalUrl, cachedAt: Date.now() });
+        return reply.send({ exists: true, url: canonicalUrl });
+      }
+    } catch (headErr) {
+      console.warn('[public/check-video] HEAD fallback falhou:', headErr.message);
+    }
   }
 
-  // Fallback otimista se Synology inacessível: mantém UX de vídeo no PDP
-  // e deixa o próprio player validar a URL final (onError no frontend).
-  // Fallback pessimista: sem Synology não dá para confirmar existência do vídeo.
-  // O botão no admin mostrará "sem vídeo" e permitirá upload.
+  // Sem Synology e sem confirmação via CDN: trata como inexistente.
   return reply.send({ exists: false });
 });
 
