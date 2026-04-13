@@ -91,7 +91,7 @@ async function shopeeGet(apiPath: string, creds: Creds, extraParams: string): Pr
     const { url } = buildShopeeUrl(apiPath, creds);
     const r = await fetch(`${url}${extraParams}`);
     const data = await r.json();
-    if ((data.error === 'invalid_access_token' || data.error === 'error_auth') && creds.refreshToken) {
+    if ((data.error === 'invalid_access_token' || data.error === 'invalid_acceess_token' || data.error === 'error_auth') && creds.refreshToken) {
         creds.accessToken = await doRefreshToken(creds);
         const { url: url2 } = buildShopeeUrl(apiPath, creds);
         const r2 = await fetch(`${url2}${extraParams}`);
@@ -104,7 +104,7 @@ async function shopeePost(apiPath: string, creds: Creds, body: any): Promise<any
     const { url } = buildShopeeUrl(apiPath, creds);
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await r.json();
-    if ((data.error === 'invalid_access_token' || data.error === 'error_auth') && creds.refreshToken) {
+    if ((data.error === 'invalid_access_token' || data.error === 'invalid_acceess_token' || data.error === 'error_auth') && creds.refreshToken) {
         creds.accessToken = await doRefreshToken(creds);
         const { url: url2 } = buildShopeeUrl(apiPath, creds);
         const r2 = await fetch(url2, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
