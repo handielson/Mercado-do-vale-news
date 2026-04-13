@@ -43,9 +43,10 @@ fastify.register(require('@fastify/static'), {
   prefix: '/images/',
   decorateReply: false,
   setHeaders: (res) => {
-    // Allow images cross-origin; s-maxage=0 impede Cloudflare de cachear
+    // Allow images cross-origin; CDN-Cache-Control impede Cloudflare de cachear
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=0');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('CDN-Cache-Control', 'no-store'); // Cloudflare não cacheia imagens
   },
 });
 
