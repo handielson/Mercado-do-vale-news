@@ -4,7 +4,15 @@ import crypto from 'crypto';
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!;
 const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
 
-const SHOPEE_LIVE_URL = 'https://partner.shopeemobile.com';
+const SHOPEE_API_LIVE_URL = 'https://partner.shopeemobile.com';
+const SHOPEE_API_SANDBOX_URL = 'https://partner.test-stable.shopeemobile.com';
+
+function getShopeeBaseUrl(partnerId: string | number) {
+    if (String(partnerId) === '1229870' || process.env.SHOPEE_ENV === 'sandbox') {
+        return SHOPEE_API_SANDBOX_URL;
+    }
+    return SHOPEE_API_LIVE_URL;
+}
 
 // Sign for shop-level APIs (access_token + shop_id in base string)
 function generateSign(partnerId: string, partnerKey: string, apiPath: string, timestamp: number, accessToken: string, shopId: string) {
@@ -47,7 +55,8 @@ async function doRefreshToken(creds: Creds): Promise<string> {
     const apiPath = '/api/v2/auth/access_token/get';
     const timestamp = Math.floor(Date.now() / 1000);
     const sign = generatePublicSign(creds.partnerId, creds.partnerKey, apiPath, timestamp);
-    const url = `${SHOPEE_LIVE_URL}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&sign=${sign}`;
+    const shopeeBaseUrl = getShopeeBaseUrl(creds.partnerId);
+    const url = `${shopeeBaseUrl}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&sign=${sign}`;
     const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -70,9 +79,10 @@ async function doRefreshToken(creds: Creds): Promise<string> {
 }
 
 function buildShopeeUrl(apiPath: string, creds: Creds) {
+    const shopeeBaseUrl = getShopeeBaseUrl(creds.partnerId);
     const timestamp = Math.floor(Date.now() / 1000);
     const sign = generateSign(creds.partnerId, creds.partnerKey, apiPath, timestamp, creds.accessToken, creds.shopId);
-    const base = `${SHOPEE_LIVE_URL}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&access_token=${creds.accessToken}&shop_id=${creds.shopId}&sign=${sign}`;
+    const base = `${shopeeBaseUrl}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&access_token=${creds.accessToken}&shop_id=${creds.shopId}&sign=${sign}`;
     return { url: base, timestamp, sign };
 }
 
