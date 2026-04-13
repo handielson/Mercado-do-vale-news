@@ -139,6 +139,66 @@ export default async function handler(req: any, res: any) {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
             return res.status(200).json(await shopeePost('/api/v2/product/update_item', creds, req.body));
         }
+        if (action === 'get_full_catalog') {
+            const pageSizeRaw = Number(req.query.page_size || 100);
+            const pageSize = Number.isFinite(pageSizeRaw) ? Math.max(1, Math.min(100, pageSizeRaw)) : 100;
+            const itemStatus = String(req.query.item_status || 'NORMAL');
+
+            const allItemIds: number[] = [];
+            let offset = 0;
+            let hasNextPage = true;
+            let safety = 0;
+
+            while (hasNextPage && safety < 200) {
+                const params = new URLSearchParams({
+                    offset: String(offset),
+                    page_size: String(pageSize),
+                    item_status: itemStatus,
+                });
+                const listData = await shopeeGet('/api/v2/product/get_item_list', creds, `&${params}`);
+                if (listData?.error && listData.error !== '') {
+                    return res.status(200).json(listData);
+                }
+
+                const pageItems: any[] = listData?.response?.item || [];
+                for (const item of pageItems) {
+                    if (item?.item_id != null) allItemIds.push(Number(item.item_id));
+                }
+
+                hasNextPage = listData?.response?.has_next_page === true;
+                offset = Number(listData?.response?.next_offset ?? (offset + pageSize));
+                if (pageItems.length === 0) break;
+                safety += 1;
+            }
+
+            const uniqueIds = [...new Set(allItemIds)].filter((id) => Number.isFinite(id));
+            const itemList: any[] = [];
+            const detailBatch = 50;
+
+            for (let i = 0; i < uniqueIds.length; i += detailBatch) {
+                const batchIds = uniqueIds.slice(i, i + detailBatch).join(',');
+                const detailData = await shopeeGet(
+                    '/api/v2/product/get_item_base_info',
+                    creds,
+                    `&item_id_list=${batchIds}&need_tax_info=true&need_complaint_policy=false`
+                );
+
+                if (detailData?.error && detailData.error !== '') {
+                    return res.status(200).json(detailData);
+                }
+
+                itemList.push(...(detailData?.response?.item_list || []));
+            }
+
+            return res.status(200).json({
+                error: '',
+                message: 'success',
+                response: {
+                    total_count: uniqueIds.length,
+                    item_list: itemList,
+                },
+            });
+        }
         if (action === 'get_item_list') {
             const params = new URLSearchParams({
                 offset: req.query.offset || '0',

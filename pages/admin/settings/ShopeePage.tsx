@@ -55,6 +55,44 @@ type Filter = 'all' | 'synced' | 'not_synced' | 'inactive';
 const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
 
+async function fetchJsonStrict(url: string, init?: RequestInit): Promise<any> {
+    const res = await fetch(url, init);
+    const text = await res.text();
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+
+    let data: any = null;
+    if (text) {
+        try {
+            data = JSON.parse(text);
+        } catch {
+            data = null;
+        }
+    }
+
+    if (!res.ok) {
+        const lower = text.toLowerCase();
+        const isHtml = contentType.includes('text/html') || lower.includes('<!doctype') || lower.includes('<html');
+        const checkpoint = lower.includes('vercel security checkpoint') || lower.includes("we're verifying your browser");
+
+        if (checkpoint) {
+            throw new Error('Vercel Security Checkpoint bloqueou temporariamente a requisicao. Aguarde alguns segundos e tente novamente.');
+        }
+
+        if (isHtml) {
+            throw new Error(`HTTP ${res.status}: a API retornou HTML em vez de JSON.`);
+        }
+
+        const apiMsg = data?.message || data?.error;
+        throw new Error(apiMsg ? `HTTP ${res.status}: ${apiMsg}` : `HTTP ${res.status}: falha na API Shopee`);
+    }
+
+    if (data === null) {
+        throw new Error('A API retornou resposta invalida (nao-JSON).');
+    }
+
+    return data;
+}
+
 const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
     if (status === 'active')
         return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">🟢 Ativo</span>;
@@ -199,39 +237,21 @@ export default function ShopeePage() {
         setImporting(true);
         toast.loading('Buscando produtos na Shopee...', { id: 'shopee-import' });
         try {
-            // 1. Fetch ALL active Shopee item IDs (paginated)
-            const shopeeItems: any[] = [];
-            let offset = 0;
-            let hasNextPage = true;
-            while (hasNextPage) {
-                const listRes = await fetch(`/api/shopee-catalog?action=get_item_list&item_status=NORMAL&page_size=100&offset=${offset}`);
-                const listData = await listRes.json();
-                const pageItems: any[] = listData.response?.item || [];
-                shopeeItems.push(...pageItems);
-                hasNextPage = listData.response?.has_next_page === true;
-                offset = listData.response?.next_offset ?? (offset + 100);
-                if (pageItems.length === 0) break; // safety exit
-                toast.loading(`Buscando produtos Shopee... ${shopeeItems.length} encontrados`, { id: 'shopee-import' });
+            // 1. Busca catalogo completo no backend (evita dezenas de chamadas no browser)
+            const fullData = await fetchJsonStrict('/api/shopee-catalog?action=get_full_catalog&item_status=NORMAL&page_size=100');
+            if (fullData?.error && fullData.error !== '') {
+                throw new Error(fullData.message || fullData.error || 'Falha ao buscar catalogo Shopee.');
             }
 
-            if (shopeeItems.length === 0) {
+            const detailedItems: any[] = fullData.response?.item_list || [];
+            const shopeeTotal = Number(fullData.response?.total_count || detailedItems.length || 0);
+
+            if (detailedItems.length === 0) {
                 toast.warning('Nenhum produto encontrado na Shopee.', { id: 'shopee-import' });
                 return;
             }
 
-            // 2. Fetch full base info (incl. seller SKU) in batches of 50
-            toast.loading(`Carregando detalhes de ${shopeeItems.length} itens...`, { id: 'shopee-import' });
-            const itemIds = shopeeItems.map((i: any) => i.item_id);
-            const batchSize = 50;
-            const detailedItems: any[] = [];
-            for (let i = 0; i < itemIds.length; i += batchSize) {
-                const batch = itemIds.slice(i, i + batchSize).join(',');
-                const infoRes = await fetch(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${batch}`);
-                const infoData = await infoRes.json();
-                detailedItems.push(...(infoData.response?.item_list || []));
-            }
-
-            // 3. Fetch VPS products for matching
+            // 2. Fetch VPS products for matching
             const localProds = await vpsApiService.getProducts({ limit: 5000, noCache: true }) || [];
             // Build SKU map: both exact and cleaned (no hyphens/spaces) → works for "RMP-12P" vs "RMP12P"
             const cleanSku = (s: string) => s.toLowerCase().replace(/[-\s]/g, '');
@@ -243,7 +263,7 @@ export default function ShopeePage() {
                 skuClean.set(cleanSku(p.sku), p);
             }
 
-            // 4. Match: item_sku → model_sku → cleaned SKU → fuzzy name
+            // 3. Match: item_sku -> model_sku -> cleaned SKU -> fuzzy name
             const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
             const matched: any[] = [];
             const unmatched: any[] = [];
@@ -291,7 +311,7 @@ export default function ShopeePage() {
             }
 
 
-            // 5. Deduplicate by product_id (SKU match wins over name match) and upsert
+            // 4. Deduplicate by product_id (SKU match wins over name match) and upsert
             const { data: existing } = await supabase.from('shopee_products').select('product_id');
             const existingIds = new Set((existing || []).map((r: any) => r.product_id));
 
@@ -333,7 +353,7 @@ export default function ShopeePage() {
 
             toast.success(
                 `✅ ${insertedCount} novos vínculos criados\n` +
-                `📦 Shopee: ${shopeeItems.length} itens | VPS: ${localProds.length} produtos\n` +
+                `📦 Shopee: ${shopeeTotal} itens | VPS: ${localProds.length} produtos\n` +
                 `🔗 Match SKU: ${bySkuCount} | Nome: ${byNameCount} | Já existiam: ${alreadyExisted}\n` +
                 `❌ Sem match: ${unmatched.length}`,
                 { id: 'shopee-import', duration: 10000 }
