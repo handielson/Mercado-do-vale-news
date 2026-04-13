@@ -2444,6 +2444,7 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
     const fileName = `${cleanSku}${ext}`;
     const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
 
+    // Tenta validar via Synology primeiramente
     if (SYNO_USER && SYNO_PASS) {
       try {
         const sid = await synoLogin();
@@ -2453,16 +2454,39 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
           `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`
         );
         const exists = data.success === true && data.data?.files?.[0]?.name != null;
-        return { exists, url: canonicalUrl };
+        return { exists, url: exists ? canonicalUrl : null };
       } catch (synoErr) {
-        console.warn('[check-video] Synology inatível, fallback otimista:', synoErr.message);
-        return { exists: true, url: canonicalUrl };
+        console.warn('[check-video] Synology indisponível, tentando HEAD fallback no CDN:', synoErr.message);
+        
+        // Fallback: validar existência do arquivo no CDN via HEAD request
+        try {
+          const headResp = await fetch(canonicalUrl, { method: 'HEAD' });
+          if (headResp.ok) {
+            return { exists: true, url: canonicalUrl };
+          }
+        } catch (headErr) {
+          console.warn('[check-video] HEAD fallback falhou:', headErr.message);
+        }
+        
+        // Sem Synology e sem confirmação via CDN: retorna false (pessimista)
+        return { exists: false, url: null };
       }
     }
 
-    return { exists: true, url: canonicalUrl };
-  } catch {
-    return { exists: true, url: canonicalUrl };
+    // Quando Synology não configurado: tenta HEAD fallback direto
+    try {
+      const headResp = await fetch(canonicalUrl, { method: 'HEAD' });
+      if (headResp.ok) {
+        return { exists: true, url: canonicalUrl };
+      }
+    } catch (headErr) {
+      console.warn('[check-video] HEAD direto falhou:', headErr.message);
+    }
+    
+    return { exists: false, url: null };
+  } catch (err) {
+    console.error('[check-video] Erro geral:', err.message);
+    return { exists: false, url: null };
   }
 });
 
