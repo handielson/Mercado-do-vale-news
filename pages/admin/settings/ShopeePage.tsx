@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
-    Upload, Check, X, Loader2, Tag, Download, Calculator, ShoppingBag, Printer, DollarSign, Pencil
+    Upload, Check, X, Loader2, Tag, Download, Calculator, ShoppingBag, Printer, DollarSign, Pencil, Trash2, Image as ImageIcon, Video
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
@@ -50,6 +50,20 @@ interface LocalProduct {
 
 type Tab = 'config' | 'products' | 'orders' | 'finance' | 'printers';
 type Filter = 'all' | 'synced' | 'not_synced' | 'inactive';
+
+type EditableImage = {
+    image_id?: string;
+    image_url?: string;
+    data_url?: string;
+    file_name?: string;
+};
+
+type EditableVideo = {
+    video_id?: string;
+    thumbnail_url?: string;
+    data_url?: string;
+    file_name?: string;
+};
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 const fmt = (cents: number) =>
@@ -108,6 +122,15 @@ async function buildShopeePriceList(itemId: number, originalPrice: number): Prom
     }
 
     return [{ model_id: 0, original_price: originalPrice }];
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Falha ao ler arquivo.'));
+        reader.readAsDataURL(file);
+    });
 }
 
 const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
@@ -1290,6 +1313,11 @@ function ExpandedItemPanel({
     const [calcTaxes, setCalcTaxes] = useState('0');
     const [calcExtras, setCalcExtras] = useState('0');
     const [calcMargin, setCalcMargin] = useState('10');
+    const [mediaImages, setMediaImages] = useState<EditableImage[]>([]);
+    const [mediaVideos, setMediaVideos] = useState<EditableVideo[]>([]);
+    const [mediaBusy, setMediaBusy] = useState(false);
+    const imageInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
 
     // Load current item data from Shopee on mount to pre-populate form
     useEffect(() => {
@@ -1328,6 +1356,36 @@ function ExpandedItemPanel({
                     .map((f: any) => f.text).join('\n') || '';
 
                 const dim = item.dimension || {};
+                const existingImages: EditableImage[] = [];
+                const imageIds = Array.isArray(item.image?.image_id_list) ? item.image.image_id_list : [];
+                const imageUrls = Array.isArray(item.image?.image_url_list) ? item.image.image_url_list : [];
+                for (let i = 0; i < Math.max(imageIds.length, imageUrls.length); i += 1) {
+                    existingImages.push({
+                        image_id: imageIds[i] ? String(imageIds[i]) : undefined,
+                        image_url: imageUrls[i] ? String(imageUrls[i]) : undefined,
+                    });
+                }
+                setMediaImages(existingImages);
+
+                const existingVideos: EditableVideo[] = [];
+                const videoList = Array.isArray(item.video_info?.video_list) ? item.video_info.video_list : [];
+                const videoIdList = Array.isArray(item.video_info?.video_id_list) ? item.video_info.video_id_list : [];
+                for (const v of videoList) {
+                    existingVideos.push({
+                        video_id: v?.video_id ? String(v.video_id) : undefined,
+                        thumbnail_url: v?.thumbnail_url ? String(v.thumbnail_url) : undefined,
+                    });
+                }
+                for (const id of videoIdList) {
+                    if (!existingVideos.find(v => v.video_id === String(id))) {
+                        existingVideos.push({ video_id: String(id) });
+                    }
+                }
+                if (item.video_info?.video_id && !existingVideos.find(v => v.video_id === String(item.video_info.video_id))) {
+                    existingVideos.push({ video_id: String(item.video_info.video_id) });
+                }
+                setMediaVideos(existingVideos);
+
                 setForm(prev => ({
                     ...prev,
                     item_name:      item.item_name      || prev.item_name,
@@ -1431,6 +1489,62 @@ function ExpandedItemPanel({
                 });
             if (attrList.length > 0) payload.attribute_list = attrList;
 
+            // Upload/edição de mídia (fotos e vídeos)
+            if (mediaImages.length === 0) {
+                throw new Error('O item precisa de pelo menos 1 foto.');
+            }
+
+            setMediaBusy(true);
+            const imageIdList: string[] = [];
+            for (const image of mediaImages) {
+                if (image.image_id) {
+                    imageIdList.push(image.image_id);
+                    continue;
+                }
+
+                if (!image.data_url) {
+                    continue;
+                }
+
+                const uploadRes = await fetch('/api/shopee-catalog?action=upload_image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_data_url: image.data_url, file_name: image.file_name || 'image.jpg' }),
+                });
+                const uploadData = await uploadRes.json();
+                const uploadedId = uploadData?.response?.image_info?.image_id || uploadData?.response?.image_id;
+                if (!uploadedId) {
+                    throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de imagem');
+                }
+                imageIdList.push(String(uploadedId));
+            }
+            payload.image = { image_id_list: imageIdList };
+
+            const videoIdList: string[] = [];
+            for (const video of mediaVideos) {
+                if (video.video_id) {
+                    videoIdList.push(video.video_id);
+                    continue;
+                }
+
+                if (!video.data_url) {
+                    continue;
+                }
+
+                const uploadRes = await fetch('/api/shopee-catalog?action=upload_video', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_data_url: video.data_url, file_name: video.file_name || 'video.mp4' }),
+                });
+                const uploadData = await uploadRes.json();
+                const uploadedId = uploadData?.response?.video_id;
+                if (!uploadedId) {
+                    throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de vídeo');
+                }
+                videoIdList.push(String(uploadedId));
+            }
+            payload.video_info = { video_id_list: videoIdList };
+
             const promises: Promise<any>[] = [
                 fetch('/api/shopee-catalog?action=update_item', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1453,7 +1567,53 @@ function ExpandedItemPanel({
             onSaved();
         } catch (e: any) {
             toast.error(`Erro: ${e.message}`);
-        } finally { setSaving(false); }
+        } finally {
+            setMediaBusy(false);
+            setSaving(false);
+        }
+    };
+
+    const addImageFiles = async (files: FileList | null) => {
+        if (!files) return;
+        const selected = Array.from(files).slice(0, Math.max(0, 9 - mediaImages.length));
+        if (selected.length === 0) return;
+
+        try {
+            const newImages: EditableImage[] = [];
+            for (const file of selected) {
+                if (!file.type.startsWith('image/')) continue;
+                const dataUrl = await readFileAsDataUrl(file);
+                newImages.push({ data_url: dataUrl, file_name: file.name });
+            }
+            if (newImages.length > 0) {
+                setMediaImages(prev => [...prev, ...newImages].slice(0, 9));
+            }
+        } catch {
+            toast.error('Falha ao ler uma das imagens selecionadas.');
+        }
+    };
+
+    const addVideoFiles = async (files: FileList | null) => {
+        if (!files) return;
+        const selected = Array.from(files);
+        if (selected.length === 0) return;
+
+        try {
+            const newVideos: EditableVideo[] = [];
+            for (const file of selected) {
+                if (!file.type.startsWith('video/')) continue;
+                const dataUrl = await readFileAsDataUrl(file);
+                newVideos.push({ data_url: dataUrl, file_name: file.name });
+            }
+            if (newVideos.length > 0) {
+                setMediaVideos(prev => [...prev, ...newVideos].slice(0, 1));
+                if (newVideos.length > 1 || mediaVideos.length > 0) {
+                    toast.info('A Shopee geralmente permite apenas 1 vídeo por item. Mantivemos somente o primeiro.');
+                }
+            }
+        } catch {
+            toast.error('Falha ao ler o vídeo selecionado.');
+        }
     };
 
     const inp = (label: string, k: keyof typeof form, type = 'text', ph = '', cls = '') => (
@@ -1748,6 +1908,108 @@ function ExpandedItemPanel({
                     </div>
                 )}
 
+                {/* ── Fotos e Vídeos */}
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Fotos e Vídeos</p>
+                <div className="mb-4 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => imageInputRef.current?.click()}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center gap-1"
+                        >
+                            <ImageIcon className="w-3.5 h-3.5" /> Adicionar fotos
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => videoInputRef.current?.click()}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center gap-1"
+                        >
+                            <Video className="w-3.5 h-3.5" /> Adicionar vídeo
+                        </button>
+                        <span className="text-[11px] text-slate-500">
+                            Fotos: {mediaImages.length}/9 • Vídeos: {mediaVideos.length}/1
+                        </span>
+                    </div>
+
+                    <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={e => {
+                            addImageFiles(e.target.files);
+                            e.currentTarget.value = '';
+                        }}
+                    />
+                    <input
+                        ref={videoInputRef}
+                        type="file"
+                        accept="video/*"
+                        multiple
+                        className="hidden"
+                        onChange={e => {
+                            addVideoFiles(e.target.files);
+                            e.currentTarget.value = '';
+                        }}
+                    />
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {mediaImages.map((img, idx) => {
+                            const src = img.image_url || img.data_url || '';
+                            return (
+                                <div key={`${img.image_id || 'new'}-${idx}`} className="relative border border-slate-200 rounded-lg overflow-hidden bg-white">
+                                    {src ? (
+                                        <img src={src} alt={`Imagem ${idx + 1}`} className="w-full h-24 object-cover" />
+                                    ) : (
+                                        <div className="w-full h-24 flex items-center justify-center text-xs text-slate-400">Imagem #{idx + 1}</div>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setMediaImages(prev => prev.filter((_, i) => i !== idx))}
+                                        className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1 border border-red-100 hover:bg-red-50"
+                                        title="Remover foto"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {mediaVideos.map((vid, idx) => {
+                            const src = vid.data_url || undefined;
+                            return (
+                                <div key={`${vid.video_id || 'new'}-${idx}`} className="relative border border-slate-200 rounded-lg p-2 bg-white">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-medium text-slate-600">
+                                            {vid.video_id ? `Vídeo ID: ${vid.video_id}` : (vid.file_name || `Vídeo ${idx + 1}`)}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setMediaVideos(prev => prev.filter((_, i) => i !== idx))}
+                                            className="bg-white/90 text-red-500 rounded-full p-1 border border-red-100 hover:bg-red-50"
+                                            title="Remover vídeo"
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                    {src ? (
+                                        <video src={src} controls className="w-full h-32 rounded" />
+                                    ) : vid.thumbnail_url ? (
+                                        <img src={vid.thumbnail_url} alt="Thumbnail do vídeo" className="w-full h-32 object-cover rounded" />
+                                    ) : (
+                                        <div className="w-full h-32 rounded border border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400">
+                                            Vídeo já cadastrado na Shopee
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
                 {/* ── Descrição */}
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Descrição</p>
                 <textarea ref={descRef} value={form.description}
@@ -1768,7 +2030,7 @@ function ExpandedItemPanel({
                     </button>
                     <button onClick={handleSave} disabled={saving || !p.shopee_item_id}
                         className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[#ee4d2d] text-white hover:bg-[#d73f21] transition-colors flex items-center gap-1.5 disabled:opacity-50">
-                        {saving ? <><Loader2 className="w-3 h-3 animate-spin" />Salvando...</> : <><Upload className="w-3 h-3" />Salvar na Shopee</>}
+                        {(saving || mediaBusy) ? <><Loader2 className="w-3 h-3 animate-spin" />Salvando...</> : <><Upload className="w-3 h-3" />Salvar na Shopee</>}
                     </button>
                 </div>
             </td>

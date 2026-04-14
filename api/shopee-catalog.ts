@@ -130,6 +130,28 @@ async function shopeePost(apiPath: string, creds: Creds, body: any): Promise<any
     return data;
 }
 
+async function shopeeMultipart(apiPath: string, creds: Creds, formData: FormData): Promise<any> {
+    const { url } = buildShopeeUrl(apiPath, creds);
+    const r = await fetch(url, { method: 'POST', body: formData as any });
+    const data = await r.json();
+    if ((data.error === 'invalid_access_token' || data.error === 'invalid_acceess_token' || data.error === 'error_auth') && creds.refreshToken) {
+        creds.accessToken = await doRefreshToken(creds);
+        const { url: url2 } = buildShopeeUrl(apiPath, creds);
+        const r2 = await fetch(url2, { method: 'POST', body: formData as any });
+        return r2.json();
+    }
+    return data;
+}
+
+function parseDataUrl(dataUrl: string): { mimeType: string; buffer: Buffer } | null {
+    const matches = String(dataUrl || '').match(/^data:([a-zA-Z0-9/+.-]+);base64,(.*)$/);
+    if (!matches || !matches[1] || !matches[2]) return null;
+    return {
+        mimeType: matches[1],
+        buffer: Buffer.from(matches[2], 'base64'),
+    };
+}
+
 export default async function handler(req: any, res: any) {
     const action = req.query.action as string;
     try {
@@ -321,6 +343,105 @@ export default async function handler(req: any, res: any) {
             }
 
             return res.status(200).json(await shopeePost('/api/v2/product/update_item', creds, payload));
+        }
+        if (action === 'upload_image') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+
+            const imageDataUrl = String(req.body?.image_data_url || '');
+            if (!imageDataUrl) return res.status(400).json({ error: 'image_data_url required' });
+
+            const parsed = parseDataUrl(imageDataUrl);
+            if (!parsed || !parsed.mimeType.startsWith('image/')) {
+                return res.status(400).json({ error: 'invalid image_data_url' });
+            }
+
+            const ext = parsed.mimeType.split('/')[1] || 'jpg';
+            const fileName = String(req.body?.file_name || `image_${Date.now()}.${ext}`);
+
+            const formData = new FormData();
+            formData.append('image', new Blob([new Uint8Array(parsed.buffer)], { type: parsed.mimeType }), fileName);
+
+            const upload = await shopeeMultipart('/api/v2/media_space/upload_image', creds, formData);
+            return res.status(200).json(upload);
+        }
+        if (action === 'upload_video') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+
+            const videoDataUrl = String(req.body?.video_data_url || '');
+            if (!videoDataUrl) return res.status(400).json({ error: 'video_data_url required' });
+
+            const parsed = parseDataUrl(videoDataUrl);
+            if (!parsed || !parsed.mimeType.startsWith('video/')) {
+                return res.status(400).json({ error: 'invalid video_data_url' });
+            }
+
+            const ext = parsed.mimeType.split('/')[1] || 'mp4';
+            const fileName = String(req.body?.file_name || `video_${Date.now()}.${ext}`);
+
+            const formData = new FormData();
+            formData.append('video', new Blob([new Uint8Array(parsed.buffer)], { type: parsed.mimeType }), fileName);
+
+            const upload = await shopeeMultipart('/api/v2/media_space/upload_video', creds, formData);
+            if (upload?.error && upload.error !== '') {
+                return res.status(200).json(upload);
+            }
+
+            const directVideoId = firstString(
+                upload?.response?.video_id,
+                upload?.response?.video_info?.video_id,
+                upload?.response?.video_info_list?.[0]?.video_id,
+                upload?.response?.video_list?.[0]?.video_id,
+            );
+
+            if (directVideoId) {
+                return res.status(200).json({ error: '', message: '', response: { video_id: directVideoId } });
+            }
+
+            const uploadId = firstString(
+                upload?.response?.video_upload_id,
+                upload?.response?.video_upload_id_list?.[0],
+                upload?.response?.upload_id,
+                upload?.response?.upload_id_list?.[0],
+            );
+
+            if (!uploadId) {
+                return res.status(200).json({
+                    error: 'video_upload_id_not_found',
+                    message: 'Shopee não retornou video_upload_id no upload de vídeo',
+                    response: upload?.response,
+                });
+            }
+
+            const maxAttempts = 12;
+            for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                const result = await shopeePost('/api/v2/media_space/get_video_upload_result', creds, { video_upload_id: uploadId });
+
+                const resolvedVideoId = firstString(
+                    result?.response?.video_id,
+                    result?.response?.video_info?.video_id,
+                    result?.response?.video_info_list?.[0]?.video_id,
+                    result?.response?.video_list?.[0]?.video_id,
+                );
+
+                if (resolvedVideoId) {
+                    return res.status(200).json({ error: '', message: '', response: { video_id: resolvedVideoId } });
+                }
+
+                if (result?.error && result.error !== '') {
+                    const msg = String(result?.message || '').toLowerCase();
+                    const waitable = msg.includes('invalid or expired vid') || msg.includes('request vid is abnormal');
+                    if (!waitable) {
+                        return res.status(200).json(result);
+                    }
+                }
+            }
+
+            return res.status(408).json({
+                error: 'video_upload_timeout',
+                message: 'Upload do vídeo ainda em processamento. Tente salvar novamente em alguns segundos.',
+                response: { video_upload_id: uploadId },
+            });
         }
         if (action === 'get_full_catalog') {
             const pageSizeRaw = Number(req.query.page_size || 100);
