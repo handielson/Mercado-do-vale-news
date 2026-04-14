@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
   }
 
   const env = loadEnv(mode, process.cwd(), '');
+  const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'https://mercado-do-vale-news.vercel.app';
 
   return {
     server: {
@@ -28,7 +29,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       proxy: {
         '/api': {
-          target: 'https://mercado-do-vale-news.vercel.app',
+          target: apiProxyTarget,
           changeOrigin: true,
           secure: false,
         },

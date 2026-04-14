@@ -93,6 +93,23 @@ async function fetchJsonStrict(url: string, init?: RequestInit): Promise<any> {
     return data;
 }
 
+async function buildShopeePriceList(itemId: number, originalPrice: number): Promise<Array<{ model_id: number; original_price: number }>> {
+    try {
+        const modelData = await fetchJsonStrict(`/api/shopee-catalog?action=get_model_list&item_id=${itemId}`);
+        const modelIds = (modelData?.response?.model || [])
+            .map((m: any) => Number(m?.model_id))
+            .filter((id: number) => Number.isFinite(id) && id > 0);
+
+        if (modelIds.length > 0) {
+            return modelIds.map((modelId: number) => ({ model_id: modelId, original_price: originalPrice }));
+        }
+    } catch {
+        // Fallback para compatibilidade: item sem variação ou backend ainda sem get_model_list.
+    }
+
+    return [{ model_id: 0, original_price: originalPrice }];
+}
+
 const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
     if (status === 'active')
         return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">🟢 Ativo</span>;
@@ -410,12 +427,13 @@ export default function ShopeePage() {
         const newPrice = editingPrice[p.product_id];
         if (!newPrice || !p.shopee_item_id) return;
         try {
+            const priceList = await buildShopeePriceList(p.shopee_item_id, newPrice / 100);
             const res = await fetch('/api/shopee-catalog?action=update_price', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     item_id: p.shopee_item_id,
-                    price_list: [{ model_id: 0, original_price: newPrice / 100 }],
+                    price_list: priceList,
                 }),
             });
             const data = await res.json();
@@ -1235,6 +1253,16 @@ function ExpandedItemPanel({
     editingPriceVal?: number;
     onSaved: () => void;
 }) {
+    const isNoGtinValue = (value: string) => {
+        const normalized = String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .toUpperCase()
+            .replace(/\s+/g, ' ');
+        return normalized === 'SEM GTIN' || normalized === 'SEM_GTIN' || normalized === 'NAO POSSUI' || normalized === 'ISENTO';
+    };
+
     const [saving, setSaving] = useState(false);
     const [attrs, setAttrs] = useState<any[]>([]);
     const [loadingAttrs, setLoadingAttrs] = useState(false);
@@ -1253,6 +1281,7 @@ function ExpandedItemPanel({
         condition:      'NEW' as 'NEW' | 'USED',
         ncm:            '',
         gtin:           '',
+        gtin_mode:      'code' as 'code' | 'no_gtin',
     });
     const setF = (k: keyof typeof form, v: string) => setForm(prev => ({ ...prev, [k]: v }));
     const [loadingItem, setLoadingItem] = useState(false);
@@ -1282,6 +1311,14 @@ function ExpandedItemPanel({
                     return;
                 }
 
+                const resolvedGtin =
+                    item.tax_info?.gtin ||
+                    item.gtin_code ||
+                    item.gtin ||
+                    item.ean ||
+                    '';
+                const gtinMode = isNoGtinValue(resolvedGtin) ? 'no_gtin' : 'code';
+
                 console.log('[Shopee Panel] item keys:', Object.keys(item));
                 console.log('[Shopee Panel] weight:', item.weight, '| dimension:', JSON.stringify(item.dimension), '| tax_info:', JSON.stringify(item.tax_info), '| description length:', item.description?.length);
 
@@ -1302,7 +1339,8 @@ function ExpandedItemPanel({
                     package_height: dim.package_height  != null ? String(dim.package_height) : '',
                     condition:      item.condition === 'USED' ? 'USED' : 'NEW',
                     ncm:            item.tax_info?.ncm  || '',
-                    gtin:           item.tax_info?.gtin || '',
+                    gtin:           gtinMode === 'no_gtin' ? '' : resolvedGtin,
+                    gtin_mode:      gtinMode,
                     price: item.price_info?.[0]?.original_price != null
                         ? String(item.price_info[0].original_price)
                         : prev.price,
@@ -1363,10 +1401,16 @@ function ExpandedItemPanel({
             payload.condition = form.condition;
 
             // Tax info
-            if (form.ncm.trim() || form.gtin.trim()) {
+            if (form.ncm.trim() || form.gtin.trim() || form.gtin_mode === 'no_gtin') {
                 payload.tax_info = {};
                 if (form.ncm.trim())  payload.tax_info.ncm  = form.ncm.trim();
-                if (form.gtin.trim()) payload.tax_info.gtin = form.gtin.trim();
+                if (form.gtin_mode === 'no_gtin') {
+                    payload.tax_info.gtin = 'SEM GTIN';
+                    payload.gtin_code = 'SEM GTIN';
+                } else if (form.gtin.trim()) {
+                    payload.tax_info.gtin = form.gtin.trim();
+                    payload.gtin_code = form.gtin.trim();
+                }
             }
 
             // Dynamic category attributes (INMETRO, ANATEL, etc.)
@@ -1395,9 +1439,10 @@ function ExpandedItemPanel({
             ];
             const priceVal = parseFloat(form.price);
             if (!isNaN(priceVal) && priceVal > 0) {
+                const priceList = await buildShopeePriceList(p.shopee_item_id, priceVal);
                 promises.push(fetch('/api/shopee-catalog?action=update_price', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ item_id: p.shopee_item_id, price_list: [{ model_id: 0, original_price: priceVal }] }),
+                    body: JSON.stringify({ item_id: p.shopee_item_id, price_list: priceList }),
                 }).then(r => r.json()));
             }
 
@@ -1626,7 +1671,28 @@ function ExpandedItemPanel({
                         onSaved={ncm => setF('ncm', ncm)}
                         onChange={ncm => setF('ncm', ncm)}
                     />
-                    {inp('GTIN / EAN', 'gtin', 'text', 'ex: 7891234560123')}
+                    <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-1">
+                            <label className="text-xs font-medium text-slate-500">Tipo de GTIN</label>
+                            <select
+                                value={form.gtin_mode}
+                                onChange={e => setF('gtin_mode', e.target.value as 'code' | 'no_gtin')}
+                                className="px-2 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500 bg-white"
+                            >
+                                <option value="code">Informar GTIN/EAN</option>
+                                <option value="no_gtin">Produto sem GTIN</option>
+                            </select>
+                        </div>
+                        {inp(
+                            'GTIN / EAN',
+                            'gtin',
+                            'text',
+                            form.gtin_mode === 'no_gtin' ? 'Será enviado como SEM GTIN' : 'ex: 7891234560123'
+                        )}
+                        {form.gtin_mode === 'no_gtin' && (
+                            <p className="text-[11px] text-amber-600">A Shopee receberá este item como sem GTIN.</p>
+                        )}
+                    </div>
                 </div>
                 <div className="mb-4">
                     <InmetroWidget

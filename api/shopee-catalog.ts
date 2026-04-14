@@ -31,6 +31,23 @@ type Creds = {
     shopId: string; refreshToken: string | null;
 };
 
+function firstString(...values: any[]): string {
+    for (const v of values) {
+        if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return '';
+}
+
+function isNoGtinValue(value: string): boolean {
+    const normalized = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, ' ');
+    return normalized === 'SEM GTIN' || normalized === 'SEM_GTIN' || normalized === 'NAO POSSUI' || normalized === 'ISENTO';
+}
+
 async function getCredentials(): Promise<Creds> {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const { data } = await supabase
@@ -135,7 +152,67 @@ export default async function handler(req: any, res: any) {
         }
         if (action === 'update_price') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
-            return res.status(200).json(await shopeePost('/api/v2/product/update_price', creds, req.body));
+            const incoming = (req.body && typeof req.body === 'object') ? { ...req.body } : {};
+            const itemId = Number(incoming.item_id);
+            const incomingPriceList = Array.isArray(incoming.price_list) ? incoming.price_list : [];
+
+            if (!Number.isFinite(itemId) || itemId <= 0) {
+                return res.status(400).json({ error: 'item_id required' });
+            }
+            if (incomingPriceList.length === 0) {
+                return res.status(400).json({ error: 'price_list required' });
+            }
+
+            const detailData = await shopeeGet(
+                '/api/v2/product/get_item_base_info',
+                creds,
+                `&item_id_list=${itemId}&need_tax_info=false&need_complaint_policy=false`
+            );
+            const currentItem = detailData?.response?.item_list?.[0] || null;
+            const hasModel = currentItem?.has_model === true || currentItem?.has_model === 1 || currentItem?.has_model === '1';
+
+            let pricePayload = {
+                item_id: itemId,
+                price_list: incomingPriceList,
+            } as Record<string, any>;
+
+            // Compatibilidade com UI atual: model_id=0 significa item simples.
+            // Se houver variações, sempre substituímos por model_id reais.
+            const hasZeroModel = incomingPriceList.some((p: any) => Number(p?.model_id) === 0);
+            if (hasModel || hasZeroModel) {
+                const modelListData = await shopeeGet('/api/v2/product/get_model_list', creds, `&item_id=${itemId}`);
+                const modelList = modelListData?.response?.model || [];
+                const modelIds = modelList
+                    .map((m: any) => Number(m?.model_id))
+                    .filter((id: number) => Number.isFinite(id) && id > 0);
+
+                if (modelIds.length > 0) {
+                    const firstPrice = incomingPriceList.find((p: any) => p && Number(p.original_price) > 0);
+                    const fallbackPrice = Number(firstPrice?.original_price);
+                    const incomingByModel = new Map<number, number>();
+
+                    for (const row of incomingPriceList) {
+                        const modelId = Number(row?.model_id);
+                        const price = Number(row?.original_price);
+                        if (Number.isFinite(modelId) && modelId > 0 && Number.isFinite(price) && price > 0) {
+                            incomingByModel.set(modelId, price);
+                        }
+                    }
+
+                    const expandedPriceList = modelIds
+                        .map((modelId: number) => ({
+                            model_id: modelId,
+                            original_price: Number(incomingByModel.get(modelId) ?? fallbackPrice),
+                        }))
+                        .filter((row: any) => Number.isFinite(row.original_price) && row.original_price > 0);
+
+                    if (expandedPriceList.length > 0) {
+                        pricePayload.price_list = expandedPriceList;
+                    }
+                }
+            }
+
+            return res.status(200).json(await shopeePost('/api/v2/product/update_price', creds, pricePayload));
         }
         if (action === 'update_stock') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
@@ -147,7 +224,103 @@ export default async function handler(req: any, res: any) {
         }
         if (action === 'update_item') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
-            return res.status(200).json(await shopeePost('/api/v2/product/update_item', creds, req.body));
+            const incoming = (req.body && typeof req.body === 'object') ? { ...req.body } : {};
+            const itemId = Number(incoming.item_id);
+
+            if (!Number.isFinite(itemId) || itemId <= 0) {
+                return res.status(400).json({ error: 'item_id required' });
+            }
+
+            // Em updates parciais (ex.: só nome), preserva dados fiscais já existentes na Shopee.
+            // Isso evita erro "GTIN code is mandatory" quando a categoria exige GTIN.
+            const detailData = await shopeeGet(
+                '/api/v2/product/get_item_base_info',
+                creds,
+                `&item_id_list=${itemId}&need_tax_info=true&need_complaint_policy=false`
+            );
+
+            const currentItem = detailData?.response?.item_list?.[0] || null;
+            const currentDim = currentItem?.dimension || {};
+            const hasModel = currentItem?.has_model === true;
+            const currentTax = (currentItem?.tax_info && typeof currentItem.tax_info === 'object')
+                ? { ...currentItem.tax_info }
+                : {};
+
+            const incomingTax = (incoming.tax_info && typeof incoming.tax_info === 'object')
+                ? { ...incoming.tax_info }
+                : {};
+
+            const incomingGtinCandidate = firstString(incomingTax.gtin, incoming.gtin_code);
+            const noGtinSelected = isNoGtinValue(incomingGtinCandidate);
+
+            const resolvedGtin = noGtinSelected
+                ? 'SEM GTIN'
+                : firstString(
+                    incomingTax.gtin,
+                    incoming.gtin_code,
+                    currentTax.gtin,
+                    currentItem?.gtin_code,
+                    currentItem?.gtin,
+                    currentItem?.ean
+                );
+
+            const mergedTax: Record<string, any> = {
+                ...currentTax,
+                ...incomingTax,
+            };
+
+            if (resolvedGtin) {
+                mergedTax.gtin = resolvedGtin;
+                incoming.gtin_code = resolvedGtin;
+            }
+
+            // Em itens com variação, a regra de GTIN pode ser aplicada no nível de modelo.
+            // Nesses casos, enviamos o gtin_code para todos os modelos antes do update_item.
+            if (hasModel && resolvedGtin) {
+                const modelListData = await shopeeGet('/api/v2/product/get_model_list', creds, `&item_id=${itemId}`);
+                const modelList = modelListData?.response?.model || [];
+
+                if (Array.isArray(modelList) && modelList.length > 0) {
+                    const modelPayload = {
+                        item_id: itemId,
+                        model: modelList
+                            .filter((m: any) => m?.model_id != null)
+                            .map((m: any) => ({
+                                model_id: m.model_id,
+                                gtin_code: resolvedGtin,
+                            })),
+                    };
+
+                    if (modelPayload.model.length > 0) {
+                        const modelUpdate = await shopeePost('/api/v2/product/update_model', creds, modelPayload);
+                        if (modelUpdate?.error && modelUpdate.error !== '') {
+                            return res.status(200).json(modelUpdate);
+                        }
+                    }
+                }
+            }
+
+            const payload = {
+                ...incoming,
+                item_id: itemId,
+                // Preserva campos comuns quando a UI manda update parcial
+                condition: incoming.condition ?? currentItem?.condition,
+                item_sku: incoming.item_sku ?? currentItem?.item_sku,
+                item_weight: incoming.item_weight ?? currentItem?.weight,
+                package_length: incoming.package_length ?? currentDim.package_length,
+                package_width: incoming.package_width ?? currentDim.package_width,
+                package_height: incoming.package_height ?? currentDim.package_height,
+                tax_info: Object.keys(mergedTax).length > 0 ? mergedTax : undefined,
+            } as Record<string, any>;
+
+            if (!payload.tax_info) {
+                delete payload.tax_info;
+            }
+            if (!payload.gtin_code) {
+                delete payload.gtin_code;
+            }
+
+            return res.status(200).json(await shopeePost('/api/v2/product/update_item', creds, payload));
         }
         if (action === 'get_full_catalog') {
             const pageSizeRaw = Number(req.query.page_size || 100);
@@ -222,6 +395,13 @@ export default async function handler(req: any, res: any) {
             if (!rawIds) return res.status(400).json({ error: 'item_id_list required' });
             return res.status(200).json(
                 await shopeeGet('/api/v2/product/get_item_base_info', creds, `&item_id_list=${rawIds}&need_tax_info=true&need_complaint_policy=false`)
+            );
+        }
+        if (action === 'get_model_list') {
+            const itemId = Number(req.query.item_id);
+            if (!Number.isFinite(itemId) || itemId <= 0) return res.status(400).json({ error: 'item_id required' });
+            return res.status(200).json(
+                await shopeeGet('/api/v2/product/get_model_list', creds, `&item_id=${itemId}`)
             );
         }
         if (action === 'debug') {
