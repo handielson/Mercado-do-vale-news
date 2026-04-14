@@ -98,8 +98,12 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                 localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), orders: newOrders }));
             }
 
-        } catch (error) {
-            toast.error('Erro de conexão ao buscar pedidos Shopee.');
+        } catch (error: any) {
+            // Ignora erros gerados por extensões do browser (não são falhas reais de rede)
+            const msg = error?.message || '';
+            if (!msg.includes('message channel closed') && !msg.includes('listener indicated')) {
+                toast.error('Erro de conexão ao buscar pedidos Shopee.');
+            }
         } finally {
             setLoading(false);
         }

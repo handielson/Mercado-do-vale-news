@@ -156,6 +156,8 @@ export default function ShopeePage() {
     const [importing, setImporting] = useState(false);
     const [filter, setFilter] = useState<Filter>('all');
     const [searchQ, setSearchQ] = useState('');
+    const [priceMin, setPriceMin] = useState('');
+    const [priceMax, setPriceMax] = useState('');
     const [syncModal, setSyncModal] = useState<LocalProduct | null>(null);
     const [editingPrice, setEditingPrice] = useState<Record<string, number>>({});
     const [linkingProductId, setLinkingProductId] = useState<string | null>(null);
@@ -545,7 +547,10 @@ export default function ShopeePage() {
             filter === 'not_synced' ? p.status === 'not_synced' :
             p.status === 'inactive';
         const matchSearch = !searchQ || p.name?.toLowerCase().includes(searchQ.toLowerCase()) || p.sku?.toLowerCase().includes(searchQ.toLowerCase());
-        return matchFilter && matchSearch;
+        const priceVal = (p.shopee_price || p.price_retail || 0) / 100;
+        const matchMin = !priceMin || priceVal >= parseFloat(priceMin);
+        const matchMax = !priceMax || priceVal <= parseFloat(priceMax);
+        return matchFilter && matchSearch && matchMin && matchMax;
     });
 
     const stats = {
@@ -721,12 +726,43 @@ export default function ShopeePage() {
                     </div>
 
                     {/* Filters + Search */}
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <input value={searchQ} onChange={e => setSearchQ(e.target.value)}
-                                placeholder="Buscar por nome ou SKU..."
-                                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white" />
+                    <div className="flex flex-col gap-3">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input value={searchQ} onChange={e => setSearchQ(e.target.value)}
+                                    placeholder="Buscar por nome ou SKU..."
+                                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-500 whitespace-nowrap">R$</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Mín"
+                                    value={priceMin}
+                                    onChange={e => setPriceMin(e.target.value)}
+                                    className="w-24 px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+                                />
+                                <span className="text-xs text-slate-400">—</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Máx"
+                                    value={priceMax}
+                                    onChange={e => setPriceMax(e.target.value)}
+                                    className="w-24 px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+                                />
+                                {(priceMin || priceMax) && (
+                                    <button
+                                        onClick={() => { setPriceMin(''); setPriceMax(''); }}
+                                        className="text-xs text-slate-400 hover:text-slate-600 px-2"
+                                        title="Limpar filtro de preço"
+                                    >✕</button>
+                                )}
+                            </div>
                         </div>
                         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl text-xs font-medium">
                             {([
@@ -1016,7 +1052,8 @@ function ShopeeSyncModal({
 }: { product: LocalProduct; onClose: () => void; onSuccess: () => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
-    const [categories, setCategories] = useState<any[]>([]);
+    const [allCatTree, setAllCatTree] = useState<any[]>([]);
+    const [catBreadcrumb, setCatBreadcrumb] = useState<any[]>([]); // stack of parent nodes
     const [loadingCats, setLoadingCats] = useState(false);
     const [selectedCat, setSelectedCat] = useState<any>(null);
     const [attributes, setAttributes] = useState<any[]>([]);
@@ -1026,25 +1063,44 @@ function ShopeeSyncModal({
     const [shopeePrice, setShopeePrice] = useState(product.price_retail / 100);
     const [shopeeStock, setShopeeStock] = useState(10);
 
-    const searchCategories = async () => {
-        if (!catSearch.trim()) return;
+    // Carrega toda a árvore de categorias ao abrir o modal
+    useEffect(() => {
         setLoadingCats(true);
-        try {
-            const res = await fetch(`/api/shopee-catalog?action=categories`);
-            const data = await res.json();
-            // filter categories that have names matching the search (leaf nodes)
-            const flattenCats = (cats: any[], level = 0): any[] => {
-                return cats.flatMap((c: any) => {
-                    const children = c.children ? flattenCats(c.children, level + 1) : [];
-                    const match = c.display_category_name?.toLowerCase().includes(catSearch.toLowerCase()) ||
-                        c.original_category_name?.toLowerCase().includes(catSearch.toLowerCase());
-                    return [...(match ? [{ ...c, level }] : []), ...children];
-                });
-            };
-            const allCats = data.response?.category_list || [];
-            setCategories(flattenCats(allCats).slice(0, 30));
-        } catch { toast.error('Erro ao buscar categorias.'); }
-        finally { setLoadingCats(false); }
+        fetch(`/api/shopee-catalog?action=categories`)
+            .then(r => r.json())
+            .then(data => setAllCatTree(data.response?.category_list || []))
+            .catch(() => toast.error('Erro ao carregar categorias.'))
+            .finally(() => setLoadingCats(false));
+    }, []);
+
+    // Nível atual da árvore
+    const currentCatLevel: any[] = catBreadcrumb.length === 0
+        ? allCatTree
+        : catBreadcrumb[catBreadcrumb.length - 1].children || [];
+
+    // Busca flat em toda a árvore
+    const flattenSearch = (cats: any[], q: string): any[] => {
+        return cats.flatMap((c: any) => {
+            const match = c.display_category_name?.toLowerCase().includes(q) ||
+                          c.original_category_name?.toLowerCase().includes(q);
+            const childMatches = c.children ? flattenSearch(c.children, q) : [];
+            return [...(match ? [c] : []), ...childMatches];
+        });
+    };
+
+    const displayedCats = catSearch.trim()
+        ? flattenSearch(allCatTree, catSearch.toLowerCase()).slice(0, 40)
+        : currentCatLevel;
+
+    const handleCatClick = (cat: any) => {
+        if (cat.children && cat.children.length > 0) {
+            // Navega para o próximo nível
+            setCatBreadcrumb(prev => [...prev, cat]);
+            setCatSearch('');
+        } else {
+            // Categoria folha — seleciona
+            selectCategory(cat);
+        }
     };
 
     const selectCategory = async (cat: any) => {
@@ -1148,31 +1204,66 @@ function ShopeeSyncModal({
                 </div>
 
                 <div className="p-6 space-y-4">
-                    {/* Step 1: Category Search */}
+                    {/* Step 1: Category Tree */}
                     {step === 1 && (
-                        <div className="space-y-4">
-                            <p className="text-sm text-slate-600">Busque a categoria da Shopee que melhor representa este produto.</p>
-                            <div className="flex gap-2">
-                                <input value={catSearch} onChange={e => setCatSearch(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && searchCategories()}
-                                    placeholder="Ex: Celular, Notebook, Câmera..."
-                                    className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500" />
-                                <button onClick={searchCategories} disabled={loadingCats}
-                                    className="px-4 py-2.5 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50">
-                                    {loadingCats ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                                </button>
+                        <div className="space-y-3">
+                            <p className="text-sm text-slate-600">Navegue pelas categorias ou busque pelo nome.</p>
+
+                            {/* Search */}
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    value={catSearch}
+                                    onChange={e => setCatSearch(e.target.value)}
+                                    placeholder="Buscar categoria..."
+                                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500"
+                                />
                             </div>
-                            {categories.length > 0 && (
-                                <div className="space-y-1 max-h-60 overflow-y-auto">
-                                    {categories.map(cat => (
-                                        <button key={cat.category_id} onClick={() => selectCategory(cat)}
-                                            className="w-full text-left px-4 py-2.5 rounded-xl hover:bg-orange-50 border border-transparent hover:border-orange-200 transition-all text-sm">
-                                            <span className="font-medium text-slate-800">{cat.display_category_name}</span>
-                                            <span className="ml-2 text-xs text-slate-400">ID: {cat.category_id}</span>
-                                        </button>
+
+                            {/* Breadcrumb */}
+                            {!catSearch && catBreadcrumb.length > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap text-xs text-slate-500">
+                                    <button
+                                        onClick={() => setCatBreadcrumb([])}
+                                        className="hover:text-orange-500 font-medium"
+                                    >Todas</button>
+                                    {catBreadcrumb.map((bc, i) => (
+                                        <React.Fragment key={bc.category_id}>
+                                            <ChevronRight className="w-3 h-3 shrink-0" />
+                                            <button
+                                                onClick={() => setCatBreadcrumb(prev => prev.slice(0, i + 1))}
+                                                className="hover:text-orange-500 font-medium"
+                                            >{bc.display_category_name}</button>
+                                        </React.Fragment>
                                     ))}
                                 </div>
                             )}
+
+                            {/* Category list */}
+                            <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
+                                {loadingCats ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
+                                    </div>
+                                ) : displayedCats.length === 0 ? (
+                                    <p className="text-center text-xs text-slate-400 py-6">Nenhuma categoria encontrada</p>
+                                ) : displayedCats.map(cat => {
+                                    const hasChildren = cat.children && cat.children.length > 0;
+                                    return (
+                                        <button
+                                            key={cat.category_id}
+                                            onClick={() => handleCatClick(cat)}
+                                            className="w-full text-left px-4 py-2.5 rounded-xl hover:bg-orange-50 border border-transparent hover:border-orange-200 transition-all text-sm flex items-center justify-between group"
+                                        >
+                                            <span className="font-medium text-slate-800">{cat.display_category_name}</span>
+                                            {hasChildren
+                                                ? <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-orange-400 shrink-0" />
+                                                : <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">selecionar</span>
+                                            }
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
                     )}
 
@@ -1958,11 +2049,11 @@ function ExpandedItemPanel({
                         {mediaImages.map((img, idx) => {
                             const src = img.image_url || img.data_url || '';
                             return (
-                                <div key={`${img.image_id || 'new'}-${idx}`} className="relative border border-slate-200 rounded-lg overflow-hidden bg-white">
+                                <div key={`${img.image_id || 'new'}-${idx}`} className="relative border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
                                     {src ? (
-                                        <img src={src} alt={`Imagem ${idx + 1}`} className="w-full h-24 object-cover" />
+                                        <img src={src} alt={`Imagem ${idx + 1}`} className="w-full aspect-square object-contain" />
                                     ) : (
-                                        <div className="w-full h-24 flex items-center justify-center text-xs text-slate-400">Imagem #{idx + 1}</div>
+                                        <div className="w-full aspect-square flex items-center justify-center text-xs text-slate-400">Imagem #{idx + 1}</div>
                                     )}
                                     <button
                                         type="button"
@@ -1996,11 +2087,11 @@ function ExpandedItemPanel({
                                         </button>
                                     </div>
                                     {src ? (
-                                        <video src={src} controls className="w-full h-32 rounded" />
+                                        <video src={src} controls className="w-full aspect-video rounded" />
                                     ) : vid.thumbnail_url ? (
-                                        <img src={vid.thumbnail_url} alt="Thumbnail do vídeo" className="w-full h-32 object-cover rounded" />
+                                        <img src={vid.thumbnail_url} alt="Thumbnail do vídeo" className="w-full aspect-video object-contain rounded bg-slate-50" />
                                     ) : (
-                                        <div className="w-full h-32 rounded border border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400">
+                                        <div className="w-full aspect-video rounded border border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400">
                                             Vídeo já cadastrado na Shopee
                                         </div>
                                     )}
