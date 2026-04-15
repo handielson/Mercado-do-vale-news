@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { Download, RefreshCw, AlertTriangle, CheckCircle, CheckCircle2, Info, Link as LinkIcon, FileSpreadsheet, Database, Users, Box, HardDriveUpload, Upload, ServerCog, Loader2 } from 'lucide-react';
+import { Download, RefreshCw, AlertTriangle, CheckCircle, CheckCircle2, Info, FileSpreadsheet, Database, Users, Box, HardDriveUpload, Upload, ServerCog, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CategorySelect } from '../../../components/products/CategorySelect';
 import { DataSyncService } from '../../../services/dataSyncService';
 import { supabase } from '../../../services/supabase';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { LegacySalesImportTab } from '../../../components/import/LegacySalesImportTab';
 
 // Definindo abas/tipos de importação que teremos na central
 type ImportTab = 'modelos' | 'clientes' | 'produtos' | 'vendas' | 'vps-sync';
@@ -242,12 +243,15 @@ export const DataImportExportPage: React.FC = () => {
           Produtos Fisicos (Em breve)
         </button>
         <button
-          disabled
-          className="px-5 py-3 rounded-t-xl font-medium text-sm flex items-center gap-2 text-slate-400 cursor-not-allowed whitespace-nowrap"
-          title="Em breve"
+          onClick={() => setActiveTab('vendas')}
+          className={`px-5 py-3 rounded-t-xl font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
+            activeTab === 'vendas'
+              ? 'bg-violet-50 text-violet-700 border-b-2 border-violet-600'
+              : 'text-slate-600 hover:bg-slate-50'
+          }`}
         >
           <HardDriveUpload className="w-4 h-4" />
-          Histórico Vendas (Em breve)
+          Histórico Vendas
         </button>
         <button
           onClick={() => setActiveTab('vps-sync')}
@@ -470,6 +474,11 @@ export const DataImportExportPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* HISTÓRICO DE VENDAS (MV-Gestao) */}
+      {activeTab === 'vendas' && (
+        <LegacySalesImportTab />
       )}
 
       {/* MODAL / CONTENT PARA CLIENTES */}

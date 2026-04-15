@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Package, RefreshCw, Receipt } from 'lucide-react';
+import { ShoppingBag, Package, RefreshCw, Receipt, FileText } from 'lucide-react';
 import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
 import { getSales, deleteSale } from '../../../services/saleService';
 import { getOrders, cancelOrder } from '../../../services/orderService';
@@ -9,6 +9,7 @@ import { companySettingsService } from '../../../services/companySettingsService
 import { SaleWithItems } from '../../../types/sale';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { getCoinBalance } from '../../../services/cashbackService';
+import { generateLegacySalePdf } from '../../../utils/legacySalePdfGenerator';
 import { benefitService } from '../../../services/benefitService';
 import { toast } from 'sonner';
 
@@ -24,6 +25,7 @@ export const PurchaseHistoryTab: React.FC = () => {
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
     const [loading, setLoading] = useState(true);
     const [printingReceiptId, setPrintingReceiptId] = useState<string | null>(null);
+    const [printingComprovanteId, setPrintingComprovanteId] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
     const handleClearPhantomOrders = async () => {
@@ -52,6 +54,66 @@ export const PurchaseHistoryTab: React.FC = () => {
             toast.error('Erro ao apagar pedidos: ' + e.message);
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const handleViewLegacyComprovante = async (sale: SaleWithItems) => {
+        setPrintingComprovanteId(sale.id);
+        try {
+            const settings = await companySettingsService.get();
+            const company = {
+                name:    settings?.company_name || 'Mercado do Vale',
+                address: settings?.address      || '',
+                phone:   settings?.phone        || '',
+                cnpj:    settings?.cnpj         || '',
+            };
+            const items = sale.items.map(item => {
+                const sku = item.product_sku || '';
+                const imeiParts = sku.split('/').map((s: string) => s.trim());
+                return {
+                    phone: {
+                        id: item.id,
+                        device_type: '',
+                        imei1: imeiParts[0] || '',
+                        imei2: imeiParts[1] || '',
+                        brand_id: (item as any).product_brand || '',
+                        model: (item as any).product_model || item.product_name || '',
+                        version: '',
+                        ram:     (item as any).product_specs?.ram || '',
+                        storage: (item as any).product_specs?.storage || '',
+                        color:   (item as any).product_specs?.color || '',
+                        buy_price: 0,
+                        sell_price_suggested: item.unit_price || 0,
+                        status: '',
+                        quantity: item.quantity || 1,
+                        condition: 'USED' as const,
+                        entry_date: sale.created_at,
+                        updated_at: sale.created_at,
+                    },
+                    brand: undefined,
+                    quantity:   item.quantity   || 1,
+                    unit_price: item.unit_price || 0,
+                    subtotal:   (item.unit_price || 0) * (item.quantity || 1),
+                };
+            });
+            const pdfBlob = await generateLegacySalePdf({
+                sale:         { ...sale, sale_date: sale.created_at, total_amount: (sale as any).total_amount ?? 0, payment_method: (sale as any).payment_method || '' } as any,
+                customerName: customer?.name || '',
+                customerCpf:  (customer as any)?.cpf_cnpj || '',
+                items,
+                company,
+            });
+            const url = URL.createObjectURL(pdfBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 30_000);
+        } catch (e) {
+            console.error(e);
+            toast.error('Erro ao gerar comprovante');
+        } finally {
+            setPrintingComprovanteId(null);
         }
     };
 
@@ -229,17 +291,30 @@ export const PurchaseHistoryTab: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => handlePrintReceipt(sale)}
-                                            disabled={printingReceiptId === sale.id}
-                                            title="Imprimir Recibo"
-                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors disabled:opacity-50"
-                                        >
-                                            {printingReceiptId === sale.id
-                                                ? <RefreshCw size={13} className="animate-spin" />
-                                                : <Receipt size={13} />}
-                                            Recibo
-                                        </button>
+                                        {sale.legacy_sale_id && (
+                                            <button
+                                                onClick={() => handleViewLegacyComprovante(sale)}
+                                                disabled={printingComprovanteId === sale.id}
+                                                title="Ver Comprovante de Venda"
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg border border-violet-200 transition-colors disabled:opacity-50"
+                                            >
+                                                <FileText size={13} />
+                                                {printingComprovanteId === sale.id ? 'Gerando...' : 'Ver Comprovante'}
+                                            </button>
+                                        )}
+                                        {!sale.legacy_sale_id && (
+                                            <button
+                                                onClick={() => handlePrintReceipt(sale)}
+                                                disabled={printingReceiptId === sale.id}
+                                                title="Imprimir Recibo"
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors disabled:opacity-50"
+                                            >
+                                                {printingReceiptId === sale.id
+                                                    ? <RefreshCw size={13} className="animate-spin" />
+                                                    : <Receipt size={13} />}
+                                                Recibo
+                                            </button>
+                                        )}
                                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${sale.status === 'completed' || sale.status === 'paid' ? 'bg-green-100 text-green-800' :
                                             sale.status === 'pending' || sale.status === 'awaiting_payment' ? 'bg-yellow-100 text-yellow-800' :
                                                 sale.status === 'cancelled' ? 'bg-red-100 text-red-800' :

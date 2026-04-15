@@ -35,20 +35,7 @@ export default defineConfig(({ mode }) => {
         },
         '/vps-proxy': {
           target: 'https://api.xiaomipetrolina.com.br',
-          router: (req) => {
-            try {
-              const requestUrl = req.url || '';
-              const parsed = new URL(`http://localhost${requestUrl}`);
-              const targetPath = decodeURIComponent(parsed.searchParams.get('path') || '');
-              const directPath = parsed.pathname || '';
-              if (targetPath.startsWith('/synology/') || directPath.startsWith('/synology/')) {
-                return env.VITE_LOCAL_VPS_URL || 'http://localhost:4000';
-              }
-            } catch (_) {
-              // Ignore parse errors and use default remote target
-            }
-            return 'https://api.xiaomipetrolina.com.br';
-          },
+          router: () => 'https://api.xiaomipetrolina.com.br',
           changeOrigin: true,
           secure: false,
           rewrite: (pathStr) => {

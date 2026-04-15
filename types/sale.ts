@@ -88,6 +88,10 @@ export interface Sale {
     // Indicação (Referral)
     referral_code?: string;
 
+    // Importação legada (MV-Gestao)
+    legacy_sale_id?: string;
+    legacy_pdf_url?: string;
+
     created_at: string;
     updated_at: string;
 }

@@ -399,7 +399,11 @@ export function SynologyFilesPage() {
             const data = await vpsClient.get<CDNFile[]>(`/synology/files?folder=${folder}`);
             setFiles(prev => ({ ...prev, [folder]: data }));
         } catch (e: unknown) {
-            toast.error(`Erro ao listar arquivos: ${e instanceof Error ? e.message : 'Erro'}`);
+            const msg = e instanceof Error ? e.message : 'Erro';
+            // "Folder not found" é esperado em modo local — não exibe toast
+            if (!msg.includes('Folder not found') && !msg.includes('500')) {
+                toast.error(`Erro ao listar arquivos: ${msg}`);
+            }
             setFiles(prev => ({ ...prev, [folder]: [] }));
         } finally {
             setLoading(false);

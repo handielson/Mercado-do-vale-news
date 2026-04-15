@@ -22,10 +22,7 @@ function getRuntimeProxyBase(): string {
 
 function buildProxyUrl(path: string): string {
     const normalized = path.startsWith('/') ? path : `/${path}`;
-    if (typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname) && normalized.startsWith('/synology/')) {
-        const localVps = import.meta.env.VITE_LOCAL_VPS_URL || 'http://localhost:4000';
-        return `${localVps}${normalized}`;
-    }
+    // Sempre passa pelo Vite proxy (que encaminha para a VPS real)
     return `${getRuntimeProxyBase()}?path=${encodeURIComponent(normalized)}`;
 }
 

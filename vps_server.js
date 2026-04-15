@@ -2284,8 +2284,12 @@ fastify.get('/synology/files', { preHandler: requireSyncKey }, async (req, reply
   // 2) Fallback to local SynologyDrive mirror
   const result = listLocalSynologyFiles(folder, limit, offset);
   if (!result.ok) {
-    console.error(`[synology/files] Error for ${folder}:`, result.error);
-    return reply.code(500).send({ error: result.error });
+    // Synology inacessível e path local não existe — retorna lista vazia (sem erro 500)
+    console.warn(`[synology/files] Unreachable for ${folder}: ${result.error}`);
+    reply.header('Cache-Control', 'no-store');
+    reply.header('X-Total-Count', '0');
+    reply.header('X-Synology-Unreachable', 'true');
+    return [];
   }
 
   const files = result.data.files.map(f => ({

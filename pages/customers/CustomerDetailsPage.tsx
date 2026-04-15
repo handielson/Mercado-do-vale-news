@@ -14,6 +14,7 @@ import { companySettingsService } from '../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../utils/printSaleReceipt';
 import { getCoinBalance } from '../../services/cashbackService';
+import { generateLegacySalePdf } from '../../utils/legacySalePdfGenerator';
 
 /**
  * Customer Details Page
@@ -37,6 +38,7 @@ export default function CustomerDetailsPage() {
     const [deleteConfirm, setDeleteConfirm] = useState(false);
     const [printingSaleId, setPrintingSaleId] = useState<string | null>(null);
     const [printingReceiptId, setPrintingReceiptId] = useState<string | null>(null);
+    const [printingComprovanteId, setPrintingComprovanteId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'info' | 'compras' | 'beneficios'>('info');
     // Map: product_id -> specs (for IMEI display in purchase history)
     const [saleProductSpecs, setSaleProductSpecs] = useState<Record<string, Record<string, string>>>();
@@ -74,6 +76,73 @@ export default function CustomerDetailsPage() {
         }
     };
 
+    const handleViewLegacyComprovante = async (sale: SaleWithItems) => {
+        setPrintingComprovanteId(sale.id);
+        try {
+            const settings = await companySettingsService.get();
+            const company = {
+                name:    settings?.company_name || 'Mercado do Vale',
+                address: settings?.address      || '',
+                phone:   settings?.phone        || '',
+                cnpj:    settings?.cnpj         || '',
+            };
+            const items = sale.items.map(item => {
+                const sku = item.product_sku || '';
+                const imeiParts = sku.split('/').map((s: string) => s.trim());
+                return {
+                    phone: {
+                        id: item.id,
+                        device_type: '',
+                        imei1: imeiParts[0] || '',
+                        imei2: imeiParts[1] || '',
+                        brand_id: (item as any).product_brand || '',
+                        model: (item as any).product_model || item.product_name || '',
+                        version: '',
+                        ram:     (item as any).product_specs?.ram || '',
+                        storage: (item as any).product_specs?.storage || '',
+                        color:   (item as any).product_specs?.color || '',
+                        buy_price: 0,
+                        sell_price_suggested: item.unit_price || 0,
+                        status: '',
+                        quantity: item.quantity || 1,
+                        condition: 'USED' as const,
+                        entry_date: sale.created_at,
+                        updated_at: sale.created_at,
+                    },
+                    brand: undefined,
+                    quantity:   item.quantity   || 1,
+                    unit_price: item.unit_price || 0,
+                    subtotal:   (item.unit_price || 0) * (item.quantity || 1),
+                };
+            });
+            const saleForPdf = {
+                ...sale,
+                id: sale.id,
+                sale_date:    sale.created_at,
+                total_amount: (sale as any).total_amount ?? (sale as any).total ?? 0,
+                payment_method: (sale as any).payment_method || '',
+            };
+            const pdfBlob = await generateLegacySalePdf({
+                sale:         saleForPdf as any,
+                customerName: customer?.name || '',
+                customerCpf:  customer?.cpf_cnpj || '',
+                items,
+                company,
+            });
+            const url = URL.createObjectURL(pdfBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 30_000);
+        } catch (e) {
+            console.error(e);
+            toast.error('Erro ao gerar comprovante');
+        } finally {
+            setPrintingComprovanteId(null);
+        }
+    };
+
     const handleReprintWarrantyForSale = async (sale: SaleWithItems) => {
         if (!sale.items.length) return;
         setPrintingSaleId(sale.id);
@@ -81,12 +150,23 @@ export default function CustomerDetailsPage() {
             const settings = await companySettingsService.get();
             if (!settings?.warranty_template) { toast.error('Template de garantia não configurado'); return; }
             const firstItem = sale.items[0];
-            let specs: Record<string, any> = {};
-            let brand = ''; let model = '';
+            let specs: Record<string, any> = (firstItem as any).product_specs || {};
+            let brand = (firstItem as any).product_brand || '';
+            let model = (firstItem as any).product_model || '';
+
             if (firstItem.product_id) {
                 const { data: prod } = await supabase.from('products').select('*').eq('id', firstItem.product_id).single();
                 if (prod) { specs = prod.specs || {}; brand = prod.brand || ''; model = prod.model || prod.name || ''; }
             }
+
+            // Para vendas legadas: extrai IMEI do product_sku ("imei1 / imei2") se specs vazio
+            if (!specs.imei1 && firstItem.product_sku) {
+                const parts = firstItem.product_sku.split('/').map((s: string) => s.trim());
+                specs = { ...specs, imei1: parts[0] || '', imei2: parts[1] || '' };
+            }
+            // Extrai modelo e marca do product_name se ainda vazios
+            if (!model && firstItem.product_name) model = firstItem.product_name;
+
             const cust = sale.customer;
             const tagData = {
                 nome_loja: settings.company_name || '',
@@ -449,15 +529,28 @@ export default function CustomerDetailsPage() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => handlePrintReceiptForSale(sale)}
-                                            disabled={printingReceiptId === sale.id}
-                                            title="Imprimir Recibo"
-                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors disabled:opacity-50"
-                                        >
-                                            {printingReceiptId === sale.id ? <RefreshCw size={13} className="animate-spin" /> : <Receipt size={13} />}
-                                            Recibo
-                                        </button>
+                                        {sale.legacy_sale_id && (
+                                            <button
+                                                onClick={() => handleViewLegacyComprovante(sale)}
+                                                disabled={printingComprovanteId === sale.id}
+                                                title="Ver Comprovante de Venda (Importado)"
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg border border-violet-200 transition-colors disabled:opacity-50"
+                                            >
+                                                <FileText size={13} />
+                                                {printingComprovanteId === sale.id ? 'Gerando...' : 'Ver Comprovante'}
+                                            </button>
+                                        )}
+                                        {!sale.legacy_sale_id && (
+                                            <button
+                                                onClick={() => handlePrintReceiptForSale(sale)}
+                                                disabled={printingReceiptId === sale.id}
+                                                title="Imprimir Recibo"
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors disabled:opacity-50"
+                                            >
+                                                {printingReceiptId === sale.id ? <RefreshCw size={13} className="animate-spin" /> : <Receipt size={13} />}
+                                                Recibo
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => handleReprintWarrantyForSale(sale)}
                                             disabled={printingSaleId === sale.id}
@@ -484,12 +577,16 @@ export default function CustomerDetailsPage() {
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Itens</h4>
                                         <div className="space-y-3">
                                             {sale.items.map((item, idx) => {
-                                                const specs = saleProductSpecs?.[(item as any).product_id] || {};
+                                                // Specs do catálogo (produtos novos) ou direto do item (vendas legadas)
+                                                const catalogSpecs = saleProductSpecs?.[(item as any).product_id] || {};
+                                                const itemSpecs = (item as any).product_specs || {};
+                                                const specs = { ...itemSpecs, ...catalogSpecs };
                                                 const idParts: string[] = [];
                                                 if (specs.imei1) idParts.push(`IMEI 1: ${specs.imei1}`);
                                                 if (specs.imei2) idParts.push(`IMEI 2: ${specs.imei2}`);
                                                 if (specs.serial) idParts.push(`Serial: ${specs.serial}`);
-                                                const identifier = idParts.length > 0 ? idParts.join(' | ') : (item.product_sku ? `SKU: ${item.product_sku}` : null);
+                                                if (specs.color && !idParts.length) idParts.push(specs.color);
+                                                const identifier = idParts.length > 0 ? idParts.join(' | ') : (item.product_sku ? `IMEI: ${item.product_sku}` : null);
                                                 return (
                                                     <div key={idx} className="flex justify-between items-start py-2 border-b border-slate-100 last:border-0">
                                                         <div>

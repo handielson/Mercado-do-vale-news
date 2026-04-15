@@ -114,23 +114,32 @@ export interface LegacyCategory {
 export interface LegacySale {
     id: string
     customer_id: string
-    sale_date: string
-    created_at?: string    // Alias do campo sale_date
-    total_amount: number
-    total?: number         // Alias do campo total_amount
+    date: string           // coluna real no banco (ISO datetime)
+    sale_date?: string     // alias para compatibilidade
+    total: number          // coluna real no banco
+    total_amount?: number  // alias para compatibilidade
     payment_method: string
-    status: string
+    installments?: number
+    notes?: string
+    net_value?: number
+    discount_amount?: number
+    fee_amount?: number
     customer?: LegacyCustomer
     items?: LegacySaleItem[]
 }
 
 export interface LegacySaleItem {
-    id: string
-    sale_id: string
-    phone_id: string
+    itemId: string         // ID do telefone/produto no sistema legado
+    type: string           // "PHONE", "GIFT", "ACCESSORY", etc.
+    description: string    // Nome do produto
+    price: number          // Valor de venda (reais)
+    cost: number           // Custo (reais)
     quantity: number
-    unit_price: number
-    subtotal: number
+    // Aliases para compatibilidade com o restante do código
+    phone_id?: string
+    unit_price?: number
+    subtotal?: number
+    sale_id?: string
 }
 
 // ============================================================================
@@ -291,7 +300,7 @@ export class LegacyAPI {
     // ==========================================================================
 
     /**
-     * Buscar todas as vendas
+     * Buscar todas as vendas (items são JSONB embutidos na venda)
      */
     async getSales(options?: {
         startDate?: string
@@ -300,13 +309,38 @@ export class LegacyAPI {
     }): Promise<LegacySale[]> {
         const { startDate, endDate, limit } = options || {}
 
-        let endpoint = '/sales?select=*,customer:customers(*),items:sale_items(*)&order=sale_date.desc'
+        let endpoint = '/sales?select=*&order=date.desc'
+        if (startDate) endpoint += `&date=gte.${startDate}`
+        if (endDate)   endpoint += `&date=lte.${endDate}`
+        if (limit)     endpoint += `&limit=${limit}`
 
-        if (startDate) endpoint += `&sale_date=gte.${startDate}`
-        if (endDate) endpoint += `&sale_date=lte.${endDate}`
-        if (limit) endpoint += `&limit=${limit}`
+        const sales = await this.request<LegacySale[]>(endpoint)
+        if (!sales.length) return sales
 
-        return this.request<LegacySale[]>(endpoint)
+        // Buscar clientes em paralelo (items já estão embutidos como JSONB)
+        const customerIds = [...new Set(sales.map(s => s.customer_id).filter(Boolean))]
+        const customers   = customerIds.length
+            ? await this.request<LegacyCustomer[]>(
+                `/customers?id=in.(${customerIds.join(',')})&select=*`
+              )
+            : []
+
+        const customerMap = new Map(customers.map(c => [c.id, c]))
+
+        // Normaliza cada venda: garante aliases e normaliza itens JSONB
+        return sales.map(s => ({
+            ...s,
+            sale_date:    s.date,
+            total_amount: s.total,
+            customer:     customerMap.get(s.customer_id),
+            items: ((s.items as unknown as LegacySaleItem[]) || []).map(item => ({
+                ...item,
+                phone_id:   item.itemId,
+                unit_price: item.price,
+                subtotal:   item.price * item.quantity,
+                sale_id:    s.id,
+            })),
+        }))
     }
 
     /**
@@ -314,7 +348,7 @@ export class LegacyAPI {
      */
     async getSalesByCustomer(customerId: string): Promise<LegacySale[]> {
         return this.request<LegacySale[]>(
-            `/sales?customer_id=eq.${customerId}&select=*,items:sale_items(*)&order=sale_date.desc`
+            `/sales?customer_id=eq.${customerId}&select=*&order=date.desc`
         )
     }
 
@@ -322,10 +356,13 @@ export class LegacyAPI {
      * Buscar venda por ID
      */
     async getSaleById(id: string): Promise<LegacySale | null> {
-        const data = await this.request<LegacySale[]>(
-            `/sales?id=eq.${id}&select=*,customer:customers(*),items:sale_items(*)`
+        const sales = await this.request<LegacySale[]>(`/sales?id=eq.${id}&select=*`)
+        if (!sales.length) return null
+        const sale = sales[0]
+        const customers = await this.request<LegacyCustomer[]>(
+            `/customers?id=eq.${sale.customer_id}&select=*`
         )
-        return data[0] || null
+        return { ...sale, sale_date: sale.date, total_amount: sale.total, customer: customers[0] }
     }
 
     // ==========================================================================
