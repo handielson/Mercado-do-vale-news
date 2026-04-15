@@ -1079,7 +1079,7 @@ export async function importBlingProducts(
 
     const updateWithColumnFallback = async (id: string, initialFields: Record<string, any>): Promise<void> => {
         let fields = { ...initialFields };
-        for (let attempt = 1; attempt <= 4; attempt++) {
+        for (let attempt = 1; attempt <= 6; attempt++) {
             const { error } = await supabase
                 .from('products')
                 .update(fields)
@@ -1087,6 +1087,28 @@ export async function importBlingProducts(
             if (!error) return;
 
             const fullMsg = formatSupabaseError(error);
+
+            // Trata conflitos de unique constraint: remove o campo conflitante e tenta novamente
+            if (fullMsg.toLowerCase().includes('duplicate key') || fullMsg.toLowerCase().includes('unique')) {
+                if ((fullMsg.toLowerCase().includes('slug')) && 'slug' in fields) {
+                    console.warn('[bling:import-fallback] conflito de slug no update, mantendo slug existente', { id });
+                    delete fields['slug'];
+                    continue;
+                }
+                if ((fullMsg.toLowerCase().includes('ean') || fullMsg.toLowerCase().includes('gtin')) && 'ean' in fields) {
+                    console.warn('[bling:import-fallback] conflito de EAN no update, removendo EAN', { id });
+                    delete fields['ean'];
+                    delete fields['alternative_eans'];
+                    continue;
+                }
+                if ((fullMsg.toLowerCase().includes('sku') || fullMsg.toLowerCase().includes('codigo')) && 'sku' in fields) {
+                    console.warn('[bling:import-fallback] conflito de SKU no update, removendo SKU', { id });
+                    delete fields['sku'];
+                    continue;
+                }
+                throw new Error(fullMsg);
+            }
+
             const missingColumn = extractMissingColumn(fullMsg);
             if (!missingColumn || !(missingColumn in fields)) {
                 throw new Error(fullMsg);
