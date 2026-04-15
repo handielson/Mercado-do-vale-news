@@ -1,13 +1,15 @@
 import React from 'react';
-import { 
-  Rocket, 
-  CheckCircle2, 
-  Clock, 
-  Lightbulb, 
+import {
+  Rocket,
+  CheckCircle2,
+  Clock,
+  Lightbulb,
   Server,
   ShieldAlert,
   Settings,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  Package
 } from 'lucide-react';
 
 export const RoadmapPage = () => {
@@ -39,8 +41,8 @@ export const RoadmapPage = () => {
               <p className="text-sm text-slate-500">Documentação do status de conexão dos vídeos locais para a nuvem.</p>
             </div>
           </div>
-          <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full border border-amber-200 uppercase tracking-wider whitespace-nowrap self-start md:self-auto">
-            Túnel Instalado — Aguardando DNS
+          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200 uppercase tracking-wider whitespace-nowrap self-start md:self-auto">
+            Ativo — xiaomipetrolina.com.br ✓
           </span>
         </div>
 
@@ -93,6 +95,12 @@ export const RoadmapPage = () => {
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                 <p>
                   <strong className="text-slate-800">Tarefas no Agendador Synology:</strong> <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">instalar-cloudflared</code> (instala e inicia o túnel) e <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">update-tunnel-config</code> (atualiza config com múltiplos domínios). Ambas como root.
+                </p>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-slate-600">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                <p>
+                  <strong className="text-slate-800">Domínios xiaomipetrolina.com.br ativos via tunnel (Abr/2026):</strong> <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">dsm-api</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">imagens</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">arquivos</code> e <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">videos.xiaomipetrolina.com.br</code> todos apontam para o Synology via Cloudflare Tunnel. CDN funcionando para imagens de produtos, vídeos e arquivos.
                 </p>
               </li>
             </ul>
@@ -154,19 +162,27 @@ export const RoadmapPage = () => {
 
           <hr className="border-slate-100" />
 
-          {/* BLOQUEIO ATUAL */}
+          {/* ATENÇÃO MANUTENÇÃO */}
           <div>
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2 mb-4">
-              <ShieldAlert size={16} className="text-rose-500" />
-              Por Que Ainda Não Funciona
+              <ShieldAlert size={16} className="text-amber-500" />
+              Atenção — Manutenção do Tunnel
             </h3>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-3">
+              <h4 className="font-semibold text-amber-800 text-sm flex items-center gap-2">
+                <AlertCircle size={16} /> Tarefa <code className="bg-amber-100 px-1 rounded">instalar-cloudflared</code> deve ficar HABILITADA
+              </h4>
+              <p className="text-sm text-amber-700 mt-2">
+                Em Abr/2026 o tunnel caiu porque a tarefa agendada estava desabilitada desde 21/03. A tarefa foi reabilitada e o tunnel foi reiniciado. Se o tunnel cair de novo, acesse o <strong>Agendador de Tarefas</strong> do DSM → selecione <code className="bg-amber-100 px-1 rounded">instalar-cloudflared</code> → clique em <strong>Executar</strong>. A tarefa está configurada para rodar automaticamente no boot do NAS.
+              </p>
+            </div>
             <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 mb-3">
               <h4 className="font-semibold text-rose-800 text-sm flex items-center gap-2">
-                <AlertCircle size={16} /> Zona mercadodovale.com.br "Pending" no Cloudflare
+                <AlertCircle size={16} /> Vídeos via videos.mercadodovale.com.br ainda pendentes
               </h4>
               <p className="text-sm text-rose-700 mt-2">
                 A zona exige NS <code className="bg-rose-100 px-1 rounded">carlos</code> + <code className="bg-rose-100 px-1 rounded">jill</code>, mas o domínio .com.br está em uso ativo — troca de NS agora pode derrubar o site. <br/>
-                O <code className="bg-rose-100 px-1 rounded">mercadodovale.com</code> foi testado via CNAME no GoDaddy, mas o Cloudflare Tunnel só roteia tráfego de domínios <em>dentro da conta</em> — CNAME externo isolado não é suficiente.
+                Os vídeos funcionam via <code className="bg-rose-100 px-1 rounded">videos.xiaomipetrolina.com.br</code> enquanto a migração não ocorre.
               </p>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -275,6 +291,58 @@ export const RoadmapPage = () => {
         </div>
       </section>
 
+
+      {/* IMPORTAÇÃO LEGADA MV-GESTÃO */}
+      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="bg-slate-50 border-b border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center text-violet-600 shrink-0">
+              <Package size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Importação do MV-Gestão (Sistema Legado)</h2>
+              <p className="text-sm text-slate-500">Histórico de vendas migrado do sistema antigo para o novo ERP.</p>
+            </div>
+          </div>
+          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200 uppercase tracking-wider whitespace-nowrap self-start md:self-auto">
+            Concluído — Abr/2026
+          </span>
+        </div>
+        <div className="p-6 space-y-6">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2 mb-4">
+              <CheckCircle2 size={16} className="text-emerald-500" />
+              O Que Foi Feito
+            </h3>
+            <ul className="space-y-3">
+              <li className="flex items-start gap-3 text-sm text-slate-600">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                <p><strong className="text-slate-800">208 vendas importadas</strong> do MV-Gestão para o novo sistema, vinculadas aos clientes pelo CPF. As 27 restantes não tinham cliente cadastrado no novo sistema.</p>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-slate-600">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                <p><strong className="text-slate-800">Dados do aparelho preservados:</strong> IMEI 1, IMEI 2, modelo, marca, cor, RAM e memória salvos em cada item da venda via campos <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">product_sku</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">product_name</code> e <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-rose-600">product_brand</code>.</p>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-slate-600">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                <p><strong className="text-slate-800">Botão "Ver Comprovante" no histórico do cliente:</strong> Gera PDF do comprovante de venda com dados do aparelho diretamente no browser (sem depender de CDN), usando os dados já salvos no banco.</p>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-slate-600">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                <p><strong className="text-slate-800">Termo de Garantia corrigido:</strong> Para vendas importadas, o termo agora exibe corretamente IMEI, modelo e marca lidos dos campos do item, sem exigir produto cadastrado no catálogo.</p>
+              </li>
+            </ul>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <h4 className="font-semibold text-amber-800 text-sm flex items-center gap-2 mb-2">
+              <AlertCircle size={15} /> Pendência — Migração Supabase
+            </h4>
+            <p className="text-sm text-amber-700">
+              As migrations <code className="bg-amber-100 px-1 rounded text-xs">20260414000001</code> e <code className="bg-amber-100 px-1 rounded text-xs">20260414000002</code> foram criadas mas ainda precisam ser aplicadas no Supabase Dashboard (SQL Editor) para adicionar as colunas <code className="bg-amber-100 px-1 rounded text-xs">legacy_sale_id</code>, <code className="bg-amber-100 px-1 rounded text-xs">product_specs</code>, <code className="bg-amber-100 px-1 rounded text-xs">product_brand</code> e <code className="bg-amber-100 px-1 rounded text-xs">product_model</code>. Após aplicar, reimportar as vendas para capturar RAM, memória e cor corretamente.
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* PRÓXIMAS REGRAS DE NEGÓCIO */}
       <section className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
