@@ -1427,11 +1427,14 @@ export async function importBlingProducts(
         onProgress(i + 1, total, result);
     }
 
-    // Batch sync all successfully imported products to VPS MySQL (fire-and-forget)
+    // Sync all successfully imported products to VPS MySQL — aguarda antes de retornar
+    // para evitar race condition onde a lista de produtos é carregada antes da sync completar.
     if (vpsRows.length > 0) {
-        vpsApiService.syncProducts(vpsRows).catch(err =>
-            console.warn('[blingService] VPS batch sync failed (not critical):', err)
-        );
+        try {
+            await vpsApiService.syncProducts(vpsRows);
+        } catch (err) {
+            console.warn('[blingService] VPS batch sync failed (not critical):', err);
+        }
     }
 
     return result;

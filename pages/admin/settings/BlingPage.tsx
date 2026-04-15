@@ -565,6 +565,10 @@ export default function BlingPage() {
 
             setImportResult(result);
 
+            // Invalida o cache local da lista de produtos para forçar busca fresca na próxima visita
+            localStorage.removeItem('admin_products_cache');
+            localStorage.removeItem('admin_products_cache_ts');
+
             if (result.errors.length === 0) {
                 toast.success(`Importação concluída! ${result.created} criados, ${result.updated} atualizados.`);
             } else {
