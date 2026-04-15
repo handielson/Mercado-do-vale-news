@@ -9,7 +9,9 @@ import {
   Settings,
   AlertCircle,
   FileText,
-  Package
+  Package,
+  Database,
+  ArrowRight
 } from 'lucide-react';
 
 export const RoadmapPage = () => {
@@ -341,6 +343,146 @@ export const RoadmapPage = () => {
               As migrations <code className="bg-amber-100 px-1 rounded text-xs">20260414000001</code> e <code className="bg-amber-100 px-1 rounded text-xs">20260414000002</code> foram criadas mas ainda precisam ser aplicadas no Supabase Dashboard (SQL Editor) para adicionar as colunas <code className="bg-amber-100 px-1 rounded text-xs">legacy_sale_id</code>, <code className="bg-amber-100 px-1 rounded text-xs">product_specs</code>, <code className="bg-amber-100 px-1 rounded text-xs">product_brand</code> e <code className="bg-amber-100 px-1 rounded text-xs">product_model</code>. Após aplicar, reimportar as vendas para capturar RAM, memória e cor corretamente.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* ARQUITETURA DE DADOS — VPS vs SUPABASE */}
+      <section className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="bg-slate-50 border-b border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 shrink-0">
+              <Database size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Arquitetura de Dados — VPS vs Supabase</h2>
+              <p className="text-sm text-slate-500">Mapa atual de onde cada módulo busca/salva dados. Controlado em <code className="bg-slate-200 px-1 rounded text-xs">config/migration.ts</code>.</p>
+            </div>
+          </div>
+          <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200 uppercase tracking-wider whitespace-nowrap self-start md:self-auto">
+            Migração em andamento
+          </span>
+        </div>
+        <div className="p-6 space-y-6">
+
+          {/* Grid VPS vs Supabase */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            {/* VPS MySQL - já migrados */}
+            <div className="border border-emerald-200 rounded-xl overflow-hidden">
+              <div className="bg-emerald-50 px-4 py-3 border-b border-emerald-200 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <h4 className="font-bold text-emerald-800 text-sm">VPS MySQL — <code className="font-mono text-xs">api.xiaomipetrolina.com.br</code></h4>
+              </div>
+              <div className="p-4 space-y-2">
+                {[
+                  { module: 'products', label: 'Produtos', detail: 'Catálogo, estoque, preços, variações, SKU' },
+                  { module: 'categories', label: 'Categorias', detail: 'Árvore de categorias e multi-categoria' },
+                  { module: 'brands', label: 'Marcas', detail: 'Marcas de produtos' },
+                  { module: 'versions', label: 'Versões', detail: 'Variações de produto (cor, RAM, memória)' },
+                  { module: 'banners', label: 'Banners', detail: 'Carrossel do storefront' },
+                  { module: 'shipping', label: 'Entrega', detail: 'Taxas e zonas de entrega' },
+                  { module: 'coupons', label: 'Cupons', detail: 'Cupons de desconto' },
+                  { module: 'paymentFees', label: 'Taxas', detail: 'Taxas por forma de pagamento' },
+                  { module: 'company', label: 'Empresa', detail: 'Nome, CNPJ, horários, template garantia' },
+                ].map(({ module, label, detail }) => (
+                  <div key={module} className="flex items-start gap-2 text-xs">
+                    <CheckCircle2 size={13} className="text-emerald-500 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="font-semibold text-slate-800">{label}</span>
+                      <span className="text-slate-400 mx-1">·</span>
+                      <code className="text-rose-600 bg-slate-100 px-1 rounded">{module}</code>
+                      <p className="text-slate-500 mt-0.5">{detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Supabase - ainda não migrados */}
+            <div className="border border-amber-200 rounded-xl overflow-hidden">
+              <div className="bg-amber-50 px-4 py-3 border-b border-amber-200 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-amber-400" />
+                <h4 className="font-bold text-amber-800 text-sm">Supabase PostgreSQL — <code className="font-mono text-xs">cqbdyxxzm...supabase.co</code></h4>
+              </div>
+              <div className="p-4 space-y-2">
+                {[
+                  { module: 'customers', label: 'Clientes', detail: 'Cadastro, CPF, endereço. Usa Supabase Auth para login no storefront — migração requer solução de autenticação alternativa' },
+                  { module: 'orders', label: 'Pedidos', detail: 'Pedidos online do storefront (status, itens, entrega)' },
+                  { module: 'sales', label: 'Vendas / PDV', detail: 'Histórico de vendas do caixa físico e importações do MV-Gestão' },
+                  { module: 'pdv', label: 'Caixa (PDV)', detail: 'Abertura/fechamento de caixa, sangrias e suprimentos' },
+                ].map(({ module, label, detail }) => (
+                  <div key={module} className="flex items-start gap-2 text-xs">
+                    <Clock size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="font-semibold text-slate-800">{label}</span>
+                      <span className="text-slate-400 mx-1">·</span>
+                      <code className="text-rose-600 bg-slate-100 px-1 rounded">{module}</code>
+                      <p className="text-slate-500 mt-0.5">{detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-amber-50 border-t border-amber-200 px-4 py-3">
+                <p className="text-xs text-amber-700"><strong>Prioridade de migração:</strong> orders → sales/pdv → customers (último, pois depende de auth).</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Endpoints principais da VPS */}
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">Endpoints principais da VPS</h3>
+            <div className="bg-slate-900 rounded-xl p-4 space-y-1.5 font-mono text-xs overflow-x-auto">
+              {[
+                ['GET/POST', '/products', 'Catálogo de produtos (MySQL)'],
+                ['GET/POST', '/categories', 'Categorias e sub-categorias'],
+                ['GET',      '/brands', 'Marcas de produtos'],
+                ['GET/POST', '/banners', 'Banners do carrossel'],
+                ['GET/POST', '/company-settings', 'Configurações da empresa'],
+                ['GET/POST', '/shipping', 'Taxas de entrega'],
+                ['GET/POST', '/coupons', 'Cupons de desconto'],
+                ['GET/POST', '/synology/files?folder=imagens|videos|arquivos', 'CDN Synology — lista arquivos'],
+                ['POST',     '/synology/upload?folder=...', 'CDN Synology — upload de arquivo'],
+                ['GET',      '/video/:filename', 'Streaming de vídeo do Synology'],
+                ['GET',      '/images/:filename', 'Proxy de imagem do Synology'],
+                ['GET',      '/check-video?sku=SKU', 'Verifica se produto tem vídeo no CDN'],
+              ].map(([method, path, desc]) => (
+                <div key={path} className="flex items-start gap-3">
+                  <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-bold ${method.includes('POST') ? 'bg-emerald-900 text-emerald-300' : 'bg-blue-900 text-blue-300'}`}>
+                    {method.split('/')[0]}
+                  </span>
+                  <span className="text-green-400 shrink-0">{path}</span>
+                  <span className="text-slate-500">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Proxy de roteamento */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+              <ArrowRight size={15} className="text-blue-500" />
+              Como o Frontend Roteia as Chamadas
+            </h3>
+            <div className="space-y-2 text-xs text-slate-600">
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <p><strong>Desenvolvimento (localhost:3000):</strong> Vite proxy roteia <code className="bg-slate-200 px-1 rounded">/vps-proxy?path=...</code> → <code className="bg-slate-200 px-1 rounded">api.xiaomipetrolina.com.br</code> com header <code className="bg-slate-200 px-1 rounded">x-sync-key</code> injetado automaticamente.</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <p><strong>Produção (Vercel):</strong> <code className="bg-slate-200 px-1 rounded">vpsClient.ts</code> usa <code className="bg-slate-200 px-1 rounded">VPS_PROXY_BASE</code> = <code className="bg-slate-200 px-1 rounded">https://api.xiaomipetrolina.com.br</code> diretamente. Header <code className="bg-slate-200 px-1 rounded">x-sync-key</code> vem de <code className="bg-slate-200 px-1 rounded">VITE_VPS_SYNC_KEY</code> (env var no Vercel).</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <p><strong>Autenticação VPS:</strong> Header <code className="bg-slate-200 px-1 rounded">x-sync-key: {'{SYNC_SECRET}'}</code> em todas as chamadas. Valor compartilhado entre <code className="bg-slate-200 px-1 rounded">.env</code> do servidor e <code className="bg-slate-200 px-1 rounded">VITE_VPS_SYNC_KEY</code> do frontend.</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 shrink-0" />
+                <p><strong>Supabase (clientes/pedidos/vendas):</strong> Chamadas diretas via <code className="bg-slate-200 px-1 rounded">@supabase/supabase-js</code> com <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_URL</code> + <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_ANON_KEY</code>.</p>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
