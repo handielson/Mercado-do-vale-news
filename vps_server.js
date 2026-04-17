@@ -1982,12 +1982,7 @@ fastify.get('/public/check-video', async (req, reply) => {
     return reply.send({ exists: cached.exists, ...(cached.url ? { url: cached.url } : {}) });
   }
 
-  // URL do proxy da VPS — NÃO depende do Cloudflare Tunnel (videos.mercadodovale.com.br).
-  // O endpoint /video/:filename já faz streaming direto do Synology via FileStation.
-  const apiBase = process.env.API_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-  const proxyUrl = `${apiBase}/video/${encodeURIComponent(fileName)}`;
-  // URL CDN mantida apenas como fallback caso o proxy da VPS falhe
-  const cdnUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
+  const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
 
   // Verifica existência via FileStation API (não depende do CDN)
   try {
@@ -1999,41 +1994,26 @@ fastify.get('/public/check-video', async (req, reply) => {
         `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`
       );
       const exists = data.success === true && data.data?.files?.[0]?.name != null;
-      videoExistenceCache.set(cleanSku, { exists, url: exists ? proxyUrl : null, cachedAt: Date.now() });
-      return reply.send({ exists, ...(exists ? { url: proxyUrl } : {}) });
+      videoExistenceCache.set(cleanSku, { exists, url: exists ? canonicalUrl : null, cachedAt: Date.now() });
+      return reply.send({ exists, ...(exists ? { url: canonicalUrl } : {}) });
     }
   } catch (err) {
-    console.warn('[public/check-video] Synology API error, tentando fallback via HEAD no proxy:', err.message);
+    console.warn('[public/check-video] Synology API error, tentando fallback via HEAD no CDN:', err.message);
 
-    // Fallback: tenta confirmar existência via HEAD no proxy da VPS
+    // Fallback robusto: tenta validar existência do arquivo no CDN.
     try {
-      const headResp = await fetch(proxyUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+      const headResp = await fetch(canonicalUrl, { method: 'HEAD' });
       if (headResp.ok) {
-        videoExistenceCache.set(cleanSku, { exists: true, url: proxyUrl, cachedAt: Date.now() });
-        return reply.send({ exists: true, url: proxyUrl });
+        videoExistenceCache.set(cleanSku, { exists: true, url: canonicalUrl, cachedAt: Date.now() });
+        return reply.send({ exists: true, url: canonicalUrl });
       }
     } catch (headErr) {
-      console.warn('[public/check-video] HEAD proxy falhou, tentando CDN:', headErr.message);
-      // Último recurso: CDN (depende do tunnel, pode estar offline)
-      try {
-        const cdnHead = await fetch(cdnUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-        if (cdnHead.ok) {
-          videoExistenceCache.set(cleanSku, { exists: true, url: cdnUrl, cachedAt: Date.now() });
-          return reply.send({ exists: true, url: cdnUrl });
-        }
-      } catch (_) { /* tunnel offline */ }
+      console.warn('[public/check-video] HEAD fallback falhou:', headErr.message);
     }
   }
 
-  // Sem Synology e sem confirmação via proxy ou CDN: trata como inexistente.
+  // Sem Synology e sem confirmação via CDN: trata como inexistente.
   return reply.send({ exists: false });
-});
-
-// POST /public/clear-video-cache — limpa cache de existência de vídeos (útil após reconfigurar o tunnel)
-fastify.post('/public/clear-video-cache', { preHandler: requireSyncKey }, async (req, reply) => {
-  const size = videoExistenceCache.size;
-  videoExistenceCache.clear();
-  return reply.send({ ok: true, cleared: size });
 });
 
 fastify.get('/team', { preHandler: requireSyncKey }, async (req, reply) => {
