@@ -1121,7 +1121,7 @@ export async function importBlingProducts(
         throw new Error('Falha ao atualizar produto após fallback de colunas.');
     };
 
-    const insertWithColumnFallback = async (initialRow: Record<string, any>): Promise<{ id: string }> => {
+    const insertWithColumnFallback = async (initialRow: Record<string, any>): Promise<{ id: string; resolvedRow: Record<string, any> }> => {
         let row = { ...initialRow };
         for (let attempt = 1; attempt <= 6; attempt++) {
             const { data: insertedData, error } = await supabase
@@ -1129,7 +1129,7 @@ export async function importBlingProducts(
                 .insert(row)
                 .select('id')
                 .single();
-            if (!error) return { id: insertedData?.id };
+            if (!error) return { id: insertedData?.id, resolvedRow: row };
 
             const fullMsg = formatSupabaseError(error);
 
@@ -1163,7 +1163,7 @@ export async function importBlingProducts(
             delete row[missingColumn];
         }
 
-        throw new Error('Falha ao inserir produto após fallback de colunas.');
+        throw new Error('Falha ao inserir produto após fallback de colunas.'); // row never returned — caller handles the throw
     };
 
     // Resolve brand and model name for use as fallback values
@@ -1409,7 +1409,9 @@ export async function importBlingProducts(
                 operation = 'criação';
                 const insertedData = await insertWithColumnFallback(dbRow);
                 result.created++;
-                vpsRows.push({ ...dbRow, id: insertedData?.id });
+                // Use resolvedRow so that any slug/sku/ean modified during conflict fallback
+                // is propagated to the VPS (not the original conflicting value from dbRow).
+                vpsRows.push({ ...insertedData.resolvedRow, id: insertedData.id });
             }
 
             // Associa cor ao model_color_images se o produto tiver model_id e cor mapeada
