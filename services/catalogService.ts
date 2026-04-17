@@ -38,18 +38,46 @@ export const catalogService = {
     ): Promise<{ products: CatalogProduct[], total: number, hasMore: boolean }> => {
         const cacheKey = `${CACHE_KEY_PREFIX}products:${JSON.stringify({ filters, page, pageSize })}`;
 
-        // ── Atalho para busca por EAN / código de barras ──────────────────────
-        // Quando a busca é puramente numérica com 8-14 dígitos, usa endpoint
-        // dedicado que retorna os campos completos (inclusive ean).
+        // ── Busca com termo: vai direto ao VPS (server-side) ──────────────────
+        // Isso resolve o problema de limit: 1000 esconder produtos além da 1000ª posição.
+        // O VPS busca em TODOS os produtos do banco (nome, sku, ean, etc.).
         const searchTerm = filters?.search?.trim() || '';
-        if (searchTerm && /^\d{8,14}$/.test(searchTerm)) {
-            const byEan = await vpsApiService.getProductByEan(searchTerm);
-            if (byEan && byEan.length > 0) {
-                const mapped = byEan.map(normalizeProduct) as unknown as CatalogProduct[];
-                return { products: mapped, total: mapped.length, hasMore: false };
+        if (searchTerm) {
+            // EAN puro (8-14 dígitos) → endpoint dedicado /products/by-ean
+            if (/^\d{8,14}$/.test(searchTerm)) {
+                const byEan = await vpsApiService.getProductByEan(searchTerm);
+                if (byEan && byEan.length > 0) {
+                    const settings = await catalogConfigService.getSettings();
+                    let mapped = byEan.map(normalizeProduct) as unknown as CatalogProduct[];
+                    mapped = catalogConfigService.applyVisibilityRules(mapped, settings) as unknown as CatalogProduct[];
+                    return { products: mapped, total: mapped.length, hasMore: false };
+                }
+                return { products: [], total: 0, hasMore: false };
             }
-            // Nenhum resultado por EAN → retorna vazio imediatamente
-            return { products: [], total: 0, hasMore: false };
+
+            // Busca por texto → VPS server-side search (sem limite de 1000)
+            const [vpsRaw, vpsCats, settings] = await Promise.all([
+                vpsApiService.getProducts({ search: searchTerm, status: 'active', limit: 500, noCache: true }),
+                vpsApiService.getCategories(),
+                catalogConfigService.getSettings(),
+            ]);
+
+            if (!vpsRaw) return { products: [], total: 0, hasMore: false };
+
+            const catSlugMap = new Map<string, string>(
+                (vpsCats || []).map((c: any) => [c.id, c.slug])
+            );
+
+            let result = vpsRaw.map((p: any) => ({
+                ...normalizeProduct(p),
+                category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
+            })) as unknown as CatalogProduct[];
+
+            result = catalogConfigService.applyVisibilityRules(result as any, settings) as unknown as CatalogProduct[];
+
+            const from = (page - 1) * pageSize;
+            const paginated = result.slice(from, from + pageSize);
+            return { products: paginated, total: result.length, hasMore: paginated.length === pageSize };
         }
 
         // Helper para salvar no cache
