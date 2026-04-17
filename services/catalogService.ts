@@ -38,6 +38,20 @@ export const catalogService = {
     ): Promise<{ products: CatalogProduct[], total: number, hasMore: boolean }> => {
         const cacheKey = `${CACHE_KEY_PREFIX}products:${JSON.stringify({ filters, page, pageSize })}`;
 
+        // ── Atalho para busca por EAN / código de barras ──────────────────────
+        // Quando a busca é puramente numérica com 8-14 dígitos, usa endpoint
+        // dedicado que retorna os campos completos (inclusive ean).
+        const searchTerm = filters?.search?.trim() || '';
+        if (searchTerm && /^\d{8,14}$/.test(searchTerm)) {
+            const byEan = await vpsApiService.getProductByEan(searchTerm);
+            if (byEan && byEan.length > 0) {
+                const mapped = byEan.map(normalizeProduct) as unknown as CatalogProduct[];
+                return { products: mapped, total: mapped.length, hasMore: false };
+            }
+            // Nenhum resultado por EAN → retorna vazio imediatamente
+            return { products: [], total: 0, hasMore: false };
+        }
+
         // Helper para salvar no cache
         const saveToCache = (products: any[], total: number, hasMore: boolean) => {
             if (filters?.search) return; // Buscas não são cacheadas

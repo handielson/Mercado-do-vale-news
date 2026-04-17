@@ -63,6 +63,7 @@ export const PublicProductPage: React.FC = () => {
 
     // Resolved video URL: prioridade video_url → HEAD check automático por SKU
     const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(null);
+    const [videoLoadError, setVideoLoadError] = useState(false);
     const primaryColor = catalogTheme?.primary_color || '#2563eb';
     const secondaryColor = catalogTheme?.secondary_color || '#1d4ed8';
     const accentColor = catalogTheme?.accent_color || '#10b981';
@@ -75,6 +76,7 @@ export const PublicProductPage: React.FC = () => {
         let cancelled = false;
 
         const resolveVideoUrl = async () => {
+            setVideoLoadError(false);
             // 1. Se o produto tem video_url explícita, usa a URL salva
             if (product?.video_url) {
                 setEffectiveVideoUrl(product.video_url);
@@ -753,19 +755,27 @@ export const PublicProductPage: React.FC = () => {
                     <div className="space-y-4">
                         <div className="aspect-square bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-4">
                             {selectedImage === 'VIDEO' && effectiveVideoUrl ? (
-                                effectiveVideoUrl.toLowerCase().endsWith('.mp4') ? (
-                                    <video src={effectiveVideoUrl} controls autoPlay className="w-full h-full object-contain shadow-lg rounded-lg bg-black" onError={() => { setEffectiveVideoUrl(null); setSelectedImage(product?.images?.[0] || ''); }} />
+                                videoLoadError ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-slate-500">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                        <p className="text-sm font-medium">Vídeo temporariamente indisponível</p>
+                                        <a href={effectiveVideoUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">
+                                            Tentar abrir diretamente
+                                        </a>
+                                    </div>
+                                ) : effectiveVideoUrl.toLowerCase().endsWith('.mp4') ? (
+                                    <video src={effectiveVideoUrl} controls autoPlay className="w-full h-full object-contain shadow-lg rounded-lg bg-black" onError={() => setVideoLoadError(true)} />
                                 ) : (
                                     <div className="w-full h-full flex flex-col">
-                                        <iframe 
-                                            src={effectiveVideoUrl.includes('youtube.com/watch?v=') ? effectiveVideoUrl.replace('watch?v=', 'embed/') : effectiveVideoUrl.includes('youtu.be/') ? effectiveVideoUrl.replace('youtu.be/', 'youtube.com/embed/') : effectiveVideoUrl} 
-                                            className="w-full h-full rounded-lg shadow-sm bg-white" 
+                                        <iframe
+                                            src={effectiveVideoUrl.includes('youtube.com/watch?v=') ? effectiveVideoUrl.replace('watch?v=', 'embed/') : effectiveVideoUrl.includes('youtu.be/') ? effectiveVideoUrl.replace('youtu.be/', 'youtube.com/embed/') : effectiveVideoUrl}
+                                            className="w-full h-full rounded-lg shadow-sm bg-white"
                                             allowFullScreen
                                             title="Vídeo do Produto"
                                         ></iframe>
                                         {!effectiveVideoUrl.includes('youtube.com') && !effectiveVideoUrl.includes('youtu.be') && (
                                             <a href={effectiveVideoUrl} target="_blank" rel="noreferrer" className="mt-4 text-sm text-center font-bold text-blue-600 hover:underline">
-                                                🔗 O vídeo não carregou? Clique aqui para abrir
+                                                O vídeo não carregou? Clique aqui para abrir
                                             </a>
                                         )}
                                     </div>
