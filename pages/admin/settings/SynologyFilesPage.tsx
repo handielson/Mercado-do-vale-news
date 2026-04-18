@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Upload, Copy, Trash2, Image, Video, FileText, RefreshCw, ExternalLink, CheckCircle, Shield, Clock, GitCommit, FileArchive, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, Copy, Trash2, Image, Video, FileText, RefreshCw, ExternalLink, CheckCircle, Shield, Clock, GitCommit, FileArchive, ChevronDown, ChevronUp, Zap, AlertTriangle } from 'lucide-react';
 import { vpsClient } from '../../../services/vpsClient';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -379,6 +379,101 @@ function BackupCard({ entry }: { entry: BackupEntry }) {
     );
 }
 
+// ─── Tunnel Restart Widget ───────────────────────────────────────────────────
+
+interface CommandStatus {
+    command: string | null;
+    id?: string;
+    enqueuedAt?: string;
+    status?: 'pending' | 'success' | 'failed' | 'expired';
+    completedAt?: string;
+    result?: string;
+}
+
+function TunnelRestartWidget() {
+    const [submitting, setSubmitting] = useState(false);
+    const [status, setStatus] = useState<CommandStatus | null>(null);
+
+    useEffect(() => {
+        if (status?.status !== 'pending') return;
+        const interval = setInterval(async () => {
+            try {
+                const s = await vpsClient.get<CommandStatus>('/synology/command-status');
+                setStatus(s);
+                if (s.status !== 'pending') clearInterval(interval);
+            } catch {
+                // silencioso — o polling continua
+            }
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [status?.status]);
+
+    async function handleRestart() {
+        setSubmitting(true);
+        try {
+            const resp = await vpsClient.post<{ ok: boolean; command: CommandStatus }>(
+                '/synology/enqueue-restart',
+                {}
+            );
+            setStatus({ ...resp.command, command: resp.command.command });
+            toast.success('Restart enfileirado. O Synology vai executar em até 1 minuto.');
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : 'erro desconhecido';
+            toast.error(`Erro ao enfileirar: ${msg}`);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    return (
+        <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="flex items-start gap-3">
+                <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-amber-900">Tunnel Cloudflare caiu?</h3>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                        Se listar 0 arquivos mesmo com pasta cheia no Synology, o tunnel <code className="font-mono bg-amber-100 px-1 rounded">cloudflared</code> pode estar fora.
+                        Use o botão abaixo — ele enfileira um restart que o Synology consome em até 1 min.
+                    </p>
+                    {status?.status === 'pending' && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-amber-900">
+                            <RefreshCw size={12} className="animate-spin" />
+                            Aguardando Synology executar...
+                        </div>
+                    )}
+                    {status?.status === 'success' && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-green-700">
+                            <CheckCircle size={12} />
+                            Reiniciado: {status.result || 'ok'}
+                            {status.completedAt ? ` · ${new Date(status.completedAt).toLocaleTimeString()}` : ''}
+                        </div>
+                    )}
+                    {status?.status === 'failed' && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-red-700">
+                            <AlertTriangle size={12} />
+                            Falhou: {status.result || 'sem detalhes'}
+                        </div>
+                    )}
+                    {status?.status === 'expired' && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                            <Clock size={12} />
+                            Expirou sem resposta — o poller do Synology não rodou. Confira o Agendador de Tarefas.
+                        </div>
+                    )}
+                </div>
+                <button
+                    onClick={handleRestart}
+                    disabled={submitting || status?.status === 'pending'}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all shrink-0"
+                >
+                    <Zap size={14} className={submitting ? 'animate-pulse' : ''} />
+                    {submitting ? 'Enfileirando...' : 'Reiniciar tunnel'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function SynologyFilesPage() {
@@ -455,6 +550,8 @@ export function SynologyFilesPage() {
                     <p className="text-slate-500 text-sm mt-1">Gerencie arquivos nos CDNs do Synology NAS</p>
                 </div>
             </div>
+
+            <TunnelRestartWidget />
 
             {/* Tabs */}
             <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit mb-6">
