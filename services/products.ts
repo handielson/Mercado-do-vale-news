@@ -286,24 +286,38 @@ async function create(input: ProductInput): Promise<Product> {
 }
 
 async function update(id: string, input: ProductInput): Promise<Product> {
-    // Validate model_id
-    if (!input.model_id || input.model_id.trim() === '') {
-        throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
+    // Carrega produto existente — preserva model_id legado e serve de base para price history/Shopee sync.
+    const oldProduct = await getById(id);
+    if (!oldProduct) throw new Error(`Produto não encontrado: ${id}`);
+
+    // Preserva model_id existente quando o form não envia (produtos legados sem modelo associado).
+    const trimmedInputModelId = input.model_id?.trim() || '';
+    const effectiveModelId = trimmedInputModelId || oldProduct.model_id || null;
+
+    // Busca modelo apenas quando há model_id. Erro explícito só se o usuário escolheu um modelo inválido;
+    // model_id preservado de legado segue sem enriquecimento.
+    let modelData: any = null;
+    if (effectiveModelId) {
+        const { data, error: modelError } = await supabase
+            .from('models')
+            .select('id, name, brand_id, category_id, template_values, brand:brands(name)')
+            .eq('id', effectiveModelId)
+            .single();
+        if (modelError) {
+            if (trimmedInputModelId) {
+                throw new Error(`Failed to fetch model: ${modelError.message}`);
+            }
+            console.warn(`[productService.update] Modelo ${effectiveModelId} não encontrado; seguindo sem enriquecimento de template.`);
+        } else {
+            modelData = data;
+        }
     }
 
-    // Fetch model via Supabase (models não estão na VPS)
-    const { data: modelData, error: modelError } = await supabase
-        .from('models')
-        .select('id, name, brand_id, category_id, template_values, brand:brands(name)')
-        .eq('id', input.model_id)
-        .single();
-    if (modelError) throw new Error(`Failed to fetch model: ${modelError.message}`);
-
-    const brand = (modelData.brand as any)?.[0]?.name || input.brand;
+    const brand = (modelData?.brand as any)?.[0]?.name || input.brand || oldProduct.brand;
     // Respeita override manual de categoria no formulário.
-    const category_id = input.category_id || modelData.category_id;
-    const dimensions = input.dimensions || modelData.template_values?.dimensions;
-    const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
+    const category_id = input.category_id || modelData?.category_id || oldProduct.category_id;
+    const dimensions = input.dimensions || modelData?.template_values?.dimensions || oldProduct.dimensions;
+    const weight_kg = input.weight_kg || modelData?.template_values?.weight_kg || oldProduct.weight_kg;
 
     // Categorias de produtos físicos serializados onde múltiplos itens podem compartilhar o mesmo SKU
     let isSerializedCategory = false;
@@ -335,7 +349,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     }
 
     let finalVideoUrl = input.video_url || null;
-    if (!finalVideoUrl && modelData.template_values?.has_video && input.sku) {
+    if (!finalVideoUrl && modelData?.template_values?.has_video && input.sku) {
         try {
             const { companySettingsService } = await import('./companySettingsService');
             const settings = await companySettingsService.get() as any;
@@ -352,7 +366,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     const payload: any = {
         id,
         company_id: companyId,
-        model_id: input.model_id,
+        model_id: effectiveModelId,
         parent_id: input.parent_id ?? null,
         brand,
         category_id,
@@ -361,7 +375,7 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         description: input.description || null,
         ean: input.eans?.[0] || null,
         alternative_eans: input.eans || [],
-        specs: { ...(modelData.template_values || {}), ...(input.specs || {}) },
+        specs: { ...(modelData?.template_values || {}), ...(input.specs || {}) },
         price_cost: input.price_cost,
         price_retail: input.price_retail,
         price_reseller: input.price_reseller,
@@ -394,12 +408,6 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
         production_days: input.production_days != null ? input.production_days : null,
     };
-
-    // Pegamos o oldProduct ANTES de atualizar para comparar preços e estoques
-    let oldProduct: Product | null = null;
-    try {
-        oldProduct = await getById(id);
-    } catch(e) {}
 
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);
