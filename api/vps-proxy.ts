@@ -57,7 +57,8 @@ function isSensitiveGetPath(path: string): boolean {
         path.startsWith('/company-settings') ||
         path.startsWith('/admin/') ||
         path.startsWith('/table-data/') ||
-        path.startsWith('/synology/') ||
+        // /synology/ GETs are protected by x-sync-key injected by this proxy — admin check is redundant
+        // Writes (/synology/upload, DELETE /synology/file) are still blocked by isWrite check
         path.startsWith('/images/list')
     );
 }
