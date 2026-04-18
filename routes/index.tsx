@@ -98,6 +98,7 @@ import { RoadmapPage } from '../pages/admin/settings/RoadmapPage';
 import { VpsStatusPage } from '../pages/admin/settings/VpsStatusPage';
 import { MySQLExplorerPage } from '../pages/admin/settings/MySQLExplorerPage';
 import { SynologyFilesPage } from '../pages/admin/settings/SynologyFilesPage';
+import { SynologyConfigPage } from '../pages/admin/settings/SynologyConfigPage';
 import AccountingPage from '../pages/admin/accounting/AccountingPage';
 import { DataImportExportPage } from '../pages/admin/import/DataImportExportPage';
 import { FavoritesRankingReport } from '../pages/admin/reports/FavoritesRankingReport';
@@ -752,6 +753,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><SynologyFilesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/synology-config",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SynologyConfigPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
