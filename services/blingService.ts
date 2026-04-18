@@ -809,22 +809,38 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
 
 export async function checkExistingBlingProducts(blingIds: number[]): Promise<Set<number>> {
     if (blingIds.length === 0) return new Set();
-    const companyId = await getCompanyId();
 
-    const { data, error } = await supabase
-        .from('products')
-        .select('bling_id')
-        .eq('company_id', companyId)
-        .in('bling_id', blingIds)
-        .not('model_id', 'is', null) // Ignora produtos que ficaram órfãos ao deletar modelo
-        .neq('status', 'draft');     // Ignora produtos "pai" estruturais
+    // Fonte da verdade: VPS (mesma fonte da listagem /admin/products).
+    // Antes consultava Supabase, mas produtos podiam existir lá sem ter sincronizado com a VPS,
+    // gerando falso-positivo "já importado" que bloqueava reimportação de produtos órfãos.
+    const pageSize = 300;
+    const maxRecords = 10000;
+    const requestedSet = new Set(blingIds.map(id => Number(id)));
+    const found = new Set<number>();
 
-    if (error) {
-        console.error('[checkExistingBlingProducts] Falha:', error.message);
-        return new Set();
+    for (let offset = 0; offset < maxRecords; offset += pageSize) {
+        const page = await vpsApiService.getProducts({
+            status: 'all',
+            limit: pageSize,
+            offset,
+            noCache: true,
+        });
+        if (!page || page.length === 0) break;
+
+        for (const p of page as any[]) {
+            if (p?.bling_id == null) continue;
+            const bid = Number(p.bling_id);
+            if (!requestedSet.has(bid)) continue;
+            // Mesma semântica do filtro anterior: ignora produtos órfãos de modelo e drafts estruturais.
+            if (p.model_id == null) continue;
+            if (p.status === 'draft') continue;
+            found.add(bid);
+        }
+
+        if (page.length < pageSize) break;
     }
 
-    return new Set(data.filter(p => p.bling_id != null).map(p => p.bling_id));
+    return found;
 }
 
 export async function searchBlingProducts(query: string): Promise<BlingProduct[]> {
@@ -1455,9 +1471,23 @@ export async function importBlingProducts(
     // para evitar race condition onde a lista de produtos é carregada antes da sync completar.
     if (vpsRows.length > 0) {
         try {
-            await vpsApiService.syncProducts(vpsRows);
-        } catch (err) {
-            console.warn('[blingService] VPS batch sync failed (not critical):', err);
+            const ok = await vpsApiService.syncProducts(vpsRows);
+            if (!ok) {
+                // Sync parcial: alguns produtos podem ter ficado só no Supabase (órfãos),
+                // não aparecendo na listagem /admin/products. Surface para o usuário retryar.
+                result.errors.push({
+                    name: `Sincronização parcial com VPS (${vpsRows.length} produto(s))`,
+                    sku: '',
+                    reason: 'Um ou mais produtos foram salvos no Supabase mas falharam ao sincronizar com a VPS. Eles podem não aparecer na listagem. Verifique o console do navegador e rode o script de reconciliação de órfãos.',
+                });
+            }
+        } catch (err: any) {
+            console.warn('[blingService] VPS batch sync failed:', err);
+            result.errors.push({
+                name: `Sincronização com VPS falhou (${vpsRows.length} produto(s))`,
+                sku: '',
+                reason: `Produtos salvos no Supabase podem não aparecer na listagem: ${err?.message || String(err)}. Rode o script de reconciliação de órfãos para recuperar.`,
+            });
         }
     }
 
