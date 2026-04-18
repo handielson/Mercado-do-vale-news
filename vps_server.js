@@ -2064,7 +2064,7 @@ function normalizeSynologyUrl(rawUrl) {
   }
 }
 
-const SYNO_URL  = normalizeSynologyUrl(process.env.SYNOLOGY_URL || 'https://192-168-1-25.handielson.direct.quickconnect.to:5001');
+const SYNO_URL  = normalizeSynologyUrl(process.env.SYNOLOGY_URL || 'https://dsm-api.xiaomipetrolina.com.br');
 const SYNO_USER = process.env.SYNOLOGY_USER || '';
 const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
 
