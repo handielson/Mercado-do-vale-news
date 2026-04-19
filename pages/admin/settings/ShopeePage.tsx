@@ -17,6 +17,12 @@ import { InmetroWidget } from '../../../components/admin/InmetroWidget';
 import { fetchBlingProductDetail } from '../../../services/blingService';
 import { resolveShopeeSyncDefaults } from './shopeeSyncDefaults.js';
 import {
+    applyShopeeStockFields,
+    buildShopeeAddItemStockVariants,
+    extractShopeeLocationIds,
+    isShopeeSellerStockConstraintError,
+} from './shopeeStockPayloads.js';
+import {
     buildCategoryTree,
     getCategoryChildren,
     getCategoryPathLabel,
@@ -1407,6 +1413,9 @@ function ShopeeSyncModal({
     const requiredAttributes = attributes.filter((attr) => attr.mandatory);
     const optionalAttributes = attributes.filter((attr) => !attr.mandatory);
     const missingRequiredAttributes = requiredAttributes.filter((attr) => !hasFilledAttributeValue(attrValues[attr.attribute_id]));
+    const debugText = syncDebugEntries
+        .map((entry) => `[${entry.timestamp}] ${entry.stage}\n${entry.payload}`)
+        .join('\n\n');
 
     const updateAttributeValue = (attributeId: number, value: string | string[]) => {
         setAttrValues((prev) => ({ ...prev, [attributeId]: value }));
@@ -1597,8 +1606,8 @@ function ShopeeSyncModal({
         ]);
     };
 
-    const postShopeeDebug = async (action: string, body: Record<string, any>) => {
-        pushSyncDebug(`${action}:request`, body);
+    const postShopeeDebug = async (action: string, body: Record<string, any>, debugLabel: string = action) => {
+        pushSyncDebug(`${debugLabel}:request`, body);
 
         const res = await fetch(`/api/shopee-catalog?action=${action}`, {
             method: 'POST',
@@ -1614,7 +1623,7 @@ function ShopeeSyncModal({
             data = null;
         }
 
-        pushSyncDebug(`${action}:response`, {
+        pushSyncDebug(`${debugLabel}:response`, {
             httpStatus: res.status,
             ok: res.ok,
             body: data ?? text,
@@ -1639,6 +1648,108 @@ function ShopeeSyncModal({
         }
 
         return data;
+    };
+
+    const getShopeeDebug = async (action: string, debugLabel: string = action) => {
+        pushSyncDebug(`${debugLabel}:request`, { action });
+
+        const res = await fetch(`/api/shopee-catalog?action=${action}`);
+        const text = await res.text();
+        let data: any = null;
+        try {
+            data = text ? JSON.parse(text) : null;
+        } catch {
+            data = null;
+        }
+
+        pushSyncDebug(`${debugLabel}:response`, {
+            httpStatus: res.status,
+            ok: res.ok,
+            body: data ?? text,
+        });
+
+        if (!res.ok) {
+            throw new Error(`[${action}] ${data?.message || data?.error || text || `HTTP ${res.status}`}`);
+        }
+
+        return data;
+    };
+
+    const collectShopeeStockContext = async () => {
+        const locationIds = new Set<string>();
+
+        for (const probe of [
+            { action: 'warehouse_list', label: 'stock_context:warehouse_list' },
+            { action: 'warehouse_locations', label: 'stock_context:warehouse_locations' },
+        ]) {
+            try {
+                const data = await getShopeeDebug(probe.action, probe.label);
+                extractShopeeLocationIds(data).forEach((value) => locationIds.add(value));
+            } catch (error: any) {
+                pushSyncDebug(`${probe.label}:error`, error?.message || error);
+            }
+        }
+
+        const resolved = Array.from(locationIds);
+        pushSyncDebug('add_item:stock_context_summary', {
+            location_ids: resolved,
+            location_count: resolved.length,
+        });
+
+        return resolved;
+    };
+
+    const publishShopeeItemWithStockFallback = async (basePayload: Record<string, any>, parsedStockValue: number) => {
+        const locationIds = await collectShopeeStockContext();
+        const variants = buildShopeeAddItemStockVariants({
+            stock: parsedStockValue,
+            locationIds,
+        });
+
+        pushSyncDebug('add_item:stock_variants', variants.map((variant) => ({
+            key: variant.key,
+            label: variant.label,
+            stock_fields: variant.stockFields,
+        })));
+
+        let lastError: any = null;
+
+        for (const variant of variants) {
+            const payload = applyShopeeStockFields(basePayload, variant.stockFields);
+            pushSyncDebug('add_item:payload_preview', {
+                variant: variant.key,
+                payload_keys: Object.keys(payload),
+                image_count: Array.isArray(payload?.image?.image_id_list) ? payload.image.image_id_list.length : 0,
+                video_count: Array.isArray(payload?.video_info?.video_id_list) ? payload.video_info.video_id_list.length : 0,
+                attribute_ids: Array.isArray(payload.attribute_list) ? payload.attribute_list.map((attr: any) => attr.attribute_id) : [],
+                brand: payload.brand,
+                logistics_info: payload.logistics_info,
+                stock_fields: variant.stockFields,
+                payload,
+            });
+
+            try {
+                const data = await postShopeeDebug('add_item', payload, `add_item:${variant.key}`);
+                pushSyncDebug('add_item:variant_success', {
+                    variant: variant.key,
+                    label: variant.label,
+                });
+                return data;
+            } catch (error: any) {
+                lastError = error;
+                pushSyncDebug('add_item:variant_error', {
+                    variant: variant.key,
+                    label: variant.label,
+                    message: error?.message || error,
+                });
+
+                if (!isShopeeSellerStockConstraintError(error?.message)) {
+                    throw error;
+                }
+            }
+        }
+
+        throw lastError || new Error('Falha ao publicar produto na Shopee.');
     };
 
     const handleSync = async () => {
@@ -1671,6 +1782,16 @@ function ShopeeSyncModal({
             const videoIdList: string[] = [];
             let videoUploadSkipped = false;
             const weightValue = Number(defaultWeightKg.toFixed(3));
+
+            pushSyncDebug('add_item:stock_diagnostics', {
+                raw_shopeeStock_state: shopeeStock,
+                parsedStock,
+                product_stock_quantity: product.stock_quantity ?? null,
+                track_inventory: product.track_inventory ?? null,
+                selected_category_id: selectedCat.category_id,
+                required_attributes_count: requiredAttributes.length,
+                filled_attributes_count: attributeList.length,
+            });
 
             for (const image of availableImages) {
                 if (image.image_id) {
@@ -1728,14 +1849,13 @@ function ShopeeSyncModal({
                 }
             }
 
-            const payload = {
+            const basePayload = {
                 original_price: parsedPrice,
                 description: cleanDescription,
                 item_name: cleanItemName,
                 category_id: selectedCat.category_id,
                 attribute_list: attributeList,
                 logistics_info: [{ logistic_id: 80031, enabled: true }],
-                normal_stock: parsedStock,
                 image: {
                     image_id_list: imageIdList
                 },
@@ -1749,7 +1869,7 @@ function ShopeeSyncModal({
                 condition: 'NEW',
             };
 
-            const data = await postShopeeDebug('add_item', payload);
+            const data = await publishShopeeItemWithStockFallback(basePayload, parsedStock);
 
             // Save to Supabase
             const shopeeItemId = data.response?.item_id;
@@ -2170,12 +2290,26 @@ function ShopeeSyncModal({
                                 <div className="flex justify-between"><span className="text-slate-500">Atributos preenchidos</span><span className="font-medium">{Object.keys(attrValues).length}</span></div>
                                 <div className="flex justify-between"><span className="text-slate-500">Fotos / Video</span><span className="font-medium">{availableImages.length} / {availableVideos.length}</span></div>
                             </div>
-                            <details className="rounded-xl border border-slate-200 bg-white">
-                                <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between text-sm font-semibold text-slate-700">
+                            <details open={syncDebugEntries.length > 0} className="rounded-xl border border-slate-200 bg-white">
+                                <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
                                     <span>Debug da publicação</span>
-                                    <span className="text-xs text-slate-400">{syncDebugEntries.length} eventos</span>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.preventDefault();
+                                                if (!debugText) return;
+                                                navigator.clipboard.writeText(debugText);
+                                                toast.success('Debug copiado.');
+                                            }}
+                                            className="px-2 py-1 rounded-md border border-slate-200 text-[11px] text-slate-500 hover:bg-slate-50"
+                                        >
+                                            Copiar
+                                        </button>
+                                        <span className="text-xs text-slate-400">{syncDebugEntries.length} eventos</span>
+                                    </div>
                                 </summary>
-                                <div className="border-t border-slate-100 px-4 py-3 space-y-3 max-h-72 overflow-y-auto">
+                                <div className="border-t border-slate-100 px-4 py-3 space-y-3 max-h-[50vh] overflow-y-auto">
                                     {syncDebugEntries.length === 0 ? (
                                         <p className="text-xs text-slate-400">Ao clicar em publicar, vamos registrar aqui cada request e response da API.</p>
                                     ) : syncDebugEntries.map((entry, index) => (

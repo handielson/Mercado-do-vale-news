@@ -195,6 +195,14 @@ export default async function handler(req: any, res: any) {
             const data = await shopeeGet('/api/v2/product/get_attribute_tree', creds, `&category_id_list=${category_id}&language=pt-BR`);
             return res.status(200).json(data);
         }
+        if (action === 'warehouse_list') {
+            const data = await shopeeGet('/api/v2/inventory/get_warehouse_list', creds, '');
+            return res.status(200).json(data);
+        }
+        if (action === 'warehouse_locations') {
+            const data = await shopeeGet('/api/v2/merchant/get_merchant_warehouse_location_list', creds, '');
+            return res.status(200).json(data);
+        }
         if (action === 'add_item') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
             return res.status(200).json(await shopeePost('/api/v2/product/add_item', creds, req.body));
