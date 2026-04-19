@@ -325,6 +325,11 @@ async function readRemoteUrlAsDataUrl(url: string): Promise<string> {
     return readFileAsDataUrl(file);
 }
 
+function isUnsupportedVideoUploadMessage(message: unknown): boolean {
+    const normalized = String(message || '').toLowerCase();
+    return normalized.includes('upload_video') && normalized.includes('nao suporta');
+}
+
 const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
     if (status === 'active')
         return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">🟢 Ativo</span>;
@@ -1664,6 +1669,7 @@ function ShopeeSyncModal({
             const cleanDescription = (normalizeShopeeDescription(itemDescription) || cleanItemName).slice(0, 3000);
             const imageIdList: string[] = [];
             const videoIdList: string[] = [];
+            let videoUploadSkipped = false;
             const weightValue = Number(defaultWeightKg.toFixed(3));
 
             for (const image of availableImages) {
@@ -1702,15 +1708,24 @@ function ShopeeSyncModal({
                     : (video.video_url ? await readRemoteUrlAsDataUrl(video.video_url) : '');
                 if (!resolvedVideoDataUrl) continue;
 
-                const uploadData = await postShopeeDebug('upload_video', {
-                    video_data_url: resolvedVideoDataUrl,
-                    file_name: video.file_name || 'video.mp4',
-                });
-                const uploadedId = uploadData?.response?.video_id;
-                if (!uploadedId) {
-                    throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de video');
+                try {
+                    const uploadData = await postShopeeDebug('upload_video', {
+                        video_data_url: resolvedVideoDataUrl,
+                        file_name: video.file_name || 'video.mp4',
+                    });
+                    const uploadedId = uploadData?.response?.video_id;
+                    if (!uploadedId) {
+                        throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de video');
+                    }
+                    videoIdList.push(String(uploadedId));
+                } catch (error: any) {
+                    if (isUnsupportedVideoUploadMessage(error?.message)) {
+                        videoUploadSkipped = true;
+                        pushSyncDebug('upload_video:skipped', 'Backend atual sem suporte a upload_video. Vamos publicar sem video.');
+                        break;
+                    }
+                    throw error;
                 }
-                videoIdList.push(String(uploadedId));
             }
 
             const payload = {
@@ -1752,6 +1767,9 @@ function ShopeeSyncModal({
             }, { onConflict: 'product_id' });
 
             toast.success('Produto publicado na Shopee! 🎉');
+            if (videoUploadSkipped) {
+                toast.info('Produto publicado sem vídeo porque o backend atual ainda não suporta upload_video.');
+            }
             onSuccess();
         } catch (e: any) {
             pushSyncDebug('sync:error', e?.message || e);
