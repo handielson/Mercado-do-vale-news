@@ -1735,9 +1735,6 @@ function ShopeeSyncModal({
                 category_id: selectedCat.category_id,
                 attribute_list: attributeList,
                 logistics_info: [{ logistic_id: 80031, enabled: true }],
-                stock_info_v2: {
-                    summary_info: { total_reserved_stock: 0, total_available_stock: parsedStock }
-                },
                 normal_stock: parsedStock,
                 image: {
                     image_id_list: imageIdList
