@@ -747,7 +747,12 @@ export async function syncStockToBling(productId: string, quantity: number, note
 
 // ------- Fetch all products (for selection UI) -------
 
-export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
+export type FetchProgress =
+    | { phase: 'fetching_products'; newItems: BlingProduct[]; totalSoFar: number }
+    | { phase: 'fetching_stock'; totalSoFar: number }
+    | { phase: 'done'; totalSoFar: number };
+
+export async function fetchAllBlingProducts(onProgress?: (p: FetchProgress) => void): Promise<BlingProduct[]> {
     const accessToken = await getValidToken();
     const all: BlingProduct[] = [];
     let page = 1;
@@ -756,12 +761,12 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
 
     do {
         const { items } = await fetchProductsPage(accessToken, page);
-        
+
         // Rate limit protection
         await new Promise(resolve => setTimeout(resolve, 350));
-        
+
         if (items.length === 0) break;
-        all.push(...items.map((item: any) => ({
+        const mapped: BlingProduct[] = items.map((item: any) => ({
             id: item.id,
             nome: item.nome || 'Produto sem nome',
             codigo: item.codigo || null,
@@ -775,12 +780,15 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
             imagens: item.imagens || [],
             variacao: item.variacao || undefined,
             formato: item.formato, // Necessário para exibir Produto Pai corretamente
-        })));
+        }));
+        all.push(...mapped);
+        onProgress?.({ phase: 'fetching_products', newItems: mapped, totalSoFar: all.length });
         if (items.length < 100) break;
         page++;
     } while (true);
 
     // Busca os estoques (Bling v3 exige passar idsProdutos[])
+    onProgress?.({ phase: 'fetching_stock', totalSoFar: all.length });
     const productIds = all.map(p => p.id);
     const stockMap = await fetchStockMap(accessToken, productIds);
 
@@ -802,6 +810,7 @@ export async function fetchAllBlingProducts(): Promise<BlingProduct[]> {
         }
     }
 
+    onProgress?.({ phase: 'done', totalSoFar: all.length });
     return all;
 }
 
@@ -843,7 +852,7 @@ export async function checkExistingBlingProducts(blingIds: number[]): Promise<Se
     return found;
 }
 
-export async function searchBlingProducts(query: string): Promise<BlingProduct[]> {
+export async function searchBlingProducts(query: string, onProgress?: (p: FetchProgress) => void): Promise<BlingProduct[]> {
     const accessToken = await getValidToken();
 
     // O estoque será buscado *depois* que os produtos forem carregados
@@ -863,10 +872,10 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
         if (!res.ok) throw new Error(`Bling API error ${res.status}`);
         const json = await res.json();
         const items = json.data || [];
-        
+
         if (items.length === 0) break;
 
-        all.push(...items.map((item: any) => ({
+        const mapped: BlingProduct[] = items.map((item: any) => ({
             id: item.id,
             nome: item.nome || 'Produto sem nome',
             codigo: item.codigo || null,
@@ -880,13 +889,16 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
             imagens: item.imagens || [],
             variacao: item.variacao || undefined,
             formato: item.formato, // Necessário para a UI saber se ignora o click
-        })));
+        }));
+        all.push(...mapped);
+        onProgress?.({ phase: 'fetching_products', newItems: mapped, totalSoFar: all.length });
 
         if (items.length < 100) break;
         page++;
     } while (true);
 
     // Busca os estoques (Bling v3 exige passar idsProdutos[])
+    onProgress?.({ phase: 'fetching_stock', totalSoFar: all.length });
     const productIds = all.map(p => p.id);
     const stockMap = await fetchStockMap(accessToken, productIds);
 
@@ -905,6 +917,7 @@ export async function searchBlingProducts(query: string): Promise<BlingProduct[]
         }
     }
 
+    onProgress?.({ phase: 'done', totalSoFar: all.length });
     return all;
 }
 

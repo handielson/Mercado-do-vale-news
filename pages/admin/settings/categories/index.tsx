@@ -6,6 +6,7 @@ import { categoryService } from '../../../../services/categories';
 import { NextStepBanner } from '../../../../components/ui/NextStepBanner';
 import { toast } from 'react-hot-toast';
 import { CategoryProductsPanel } from '../../../../components/categories/CategoryProductsPanel';
+import { vpsApiService } from '../../../../services/vpsApiService';
 
 interface DraggedProduct {
     product: {
@@ -182,6 +183,26 @@ export default function CategorySettingsPage() {
     const handleProductsChanged = useCallback(() => {
         setProductsRefreshKey(prev => prev + 1);
     }, []);
+
+    const handleProductDropOnCategory = useCallback(async (targetCategoryId: string, targetCategoryName: string) => {
+        if (!draggedProduct || draggedProduct.sourceCategoryId === targetCategoryId) {
+            setDraggedProduct(null);
+            return;
+        }
+        const { product } = draggedProduct;
+        setDraggedProduct(null);
+        const toastId = toast.loading(`Movendo "${product.name}" para ${targetCategoryName}...`);
+        try {
+            const ok = await vpsApiService.moveProductCategory(product.id, targetCategoryId);
+            if (!ok) throw new Error('Falha ao mover produto na VPS');
+            vpsApiService.clearCache();
+            setProductsRefreshKey(prev => prev + 1);
+            toast.success(`"${product.name}" movido para ${targetCategoryName}!`, { id: toastId });
+        } catch (error) {
+            console.error('[categories:product-drop-on-row] erro:', error);
+            toast.error('Erro ao mover produto', { id: toastId });
+        }
+    }, [draggedProduct]);
 
     const toggleCategorySelection = (categoryId: string) => {
         setSelectedCategoryIds(prev => {
@@ -748,16 +769,40 @@ export default function CategorySettingsPage() {
                                         draggedProduct.sourceCategoryId !== category.id &&
                                         isExpanded;
 
+                                    const isProductDraggingToThisRow = draggedProduct && draggedProduct.sourceCategoryId !== category.id;
+
                                     return (
                                         <React.Fragment key={category.id}>
                                             <tr
                                                 data-category-row-id={category.id}
-                                                onDragOver={(e) => !draggedProduct && onDragOver(e, category.id!)}
+                                                onDragEnter={(e) => {
+                                                    if (isProductDraggingToThisRow) {
+                                                        e.preventDefault();
+                                                        e.dataTransfer.dropEffect = 'move';
+                                                    }
+                                                }}
+                                                onDragOver={(e) => {
+                                                    if (isProductDraggingToThisRow) {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        e.dataTransfer.dropEffect = 'move';
+                                                    } else if (!draggedProduct) {
+                                                        onDragOver(e, category.id!);
+                                                    }
+                                                }}
                                                 onDragLeave={(e) => !draggedProduct && onDragLeave(e)}
-                                                onDrop={(e) => !draggedProduct && handleDrop(e, category.id!)}
+                                                onDrop={(e) => {
+                                                    if (isProductDraggingToThisRow) {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleProductDropOnCategory(category.id!, category.name);
+                                                    } else if (!draggedProduct) {
+                                                        handleDrop(e, category.id!);
+                                                    }
+                                                }}
                                                 className={`transition-all ${
                                                     isBeingDragged ? 'bg-blue-100 opacity-85 ring-2 ring-blue-500 shadow-[inset_0_0_0_2px_rgba(59,130,246,0.45)]' : 'hover:bg-slate-50'
-                                                } ${dropClass}`}
+                                                } ${isProductDraggingToThisRow ? 'bg-blue-50 ring-2 ring-blue-400 ring-inset' : ''} ${dropClass}`}
                                             >
                                                 <td className="px-4 py-4">
                                                     <div className="flex items-center gap-2">
@@ -863,6 +908,7 @@ export default function CategorySettingsPage() {
                                                             onDragEnd={handleProductDragEnd}
                                                             refreshKey={productsRefreshKey}
                                                             onProductsChanged={handleProductsChanged}
+                                                            allCategories={categories}
                                                         />
                                                     </td>
                                                 </tr>

@@ -338,7 +338,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2">
+                        <h3 className="font-semibold text-slate-900 text-sm leading-tight break-words">
                             <a
                                 href={`/produto/${product.slug || product.id}`}
                                 target="_blank"

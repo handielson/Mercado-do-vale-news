@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
     Settings, Package, Save, Eye, EyeOff, CheckCircle, AlertCircle,
-    Copy, ExternalLink, Download, Loader2, Search, RefreshCw, Link2, Webhook, Activity, ShieldCheck, Info
+    Copy, ExternalLink, Download, Loader2, Search, RefreshCw, Link2, Webhook, Activity, ShieldCheck, Info,
+    XCircle, Circle, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../../services/supabase';
-import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings, ColorMapping, loadColorMappings, saveColorMappings, blingService } from '../../../services/blingService';
+import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings, ColorMapping, loadColorMappings, saveColorMappings, blingService, FetchProgress } from '../../../services/blingService';
 import { categoryService } from '../../../services/categories';
 import { modelService } from '../../../services/models-new';
 import { colorService } from '../../../services/colors';
@@ -175,8 +176,12 @@ export default function BlingPage() {
     const [productSearch, setProductSearch] = useState('');
     const [blingSearch, setBlingSearch] = useState('');
     const [productListFilter, setProductListFilter] = useState<'new' | 'imported' | 'out_of_stock' | 'all'>('new');
+    const [hideInactive, setHideInactive] = useState(true);
     const [enabledFields, setEnabledFields] = useState<Set<string>>(new Set(DEFAULT_ENABLED_FIELDS));
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+    const [importItemStatus, setImportItemStatus] = useState<Map<number, { status: 'pending' | 'processing' | 'success' | 'error'; reason?: string }>>(new Map());
+    const [fetchPhase, setFetchPhase] = useState<'idle' | 'fetching_products' | 'fetching_stock' | 'done'>('idle');
+    const [fetchCount, setFetchCount] = useState(0);
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
     const [cacheInfo, setCacheInfo] = useState<{ timestamp: number } | null>(null);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -494,36 +499,54 @@ export default function BlingPage() {
         setFetching(true);
         setBlingProducts([]);
         setSelectedIds(new Set());
+        setExistingBlingIds(new Set());
         setImportResult(null);
+        setImportItemStatus(new Map());
+        setFetchPhase('idle');
+        setFetchCount(0);
+
+        const handleProgress = (p: FetchProgress) => {
+            setFetchPhase(p.phase);
+            setFetchCount(p.totalSoFar);
+            if (p.phase === 'fetching_products' && p.newItems.length > 0) {
+                // Append incremental para o usuário ver os produtos chegando
+                setBlingProducts(prev => [...prev, ...p.newItems]);
+            }
+        };
+
         try {
             let products: BlingProduct[];
 
             if (blingSearch.trim()) {
                 // Busca específica → vai direto ao Bling, sem cache
-                products = await searchBlingProducts(blingSearch.trim());
+                products = await searchBlingProducts(blingSearch.trim(), handleProgress);
                 setCacheInfo(null);
+                if (products.length === 0) toast.error('Nenhum produto encontrado para esta busca.');
+                else toast.success(`Pesquisa finalizada: ${products.length} produto(s) encontrado(s).`);
             } else if (!forceRefresh) {
                 // Sem filtro → tenta usar cache primeiro
                 const cached = loadCache();
                 if (cached) {
                     products = cached.products;
                     setCacheInfo({ timestamp: cached.timestamp });
+                    setFetchPhase('done');
+                    setFetchCount(products.length);
                     toast.success(`${products.length} produtos carregados do cache (${formatCacheAge(cached.timestamp)}).`);
                 } else {
-                    products = await fetchAllBlingProducts();
+                    products = await fetchAllBlingProducts(handleProgress);
                     saveCache(products);
                     setCacheInfo({ timestamp: Date.now() });
                     if (products.length === 0) toast.error('Nenhum produto encontrado.');
-                    else toast.success(`${products.length} produtos carregados do Bling.`);
+                    else toast.success(`Pesquisa finalizada: ${products.length} produtos carregados do Bling.`);
                 }
             } else {
                 // Forçar atualização → limpa cache e recarrega
                 clearCache();
-                products = await fetchAllBlingProducts();
+                products = await fetchAllBlingProducts(handleProgress);
                 saveCache(products);
                 setCacheInfo({ timestamp: Date.now() });
                 if (products.length === 0) toast.error('Nenhum produto encontrado.');
-                else toast.success(`${products.length} produtos atualizados do Bling.`);
+                else toast.success(`Pesquisa finalizada: ${products.length} produtos atualizados do Bling.`);
             }
 
             setBlingProducts(products);
@@ -554,13 +577,38 @@ export default function BlingPage() {
             return detail ? { ...p, ...detail } : p;
         });
 
+        const initialStatus = new Map<number, { status: 'pending' | 'processing' | 'success' | 'error'; reason?: string }>();
+        toImport.forEach((p, idx) => initialStatus.set(p.id, { status: idx === 0 ? 'processing' : 'pending' }));
+        setImportItemStatus(initialStatus);
+
         setImporting(true);
         setImportResult(null);
         setImportProgress({ current: 0, total: toImport.length });
 
+        let prevErrorsCount = 0;
+
         try {
-            const result = await importBlingProducts(toImport, enabledFields, importCategoryId, (current, total) => {
+            const result = await importBlingProducts(toImport, enabledFields, importCategoryId, (current, total, partial) => {
                 setImportProgress({ current, total });
+
+                const finishedIndex = current - 1;
+                const finishedItem = toImport[finishedIndex];
+                if (!finishedItem) return;
+
+                const errors = partial?.errors || [];
+                const didError = errors.length > prevErrorsCount;
+                const lastErrReason = didError ? (errors[errors.length - 1]?.reason || 'Erro desconhecido') : undefined;
+                prevErrorsCount = errors.length;
+
+                setImportItemStatus(prev => {
+                    const next = new Map(prev);
+                    next.set(finishedItem.id, didError
+                        ? { status: 'error', reason: lastErrReason }
+                        : { status: 'success' });
+                    const nextItem = toImport[finishedIndex + 1];
+                    if (nextItem) next.set(nextItem.id, { status: 'processing' });
+                    return next;
+                });
             }, importModelId || undefined, autoCreateModel);
 
             setImportResult(result);
@@ -596,7 +644,10 @@ export default function BlingPage() {
             (p.codigo || '').toLowerCase().includes(productSearch.toLowerCase());
         if (!matchesSearch) return false;
 
-        // 2. Tab Filter
+        // 2. Inactive Filter (ocultar produtos inativos no Bling)
+        if (hideInactive && p.situacao !== 'A') return false;
+
+        // 3. Tab Filter
         if (productListFilter === 'new') {
             return !existingBlingIds.has(p.id) && Number(p.stock_quantity) > 0;
         } else if (productListFilter === 'imported') {
@@ -1187,13 +1238,35 @@ export default function BlingPage() {
                                                     className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors disabled:opacity-50 flex-shrink-0"
                                                 >
                                                     {fetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                                    {fetching ? 'Buscando...' : blingProducts.length > 0 ? 'Atualizar' : 'Buscar'}
+                                                    {fetching
+                                                        ? (fetchPhase === 'fetching_stock'
+                                                            ? `Carregando estoques (${fetchCount})...`
+                                                            : fetchCount > 0
+                                                                ? `Buscando... ${fetchCount}`
+                                                                : 'Buscando...')
+                                                        : blingProducts.length > 0 ? 'Atualizar' : 'Buscar'}
                                                 </button>
                                             </div>
                                             <p className="text-[11.5px] text-slate-500 flex items-center gap-1.5 ml-1 mt-0.5">
                                                 <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                                                 A API do Bling requer que a busca seja pelo início exato do nome (ex: "Kit Teclado"). Para buscar palavras no meio do nome, carregue os produtos acima e use o filtro local abaixo.
                                             </p>
+                                            {fetching && (
+                                                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-700">
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                                                    {fetchPhase === 'fetching_stock'
+                                                        ? <span>Produtos carregados ({fetchCount}). Buscando estoques no Bling...</span>
+                                                        : fetchCount > 0
+                                                            ? <span>{fetchCount} produto(s) carregado(s) até agora · buscando mais páginas...</span>
+                                                            : <span>Conectando ao Bling...</span>}
+                                                </div>
+                                            )}
+                                            {!fetching && fetchPhase === 'done' && blingProducts.length > 0 && (
+                                                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-xs text-green-700">
+                                                    <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                                    <span>Pesquisa finalizada · {blingProducts.length} produto(s) carregado(s).</span>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Product list */}
@@ -1206,28 +1279,28 @@ export default function BlingPage() {
                                                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'new' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                                                     >
                                                         ✨ Novos c/ Estoque
-                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => !existingBlingIds.has(p.id) && Number(p.stock_quantity) > 0).length})</span>
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => (!hideInactive || p.situacao === 'A') && !existingBlingIds.has(p.id) && Number(p.stock_quantity) > 0).length})</span>
                                                     </button>
                                                     <button
                                                         onClick={() => setProductListFilter('out_of_stock')}
                                                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'out_of_stock' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                                                     >
                                                         🚫 Sem Estoque
-                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => !existingBlingIds.has(p.id) && Number(p.stock_quantity) <= 0).length})</span>
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => (!hideInactive || p.situacao === 'A') && !existingBlingIds.has(p.id) && Number(p.stock_quantity) <= 0).length})</span>
                                                     </button>
                                                     <button
                                                         onClick={() => setProductListFilter('imported')}
                                                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'imported' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                                                     >
                                                         ✅ Já Importados
-                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => existingBlingIds.has(p.id)).length})</span>
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => (!hideInactive || p.situacao === 'A') && existingBlingIds.has(p.id)).length})</span>
                                                     </button>
                                                     <button
                                                         onClick={() => setProductListFilter('all')}
                                                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${productListFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                                                     >
                                                         📦 Todos
-                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.length})</span>
+                                                        <span className="ml-1.5 text-xs text-slate-400">({blingProducts.filter(p => !hideInactive || p.situacao === 'A').length})</span>
                                                     </button>
                                                 </div>
 
@@ -1241,8 +1314,17 @@ export default function BlingPage() {
                                                             placeholder="Filtrar por nome ou SKU..."
                                                             className="flex-1 bg-transparent text-sm outline-none text-slate-700"
                                                         />
+                                                        <label className="flex items-center gap-1.5 text-xs text-slate-600 whitespace-nowrap cursor-pointer select-none" title="Ocultar produtos marcados como inativos no Bling">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={hideInactive}
+                                                                onChange={e => setHideInactive(e.target.checked)}
+                                                                className="w-3.5 h-3.5 rounded border-slate-300 text-green-600 focus:ring-green-500"
+                                                            />
+                                                            Ocultar inativos
+                                                        </label>
                                                         <span className="text-xs text-slate-400 whitespace-nowrap">{selectedIds.size} selecionados</span>
-                                                        <button 
+                                                        <button
                                                             onClick={() => {
                                                                 const selectableProducts = filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V');
                                                                 if (selectableProducts.every(p => selectedIds.has(p.id))) {
@@ -1250,7 +1332,7 @@ export default function BlingPage() {
                                                                 } else {
                                                                     setSelectedIds(new Set(selectableProducts.map(p => p.id))); // Marca todos os selecionáveis
                                                                 }
-                                                            }} 
+                                                            }}
                                                             className="text-xs text-blue-600 hover:underline font-medium whitespace-nowrap ml-2"
                                                         >
                                                             {filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V').every(p => selectedIds.has(p.id)) && filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V').length > 0 ? 'Desmarcar' : 'Todos'}
@@ -1533,6 +1615,91 @@ export default function BlingPage() {
                                             </div>
                                             </div>
                                         )}
+
+                                        {/* Selected items tray + live import checklist */}
+                                        {(selectedIds.size > 0 || importing || importItemStatus.size > 0) && (() => {
+                                            const showStatus = importing || importItemStatus.size > 0;
+                                            const trayItems = showStatus
+                                                ? Array.from(importItemStatus.keys())
+                                                    .map(id => blingProducts.find(p => p.id === id))
+                                                    .filter((p): p is BlingProduct => !!p)
+                                                : blingProducts.filter(p => selectedIds.has(p.id));
+                                            const successCount = Array.from(importItemStatus.values()).filter(s => s.status === 'success').length;
+                                            const errorCount = Array.from(importItemStatus.values()).filter(s => s.status === 'error').length;
+                                            return (
+                                                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                                                    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                                                        <div className="flex items-center gap-3">
+                                                            <h4 className="text-sm font-semibold text-slate-700">
+                                                                {importing
+                                                                    ? `Importando ${importProgress.current}/${importProgress.total}`
+                                                                    : importItemStatus.size > 0
+                                                                        ? 'Resultado da importação'
+                                                                        : `${selectedIds.size} produto${selectedIds.size !== 1 ? 's' : ''} selecionado${selectedIds.size !== 1 ? 's' : ''}`}
+                                                            </h4>
+                                                            {showStatus && (
+                                                                <span className="flex items-center gap-2 text-xs">
+                                                                    {successCount > 0 && <span className="text-green-600 font-medium">✅ {successCount}</span>}
+                                                                    {errorCount > 0 && <span className="text-red-600 font-medium">❌ {errorCount}</span>}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {!importing && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (importItemStatus.size > 0) setImportItemStatus(new Map());
+                                                                    else setSelectedIds(new Set());
+                                                                }}
+                                                                className="text-xs text-slate-500 hover:text-red-600 font-medium"
+                                                            >
+                                                                {importItemStatus.size > 0 ? 'Fechar' : 'Limpar seleção'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                                                        {trayItems.map(p => {
+                                                            const st = importItemStatus.get(p.id);
+                                                            const thumb = p.imagens?.[0]?.link || p.imagens?.[0]?.url;
+                                                            return (
+                                                                <div
+                                                                    key={p.id}
+                                                                    className={`flex items-start gap-3 px-4 py-2.5 transition-colors ${st?.status === 'processing' ? 'bg-blue-50' : st?.status === 'error' ? 'bg-red-50' : st?.status === 'success' ? 'bg-green-50/40' : ''}`}
+                                                                >
+                                                                    {thumb ? (
+                                                                        <img src={thumb} alt="" className="w-10 h-10 object-contain rounded bg-slate-50 flex-shrink-0" />
+                                                                    ) : (
+                                                                        <div className="w-10 h-10 rounded bg-slate-100 flex-shrink-0" />
+                                                                    )}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-sm text-slate-800 font-medium break-words">{p.nome}</p>
+                                                                        {p.codigo && <p className="text-xs text-slate-400 font-mono mt-0.5">{p.codigo}</p>}
+                                                                        {st?.status === 'error' && st.reason && (
+                                                                            <p className="text-xs text-red-600 mt-1 break-words">⚠️ {st.reason}</p>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex-shrink-0 flex items-center pt-0.5">
+                                                                        {showStatus ? (
+                                                                            st?.status === 'success' ? <CheckCircle className="w-5 h-5 text-green-500" /> :
+                                                                            st?.status === 'error' ? <XCircle className="w-5 h-5 text-red-500" /> :
+                                                                            st?.status === 'processing' ? <Loader2 className="w-5 h-5 animate-spin text-blue-500" /> :
+                                                                            <Circle className="w-5 h-5 text-slate-300" />
+                                                                        ) : (
+                                                                            <button
+                                                                                onClick={() => toggleSelect(p.id)}
+                                                                                className="text-slate-400 hover:text-red-500 transition-colors"
+                                                                                title="Remover da seleção"
+                                                                            >
+                                                                                <X className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
 
                                         {/* Import button */}
                                         {selectedIds.size > 0 && (

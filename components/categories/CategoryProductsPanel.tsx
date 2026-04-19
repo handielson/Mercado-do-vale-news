@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Package, ChevronDown, ChevronUp, GripVertical, Loader2, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Package, ChevronDown, GripVertical, Loader2, Plus, Trash2, Check, FolderInput } from 'lucide-react';
 import { vpsApiService } from '../../services/vpsApiService';
+import { Category } from '../../types/category';
 import { toast } from 'react-hot-toast';
 
 interface CategoryProduct {
@@ -26,6 +27,7 @@ interface CategoryProductsPanelProps {
     onDragEnd: () => void;
     refreshKey?: number;
     onProductsChanged?: () => void;
+    allCategories?: Category[];
 }
 
 export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
@@ -36,6 +38,7 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
     onDragEnd,
     refreshKey = 0,
     onProductsChanged,
+    allCategories = [],
 }) => {
     const [items, setItems] = useState<CategoryProduct[]>([]);
     const [total, setTotal] = useState(0);
@@ -43,6 +46,9 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
     const [hasMore, setHasMore] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isDropTarget, setIsDropTarget] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [targetCategoryId, setTargetCategoryId] = useState<string>('');
+    const [isBulkMoving, setIsBulkMoving] = useState(false);
     const dropRef = useRef<HTMLDivElement>(null);
 
     const load = useCallback(async (p: number, reset: boolean) => {
@@ -62,6 +68,7 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
 
     useEffect(() => {
         load(1, true);
+        setSelectedIds(new Set());
     }, [load, refreshKey]);
 
     // --- Drop handlers ---
@@ -113,7 +120,71 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
         }
     };
 
+    const toggleSelect = (productId: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(productId)) next.delete(productId);
+            else next.add(productId);
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === items.length && items.length > 0) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(items.map(i => i.id)));
+        }
+    };
+
+    const clearSelection = () => setSelectedIds(new Set());
+
+    const targetOptions = useMemo(() => {
+        return allCategories
+            .filter(c => c.id && c.id !== categoryId)
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [allCategories, categoryId]);
+
+    const handleBulkMove = async () => {
+        if (!targetCategoryId || selectedIds.size === 0) return;
+        const target = allCategories.find(c => c.id === targetCategoryId);
+        if (!target) return;
+
+        const ids = [...selectedIds];
+        setIsBulkMoving(true);
+        const toastId = toast.loading(`Movendo ${ids.length} produto(s) para ${target.name}...`);
+
+        let ok = 0;
+        let fail = 0;
+        await Promise.all(ids.map(async id => {
+            try {
+                const result = await vpsApiService.moveProductCategory(id, targetCategoryId);
+                if (result) ok++;
+                else fail++;
+            } catch (err) {
+                console.error('[CategoryProductsPanel.handleBulkMove] erro em', id, err);
+                fail++;
+            }
+        }));
+
+        vpsApiService.clearCache();
+        setIsBulkMoving(false);
+        setSelectedIds(new Set());
+        setTargetCategoryId('');
+        onProductsChanged?.();
+
+        if (fail === 0) {
+            toast.success(`${ok} produto(s) movido(s) para ${target.name}!`, { id: toastId });
+        } else if (ok === 0) {
+            toast.error(`Falha ao mover ${fail} produto(s)`, { id: toastId });
+        } else {
+            toast.success(`${ok} movido(s), ${fail} falha(s)`, { id: toastId });
+        }
+    };
+
     const isDraggingFromOther = draggedProduct && draggedProduct.sourceCategoryId !== categoryId;
+    const allSelected = items.length > 0 && selectedIds.size === items.length;
+    const someSelected = selectedIds.size > 0 && selectedIds.size < items.length;
 
     return (
         <div
@@ -142,6 +213,67 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                 </div>
             )}
 
+            {/* Bulk action bar */}
+            {selectedIds.size > 0 && (
+                <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-blue-50 border-b border-blue-200">
+                    <span className="text-sm font-semibold text-blue-700">
+                        {selectedIds.size} selecionado{selectedIds.size > 1 ? 's' : ''}
+                    </span>
+                    <button
+                        onClick={clearSelection}
+                        className="text-xs text-blue-600 hover:text-blue-800 underline"
+                    >
+                        Limpar
+                    </button>
+                    <div className="flex-1" />
+                    <FolderInput className="w-4 h-4 text-blue-600" />
+                    <select
+                        value={targetCategoryId}
+                        onChange={e => setTargetCategoryId(e.target.value)}
+                        disabled={isBulkMoving}
+                        className="text-sm border border-blue-300 rounded-md px-2 py-1 bg-white text-slate-700 max-w-[260px] disabled:opacity-50"
+                    >
+                        <option value="">Mover para...</option>
+                        {targetOptions.map(cat => (
+                            <option key={cat.id} value={cat.id!}>{cat.name}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={handleBulkMove}
+                        disabled={!targetCategoryId || isBulkMoving}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        {isBulkMoving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderInput className="w-3.5 h-3.5" />}
+                        Mover
+                    </button>
+                </div>
+            )}
+
+            {/* Select-all header */}
+            {items.length > 0 && (
+                <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-slate-200">
+                    <button
+                        type="button"
+                        onClick={toggleSelectAll}
+                        className="inline-flex items-center gap-2 cursor-pointer select-none"
+                        title={allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+                    >
+                        <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                            allSelected
+                                ? 'bg-blue-600 border-blue-600 text-white'
+                                : someSelected
+                                ? 'bg-blue-100 border-blue-400 text-blue-600'
+                                : 'bg-white border-slate-400 text-transparent'
+                        }`}>
+                            {someSelected && !allSelected ? <span className="block w-2 h-0.5 bg-blue-600" /> : <Check className="w-3 h-3" />}
+                        </span>
+                        <span className="text-xs text-slate-600">
+                            {allSelected ? 'Desmarcar todos' : 'Selecionar todos nesta página'}
+                        </span>
+                    </button>
+                </div>
+            )}
+
             {/* Product list */}
             <div className="divide-y divide-slate-200">
                 {isLoading && items.length === 0 ? (
@@ -155,87 +287,111 @@ export const CategoryProductsPanel: React.FC<CategoryProductsPanelProps> = ({
                         Nenhum produto nesta categoria
                     </div>
                 ) : (
-                    items.map(product => (
-                        <div
-                            key={product.id}
-                            draggable
-                            onDragStart={e => {
-                                e.dataTransfer.effectAllowed = 'move';
-                                onDragStart(product, categoryId);
-                            }}
-                            onDragEnd={() => {
-                                // Nao chamar onDragEnd aqui; a pagina limpa no drop.
-                            }}
-                            className="flex items-center gap-3 px-4 py-2.5 hover:bg-white transition-colors cursor-grab active:cursor-grabbing group"
-                        >
-                            {/* Grip */}
-                            <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+                    items.map(product => {
+                        const isSelected = selectedIds.has(product.id);
+                        return (
+                            <div
+                                key={product.id}
+                                draggable
+                                onDragStart={e => {
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    onDragStart(product, categoryId);
+                                }}
+                                onDragEnd={() => {
+                                    // Nao chamar onDragEnd aqui; a pagina limpa no drop.
+                                }}
+                                className={`flex items-center gap-3 px-4 py-2.5 transition-colors cursor-grab active:cursor-grabbing group ${
+                                    isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-white'
+                                }`}
+                            >
+                                {/* Checkbox */}
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleSelect(product.id);
+                                    }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    draggable={false}
+                                    className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                                        isSelected
+                                            ? 'bg-blue-600 border-blue-600 text-white'
+                                            : 'bg-white border-slate-400 text-transparent hover:border-blue-500'
+                                    }`}
+                                    title={isSelected ? 'Desmarcar' : 'Selecionar'}
+                                >
+                                    <Check className="w-3 h-3" />
+                                </button>
 
-                            {/* Thumbnail */}
-                            <div className="w-8 h-8 rounded border border-slate-200 overflow-hidden flex-shrink-0 bg-white">
-                                {product.thumbnail ? (
-                                    <img src={product.thumbnail} alt="" className="w-full h-full object-contain" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                        <Package className="w-4 h-4" />
-                                    </div>
-                                )}
-                            </div>
+                                {/* Grip */}
+                                <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
 
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-800 truncate">{product.name}</p>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-xs text-slate-400">{product.sku}</span>
-                                    {product.brand && (
-                                        <span className="text-xs text-slate-400">· {product.brand}</span>
-                                    )}
-                                    {!product.is_primary_category && (
-                                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">
-                                            Categoria Extra
-                                        </span>
-                                    )}
-                                    {product.status !== 'active' && (
-                                        <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">
-                                            {product.status}
-                                        </span>
+                                {/* Thumbnail */}
+                                <div className="w-8 h-8 rounded border border-slate-200 overflow-hidden flex-shrink-0 bg-white">
+                                    {product.thumbnail ? (
+                                        <img src={product.thumbnail} alt="" className="w-full h-full object-contain" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                            <Package className="w-4 h-4" />
+                                        </div>
                                     )}
                                 </div>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-800 truncate">{product.name}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-xs text-slate-400">{product.sku}</span>
+                                        {product.brand && (
+                                            <span className="text-xs text-slate-400">· {product.brand}</span>
+                                        )}
+                                        {!product.is_primary_category && (
+                                            <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">
+                                                Categoria Extra
+                                            </span>
+                                        )}
+                                        {product.status !== 'active' && (
+                                            <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">
+                                                {product.status}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Stock */}
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                    product.stock_quantity > 0
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-red-100 text-red-600'
+                                }`}>
+                                    {product.stock_quantity} un
+                                </span>
+
+                                {/* Price — stored as INTEGER CENTS (4900 = R$ 49,00) */}
+                                <span className="text-sm font-medium text-slate-700 flex-shrink-0 w-28 text-right whitespace-nowrap">
+                                    {parseFloat(String(product.price_retail)) > 0
+                                        ? (parseFloat(String(product.price_retail)) / 100).toLocaleString('pt-BR', {
+                                            style: 'currency',
+                                            currency: 'BRL',
+                                            minimumFractionDigits: 2,
+                                        })
+                                        : '-'
+                                    }
+                                </span>
+
+                                {/* Remove extra-category button */}
+                                {!product.is_primary_category && (
+                                    <button
+                                        onClick={() => handleRemoveExtra(product)}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded flex-shrink-0"
+                                        title="Remover desta categoria extra"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
                             </div>
-
-                            {/* Stock */}
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                product.stock_quantity > 0
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-red-100 text-red-600'
-                            }`}>
-                                {product.stock_quantity} un
-                            </span>
-
-                            {/* Price — stored as INTEGER CENTS (4900 = R$ 49,00) */}
-                            <span className="text-sm font-medium text-slate-700 flex-shrink-0 w-28 text-right whitespace-nowrap">
-                                {parseFloat(String(product.price_retail)) > 0
-                                    ? (parseFloat(String(product.price_retail)) / 100).toLocaleString('pt-BR', {
-                                        style: 'currency',
-                                        currency: 'BRL',
-                                        minimumFractionDigits: 2,
-                                    })
-                                    : '-'
-                                }
-                            </span>
-
-                            {/* Remove extra-category button */}
-                            {!product.is_primary_category && (
-                                <button
-                                    onClick={() => handleRemoveExtra(product)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded flex-shrink-0"
-                                    title="Remover desta categoria extra"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
 
