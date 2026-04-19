@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
@@ -14,6 +14,16 @@ import ShopeePrintersTab from './components/ShopeePrintersTab';
 import ShopeeFinanceTab from './components/ShopeeFinanceTab';
 import { NcmSearchWidget } from '../../../components/admin/NcmSearchWidget';
 import { InmetroWidget } from '../../../components/admin/InmetroWidget';
+import { fetchBlingProductDetail } from '../../../services/blingService';
+import { resolveShopeeSyncDefaults } from './shopeeSyncDefaults.js';
+import {
+    buildCategoryTree,
+    getCategoryChildren,
+    getCategoryPathLabel,
+    isLeafCategory,
+    searchShopeeCategories,
+    suggestShopeeCategories,
+} from './shopeeCategoryHelpers.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ShopeeProduct {
@@ -34,6 +44,23 @@ interface ShopeeProduct {
     category_slug?: string;
     inmetro_certificate?: string;
     ncm?: string;
+    description?: string;
+    brand?: string;
+    bling_id?: number | string | null;
+    video_url?: string | null;
+    stock_quantity?: number;
+    track_inventory?: boolean;
+    eans?: string[];
+    weight_kg?: number;
+    shipping_weight?: number;
+    shipping_length?: number;
+    shipping_width?: number;
+    shipping_height?: number;
+    dimensions?: {
+        width_cm?: number;
+        height_cm?: number;
+        depth_cm?: number;
+    };
 }
 
 interface LocalProduct {
@@ -46,6 +73,23 @@ interface LocalProduct {
     category_slug: string;
     inmetro_certificate?: string;
     ncm?: string;
+    description?: string;
+    brand?: string;
+    bling_id?: number | string | null;
+    video_url?: string | null;
+    stock_quantity?: number;
+    track_inventory?: boolean;
+    eans?: string[];
+    weight_kg?: number;
+    shipping_weight?: number;
+    shipping_length?: number;
+    shipping_width?: number;
+    shipping_height?: number;
+    dimensions?: {
+        width_cm?: number;
+        height_cm?: number;
+        depth_cm?: number;
+    };
 }
 
 type Tab = 'config' | 'products' | 'orders' | 'finance' | 'printers';
@@ -61,13 +105,137 @@ type EditableImage = {
 type EditableVideo = {
     video_id?: string;
     thumbnail_url?: string;
+    video_url?: string;
     data_url?: string;
     file_name?: string;
+};
+
+type SyncDebugEntry = {
+    stage: string;
+    timestamp: string;
+    payload: string;
+};
+
+type ShopeeAttributeOption = {
+    value_id: number;
+    label: string;
+    raw_name: string;
+    original_value_name: string;
+};
+
+type ShopeeAttributeField = {
+    attribute_id: number;
+    label: string;
+    mandatory: boolean;
+    input_kind: 'select' | 'multiselect' | 'text';
+    attribute_value_list: ShopeeAttributeOption[];
+    raw_input_type?: string | number;
 };
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+
+function translateShopeeText(entity: any, fallbackKeys: string[] = []): string {
+    if (Array.isArray(entity?.multi_lang)) {
+        const localized = entity.multi_lang.find((entry: any) => {
+            const language = String(entry?.language || '').toLowerCase();
+            return language === 'pt-br' || language === 'pt_br' || language.startsWith('pt');
+        });
+        if (typeof localized?.value === 'string' && localized.value.trim()) {
+            return localized.value.trim();
+        }
+    }
+
+    for (const key of fallbackKeys) {
+        const value = entity?.[key];
+        if (typeof value === 'string' && value.trim()) {
+            return value.trim();
+        }
+    }
+
+    return '';
+}
+
+function normalizeShopeeDescription(value: string | undefined): string {
+    if (!value) return '';
+    return String(value)
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim();
+}
+
+function extractShopeeAttributeTree(data: any): any[] {
+    if (Array.isArray(data?.response?.attribute_list)) {
+        return data.response.attribute_list;
+    }
+
+    if (Array.isArray(data?.response?.attribute_tree)) {
+        return data.response.attribute_tree;
+    }
+
+    if (Array.isArray(data?.response?.list)) {
+        const entryWithTree = data.response.list.find((entry: any) => Array.isArray(entry?.attribute_tree));
+        if (entryWithTree?.attribute_tree) {
+            return entryWithTree.attribute_tree;
+        }
+    }
+
+    return [];
+}
+
+function normalizeShopeeAttributes(data: any): ShopeeAttributeField[] {
+    return extractShopeeAttributeTree(data)
+        .map((attr: any) => {
+            const rawInputType = attr?.input_type ?? attr?.attribute_type ?? '';
+            const inputTypeText = String(rawInputType).toUpperCase();
+            const options: ShopeeAttributeOption[] = Array.isArray(attr?.attribute_value_list)
+                ? attr.attribute_value_list
+                    .map((option: any) => {
+                        const label =
+                            translateShopeeText(option, ['display_attribute_value', 'display_value_name', 'name', 'original_value_name']) ||
+                            String(option?.value_id || '').trim();
+                        return {
+                            value_id: Number(option?.value_id) || 0,
+                            label,
+                            raw_name: String(option?.name || option?.display_attribute_value || label).trim(),
+                            original_value_name: String(option?.original_value_name || option?.name || option?.display_attribute_value || label).trim(),
+                        };
+                    })
+                    .filter((option: ShopeeAttributeOption) => option.label)
+                : [];
+
+            const allowsMultiple =
+                inputTypeText.includes('MULTIPLE') ||
+                attr?.multiple_select === true ||
+                attr?.is_multiple === true ||
+                attr?.multiple_enter === true;
+
+            return {
+                attribute_id: Number(attr?.attribute_id) || 0,
+                label:
+                    translateShopeeText(attr, ['display_attribute_name', 'name', 'original_attribute_name']) ||
+                    `Atributo ${attr?.attribute_id || ''}`.trim(),
+                mandatory: Boolean(attr?.mandatory ?? attr?.is_mandatory),
+                input_kind: options.length > 0 ? (allowsMultiple ? 'multiselect' : 'select') : 'text',
+                attribute_value_list: options,
+                raw_input_type: rawInputType,
+            } satisfies ShopeeAttributeField;
+        })
+        .filter((attr: ShopeeAttributeField) => Number.isFinite(attr.attribute_id) && attr.attribute_id > 0);
+}
+
+function hasFilledAttributeValue(value: string | string[] | undefined): boolean {
+    if (Array.isArray(value)) {
+        return value.some((entry) => String(entry || '').trim().length > 0);
+    }
+    return String(value || '').trim().length > 0;
+}
 
 async function fetchJsonStrict(url: string, init?: RequestInit): Promise<any> {
     const res = await fetch(url, init);
@@ -131,6 +299,30 @@ function readFileAsDataUrl(file: File): Promise<string> {
         reader.onerror = () => reject(new Error('Falha ao ler arquivo.'));
         reader.readAsDataURL(file);
     });
+}
+
+function buildSynologyVideoUrl(baseUrl: string | undefined, sku: string | undefined, extension: string | undefined): string {
+    const cleanBase = String(baseUrl || '').trim();
+    const cleanSku = String(sku || '').trim().replace(/\s+/g, '').toUpperCase();
+    const cleanExt = String(extension || '.mp4').trim() || '.mp4';
+    if (!cleanBase || !cleanSku) return '';
+    const normalizedBase = cleanBase.endsWith('/') ? cleanBase : `${cleanBase}/`;
+    const normalizedExt = cleanExt.startsWith('.') ? cleanExt : `.${cleanExt}`;
+    return `${normalizedBase}${encodeURIComponent(cleanSku)}${normalizedExt}`;
+}
+
+async function readRemoteUrlAsDataUrl(url: string): Promise<string> {
+    const targetUrl = /^https?:\/\//i.test(url)
+        ? `/api/bling?resource=image-proxy&url=${encodeURIComponent(url)}`
+        : url;
+    const res = await fetch(targetUrl);
+    if (!res.ok) {
+        throw new Error(`Falha ao baixar midia do sistema (${res.status}).`);
+    }
+    const blob = await res.blob();
+    const extFromType = blob.type.split('/')[1] || 'bin';
+    const file = new File([blob], `media.${extFromType}`, { type: blob.type || undefined });
+    return readFileAsDataUrl(file);
 }
 
 const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
@@ -201,7 +393,7 @@ export default function ShopeePage() {
             // Fetch raw Supabase products for instant price_cost retrieval (bypasses VPS sync delays)
             const { data: supaProds } = await supabase
                 .from('products')
-                .select('id, price_cost, parent_id');
+                .select('id, price_cost, parent_id, bling_id, video_url');
 
             const syncMap = new Map((shopeeRecords || []).map((r: any) => [r.product_id, r]));
             const supaMap = new Map((supaProds || []).map((p: any) => [p.id, p]));
@@ -236,6 +428,20 @@ export default function ShopeePage() {
                     price_retail: p.price_retail,
                     price_cost: actualCost,
                     category_slug: p.category_slug,
+                    description: p.description,
+                    brand: p.brand,
+                    bling_id: sp?.bling_id ?? p.bling_id ?? null,
+                    video_url: sp?.video_url ?? p.video_url ?? null,
+                    stock_quantity: Number(p.stock_quantity ?? 0) || 0,
+                    track_inventory: p.track_inventory !== false,
+                    eans: Array.isArray(p.eans) ? p.eans : (p.ean ? [p.ean] : []),
+                    weight_kg: p.weight_kg,
+                    shipping_weight: p.shipping_weight,
+                    shipping_length: p.shipping_length,
+                    shipping_width: p.shipping_width,
+                    shipping_height: p.shipping_height,
+                    dimensions: p.dimensions,
+                    ncm: p.ncm,
                 };
             });
             setProducts(merged);
@@ -964,6 +1170,20 @@ export default function ShopeePage() {
                                                                             price_retail: p.price_retail || 0,
                                                                             price_cost: p.price_cost || 0,
                                                                             category_slug: p.category_slug || '',
+                                                                            description: p.description || '',
+                                                                            brand: p.brand || '',
+                                                                            bling_id: p.bling_id ?? null,
+                                                                            video_url: p.video_url ?? null,
+                                                                            stock_quantity: p.stock_quantity || 0,
+                                                                            track_inventory: p.track_inventory !== false,
+                                                                            eans: p.eans || [],
+                                                                            weight_kg: p.weight_kg,
+                                                                            shipping_weight: p.shipping_weight,
+                                                                            shipping_length: p.shipping_length,
+                                                                            shipping_width: p.shipping_width,
+                                                                            shipping_height: p.shipping_height,
+                                                                            dimensions: p.dimensions,
+                                                                            ncm: p.ncm || '',
                                                                         })}
                                                                         className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-[#ee4d2d] text-white hover:bg-[#d73f21]">
                                                                         Sincronizar
@@ -1021,6 +1241,8 @@ export default function ShopeePage() {
                     {syncModal && (
                         <ShopeeSyncModal
                             product={syncModal}
+                            company={company}
+                            historicalProducts={products}
                             onClose={() => setSyncModal(null)}
                             onSuccess={() => { setSyncModal(null); loadProducts(); }}
                         />
@@ -1048,52 +1270,188 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 function ShopeeSyncModal({
-    product, onClose, onSuccess
-}: { product: LocalProduct; onClose: () => void; onSuccess: () => void }) {
+    product, company, historicalProducts, onClose, onSuccess
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; onClose: () => void; onSuccess: () => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
     const [allCatTree, setAllCatTree] = useState<any[]>([]);
     const [catBreadcrumb, setCatBreadcrumb] = useState<any[]>([]); // stack of parent nodes
     const [loadingCats, setLoadingCats] = useState(false);
     const [selectedCat, setSelectedCat] = useState<any>(null);
-    const [attributes, setAttributes] = useState<any[]>([]);
+    const [attributes, setAttributes] = useState<ShopeeAttributeField[]>([]);
     const [loadingAttrs, setLoadingAttrs] = useState(false);
-    const [attrValues, setAttrValues] = useState<Record<number, any>>({});
+    const [attrValues, setAttrValues] = useState<Record<number, string | string[]>>({});
     const [syncing, setSyncing] = useState(false);
-    const [shopeePrice, setShopeePrice] = useState(product.price_retail / 100);
-    const [shopeeStock, setShopeeStock] = useState(10);
+
+    const initialDefaults = resolveShopeeSyncDefaults(product);
+    const defaultDescription = initialDefaults.description;
+    const defaultStock = initialDefaults.stock;
+    const defaultWeightKg = (() => {
+        const directWeight = Number(product.weight_kg);
+        if (Number.isFinite(directWeight) && directWeight > 0) return directWeight;
+
+        const shippingWeight = Number(product.shipping_weight);
+        if (Number.isFinite(shippingWeight) && shippingWeight > 0) return shippingWeight / 1000;
+
+        return 0.3;
+    })();
+    const primaryImage = (product.images || []).find((image) => typeof image === 'string' && image.trim()) || '';
+    const gtinValue = (product.eans || []).find((ean) => typeof ean === 'string' && ean.trim()) || '';
+    const packageLength = Number(product.dimensions?.depth_cm ?? product.shipping_length ?? 0) || 0;
+    const packageWidth = Number(product.dimensions?.width_cm ?? product.shipping_width ?? 0) || 0;
+    const packageHeight = Number(product.dimensions?.height_cm ?? product.shipping_height ?? 0) || 0;
+    const defaultVideoUrl = (() => {
+        if (typeof product.video_url === 'string' && product.video_url.trim()) {
+            return product.video_url.trim();
+        }
+        return buildSynologyVideoUrl(company?.synologyVideoBaseUrl, product.sku, company?.synologyVideoExtension);
+    })();
+
+    const [itemName, setItemName] = useState((product.name || '').slice(0, 120));
+    const [itemDescription, setItemDescription] = useState(defaultDescription);
+    const [shopeePrice, setShopeePrice] = useState((product.price_retail || 0) / 100);
+    const [shopeeStock, setShopeeStock] = useState(defaultStock);
+    const [mediaImages, setMediaImages] = useState<EditableImage[]>(() =>
+        (product.images || [])
+            .filter((image) => typeof image === 'string' && image.trim())
+            .slice(0, 9)
+            .map((image) => ({ image_url: image }))
+    );
+    const [mediaVideos, setMediaVideos] = useState<EditableVideo[]>(() =>
+        defaultVideoUrl ? [{ file_name: defaultVideoUrl.split('/').pop() || 'video.mp4', video_url: defaultVideoUrl }] : []
+    );
+    const [mediaBusy, setMediaBusy] = useState(false);
+    const [syncDebugEntries, setSyncDebugEntries] = useState<SyncDebugEntry[]>([]);
+    const descriptionDirtyRef = useRef(false);
+    const stockDirtyRef = useRef(false);
+    const imageInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
 
     // Carrega toda a árvore de categorias ao abrir o modal
     useEffect(() => {
         setLoadingCats(true);
         fetch(`/api/shopee-catalog?action=categories`)
             .then(r => r.json())
-            .then(data => setAllCatTree(data.response?.category_list || []))
+            .then(data => setAllCatTree(buildCategoryTree(data.response?.category_list || [])))
             .catch(() => toast.error('Erro ao carregar categorias.'))
             .finally(() => setLoadingCats(false));
     }, []);
 
+    useEffect(() => {
+        const blingId = Number(product.bling_id);
+        const shouldRefreshFromBling = !product.description || Number(product.stock_quantity ?? 0) <= 0;
+        if (!shouldRefreshFromBling) return;
+        if (!Number.isFinite(blingId) || blingId <= 0) return;
+
+        let cancelled = false;
+
+        const loadBlingDefaults = async () => {
+            try {
+                const detail = await fetchBlingProductDetail(blingId);
+                if (!detail) return;
+                if (cancelled) return;
+
+                const resolved = resolveShopeeSyncDefaults(product, detail);
+
+                if (!descriptionDirtyRef.current && resolved.description) {
+                    setItemDescription(resolved.description);
+                }
+
+                if (!stockDirtyRef.current) {
+                    setShopeeStock(resolved.stock);
+                }
+            } catch (error) {
+                console.error('[Shopee Sync] Failed to load Bling defaults:', error);
+            }
+        };
+
+        loadBlingDefaults();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [product]);
+
     // Nível atual da árvore
     const currentCatLevel: any[] = catBreadcrumb.length === 0
         ? allCatTree
-        : catBreadcrumb[catBreadcrumb.length - 1].children || [];
-
-    // Busca flat em toda a árvore
-    const flattenSearch = (cats: any[], q: string): any[] => {
-        return cats.flatMap((c: any) => {
-            const match = c.display_category_name?.toLowerCase().includes(q) ||
-                          c.original_category_name?.toLowerCase().includes(q);
-            const childMatches = c.children ? flattenSearch(c.children, q) : [];
-            return [...(match ? [c] : []), ...childMatches];
-        });
-    };
+        : getCategoryChildren(catBreadcrumb[catBreadcrumb.length - 1]);
 
     const displayedCats = catSearch.trim()
-        ? flattenSearch(allCatTree, catSearch.toLowerCase()).slice(0, 40)
+        ? searchShopeeCategories(allCatTree, catSearch, 40)
         : currentCatLevel;
 
+    const suggestedCategories = useMemo(
+        () => suggestShopeeCategories({
+            productName: product.name || '',
+            categoryTree: allCatTree,
+            historicalProducts: historicalProducts.filter((entry) => String(entry.product_id) !== String(product.id)),
+            limit: 3,
+        }),
+        [allCatTree, historicalProducts, product.id, product.name]
+    );
+
+    const parsedPrice = (() => {
+        const value = Number.parseFloat(String(shopeePrice || '').replace(',', '.'));
+        if (Number.isFinite(value) && value > 0) return value;
+        return Number(((product.price_retail || 0) / 100).toFixed(2));
+    })();
+    const parsedStock = Math.max(0, Number.parseInt(String(shopeeStock || '0'), 10) || 0);
+    const availableImages = mediaImages;
+    const availableVideos = mediaVideos;
+    const requiredAttributes = attributes.filter((attr) => attr.mandatory);
+    const optionalAttributes = attributes.filter((attr) => !attr.mandatory);
+    const missingRequiredAttributes = requiredAttributes.filter((attr) => !hasFilledAttributeValue(attrValues[attr.attribute_id]));
+
+    const updateAttributeValue = (attributeId: number, value: string | string[]) => {
+        setAttrValues((prev) => ({ ...prev, [attributeId]: value }));
+    };
+
+    const addImageFiles = async (files: FileList | null) => {
+        if (!files) return;
+        const selected = Array.from(files).slice(0, Math.max(0, 9 - mediaImages.length));
+        if (selected.length === 0) return;
+
+        try {
+            const newImages: EditableImage[] = [];
+            for (const file of selected) {
+                if (!file.type.startsWith('image/')) continue;
+                const dataUrl = await readFileAsDataUrl(file);
+                newImages.push({ data_url: dataUrl, file_name: file.name });
+            }
+            if (newImages.length > 0) {
+                setMediaImages(prev => [...prev, ...newImages].slice(0, 9));
+            }
+        } catch {
+            toast.error('Falha ao ler uma das imagens selecionadas.');
+        }
+    };
+
+    const addVideoFiles = async (files: FileList | null) => {
+        if (!files) return;
+        const selected = Array.from(files);
+        if (selected.length === 0) return;
+
+        try {
+            const newVideos: EditableVideo[] = [];
+            for (const file of selected) {
+                if (!file.type.startsWith('video/')) continue;
+                const dataUrl = await readFileAsDataUrl(file);
+                newVideos.push({ data_url: dataUrl, file_name: file.name });
+            }
+            if (newVideos.length > 0) {
+                setMediaVideos(newVideos.slice(0, 1));
+                if (newVideos.length > 1 || mediaVideos.length > 0) {
+                    toast.info('A Shopee geralmente permite apenas 1 video por item. Mantivemos somente o primeiro.');
+                }
+            }
+        } catch {
+            toast.error('Falha ao ler o video selecionado.');
+        }
+    };
+
     const handleCatClick = (cat: any) => {
-        if (cat.children && cat.children.length > 0) {
+        if (!isLeafCategory(cat)) {
             // Navega para o próximo nível
             setCatBreadcrumb(prev => [...prev, cat]);
             setCatSearch('');
@@ -1107,55 +1465,279 @@ function ShopeeSyncModal({
         setSelectedCat(cat);
         setStep(2);
         setLoadingAttrs(true);
+        setAttrValues({});
         try {
             const res = await fetch(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`);
             const data = await res.json();
-            const attrs = data.response?.attribute_list || [];
-            setAttributes(attrs);
+            if (data.error && data.error !== '') {
+                throw new Error(data.message || data.error);
+            }
+            setAttributes(normalizeShopeeAttributes(data));
         } catch { toast.error('Erro ao carregar atributos.'); }
         finally { setLoadingAttrs(false); }
     };
 
-    const handleSync = async () => {
-        setSyncing(true);
+    const buildAttributePayload = () => {
+        return attributes
+            .filter((attr) => hasFilledAttributeValue(attrValues[attr.attribute_id]))
+            .map((attr) => {
+                const currentValue = attrValues[attr.attribute_id];
+                const valueList = (Array.isArray(currentValue) ? currentValue : [currentValue])
+                    .map((entry) => String(entry || '').trim())
+                    .filter(Boolean);
+
+                return {
+                    attribute_id: attr.attribute_id,
+                    attribute_value_list: valueList.map((entry) => {
+                        const option = attr.attribute_value_list.find((candidate) =>
+                            candidate.raw_name === entry ||
+                            candidate.original_value_name === entry ||
+                            candidate.label === entry ||
+                            String(candidate.value_id) === entry
+                        );
+
+                        return {
+                            value_id: option?.value_id || 0,
+                            original_value_name: option?.original_value_name || option?.raw_name || option?.label || entry,
+                        };
+                    }),
+                };
+            });
+    };
+
+    const renderAttributeField = (attr: ShopeeAttributeField) => {
+        const currentValue = attrValues[attr.attribute_id];
+
+        if (attr.input_kind === 'multiselect') {
+            return (
+                <div className="space-y-2">
+                    <select
+                        multiple
+                        value={Array.isArray(currentValue) ? currentValue : []}
+                        onChange={(event) => {
+                            const values = Array.from(event.currentTarget.selectedOptions).map((option) => option.value);
+                            updateAttributeValue(attr.attribute_id, values);
+                        }}
+                        className="w-full min-h-[120px] px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+                    >
+                        {attr.attribute_value_list.map((option) => (
+                            <option key={`${attr.attribute_id}-${option.value_id}-${option.raw_name}`} value={option.raw_name || option.label}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                    <p className="text-[11px] text-slate-400">Use Ctrl para selecionar mais de uma opcao.</p>
+                </div>
+            );
+        }
+
+        if (attr.input_kind === 'select') {
+            return (
+                <select
+                    value={Array.isArray(currentValue) ? currentValue[0] || '' : currentValue || ''}
+                    onChange={(event) => updateAttributeValue(attr.attribute_id, event.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+                >
+                    <option value="">Selecione...</option>
+                    {attr.attribute_value_list.map((option) => (
+                        <option key={`${attr.attribute_id}-${option.value_id}-${option.raw_name}`} value={option.raw_name || option.label}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+            );
+        }
+
+        return (
+            <input
+                type="text"
+                value={Array.isArray(currentValue) ? currentValue[0] || '' : currentValue || ''}
+                onChange={(event) => updateAttributeValue(attr.attribute_id, event.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+                placeholder={attr.label}
+            />
+        );
+    };
+
+    const handleAdvance = () => {
+        if (missingRequiredAttributes.length > 0) {
+            toast.error(`Preencha os atributos obrigatorios: ${missingRequiredAttributes.map((attr) => attr.label).join(', ')}`);
+            return;
+        }
+
+        if (availableImages.length === 0) {
+            toast.error('O produto precisa ter pelo menos 1 imagem para ser publicado na Shopee.');
+            return;
+        }
+
+        setStep(3);
+    };
+
+    const pushSyncDebug = (stage: string, payload: unknown) => {
+        const serialized = (() => {
+            try {
+                return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+            } catch {
+                return String(payload);
+            }
+        })();
+
+        setSyncDebugEntries((prev) => [
+            ...prev,
+            {
+                stage,
+                timestamp: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
+                payload: serialized.slice(0, 4000),
+            },
+        ]);
+    };
+
+    const postShopeeDebug = async (action: string, body: Record<string, any>) => {
+        pushSyncDebug(`${action}:request`, body);
+
+        const res = await fetch(`/api/shopee-catalog?action=${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+
+        const text = await res.text();
+        let data: any = null;
         try {
-            // Build attribute list
-            const attributeList = Object.entries(attrValues).map(([attrId, val]) => ({
-                attribute_id: parseInt(attrId),
-                attribute_value_list: Array.isArray(val)
-                    ? val.map((v: any) => ({ value_id: v.value_id || 0, original_attribute_value: v.original_attribute_value || String(v) }))
-                    : [{ value_id: val.value_id || 0, original_attribute_value: val.original_attribute_value || String(val) }]
-            }));
+            data = text ? JSON.parse(text) : null;
+        } catch {
+            data = null;
+        }
+
+        pushSyncDebug(`${action}:response`, {
+            httpStatus: res.status,
+            ok: res.ok,
+            body: data ?? text,
+        });
+
+        if (!res.ok) {
+            const rawMessage = data?.message || data?.error || text || `HTTP ${res.status}`;
+            const friendlyMessage =
+                action === 'upload_video' && String(rawMessage).includes('error_not_found')
+                    ? 'O backend atual nao suporta upload_video. O localhost esta usando uma API remota sem essa rota.'
+                    : rawMessage;
+            throw new Error(`[${action}] ${friendlyMessage}`);
+        }
+
+        if (data?.error && data.error !== '') {
+            const rawMessage = data.message || data.error;
+            const friendlyMessage =
+                action === 'upload_video' && String(rawMessage).includes('error_not_found')
+                    ? 'O backend atual nao suporta upload_video. O localhost esta usando uma API remota sem essa rota.'
+                    : rawMessage;
+            throw new Error(`[${action}] ${friendlyMessage}`);
+        }
+
+        return data;
+    };
+
+    const handleSync = async () => {
+        if (!selectedCat?.category_id) {
+            toast.error('Selecione uma categoria antes de publicar.');
+            setStep(1);
+            return;
+        }
+
+        if (missingRequiredAttributes.length > 0) {
+            toast.error(`Preencha os atributos obrigatorios: ${missingRequiredAttributes.map((attr) => attr.label).join(', ')}`);
+            setStep(2);
+            return;
+        }
+
+        if (availableImages.length === 0) {
+            toast.error('O produto precisa ter pelo menos 1 imagem para ser publicado na Shopee.');
+            setStep(2);
+            return;
+        }
+
+        setSyncing(true);
+        setMediaBusy(true);
+        setSyncDebugEntries([]);
+        try {
+            const attributeList = buildAttributePayload();
+            const cleanItemName = (itemName.trim() || product.name || '').slice(0, 120);
+            const cleanDescription = (normalizeShopeeDescription(itemDescription) || cleanItemName).slice(0, 3000);
+            const imageIdList: string[] = [];
+            const videoIdList: string[] = [];
+            const weightValue = Number(defaultWeightKg.toFixed(3));
+
+            for (const image of availableImages) {
+                if (image.image_id) {
+                    imageIdList.push(String(image.image_id));
+                    continue;
+                }
+
+                if (!image.data_url && !image.image_url) continue;
+                const resolvedImageDataUrl = image.data_url || (image.image_url ? await readRemoteUrlAsDataUrl(image.image_url) : '');
+                if (!resolvedImageDataUrl) continue;
+
+                const uploadData = await postShopeeDebug('upload_image', {
+                    image_data_url: resolvedImageDataUrl,
+                    file_name: image.file_name || 'image.jpg',
+                });
+                const uploadedId = uploadData?.response?.image_info?.image_id || uploadData?.response?.image_id;
+                if (!uploadedId) {
+                    throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de imagem');
+                }
+                imageIdList.push(String(uploadedId));
+            }
+
+            if (imageIdList.length === 0) {
+                throw new Error('O produto precisa ter pelo menos 1 imagem valida para publicar.');
+            }
+
+            for (const video of availableVideos) {
+                if (video.video_id) {
+                    videoIdList.push(String(video.video_id));
+                    continue;
+                }
+
+                const resolvedVideoDataUrl = video.data_url?.startsWith('data:video/')
+                    ? video.data_url
+                    : (video.video_url ? await readRemoteUrlAsDataUrl(video.video_url) : '');
+                if (!resolvedVideoDataUrl) continue;
+
+                const uploadData = await postShopeeDebug('upload_video', {
+                    video_data_url: resolvedVideoDataUrl,
+                    file_name: video.file_name || 'video.mp4',
+                });
+                const uploadedId = uploadData?.response?.video_id;
+                if (!uploadedId) {
+                    throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de video');
+                }
+                videoIdList.push(String(uploadedId));
+            }
 
             const payload = {
-                original_price: shopeePrice,
-                description: product.name,
-                item_name: product.name,
+                original_price: parsedPrice,
+                description: cleanDescription,
+                item_name: cleanItemName,
                 category_id: selectedCat.category_id,
                 attribute_list: attributeList,
                 logistics_info: [{ logistic_id: 80031, enabled: true }],
                 stock_info_v2: {
-                    summary_info: { total_reserved_stock: 0, total_available_stock: shopeeStock }
+                    summary_info: { total_reserved_stock: 0, total_available_stock: parsedStock }
                 },
+                normal_stock: parsedStock,
                 image: {
-                    image_url_list: product.images?.slice(0, 9) || []
+                    image_id_list: imageIdList
                 },
-                weight: '0.3',
+                ...(videoIdList.length > 0 ? { video_info: { video_id_list: videoIdList } } : {}),
+                weight: weightValue,
+                brand: {
+                    brand_id: 0,
+                    original_brand_name: (product.brand || 'NoBrand').trim() || 'NoBrand',
+                },
                 item_status: 'NORMAL',
                 condition: 'NEW',
             };
 
-            const res = await fetch('/api/shopee-catalog?action=add_item', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            const data = await res.json();
-
-            if (data.error && data.error !== '') {
-                toast.error(`Shopee: ${data.message || data.error}`);
-                return;
-            }
+            const data = await postShopeeDebug('add_item', payload);
 
             // Save to Supabase
             const shopeeItemId = data.response?.item_id;
@@ -1164,7 +1746,7 @@ function ShopeeSyncModal({
                 shopee_item_id: shopeeItemId,
                 shopee_category_id: selectedCat.category_id,
                 shopee_category_name: selectedCat.display_category_name,
-                shopee_price: Math.round(shopeePrice * 100),
+                shopee_price: Math.round(parsedPrice * 100),
                 status: 'active',
                 last_synced_at: new Date().toISOString(),
             }, { onConflict: 'product_id' });
@@ -1172,15 +1754,17 @@ function ShopeeSyncModal({
             toast.success('Produto publicado na Shopee! 🎉');
             onSuccess();
         } catch (e: any) {
-            toast.error('Erro ao sincronizar produto.');
+            pushSyncDebug('sync:error', e?.message || e);
+            toast.error(e?.message || 'Erro ao sincronizar produto.');
         } finally {
+            setMediaBusy(false);
             setSyncing(false);
         }
     };
 
     return (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto">
                 {/* Modal header */}
                 <div className="flex items-center justify-between p-6 border-b border-slate-100">
                     <div>
@@ -1192,7 +1776,7 @@ function ShopeeSyncModal({
 
                 {/* Steps indicator */}
                 <div className="flex items-center gap-2 px-6 py-4 border-b border-slate-50">
-                    {[['1', 'Categoria'], ['2', 'Atributos'], ['3', 'Confirmar']].map(([n, label], i) => (
+                    {[['1', 'Categoria'], ['2', 'Dados'], ['3', 'Confirmar']].map(([n, label], i) => (
                         <React.Fragment key={n}>
                             <div className={`flex items-center gap-1.5 text-xs font-semibold ${step >= parseInt(n) ? 'text-orange-500' : 'text-slate-400'}`}>
                                 <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${step >= parseInt(n) ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-400'}`}>{n}</span>
@@ -1239,8 +1823,39 @@ function ShopeeSyncModal({
                                 </div>
                             )}
 
+                            {!catSearch.trim() && suggestedCategories.length > 0 && (
+                                <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3 space-y-2">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <Tag className="w-4 h-4 text-blue-500" />
+                                        <span>Sugestões automáticas</span>
+                                    </div>
+                                    <p className="text-xs text-slate-500">
+                                        Baseadas no nome deste produto e no histórico dos itens já sincronizados.
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                        {suggestedCategories.map(cat => (
+                                            <button
+                                                key={`suggested-${cat.category_id}`}
+                                                onClick={() => selectCategory(cat)}
+                                                className="w-full min-w-0 text-left px-3 py-2.5 rounded-xl border border-blue-200 bg-white hover:bg-blue-50 transition-colors"
+                                            >
+                                                <span className="block text-sm font-medium text-slate-800">{cat.display_category_name}</span>
+                                                <span className="block text-[11px] text-slate-500 line-clamp-2">{cat.__pathLabel || getCategoryPathLabel(cat)}</span>
+                                                {cat.reason && (
+                                                    <span className="block text-[11px] text-blue-600 mt-1 line-clamp-2">{cat.reason}</span>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Category list */}
-                            <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-2">
+                                <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                                    {catSearch.trim() ? 'Resultados da busca' : 'Categorias deste nível'}
+                                </div>
+                                <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
                                 {loadingCats ? (
                                     <div className="flex items-center justify-center py-8">
                                         <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
@@ -1248,21 +1863,28 @@ function ShopeeSyncModal({
                                 ) : displayedCats.length === 0 ? (
                                     <p className="text-center text-xs text-slate-400 py-6">Nenhuma categoria encontrada</p>
                                 ) : displayedCats.map(cat => {
-                                    const hasChildren = cat.children && cat.children.length > 0;
+                                    const hasChildren = !isLeafCategory(cat);
+                                    const categoryPath = cat.__pathLabel || getCategoryPathLabel(cat);
                                     return (
                                         <button
                                             key={cat.category_id}
                                             onClick={() => handleCatClick(cat)}
                                             className="w-full text-left px-4 py-2.5 rounded-xl hover:bg-orange-50 border border-transparent hover:border-orange-200 transition-all text-sm flex items-center justify-between group"
                                         >
-                                            <span className="font-medium text-slate-800">{cat.display_category_name}</span>
+                                            <span className="min-w-0 pr-3">
+                                                <span className="block font-medium text-slate-800">{cat.display_category_name}</span>
+                                                {categoryPath && (
+                                                    <span className="block text-[11px] text-slate-400 truncate">{categoryPath}</span>
+                                                )}
+                                            </span>
                                             {hasChildren
-                                                ? <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-orange-400 shrink-0" />
+                                                ? <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full shrink-0">abrir</span>
                                                 : <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">selecionar</span>
                                             }
                                         </button>
                                     );
                                 })}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1270,62 +1892,252 @@ function ShopeeSyncModal({
                     {/* Step 2: Attributes */}
                     {step === 2 && (
                         <div className="space-y-4">
-                            <div className="flex items-center gap-2 text-sm">
-                                <Tag className="w-4 h-4 text-orange-500" />
-                                <span className="font-medium text-slate-700">Categoria: <span className="text-orange-600">{selectedCat?.display_category_name}</span></span>
+                            <div className="rounded-2xl border border-orange-100 bg-orange-50/70 px-4 py-3">
+                                <div className="flex items-center gap-2 text-sm">
+                                    <Tag className="w-4 h-4 text-orange-500" />
+                                    <span className="font-medium text-slate-700">Categoria selecionada</span>
+                                </div>
+                                <div className="mt-1 text-sm font-semibold text-orange-600">
+                                    {selectedCat?.__pathLabel || getCategoryPathLabel(selectedCat)}
+                                </div>
+                            </div>
+                            <div className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-4">
+                                <div className="space-y-4">
+                                    <div className="flex flex-col sm:flex-row gap-4">
+                                        {primaryImage ? (
+                                            <img src={primaryImage} alt={product.name} className="w-24 h-24 rounded-2xl object-contain bg-white border border-orange-100 shrink-0" />
+                                        ) : (
+                                            <div className="w-24 h-24 rounded-2xl bg-white border border-orange-100 flex items-center justify-center shrink-0">
+                                                <Package className="w-8 h-8 text-slate-300" />
+                                            </div>
+                                        )}
+
+                                        <div className="min-w-0 flex-1 space-y-3">
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-[11px] font-semibold text-slate-600">
+                                                    SKU: {product.sku || 'Sem SKU'}
+                                                </span>
+                                                <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-700">
+                                                    Estoque Bling/VPS: {parsedStock}
+                                                </span>
+                                                <span className="px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-semibold text-blue-700">
+                                                    Imagens: {availableImages.length}/9
+                                                </span>
+                                                <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-[11px] font-semibold text-amber-700">
+                                                    Atributos: {requiredAttributes.length} obrig. / {optionalAttributes.length} op.
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                                                <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
+                                                    <div className="text-slate-400 uppercase tracking-wide">Marca</div>
+                                                    <div className="font-semibold text-slate-700 mt-0.5">{product.brand || 'NoBrand'}</div>
+                                                </div>
+                                                <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
+                                                    <div className="text-slate-400 uppercase tracking-wide">Peso</div>
+                                                    <div className="font-semibold text-slate-700 mt-0.5">{defaultWeightKg.toFixed(2)} kg</div>
+                                                </div>
+                                                <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
+                                                    <div className="text-slate-400 uppercase tracking-wide">NCM</div>
+                                                    <div className="font-semibold text-slate-700 mt-0.5">{product.ncm || 'Nao informado'}</div>
+                                                </div>
+                                                <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
+                                                    <div className="text-slate-400 uppercase tracking-wide">GTIN / EAN</div>
+                                                    <div className="font-semibold text-slate-700 mt-0.5 truncate">{gtinValue || 'Nao informado'}</div>
+                                                </div>
+                                            </div>
+
+                                            {(packageLength > 0 || packageWidth > 0 || packageHeight > 0) && (
+                                                <div className="text-[11px] text-slate-500">
+                                                    Embalagem base do cadastro: {packageLength || 0} x {packageWidth || 0} x {packageHeight || 0} cm
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {optionalAttributes.length > 0 && (
+                                        <div className="space-y-3 pt-3 border-t border-slate-100">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Opcionais</p>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                {optionalAttributes.map((attr) => (
+                                                    <div key={`optional-${attr.attribute_id}`} className="space-y-1.5">
+                                                        <label className="block text-xs font-semibold text-slate-700">{attr.label}</label>
+                                                        {renderAttributeField(attr)}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fotos e video</p>
+                                    <span className="text-[11px] text-slate-500">
+                                        Fotos: {availableImages.length}/9 • Video: {availableVideos.length}/1
+                                    </span>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => imageInputRef.current?.click()}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center gap-1"
+                                    >
+                                        <ImageIcon className="w-3.5 h-3.5" /> Adicionar fotos
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => videoInputRef.current?.click()}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center gap-1"
+                                    >
+                                        <Video className="w-3.5 h-3.5" /> Adicionar video
+                                    </button>
+                                </div>
+
+                                <input
+                                    ref={imageInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    className="hidden"
+                                    onChange={e => {
+                                        addImageFiles(e.target.files);
+                                        e.currentTarget.value = '';
+                                    }}
+                                />
+                                <input
+                                    ref={videoInputRef}
+                                    type="file"
+                                    accept="video/*"
+                                    className="hidden"
+                                    onChange={e => {
+                                        addVideoFiles(e.target.files);
+                                        e.currentTarget.value = '';
+                                    }}
+                                />
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    {availableImages.map((img, idx) => {
+                                        const src = img.image_url || img.data_url || '';
+                                        return (
+                                            <div key={`${img.image_id || 'new'}-${idx}`} className="relative border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
+                                                {src ? (
+                                                    <img src={src} alt={`Imagem ${idx + 1}`} className="w-full aspect-square object-contain" />
+                                                ) : (
+                                                    <div className="w-full aspect-square flex items-center justify-center text-xs text-slate-400">Imagem {idx + 1}</div>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMediaImages(prev => prev.filter((_, i) => i !== idx))}
+                                                    className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1 border border-red-100 hover:bg-red-50"
+                                                    title="Remover foto"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {availableVideos.length > 0 && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                        {availableVideos.map((vid, idx) => {
+                                            const src = vid.data_url || vid.video_url || undefined;
+                                            return (
+                                                <div key={`${vid.video_id || 'new'}-${idx}`} className="relative border border-slate-200 rounded-lg p-2 bg-slate-50">
+                                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                                        <span className="text-xs font-medium text-slate-600 truncate">
+                                                            {vid.video_id ? `Video ID: ${vid.video_id}` : (vid.file_name || `Video ${idx + 1}`)}
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setMediaVideos(prev => prev.filter((_, i) => i !== idx))}
+                                                            className="bg-white/90 text-red-500 rounded-full p-1 border border-red-100 hover:bg-red-50"
+                                                            title="Remover video"
+                                                        >
+                                                            <Trash2 className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                    {src ? (
+                                                        src.startsWith('data:video/') ? (
+                                                            <video src={src} controls className="w-full aspect-video rounded" />
+                                                        ) : (
+                                                            <div className="w-full aspect-video rounded border border-dashed border-slate-200 flex flex-col items-center justify-center text-xs text-slate-400 bg-white px-4 text-center">
+                                                                <span className="font-medium text-slate-500">Vídeo do sistema pronto para envio</span>
+                                                                <span className="mt-1 break-all">{vid.file_name || 'Arquivo remoto'}</span>
+                                                            </div>
+                                                        )
+                                                    ) : vid.thumbnail_url ? (
+                                                        <img src={vid.thumbnail_url} alt="Thumbnail do video" className="w-full aspect-video object-contain rounded bg-white" />
+                                                    ) : null}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                             {loadingAttrs ? (
-                                <div className="flex items-center justify-center py-8">
+                                <div className="rounded-2xl border border-slate-200 bg-white flex items-center justify-center py-8">
                                     <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
                                 </div>
                             ) : (
-                                <div className="space-y-3 max-h-72 overflow-y-auto">
-                                    {attributes.filter(a => a.is_mandatory).map((attr: any) => (
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3 max-h-72 overflow-y-auto">
+                                    {requiredAttributes.map((attr) => (
                                         <div key={attr.attribute_id}>
                                             <label className="block text-xs font-semibold text-slate-700 mb-1">
-                                                {attr.display_attribute_name}
+                                                {attr.label}
                                                 <span className="text-red-400 ml-1">*</span>
                                             </label>
-                                            {attr.input_type === 'DROP_DOWN' || attr.input_type === 'MULTIPLE_SELECT' ? (
-                                                <select
-                                                    onChange={e => {
-                                                        const opt = attr.attribute_value_list?.find((v: any) => String(v.value_id) === e.target.value);
-                                                        setAttrValues(prev => ({ ...prev, [attr.attribute_id]: opt || { original_attribute_value: e.target.value } }));
-                                                    }}
-                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500">
-                                                    <option value="">Selecione...</option>
-                                                    {(attr.attribute_value_list || []).map((v: any) => (
-                                                        <option key={v.value_id} value={v.value_id}>{v.display_attribute_value}</option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                <input type="text"
-                                                    onChange={e => setAttrValues(prev => ({ ...prev, [attr.attribute_id]: { original_attribute_value: e.target.value } }))}
-                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-orange-500"
-                                                    placeholder={attr.display_attribute_name} />
-                                            )}
+                                            {renderAttributeField(attr)}
                                         </div>
                                     ))}
-                                    {attributes.filter(a => a.is_mandatory).length === 0 && (
+                                    {requiredAttributes.length === 0 && (
                                         <p className="text-sm text-slate-500 text-center py-4">Nenhum atributo obrigatório para esta categoria.</p>
                                     )}
                                 </div>
                             )}
-                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Preço (R$)</label>
                                     <input type="number" step="0.01" value={shopeePrice}
-                                        onChange={e => setShopeePrice(parseFloat(e.target.value))}
+                                        onChange={e => setShopeePrice(parseFloat(e.target.value || '0'))}
                                         className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Estoque inicial</label>
                                     <input type="number" value={shopeeStock}
-                                        onChange={e => setShopeeStock(parseInt(e.target.value))}
+                                        onChange={e => {
+                                            stockDirtyRef.current = true;
+                                            setShopeeStock(parseInt(e.target.value || '0', 10));
+                                        }}
                                         className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
-                            <button onClick={() => setStep(3)}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Descricao do anuncio</label>
+                                <textarea
+                                    value={itemDescription}
+                                    onChange={e => {
+                                        descriptionDirtyRef.current = true;
+                                        setItemDescription(e.target.value);
+                                    }}
+                                    rows={7}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-orange-500"
+                                    placeholder="Descricao que sera enviada para a Shopee"
+                                />
+                            </div>
+                            {missingRequiredAttributes.length > 0 && (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                    Faltam atributos obrigatorios: <strong>{missingRequiredAttributes.map((attr) => attr.label).join(', ')}</strong>
+                                </div>
+                            )}
+                            {availableImages.length === 0 && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                    Este produto ainda nao tem imagem valida para enviar a Shopee.
+                                </div>
+                            )}
+                            <button onClick={handleAdvance}
                                 className="w-full py-2.5 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors text-sm">
                                 Avançar → Confirmar
                             </button>
@@ -1337,14 +2149,34 @@ function ShopeeSyncModal({
                         <div className="space-y-4">
                             <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
                                 <div className="flex justify-between"><span className="text-slate-500">Produto</span><span className="font-medium text-slate-800 text-right max-w-[60%]">{product.name}</span></div>
-                                <div className="flex justify-between"><span className="text-slate-500">Categoria</span><span className="font-medium text-orange-600">{selectedCat?.display_category_name}</span></div>
+                                <div className="flex justify-between gap-3"><span className="text-slate-500">Categoria</span><span className="font-medium text-orange-600 text-right max-w-[60%]">{selectedCat?.__pathLabel || getCategoryPathLabel(selectedCat)}</span></div>
                                 <div className="flex justify-between"><span className="text-slate-500">Preço</span><span className="font-semibold text-slate-800">R$ {shopeePrice.toFixed(2)}</span></div>
                                 <div className="flex justify-between"><span className="text-slate-500">Estoque</span><span className="font-medium">{shopeeStock} un.</span></div>
                                 <div className="flex justify-between"><span className="text-slate-500">Atributos preenchidos</span><span className="font-medium">{Object.keys(attrValues).length}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Fotos / Video</span><span className="font-medium">{availableImages.length} / {availableVideos.length}</span></div>
                             </div>
-                            <button onClick={handleSync} disabled={syncing}
+                            <details className="rounded-xl border border-slate-200 bg-white">
+                                <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between text-sm font-semibold text-slate-700">
+                                    <span>Debug da publicação</span>
+                                    <span className="text-xs text-slate-400">{syncDebugEntries.length} eventos</span>
+                                </summary>
+                                <div className="border-t border-slate-100 px-4 py-3 space-y-3 max-h-72 overflow-y-auto">
+                                    {syncDebugEntries.length === 0 ? (
+                                        <p className="text-xs text-slate-400">Ao clicar em publicar, vamos registrar aqui cada request e response da API.</p>
+                                    ) : syncDebugEntries.map((entry, index) => (
+                                        <div key={`${entry.timestamp}-${index}`} className="rounded-lg bg-slate-50 border border-slate-200">
+                                            <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between gap-3">
+                                                <span className="text-xs font-semibold text-slate-700">{entry.stage}</span>
+                                                <span className="text-[11px] text-slate-400">{entry.timestamp}</span>
+                                            </div>
+                                            <pre className="px-3 py-2 text-[11px] text-slate-600 whitespace-pre-wrap break-words overflow-x-auto">{entry.payload}</pre>
+                                        </div>
+                                    ))}
+                                </div>
+                            </details>
+                            <button onClick={handleSync} disabled={syncing || mediaBusy}
                                 className="w-full py-3 bg-[#ee4d2d] text-white rounded-xl font-bold hover:bg-[#d73f21] transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
-                                {syncing ? <><Loader2 className="w-4 h-4 animate-spin" />Publicando...</> : <><Upload className="w-4 h-4" />Publicar na Shopee</>}
+                                {(syncing || mediaBusy) ? <><Loader2 className="w-4 h-4 animate-spin" />Publicando...</> : <><Upload className="w-4 h-4" />Publicar na Shopee</>}
                             </button>
                             <button onClick={() => setStep(2)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-800">← Voltar e ajustar</button>
                         </div>
@@ -1618,14 +2450,18 @@ function ExpandedItemPanel({
                     continue;
                 }
 
-                if (!video.data_url) {
+                if (!video.data_url && !video.video_url) {
                     continue;
                 }
 
                 const uploadRes = await fetch('/api/shopee-catalog?action=upload_video', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ video_data_url: video.data_url, file_name: video.file_name || 'video.mp4' }),
+                    body: JSON.stringify({
+                        ...(video.data_url ? { video_data_url: video.data_url } : {}),
+                        ...(video.video_url ? { video_url: video.video_url } : {}),
+                        file_name: video.file_name || 'video.mp4',
+                    }),
                 });
                 const uploadData = await uploadRes.json();
                 const uploadedId = uploadData?.response?.video_id;

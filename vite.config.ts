@@ -22,12 +22,18 @@ export default defineConfig(({ mode }) => {
 
   const env = loadEnv(mode, process.cwd(), '');
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'https://mercado-do-vale-news.vercel.app';
+  const shopeeApiProxyTarget = env.VITE_SHOPEE_API_PROXY_TARGET || apiProxyTarget;
 
   return {
     server: {
       port: 3000,
       host: '0.0.0.0',
       proxy: {
+        '/api/shopee-catalog': {
+          target: shopeeApiProxyTarget,
+          changeOrigin: true,
+          secure: false,
+        },
         '/api': {
           target: apiProxyTarget,
           changeOrigin: true,

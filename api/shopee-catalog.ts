@@ -48,6 +48,42 @@ function isNoGtinValue(value: string): boolean {
     return normalized === 'SEM GTIN' || normalized === 'SEM_GTIN' || normalized === 'NAO POSSUI' || normalized === 'ISENTO';
 }
 
+function parseDataUrl(dataUrl: string): { mimeType: string; buffer: Buffer } | null {
+    const matches = String(dataUrl || '').match(/^data:([^;]+);base64,(.*)$/);
+    if (!matches) return null;
+    return {
+        mimeType: matches[1],
+        buffer: Buffer.from(matches[2], 'base64'),
+    };
+}
+
+async function resolveMediaInput(dataUrl: string, remoteUrl: string, expectedPrefix: 'image/' | 'video/'): Promise<{ mimeType: string; buffer: Buffer; fileNameHint: string } | null> {
+    if (dataUrl) {
+        const parsed = parseDataUrl(dataUrl);
+        if (!parsed || !parsed.mimeType.startsWith(expectedPrefix)) {
+            return null;
+        }
+        const ext = parsed.mimeType.split('/')[1] || (expectedPrefix === 'image/' ? 'jpg' : 'mp4');
+        return { mimeType: parsed.mimeType, buffer: parsed.buffer, fileNameHint: `upload.${ext}` };
+    }
+
+    if (remoteUrl) {
+        const remoteRes = await fetch(remoteUrl);
+        if (!remoteRes.ok) {
+            throw new Error(`Falha ao baixar midia remota: ${remoteRes.status}`);
+        }
+        const mimeType = remoteRes.headers.get('content-type') || (expectedPrefix === 'image/' ? 'image/jpeg' : 'video/mp4');
+        if (!mimeType.startsWith(expectedPrefix)) {
+            return null;
+        }
+        const arrayBuffer = await remoteRes.arrayBuffer();
+        const fileNameHint = remoteUrl.split('/').pop() || `upload.${mimeType.split('/')[1] || 'bin'}`;
+        return { mimeType, buffer: Buffer.from(arrayBuffer), fileNameHint };
+    }
+
+    return null;
+}
+
 async function getCredentials(): Promise<Creds> {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const { data } = await supabase
@@ -141,15 +177,6 @@ async function shopeeMultipart(apiPath: string, creds: Creds, formData: FormData
         return r2.json();
     }
     return data;
-}
-
-function parseDataUrl(dataUrl: string): { mimeType: string; buffer: Buffer } | null {
-    const matches = String(dataUrl || '').match(/^data:([a-zA-Z0-9/+.-]+);base64,(.*)$/);
-    if (!matches || !matches[1] || !matches[2]) return null;
-    return {
-        mimeType: matches[1],
-        buffer: Buffer.from(matches[2], 'base64'),
-    };
 }
 
 export default async function handler(req: any, res: any) {
@@ -348,15 +375,14 @@ export default async function handler(req: any, res: any) {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
 
             const imageDataUrl = String(req.body?.image_data_url || '');
-            if (!imageDataUrl) return res.status(400).json({ error: 'image_data_url required' });
-
-            const parsed = parseDataUrl(imageDataUrl);
-            if (!parsed || !parsed.mimeType.startsWith('image/')) {
+            const imageUrl = String(req.body?.image_url || '');
+            const parsed = await resolveMediaInput(imageDataUrl, imageUrl, 'image/');
+            if (!parsed) {
                 return res.status(400).json({ error: 'invalid image_data_url' });
             }
 
             const ext = parsed.mimeType.split('/')[1] || 'jpg';
-            const fileName = String(req.body?.file_name || `image_${Date.now()}.${ext}`);
+            const fileName = String(req.body?.file_name || parsed.fileNameHint || `image_${Date.now()}.${ext}`);
 
             const formData = new FormData();
             formData.append('image', new Blob([new Uint8Array(parsed.buffer)], { type: parsed.mimeType }), fileName);
@@ -368,15 +394,14 @@ export default async function handler(req: any, res: any) {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
 
             const videoDataUrl = String(req.body?.video_data_url || '');
-            if (!videoDataUrl) return res.status(400).json({ error: 'video_data_url required' });
-
-            const parsed = parseDataUrl(videoDataUrl);
-            if (!parsed || !parsed.mimeType.startsWith('video/')) {
-                return res.status(400).json({ error: 'invalid video_data_url' });
+            const videoUrl = String(req.body?.video_url || '');
+            const parsed = await resolveMediaInput(videoDataUrl, videoUrl, 'video/');
+            if (!parsed) {
+                return res.status(400).json({ error: 'invalid video input' });
             }
 
             const ext = parsed.mimeType.split('/')[1] || 'mp4';
-            const fileName = String(req.body?.file_name || `video_${Date.now()}.${ext}`);
+            const fileName = String(req.body?.file_name || parsed.fileNameHint || `video_${Date.now()}.${ext}`);
 
             const formData = new FormData();
             formData.append('video', new Blob([new Uint8Array(parsed.buffer)], { type: parsed.mimeType }), fileName);
