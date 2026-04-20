@@ -195,12 +195,18 @@ export default async function handler(req: any, res: any) {
             const data = await shopeeGet('/api/v2/product/get_attribute_tree', creds, `&category_id_list=${category_id}&language=pt-BR`);
             return res.status(200).json(data);
         }
+        if (action === 'shop_info') {
+            const data = await shopeeGet('/api/v2/shop/get_shop_info', creds, '');
+            return res.status(200).json(data);
+        }
         if (action === 'warehouse_list') {
             const data = await shopeeGet('/api/v2/inventory/get_warehouse_list', creds, '');
             return res.status(200).json(data);
         }
         if (action === 'warehouse_locations') {
-            const data = await shopeeGet('/api/v2/merchant/get_merchant_warehouse_location_list', creds, '');
+            const merchantId = String(req.query.merchant_id || '').trim();
+            const extraParams = merchantId ? `&merchant_id=${encodeURIComponent(merchantId)}` : '';
+            const data = await shopeeGet('/api/v2/merchant/get_merchant_warehouse_location_list', creds, extraParams);
             return res.status(200).json(data);
         }
         if (action === 'add_item') {

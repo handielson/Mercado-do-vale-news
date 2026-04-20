@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => {
   }
 
   const env = loadEnv(mode, process.cwd(), '');
-  const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'https://mercado-do-vale-news.vercel.app';
+  const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'https://www.mercadodovale.com.br';
   const shopeeApiProxyTarget = env.VITE_SHOPEE_API_PROXY_TARGET || apiProxyTarget;
 
   return {

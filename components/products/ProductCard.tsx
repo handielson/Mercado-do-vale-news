@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Edit, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Video, VideoOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
+import { Company } from '../../types/company';
 import { ProductStatus } from '../../utils/field-standards';
 import { cn } from '../../utils/cn';
 import { getModelImageWithCache } from '../../services/modelImageCache';
@@ -11,6 +12,8 @@ import { LabelPrintModal } from './LabelPrintModal';
 import { supabase } from '../../services/supabase';
 import { VPS_PROXY_BASE } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
+import { getShopeeButtonVisualState, mapProductToShopeeLocalProduct } from './productCardShopee.js';
+import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 
 interface ProductCardProps {
     product: Product;
@@ -38,6 +41,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [videoInfo, setVideoInfo] = useState<{ exists: boolean; url: string | null; checking: boolean }>({ exists: false, url: null, checking: true });
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
     const videoInputRef = useRef<HTMLInputElement>(null);
+    const [shopeeItemId, setShopeeItemId] = useState<number | null>(() => {
+        const parsed = Number(product.shopee_item_id);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    });
+    const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
+    const [isPreparingShopeeModal, setIsPreparingShopeeModal] = useState(false);
+    const [shopeeCompany, setShopeeCompany] = useState<Company | null>(null);
+
+    const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
+    const shopeeModalProduct = mapProductToShopeeLocalProduct(product as Product & Record<string, any>) as LocalProduct;
+    const emptyShopeeHistory: ShopeeProduct[] = [];
 
     // Check video: prioridade para video_url salvo no banco; fallback resiliente por SKU
     useEffect(() => {
@@ -145,6 +159,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         setCurrentStock(product.stock_quantity);
     }, [product.status, product.stock_quantity]);
 
+    useEffect(() => {
+        const parsed = Number(product.shopee_item_id);
+        setShopeeItemId(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+    }, [product.shopee_item_id]);
+
     const handleToggleStatus = async (e: React.MouseEvent) => {
         e.stopPropagation();
         const newStatus = currentStatus === ProductStatus.ACTIVE ? ProductStatus.INACTIVE : ProductStatus.ACTIVE;
@@ -214,6 +233,64 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             toast.error('Erro ao sincronizar estoque do Bling');
         } finally {
             setIsSyncing(false);
+        }
+    };
+
+    const ensureShopeeCompany = async () => {
+        if (shopeeCompany) return shopeeCompany;
+        const { getCompanyData } = await import('../../services/companyService');
+        const company = await getCompanyData();
+        setShopeeCompany(company);
+        return company;
+    };
+
+    const refreshShopeeLinkState = async (): Promise<number | null> => {
+        try {
+            const { data, error } = await supabase
+                .from('shopee_products')
+                .select('shopee_item_id')
+                .eq('product_id', product.id)
+                .not('shopee_item_id', 'is', null)
+                .order('last_synced_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            const parsed = Number(data?.shopee_item_id);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                setShopeeItemId(parsed);
+                return parsed;
+            }
+        } catch (error) {
+            console.error('[ProductCard] Erro ao atualizar estado Shopee:', error);
+        }
+
+        return null;
+    };
+
+    const handleOpenShopeeModal = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isPreparingShopeeModal) return;
+
+        setIsPreparingShopeeModal(true);
+        try {
+            const existingItemId = shopeeVisualState.isSynced
+                ? shopeeVisualState.itemId
+                : await refreshShopeeLinkState();
+
+            if (existingItemId) {
+                toast.info(`Este produto ja esta sincronizado na Shopee (#${existingItemId}).`);
+                return;
+            }
+
+            await ensureShopeeCompany();
+            setIsShopeeModalOpen(true);
+        } catch (error) {
+            console.error('[ProductCard] Erro ao preparar modal Shopee:', error);
+            toast.error('Nao foi possivel abrir a sincronizacao da Shopee.');
+        } finally {
+            setIsPreparingShopeeModal(false);
         }
     };
 
@@ -414,6 +491,47 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             </button>
                         )}
 
+                        <button
+                            onClick={handleOpenShopeeModal}
+                            disabled={isPreparingShopeeModal}
+                            className={cn(
+                                "relative p-1.5 rounded-lg transition-all duration-200 group border",
+                                isPreparingShopeeModal
+                                    ? "opacity-50 cursor-wait border-slate-200 bg-slate-50"
+                                    : shopeeVisualState.isSynced
+                                        ? "border-[#ffd3c7] bg-[#fff3ef] shadow-[0_0_0_3px_rgba(238,77,45,0.12),0_0_18px_rgba(238,77,45,0.18)] animate-pulse"
+                                        : "border-transparent hover:bg-orange-50 hover:border-orange-100"
+                            )}
+                            title={isPreparingShopeeModal ? 'Preparando sincronizacao da Shopee...' : shopeeVisualState.title}
+                        >
+                            {shopeeVisualState.isSynced && (
+                                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
+                            )}
+                            {isPreparingShopeeModal ? (
+                                <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                            ) : (
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    className={cn(
+                                        "w-4 h-4",
+                                        shopeeVisualState.isSynced
+                                            ? "text-[#ee4d2d]"
+                                            : "text-slate-400 group-hover:text-[#ee4d2d]"
+                                    )}
+                                    aria-hidden="true"
+                                >
+                                    <path d="M8 8.2V7a4 4 0 1 1 8 0v1.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                                    <path d="M6.6 8.2h10.8c.8 0 1.5.56 1.67 1.35l1.07 4.92A4.8 4.8 0 0 1 15.51 20H8.49a4.8 4.8 0 0 1-4.69-5.51l1.07-4.92c.17-.79.86-1.35 1.73-1.35Z" fill="currentColor" />
+                                    {shopeeVisualState.isSynced ? (
+                                        <path d="m9.2 12.3 2.1 2.1 3.6-3.8" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                    ) : (
+                                        <path d="M9.1 12.2h5.8M12 9.9v4.6" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                                    )}
+                                </svg>
+                            )}
+                        </button>
+
                         {product.bling_id && (
                             <button
                                 onClick={handleSyncStock}
@@ -529,6 +647,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 onClose={() => setIsPrintModalOpen(false)}
                 product={product}
             />
+
+            {isShopeeModalOpen && (
+                <ShopeeSyncModal
+                    product={shopeeModalProduct}
+                    company={shopeeCompany}
+                    historicalProducts={emptyShopeeHistory}
+                    onClose={() => setIsShopeeModalOpen(false)}
+                    onSuccess={() => {
+                        setIsShopeeModalOpen(false);
+                        refreshShopeeLinkState();
+                    }}
+                />
+            )}
         </div>
     );
 };

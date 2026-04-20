@@ -4,13 +4,14 @@ import { toast } from 'sonner';
 
 interface ShopeeOrdersTabProps {
     isConnected: boolean;
+    initialStatusFilter?: string;
 }
 
-export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
+export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'ALL' }: ShopeeOrdersTabProps) {
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchQ, setSearchQ] = useState('');
-    const [statusFilter, setStatusFilter] = useState<string>('ALL');
+    const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'ALL');
     const [trackingData, setTrackingData] = useState<Record<string, any>>({});
     const [loadingTracking, setLoadingTracking] = useState<Record<string, boolean>>({});
     const [escrowData, setEscrowData] = useState<Record<string, any>>({});
@@ -24,6 +25,10 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
             return () => clearInterval(interval);
         }
     }, [isConnected, statusFilter]);
+
+    useEffect(() => {
+        setStatusFilter(initialStatusFilter || 'ALL');
+    }, [initialStatusFilter]);
 
     const fetchOrders = async (forceRefresh = false) => {
         const cacheKey = `shopee_orders_${statusFilter}`;
@@ -352,6 +357,8 @@ export default function ShopeeOrdersTab({ isConnected }: ShopeeOrdersTabProps) {
                         <option value="SHIPPED">Enviado</option>
                         <option value="COMPLETED">Concluído</option>
                         <option value="CANCELLED">Cancelado</option>
+                        <option value="IN_CANCEL">Reclamações</option>
+                        <option value="TO_RETURN">Devoluções</option>
                     </select>
                     <button 
                         onClick={() => fetchOrders(true)}

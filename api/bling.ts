@@ -674,6 +674,30 @@ export default async function handler(req: any, res: any) {
     }
 
     // ─── NFe: lista NF-e emitidas ─────────────────────────────────────────────
+    if (resource === 'nf-detail') {
+        if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+        const authHeader = req.headers['authorization'];
+        if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
+
+        const tipo = String(req.query.tipo || '').toLowerCase();
+        const id = req.query.id;
+        if (!['nfe', 'nfce'].includes(tipo)) return res.status(400).json({ error: 'tipo must be nfe or nfce' });
+        if (!id) return res.status(400).json({ error: 'id is required' });
+
+        try {
+            const r = await fetch(`https://api.bling.com.br/Api/v3/${tipo}/${id}`, {
+                headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
+            });
+            if (!r.ok) {
+                const txt = await r.text();
+                return res.status(r.status).json({ error: `Bling ${tipo} detail error: ${r.status}`, detail: txt });
+            }
+            return res.status(200).json(await r.json());
+        } catch (err: any) {
+            return res.status(500).json({ error: 'network_error', message: err.message });
+        }
+    }
+
     if (resource === 'nfe' || resource === 'nfce') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
         const authHeader = req.headers['authorization'];
@@ -852,7 +876,7 @@ export default async function handler(req: any, res: any) {
         }
     }
 
-    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|sync-prices-vps|product-update-fiscal' });
+    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|nf-detail|sync-prices-vps|product-update-fiscal' });
 
 }
 

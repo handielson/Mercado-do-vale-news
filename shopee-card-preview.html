@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prévia Shopee no Card</title>
+  <style>
+    :root {
+      --bg: #eef3fb;
+      --panel: #ffffff;
+      --line: #d9e3f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --blue: #2563eb;
+      --green: #16a34a;
+      --orange: #ee4d2d;
+      --orange-soft: rgba(238, 77, 45, 0.14);
+      --orange-strong: rgba(238, 77, 45, 0.32);
+      --shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(238, 77, 45, 0.08), transparent 28%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    .shell {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .intro {
+      margin-bottom: 18px;
+      padding: 18px 20px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(255,255,255,0.9);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .intro h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+    }
+
+    .intro p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: 22px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5);
+    }
+
+    .image {
+      height: 330px;
+      background:
+        radial-gradient(circle at 46% 40%, #caecff 0, #caecff 34%, transparent 35%),
+        linear-gradient(180deg, #f8fafc 0, #eef4fb 100%);
+      display: grid;
+      place-items: center;
+      color: #94a3b8;
+      font-size: 18px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .body {
+      padding: 16px 16px 18px;
+    }
+
+    .title-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .title h2 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
+    .title p {
+      margin: 6px 0 0;
+      color: #94a3b8;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      max-width: 180px;
+    }
+
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: #fff;
+      color: #7c8ba1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+    }
+
+    .icon-btn:hover {
+      transform: translateY(-1px);
+      border-color: #d8dee8;
+      box-shadow: 0 8px 18px rgba(148, 163, 184, 0.18);
+    }
+
+    .icon-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .icon-btn.shopee.off {
+      background: #fff7f4;
+      border-color: #ffd9cf;
+      color: #d76b51;
+    }
+
+    .icon-btn.shopee.off:hover {
+      background: #fff0ea;
+      color: var(--orange);
+      box-shadow: 0 10px 22px rgba(238, 77, 45, 0.18);
+    }
+
+    .icon-btn.shopee.on {
+      background: linear-gradient(180deg, #ff764d 0, var(--orange) 100%);
+      border-color: rgba(238, 77, 45, 0.7);
+      color: white;
+      box-shadow:
+        0 0 0 4px var(--orange-soft),
+        0 0 22px var(--orange-strong),
+        0 14px 26px rgba(238, 77, 45, 0.28);
+      animation: shopeePulse 1.8s ease-in-out infinite;
+    }
+
+    .icon-btn.shopee.on::after {
+      content: "";
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #bbf7d0;
+      border: 1px solid rgba(255,255,255,0.9);
+      transform: translate(12px, -12px);
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+    }
+
+    @keyframes shopeePulse {
+      0%, 100% {
+        box-shadow:
+          0 0 0 4px var(--orange-soft),
+          0 0 20px rgba(238, 77, 45, 0.24),
+          0 14px 26px rgba(238, 77, 45, 0.26);
+      }
+      50% {
+        box-shadow:
+          0 0 0 7px rgba(238, 77, 45, 0.12),
+          0 0 30px rgba(238, 77, 45, 0.36),
+          0 18px 30px rgba(238, 77, 45, 0.32);
+      }
+    }
+
+    .status {
+      display: inline-flex;
+      margin-top: 14px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .prices {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid #edf2f7;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .prices strong {
+      display: block;
+      color: #3b82f6;
+      margin-top: 5px;
+    }
+
+    .prices span {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .legend {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(203, 213, 225, 0.8);
+      color: #334155;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .dot.orange { background: var(--orange); box-shadow: 0 0 14px rgba(238, 77, 45, 0.45); }
+    .dot.gray { background: #cbd5e1; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .overlay.active { display: flex; }
+
+    .modal {
+      width: min(760px, 100%);
+      background: white;
+      border-radius: 24px;
+      box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28);
+      overflow: hidden;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+
+    .modal-head {
+      padding: 18px 22px;
+      background: linear-gradient(135deg, #fff7f4 0, #fff 55%, #f8fafc 100%);
+      border-bottom: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .modal-head h3 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .modal-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .close {
+      border: 0;
+      background: #fff;
+      border-radius: 12px;
+      width: 38px;
+      height: 38px;
+      cursor: pointer;
+      font-size: 20px;
+      color: #64748b;
+      box-shadow: inset 0 0 0 1px #e2e8f0;
+    }
+
+    .modal-body {
+      padding: 22px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.9fr;
+      gap: 18px;
+    }
+
+    .field {
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 14px 15px;
+      background: #fcfdff;
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+
+    .field .fake-input {
+      min-height: 20px;
+      font-size: 15px;
+      color: #0f172a;
+    }
+
+    .aside {
+      background: linear-gradient(180deg, #fff7f4 0, #fff 100%);
+      border: 1px solid #ffe1d8;
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .aside h4 {
+      margin: 0 0 12px;
+      font-size: 15px;
+    }
+
+    .aside ul {
+      margin: 0;
+      padding-left: 18px;
+      color: #475569;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .actions {
+      padding: 0 22px 22px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+
+    .btn.secondary {
+      background: #f8fafc;
+      color: #475569;
+      box-shadow: inset 0 0 0 1px #dbe4ef;
+    }
+
+    .btn.primary {
+      background: linear-gradient(180deg, #ff764d 0, var(--orange) 100%);
+      color: white;
+      box-shadow: 0 14px 26px rgba(238, 77, 45, 0.25);
+    }
+
+    @media (max-width: 860px) {
+      .modal-body {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        max-width: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="intro">
+      <h1>Prévia do botão Shopee no card de produtos</h1>
+      <p>
+        Ideia proposta: adicionar o ícone da Shopee na mesma fileira de ações do card.
+        Quando o produto já estiver sincronizado, o botão fica aceso em laranja.
+        Quando ainda não estiver, ele continua discreto e, ao clicar, abre o modal para sincronizar.
+      </p>
+      <div class="legend">
+        <span class="pill"><span class="dot orange"></span> Sincronizado com Shopee</span>
+        <span class="pill"><span class="dot gray"></span> Ainda não sincronizado</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <div class="image">Produto sem Shopee</div>
+        <div class="body">
+          <div class="title-row">
+            <div class="title">
+              <h2>Maquininha Mercado Pago Point Pro 2</h2>
+              <p>SKU: MMPP2VIV</p>
+            </div>
+            <div class="toolbar">
+              <button class="icon-btn shopee off" title="Sincronizar com Shopee" onclick="openModal('pending')">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M8 8.2V7a4 4 0 1 1 8 0v1.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M6.6 8.2h10.8c.8 0 1.5.56 1.67 1.35l1.07 4.92A4.8 4.8 0 0 1 15.51 20H8.49a4.8 4.8 0 0 1-4.69-5.51l1.07-4.92c.17-.79.86-1.35 1.73-1.35Z" fill="currentColor"/>
+                  <path d="M9.1 12.2h5.8M12 9.9v4.6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button class="icon-btn" title="Sincronizar estoque">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M20 11a8 8 0 1 0 2 5.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4v7h-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="icon-btn" title="Editar">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m12 6 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+              <button class="icon-btn" title="Imprimir">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M7 8V4h10v4" stroke="currentColor" stroke-width="1.8"/><rect x="5" y="10" width="14" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 14h8v6H8z" stroke="currentColor" stroke-width="1.8"/></svg>
+              </button>
+            </div>
+          </div>
+          <span class="status">Ativo</span>
+          <div class="prices">
+            <div><span>Varejo</span><strong>R$ 159,90</strong></div>
+            <div><span>Revenda</span><strong style="color:#334155">R$ 159,90</strong></div>
+            <div><span>Atacado</span><strong style="color:#334155">R$ 159,90</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="image">Produto já sincronizado</div>
+        <div class="body">
+          <div class="title-row">
+            <div class="title">
+              <h2>Micro SD Classe 10 com Adaptador Alunx</h2>
+              <p>SKU: MC10CAA256</p>
+            </div>
+            <div class="toolbar">
+              <button class="icon-btn shopee on" title="Produto já sincronizado na Shopee" onclick="openModal('synced')">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M8 8.2V7a4 4 0 1 1 8 0v1.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M6.6 8.2h10.8c.8 0 1.5.56 1.67 1.35l1.07 4.92A4.8 4.8 0 0 1 15.51 20H8.49a4.8 4.8 0 0 1-4.69-5.51l1.07-4.92c.17-.79.86-1.35 1.73-1.35Z" fill="currentColor"/>
+                  <path d="m9.2 12.3 2.1 2.1 3.6-3.8" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button class="icon-btn" title="Sincronizar estoque">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M20 11a8 8 0 1 0 2 5.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4v7h-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="icon-btn" title="Editar">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M4 20h4l10-10-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m12 6 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </button>
+              <button class="icon-btn" title="Imprimir">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M7 8V4h10v4" stroke="currentColor" stroke-width="1.8"/><rect x="5" y="10" width="14" height="7" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 14h8v6H8z" stroke="currentColor" stroke-width="1.8"/></svg>
+              </button>
+            </div>
+          </div>
+          <span class="status">Ativo</span>
+          <div class="prices">
+            <div><span>Varejo</span><strong>R$ 199,90</strong></div>
+            <div><span>Revenda</span><strong style="color:#334155">R$ 179,91</strong></div>
+            <div><span>Atacado</span><strong style="color:#334155">R$ 159,92</strong></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay" onclick="closeModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <h3 id="modalTitle">Sincronizar com Shopee</h3>
+          <p id="modalSubtitle">Ajuste categoria, preço, estoque e confirme o envio.</p>
+        </div>
+        <button class="close" onclick="closeModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <div class="field">
+            <label>Categoria Shopee</label>
+            <div class="fake-input">Acessórios > Pagamentos > Maquininhas</div>
+          </div>
+          <div class="field">
+            <label>Preço Shopee</label>
+            <div class="fake-input">R$ 159,90</div>
+          </div>
+          <div class="field">
+            <label>Estoque Shopee</label>
+            <div class="fake-input">2 unidades</div>
+          </div>
+          <div class="field">
+            <label>Descrição enviada</label>
+            <div class="fake-input">Descrição pronta para publicação e ajuste antes da sincronização.</div>
+          </div>
+        </div>
+        <aside class="aside">
+          <h4 id="asideTitle">Quando o item ainda não foi enviado</h4>
+          <ul id="asideList">
+            <li>O clique no ícone abre este modal para preparar o anúncio.</li>
+            <li>Depois da publicação, o botão passa a ficar aceso no card.</li>
+            <li>O mesmo modal pode ser reutilizado depois para revisar dados.</li>
+          </ul>
+        </aside>
+      </div>
+      <div class="actions">
+        <button class="btn secondary" onclick="closeModal()">Fechar</button>
+        <button class="btn primary" id="primaryButton">Publicar na Shopee</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openModal(mode) {
+      const overlay = document.getElementById('overlay');
+      const modalTitle = document.getElementById('modalTitle');
+      const modalSubtitle = document.getElementById('modalSubtitle');
+      const asideTitle = document.getElementById('asideTitle');
+      const asideList = document.getElementById('asideList');
+      const primaryButton = document.getElementById('primaryButton');
+
+      if (mode === 'synced') {
+        modalTitle.textContent = 'Produto já vinculado à Shopee';
+        modalSubtitle.textContent = 'O ícone aceso indica vínculo ativo. Aqui o usuário poderia revisar e atualizar os dados.';
+        asideTitle.textContent = 'Quando o item já está sincronizado';
+        asideList.innerHTML = `
+          <li>O brilho laranja comunica rápido que o item já foi enviado.</li>
+          <li>O clique continua útil: abre o modal para edição, conferência ou reenvio.</li>
+          <li>Também dá espaço para mostrar item ID e link do anúncio.</li>
+        `;
+        primaryButton.textContent = 'Salvar alterações';
+      } else {
+        modalTitle.textContent = 'Sincronizar com Shopee';
+        modalSubtitle.textContent = 'O ícone discreto convida à ação e abre o fluxo de publicação do item.';
+        asideTitle.textContent = 'Quando o item ainda não foi enviado';
+        asideList.innerHTML = `
+          <li>O clique no ícone abre este modal para preparar o anúncio.</li>
+          <li>Depois da publicação, o botão passa a ficar aceso no card.</li>
+          <li>O mesmo modal pode ser reutilizado depois para revisar dados.</li>
+        `;
+        primaryButton.textContent = 'Publicar na Shopee';
+      }
+
+      overlay.classList.add('active');
+    }
+
+    function closeModal(event) {
+      if (event && event.target && event.target.id !== 'overlay') return;
+      document.getElementById('overlay').classList.remove('active');
+    }
+  </script>
+</body>
+</html>

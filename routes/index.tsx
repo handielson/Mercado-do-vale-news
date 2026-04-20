@@ -102,6 +102,7 @@ import { SynologyConfigPage } from '../pages/admin/settings/SynologyConfigPage';
 import AccountingPage from '../pages/admin/accounting/AccountingPage';
 import { DataImportExportPage } from '../pages/admin/import/DataImportExportPage';
 import { FavoritesRankingReport } from '../pages/admin/reports/FavoritesRankingReport';
+import { AdminDashboardPage } from '../pages/admin/dashboard/AdminDashboardPage';
 
 // Temporary components (will be moved to separate files in next phase)
 const DashboardPage = () => {
@@ -398,7 +399,7 @@ export const router = createBrowserRouter([
     path: "/admin",
     element: (
       <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><DashboardPage /></AdminLayout>
+        <AdminLayout><AdminDashboardPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

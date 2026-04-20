@@ -1,0 +1,27 @@
+{
+  "generated_at": "2026-04-19T16:00:40.438Z",
+  "totais": {
+    "vps": 1974,
+    "supabase_com_bling_id": 1968,
+    "orfaos_recuperaveis": 1,
+    "orfaos_sem_modelo": 0,
+    "orfaos_draft": 0
+  },
+  "recuperaveis": [
+    {
+      "id": "4b7a285e-058f-4b35-bbad-ccb08f86c32a",
+      "sku": "CCRC562",
+      "bling_id": 16234835693,
+      "bling_parent_id": 16077526285,
+      "name": "Capa Case de Silicone Realme C55",
+      "model_id": "ed049b5b-01a2-4cf9-91be-a9133d52a709",
+      "status": "active",
+      "stock_quantity": 1,
+      "price_retail": 2499,
+      "created_at": "2026-04-19T14:55:20.393309+00:00",
+      "updated_at": "2026-04-19T14:55:20.393309+00:00"
+    }
+  ],
+  "sem_modelo": [],
+  "draft": []
+}

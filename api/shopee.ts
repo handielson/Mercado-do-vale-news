@@ -1,6 +1,7 @@
 // v2025-03-25 - Production credentials: uses db-stored partner_id (not hardcoded)
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { buildShopeeCallbackUrl } from '../services/shopeeAuthUrlService.js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!;
 const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
@@ -26,10 +27,6 @@ export default async function handler(req: any, res: any) {
 
     // 1. GERAÇÃO DA URL DE AUTORIZAÇÃO (CHAMADO PELO PAINEL ADMIN)
     if (action === 'auth') {
-        const origin = req.headers.host 
-            ? (req.headers.host.includes('localhost') ? `http://${req.headers.host}` : `https://${req.headers.host}`)
-            : 'https://mercadodovale.com.br';
-            
         // Credenciais OAuth Shopee ficam SEMPRE no Supabase (fonte de verdade para OAuth)
         // A VPS pode ter dados desatualizados de sandbox, então nunca usamos VPS para estas credenciais.
         const { data: settings } = await supabase
@@ -48,7 +45,10 @@ export default async function handler(req: any, res: any) {
         const timestamp = Math.floor(Date.now() / 1000);
         
         const sign = generateSign(partnerId, partnerKey, apiPath, timestamp);
-        const redirectUrl = `${origin}/api/shopee?action=callback`;
+        const redirectUrl = buildShopeeCallbackUrl({
+            host: req.headers.host,
+            forwardedProto: req.headers['x-forwarded-proto'],
+        });
 
         const shopeeApiUrl = getShopeeBaseUrl(partnerId);
         const authUrl = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}&redirect=${encodeURIComponent(redirectUrl)}`;

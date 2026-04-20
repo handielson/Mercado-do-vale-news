@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
@@ -32,7 +33,7 @@ import {
 } from './shopeeCategoryHelpers.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface ShopeeProduct {
+export interface ShopeeProduct {
     id: string;
     product_id: string;
     shopee_item_id: number | null;
@@ -69,7 +70,7 @@ interface ShopeeProduct {
     };
 }
 
-interface LocalProduct {
+export interface LocalProduct {
     id: string;
     name: string;
     sku: string;
@@ -346,6 +347,9 @@ const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ShopeePage() {
+    const [searchParams] = useSearchParams();
+    const requestedTab = searchParams.get('tab');
+    const requestedOrderStatus = searchParams.get('status') || 'ALL';
     const [tab, setTab] = useState<Tab>('config');
     const [company, setCompany] = useState<Company | null>(null);
     const [loading, setLoading] = useState(true);
@@ -370,6 +374,12 @@ export default function ShopeePage() {
     const [renamingProductId, setRenamingProductId] = useState<string | null>(null);
     const [renameInput, setRenameInput] = useState('');
     const [savingRenameProductId, setSavingRenameProductId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (requestedTab === 'config' || requestedTab === 'products' || requestedTab === 'orders' || requestedTab === 'finance' || requestedTab === 'printers') {
+            setTab(requestedTab);
+        }
+    }, [requestedTab]);
 
     useEffect(() => { loadData(); }, []);
 
@@ -1263,7 +1273,7 @@ export default function ShopeePage() {
 
             {/* ── Tab: Pedidos ── */}
             {tab === 'orders' && (
-                <ShopeeOrdersTab isConnected={isConnected} />
+                <ShopeeOrdersTab isConnected={isConnected} initialStatusFilter={requestedOrderStatus} />
             )}
 
             {/* ── Tab: Financeiro ── */}
@@ -1280,7 +1290,7 @@ export default function ShopeePage() {
 }
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
-function ShopeeSyncModal({
+export function ShopeeSyncModal({
     product, company, historicalProducts, onClose, onSuccess
 }: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; onClose: () => void; onSuccess: () => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -1650,10 +1660,17 @@ function ShopeeSyncModal({
         return data;
     };
 
-    const getShopeeDebug = async (action: string, debugLabel: string = action) => {
-        pushSyncDebug(`${debugLabel}:request`, { action });
+    const getShopeeDebug = async (action: string, debugLabel: string = action, queryParams?: Record<string, any>) => {
+        const searchParams = new URLSearchParams({ action });
+        Object.entries(queryParams || {}).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && String(value).trim() !== '') {
+                searchParams.set(key, String(value));
+            }
+        });
 
-        const res = await fetch(`/api/shopee-catalog?action=${action}`);
+        pushSyncDebug(`${debugLabel}:request`, { action, ...(queryParams || {}) });
+
+        const res = await fetch(`/api/shopee-catalog?${searchParams.toString()}`);
         const text = await res.text();
         let data: any = null;
         try {
@@ -1677,13 +1694,41 @@ function ShopeeSyncModal({
 
     const collectShopeeStockContext = async () => {
         const locationIds = new Set<string>();
+        let merchantId = '';
+
+        try {
+            const shopInfo = await getShopeeDebug('shop_info', 'stock_context:shop_info');
+            const shopInfoMerchantId = String(
+                shopInfo?.response?.main_account_id ||
+                shopInfo?.response?.merchant_id ||
+                shopInfo?.main_account_id ||
+                shopInfo?.merchant_id ||
+                ''
+            ).trim();
+
+            if (shopInfoMerchantId) {
+                merchantId = shopInfoMerchantId;
+            }
+
+            pushSyncDebug('stock_context:shop_info_summary', {
+                merchant_id: merchantId || null,
+                shop_id: shopInfo?.response?.shop_id || shopInfo?.shop_id || null,
+                shop_name: shopInfo?.response?.shop_name || shopInfo?.shop_name || null,
+            });
+        } catch (error: any) {
+            pushSyncDebug('stock_context:shop_info:error', error?.message || error);
+        }
 
         for (const probe of [
             { action: 'warehouse_list', label: 'stock_context:warehouse_list' },
             { action: 'warehouse_locations', label: 'stock_context:warehouse_locations' },
         ]) {
             try {
-                const data = await getShopeeDebug(probe.action, probe.label);
+                const data = await getShopeeDebug(
+                    probe.action,
+                    probe.label,
+                    probe.action === 'warehouse_locations' && merchantId ? { merchant_id: merchantId } : undefined
+                );
                 extractShopeeLocationIds(data).forEach((value) => locationIds.add(value));
             } catch (error: any) {
                 pushSyncDebug(`${probe.label}:error`, error?.message || error);
@@ -1692,6 +1737,7 @@ function ShopeeSyncModal({
 
         const resolved = Array.from(locationIds);
         pushSyncDebug('add_item:stock_context_summary', {
+            merchant_id: merchantId || null,
             location_ids: resolved,
             location_count: resolved.length,
         });
