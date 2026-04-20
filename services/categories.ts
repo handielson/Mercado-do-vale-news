@@ -8,8 +8,8 @@ import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
  * A VPS é a única fonte de verdade para categorias.
  */
 
-function proxyUrl(path: string): string {
-    return buildVpsUrl(path);
+function proxyUrl(path: string, method: string = 'GET'): string {
+    return buildVpsUrl(path, { method });
 }
 
 function generateSlug(name: string): string {
@@ -113,7 +113,7 @@ async function remove(id: string): Promise<void> {
 async function updateSortOrder(orders: { id: string; sort_order: number; parent_id?: string | null }[]): Promise<void> {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
-    await fetch(proxyUrl('/categories/sort-order'), {
+    await fetch(proxyUrl('/categories/sort-order', 'PATCH'), {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',

@@ -2,8 +2,8 @@ import imageCompression from 'browser-image-compression';
 import { supabase } from './supabase';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
-function proxyUrl(path: string): string {
-    return buildVpsUrl(path);
+function proxyUrl(path: string, method: string = 'GET'): string {
+    return buildVpsUrl(path, { method });
 }
 
 async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
@@ -147,7 +147,7 @@ export async function uploadImagesToBank(
             formData.append('file', webpNamed);
             formData.append('path', storagePath);
 
-            const res = await fetch(proxyUrl('/images/upload'), {
+            const res = await fetch(proxyUrl('/images/upload', 'POST'), {
                 method: 'POST',
                 headers: await authHeaders(),
                 body: formData,
@@ -206,7 +206,7 @@ export async function listImagesForSku(sku: string): Promise<ImageBankEntry[]> {
 
 /** Deleta uma imagem da VPS pelo path */
 export async function deleteImageFromBank(filePath: string): Promise<void> {
-    const res = await fetch(proxyUrl('/images/file'), {
+    const res = await fetch(proxyUrl('/images/file', 'DELETE'), {
         method: 'DELETE',
         headers: await authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ path: filePath }),

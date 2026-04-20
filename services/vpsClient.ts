@@ -6,10 +6,10 @@
 
 import { supabase } from './supabase';
 import {
-    IS_VPS_PROXY_ROUTE,
     buildVpsUrl,
     getVpsSyncHeaders,
     getVpsSyncKey,
+    isVpsProxyPath,
 } from './vpsProxyBase';
 
 const CHECKPOINT_COOLDOWN_MS = 60_000;
@@ -56,29 +56,29 @@ async function buildHeaders(extra?: Record<string, string>): Promise<HeadersInit
     // Em producao direta para a VPS, o sync key precisa existir no cliente.
     if (!syncKey && !hasWarnedMissingSyncKey && import.meta.env.DEV) {
         hasWarnedMissingSyncKey = true;
-        console.warn('[vpsClient] âš ï¸ x-sync-key nÃ£o configurado. Verifique VITE_VPS_SYNC_KEY');
+        console.warn('[vpsClient] x-sync-key nao configurado. Verifique VITE_VPS_SYNC_KEY');
     }
 
     return headers;
 }
 
-async function handleResponse<T>(res: Response): Promise<T> {
+async function handleResponse<T>(path: string, method: string, res: Response): Promise<T> {
     if (!res.ok) {
         const text = await res.text().catch(() => res.statusText);
         const summary = summarizeErrorBody(text);
-        if (IS_VPS_PROXY_ROUTE && res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
+        if (isVpsProxyPath(path, method) && res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
             markCheckpointBlocked();
         }
-        throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` â€” ${summary}` : ''}`);
+        throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` — ${summary}` : ''}`);
     }
     return res.json() as Promise<T>;
 }
 
-function assertCheckpointNotBlocked(path: string): void {
-    if (!IS_VPS_PROXY_ROUTE) return;
+function assertCheckpointNotBlocked(path: string, method: string = 'GET'): void {
+    if (!isVpsProxyPath(path, method)) return;
     if (isCheckpointBlockedNow()) {
         const remaining = Math.max(0, Math.ceil((checkpointBlockedUntil - Date.now()) / 1000));
-        throw new Error(`[VPS] 403 ${buildVpsUrl(path)} â€” Vercel Security Checkpoint ativo (aguarde ${remaining}s)`);
+        throw new Error(`[VPS] 403 ${buildVpsUrl(path, { method })} — Vercel Security Checkpoint ativo (aguarde ${remaining}s)`);
     }
 }
 
@@ -87,70 +87,70 @@ export const vpsClient = {
      * GET /resource
      */
     get: async <T>(path: string): Promise<T> => {
-        assertCheckpointNotBlocked(path);
-        const res = await fetch(buildVpsUrl(path), {
+        assertCheckpointNotBlocked(path, 'GET');
+        const res = await fetch(buildVpsUrl(path, { method: 'GET' }), {
             headers: await buildHeaders(),
             cache: 'no-store',
         });
-        return handleResponse<T>(res);
+        return handleResponse<T>(path, 'GET', res);
     },
 
     /**
      * POST /resource  (body JSON)
      */
     post: async <T>(path: string, body: unknown): Promise<T> => {
-        assertCheckpointNotBlocked(path);
-        const res = await fetch(buildVpsUrl(path), {
+        assertCheckpointNotBlocked(path, 'POST');
+        const res = await fetch(buildVpsUrl(path, { method: 'POST' }), {
             method: 'POST',
             headers: await buildHeaders(),
             body: JSON.stringify(body),
         });
-        return handleResponse<T>(res);
+        return handleResponse<T>(path, 'POST', res);
     },
 
     /**
      * PATCH /resource/:id  (body JSON)
      */
     patch: async <T>(path: string, body: unknown): Promise<T> => {
-        assertCheckpointNotBlocked(path);
-        const res = await fetch(buildVpsUrl(path), {
+        assertCheckpointNotBlocked(path, 'PATCH');
+        const res = await fetch(buildVpsUrl(path, { method: 'PATCH' }), {
             method: 'PATCH',
             headers: await buildHeaders(),
             body: JSON.stringify(body),
         });
-        return handleResponse<T>(res);
+        return handleResponse<T>(path, 'PATCH', res);
     },
 
     /**
      * PUT /resource/:id  (body JSON)
      */
     put: async <T>(path: string, body: unknown): Promise<T> => {
-        assertCheckpointNotBlocked(path);
-        const res = await fetch(buildVpsUrl(path), {
+        assertCheckpointNotBlocked(path, 'PUT');
+        const res = await fetch(buildVpsUrl(path, { method: 'PUT' }), {
             method: 'PUT',
             headers: await buildHeaders(),
             body: JSON.stringify(body),
         });
-        return handleResponse<T>(res);
+        return handleResponse<T>(path, 'PUT', res);
     },
 
     /**
      * DELETE /resource/:id
      */
     delete: async (path: string): Promise<void> => {
-        assertCheckpointNotBlocked(path);
+        assertCheckpointNotBlocked(path, 'DELETE');
         const headers = await buildHeaders();
-        const res = await fetch(buildVpsUrl(path), {
+        const res = await fetch(buildVpsUrl(path, { method: 'DELETE' }), {
             method: 'DELETE',
             headers,
         });
         if (!res.ok) {
             const text = await res.text().catch(() => res.statusText);
             const summary = summarizeErrorBody(text);
-            if (IS_VPS_PROXY_ROUTE && res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
+            if (isVpsProxyPath(path, 'DELETE') && res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
                 markCheckpointBlocked();
             }
-            throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` â€” ${summary}` : ''}`);
+            throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` — ${summary}` : ''}`);
         }
     },
 
@@ -159,34 +159,39 @@ export const vpsClient = {
      * Usado para upload de banners e imagens.
      */
     upload: async <T>(path: string, formData: FormData): Promise<T> => {
-        assertCheckpointNotBlocked(path);
+        assertCheckpointNotBlocked(path, 'POST');
         const headers = await buildHeaders({});
         delete (headers as Record<string, string>)['Content-Type'];
-        const res = await fetch(buildVpsUrl(path), {
+        const res = await fetch(buildVpsUrl(path, { method: 'POST' }), {
             method: 'POST',
             headers,
             body: formData,
         });
-        return handleResponse<T>(res);
+        return handleResponse<T>(path, 'POST', res);
     },
 
     /**
      * POST multipart/form-data com rastreamento de progresso via XHR.
      * onProgress: (pct: 0-100, phase: 'sending'|'processing') => void
      */
-    uploadWithProgress: <T>(path: string, formData: FormData, onProgress: (pct: number, phase: 'sending' | 'processing') => void): Promise<T> => {
+    uploadWithProgress: <T>(
+        path: string,
+        formData: FormData,
+        onProgress: (pct: number, phase: 'sending' | 'processing') => void
+    ): Promise<T> => {
         return new Promise((resolve, reject) => {
             try {
-                assertCheckpointNotBlocked(path);
+                assertCheckpointNotBlocked(path, 'POST');
             } catch (error) {
                 reject(error);
                 return;
             }
+
             supabase.auth.getSession().then(({ data }) => {
                 const token = data.session?.access_token;
                 const syncKey = getVpsSyncKey();
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', buildVpsUrl(path));
+                xhr.open('POST', buildVpsUrl(path, { method: 'POST' }));
                 if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
                 if (syncKey) xhr.setRequestHeader('x-sync-key', syncKey);
                 xhr.upload.onprogress = (e) => {
@@ -195,10 +200,14 @@ export const vpsClient = {
                 xhr.upload.onloadend = () => onProgress(100, 'processing');
                 xhr.onload = () => {
                     if (xhr.status >= 200 && xhr.status < 300) {
-                        try { resolve(JSON.parse(xhr.responseText)); } catch { resolve(undefined as T); }
+                        try {
+                            resolve(JSON.parse(xhr.responseText));
+                        } catch {
+                            resolve(undefined as T);
+                        }
                     } else {
                         const summary = summarizeErrorBody(xhr.responseText || '');
-                        if (IS_VPS_PROXY_ROUTE && xhr.status === 403 && looksLikeVercelSecurityCheckpoint(xhr.responseText || '')) {
+                        if (isVpsProxyPath(path, 'POST') && xhr.status === 403 && looksLikeVercelSecurityCheckpoint(xhr.responseText || '')) {
                             markCheckpointBlocked();
                         }
                         reject(new Error(`HTTP ${xhr.status}${summary ? `: ${summary}` : ''}`));

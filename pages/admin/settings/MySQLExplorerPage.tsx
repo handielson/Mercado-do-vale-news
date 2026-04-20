@@ -23,7 +23,8 @@ async function apiFetch(path: string, options?: RequestInit) {
     const normalized = path.startsWith('/') ? path : `/${path}`;
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
-    const r = await fetch(buildVpsUrl(normalized), {
+    const method = options?.method || 'GET';
+    const r = await fetch(buildVpsUrl(normalized, { method }), {
         ...options,
         headers: {
             'Content-Type': 'application/json',

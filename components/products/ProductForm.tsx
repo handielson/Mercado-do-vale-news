@@ -397,7 +397,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 const form = new FormData();
                 form.append('file', compressed, file.name);
                 const uploadPath = `/products/${productId}/upload-image`;
-                const res = await fetch(buildVpsUrl(uploadPath), {
+                const res = await fetch(buildVpsUrl(uploadPath, { method: 'POST' }), {
                     method: 'POST',
                     headers: {
                         ...getVpsSyncHeaders(),

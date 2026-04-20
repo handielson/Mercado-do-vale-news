@@ -11,8 +11,8 @@ const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 60 * 1000; // 1 min (reduzido de 5min para evitar UI stale)
 
-function proxyUrl(path: string): string {
-  return buildVpsUrl(path);
+function proxyUrl(path: string, method: string = 'GET'): string {
+  return buildVpsUrl(path, { method });
 }
 
 interface CacheEntry<T> {
@@ -74,7 +74,7 @@ class VpsApiService {
       const separator = path.includes('?') ? '&' : '?';
       const fullPath = `${path}${separator}_t=${Date.now()}`;
       
-      const res = await fetch(proxyUrl(fullPath), {
+      const res = await fetch(proxyUrl(fullPath, 'GET'), {
         signal: controller.signal,
         headers: await this.authHeaders({
           Accept: 'application/json',
@@ -100,7 +100,7 @@ class VpsApiService {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), WRITE_TIMEOUT_MS);
       const hasBody = body != null;
-      const res = await fetch(proxyUrl(path), {
+      const res = await fetch(proxyUrl(path, method), {
         method,
         signal: controller.signal,
         headers: await this.authHeaders({
@@ -137,7 +137,7 @@ class VpsApiService {
 
   async createFieldPreset(data: FieldPresetInput): Promise<FieldPreset | null> {
     try {
-      const res = await fetch(proxyUrl('/field-presets'), {
+      const res = await fetch(proxyUrl('/field-presets', 'POST'), {
         method: 'POST',
         headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(data),
@@ -150,7 +150,7 @@ class VpsApiService {
 
   async updateFieldPreset(id: string, data: FieldPresetInput): Promise<boolean> {
     try {
-      const res = await fetch(proxyUrl(`/field-presets/${id}`), {
+      const res = await fetch(proxyUrl(`/field-presets/${id}`, 'PUT'), {
         method: 'PUT',
         headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(data),
@@ -162,7 +162,7 @@ class VpsApiService {
 
   async deleteFieldPreset(id: string): Promise<boolean> {
     try {
-      const res = await fetch(proxyUrl(`/field-presets/${id}`), {
+      const res = await fetch(proxyUrl(`/field-presets/${id}`, 'DELETE'), {
         method: 'DELETE',
         headers: await this.authHeaders(),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
@@ -216,7 +216,7 @@ class VpsApiService {
    * Retorna o número de linhas afetadas. 0 = produto ainda não existe no MySQL VPS. */
   async updateProductImagesBySku(sku: string, images: string[]): Promise<number> {
     try {
-      const res = await fetch(proxyUrl('/products/images'), {
+      const res = await fetch(proxyUrl('/products/images', 'PATCH'), {
         method: 'PATCH',
         headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ sku, images }),
@@ -253,7 +253,7 @@ class VpsApiService {
   async createProduct(data: any): Promise<{ upserted: number; errors: any[] }> {
     this.invalidateProductCache();
     try {
-      const res = await fetch(proxyUrl('/products/batch'), {
+      const res = await fetch(proxyUrl('/products/batch', 'POST'), {
         method: 'POST',
         headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify([data]),
@@ -293,7 +293,7 @@ class VpsApiService {
   async createCombo(payload: unknown): Promise<{ok: boolean, id?: string}> {
     this.invalidateProductCache();
     try {
-      const res = await fetch(proxyUrl('/combos'), {
+      const res = await fetch(proxyUrl('/combos', 'POST'), {
         method: 'POST',
         headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
         body: JSON.stringify(payload)
@@ -306,7 +306,7 @@ class VpsApiService {
   async updateCombo(id: string, payload: unknown): Promise<{ok: boolean}> {
     this.invalidateProductCache();
     try {
-      const res = await fetch(proxyUrl(`/combos/${id}`), {
+      const res = await fetch(proxyUrl(`/combos/${id}`, 'PUT'), {
         method: 'PUT',
         headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
         body: JSON.stringify(payload)
@@ -332,7 +332,7 @@ class VpsApiService {
 
   async syncCart(customerId: string, items: {product_id: string, quantity: number}[]): Promise<{ok: boolean, synced?: number}> {
     try {
-      const response = await fetch(proxyUrl('/cart/sync'), {
+      const response = await fetch(proxyUrl('/cart/sync', 'POST'), {
         method: 'POST',
         headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ customerId, items }),
@@ -376,7 +376,7 @@ class VpsApiService {
     for (let i = 0; i < products.length; i += CHUNK) {
       const chunk = products.slice(i, i + CHUNK);
       try {
-        const res = await fetch(proxyUrl('/products/batch'), {
+        const res = await fetch(proxyUrl('/products/batch', 'POST'), {
           method: 'POST',
           headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(chunk),
@@ -400,7 +400,7 @@ class VpsApiService {
   async bulkUpdateCategory(ids: string[], category_id: string, specs?: Record<string, any>): Promise<{ ok: boolean; updated: number }> {
     this.invalidateProductCache();
     try {
-      const res = await fetch(proxyUrl('/products/bulk-category'), {
+      const res = await fetch(proxyUrl('/products/bulk-category', 'PATCH'), {
         method: 'PATCH',
         headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ ids, category_id, specs }),

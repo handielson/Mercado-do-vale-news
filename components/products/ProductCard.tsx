@@ -82,7 +82,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             // Fallback para endpoint público legado
             try {
                 const path = `/public/check-video?sku=${encodeURIComponent(normalizedSku)}`;
-                const res = await fetch(buildVpsUrl(path), {
+                const res = await fetch(buildVpsUrl(path, { method: 'GET' }), {
                     headers: { Accept: 'application/json' },
                     cache: 'no-store',
                 });
@@ -132,7 +132,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             const renamedFile = new File([file], fileName, { type: file.type });
             formData.append('file', renamedFile);
 
-            const res = await fetch(buildVpsUrl(path), {
+            const res = await fetch(buildVpsUrl(path, { method: 'POST' }), {
                 method: 'POST',
                 headers: {
                     ...getVpsSyncHeaders(),

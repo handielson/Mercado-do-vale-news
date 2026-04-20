@@ -503,7 +503,7 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites`;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            await fetch(buildVpsUrl(path), {
+            await fetch(buildVpsUrl(path, { method: 'POST' }), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -526,7 +526,7 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites/${productId}`;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            await fetch(buildVpsUrl(path), {
+            await fetch(buildVpsUrl(path, { method: 'DELETE' }), {
                 method: 'DELETE',
                 headers: {
                     ...getVpsSyncHeaders(),
@@ -547,7 +547,7 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites`;
             const { data: sessionData } = await supabase.auth.getSession();
             const token = sessionData.session?.access_token;
-            const res = await fetch(buildVpsUrl(path), {
+            const res = await fetch(buildVpsUrl(path, { method: 'GET' }), {
                 headers: {
                     Accept: 'application/json',
                     ...getVpsSyncHeaders(),

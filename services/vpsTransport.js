@@ -1,6 +1,28 @@
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
 
 export const DEFAULT_VPS_BASE_URL = 'https://api.xiaomipetrolina.com.br';
+export const DEV_VPS_PROXY_BASE = '/vps-proxy';
+export const PROD_VPS_PROXY_BASE = '/api/vps-proxy';
+
+const PUBLIC_READ_EXACT_PATHS = new Set([
+  '/banners',
+  '/battery-healths',
+  '/brands',
+  '/catalog-settings',
+  '/catalog/metadata',
+  '/categories',
+  '/check-video',
+  '/field-presets',
+  '/payment-fees',
+  '/public/check-video',
+  '/rams',
+  '/shipping/settings',
+  '/shipping/zones',
+  '/status',
+  '/storages',
+  '/versions',
+  '/warranty-templates',
+]);
 
 function normalizeVpsBase(base) {
   return String(base || DEFAULT_VPS_BASE_URL).trim().replace(/\/+$/, '');
@@ -20,12 +42,102 @@ export function isProxyBase(base) {
   return typeof base === 'string' && base.startsWith('/');
 }
 
-export function resolveVpsBase(env = {}, runtimeHostname) {
+function normalizeVpsMethod(method) {
+  return String(method || 'GET').trim().toUpperCase() || 'GET';
+}
+
+function getVpsPathname(path) {
+  const normalizedPath = normalizeVpsPath(path);
+  try {
+    return new URL(normalizedPath, DEFAULT_VPS_BASE_URL).pathname;
+  } catch {
+    return normalizedPath.split('?')[0] || '/';
+  }
+}
+
+function isPublicProductReadPath(pathname) {
+  if (pathname === '/products' || pathname === '/products/category-counts') {
+    return true;
+  }
+
+  if (/^\/products\/by-category\/[^/]+$/u.test(pathname)) {
+    return true;
+  }
+
+  if (/^\/products\/by-(?:slug|ean)\/[^/]+$/u.test(pathname)) {
+    return true;
+  }
+
+  if (/^\/products\/[^/]+\/combo$/u.test(pathname)) {
+    return true;
+  }
+
+  if (/^\/products\/[^/]+$/u.test(pathname)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isPublicReadPath(pathname) {
+  if (PUBLIC_READ_EXACT_PATHS.has(pathname)) {
+    return true;
+  }
+
+  if (pathname.startsWith('/coupons/validate/')) {
+    return true;
+  }
+
+  if (pathname.startsWith('/video/')) {
+    return true;
+  }
+
+  if (/^\/versions\/[^/]+$/u.test(pathname)) {
+    return true;
+  }
+
+  return isPublicProductReadPath(pathname);
+}
+
+function isPublicWritePath(pathname, method) {
+  if (method === 'POST' && /^\/banners\/[^/]+\/(?:click|view)$/u.test(pathname)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function isPublicVpsPath(path, method = 'GET') {
+  const normalizedMethod = normalizeVpsMethod(method);
+  const pathname = getVpsPathname(path);
+
+  if (normalizedMethod === 'GET' || normalizedMethod === 'HEAD') {
+    return isPublicReadPath(pathname);
+  }
+
+  return isPublicWritePath(pathname, normalizedMethod);
+}
+
+function getProxyBase(env = {}, runtimeHostname) {
   const isDevBuild = Boolean(env.DEV);
   const forceLocalProxy = env.VITE_FORCE_LOCAL_VPS_PROXY === '1';
 
   if (isDevBuild || forceLocalProxy || isLocalHostname(runtimeHostname)) {
-    return '/vps-proxy';
+    return DEV_VPS_PROXY_BASE;
+  }
+
+  return PROD_VPS_PROXY_BASE;
+}
+
+export function resolveVpsBase(env = {}, runtimeHostname, path, method = 'GET') {
+  const proxyBase = getProxyBase(env, runtimeHostname);
+
+  if (proxyBase === DEV_VPS_PROXY_BASE) {
+    return proxyBase;
+  }
+
+  if (path && !isPublicVpsPath(path, method)) {
+    return proxyBase;
   }
 
   return normalizeVpsBase(env.VITE_VPS_BASE_URL || DEFAULT_VPS_BASE_URL);
@@ -33,7 +145,12 @@ export function resolveVpsBase(env = {}, runtimeHostname) {
 
 export function buildVpsUrl(path, options = {}) {
   const normalizedPath = normalizeVpsPath(path);
-  const base = options.base || resolveVpsBase(options.env || {}, options.runtimeHostname);
+  const base = options.base || resolveVpsBase(
+    options.env || {},
+    options.runtimeHostname,
+    normalizedPath,
+    options.method,
+  );
 
   if (isProxyBase(base)) {
     return `${base}?path=${encodeURIComponent(normalizedPath)}`;

@@ -39,4 +39,45 @@ run('buildVpsUrl preserva query string em acesso direto', () => {
   assert.equal(url, 'https://api.xiaomipetrolina.com.br/products?search=fone&_t=123');
 });
 
+run('buildVpsUrl usa VPS direta para catalogo publico em producao', () => {
+  const url = buildVpsUrl('/products?search=fone&_t=123', {
+    env: {},
+    runtimeHostname: 'mercadodovale.com.br',
+  });
+  assert.equal(url, 'https://api.xiaomipetrolina.com.br/products?search=fone&_t=123');
+});
+
+run('buildVpsUrl usa proxy server-side para company-settings em producao', () => {
+  const url = buildVpsUrl('/company-settings', {
+    env: {},
+    runtimeHostname: 'mercadodovale.com.br',
+  });
+  assert.equal(url, '/api/vps-proxy?path=%2Fcompany-settings');
+});
+
+run('buildVpsUrl usa proxy server-side para favoritos em producao', () => {
+  const url = buildVpsUrl('/customers/abc/favorites', {
+    env: {},
+    runtimeHostname: 'mercadodovale.com.br',
+  });
+  assert.equal(url, '/api/vps-proxy?path=%2Fcustomers%2Fabc%2Ffavorites');
+});
+
+run('buildVpsUrl usa proxy server-side para synology em producao', () => {
+  const url = buildVpsUrl('/synology/files?folder=videos', {
+    env: {},
+    runtimeHostname: 'mercadodovale.com.br',
+  });
+  assert.equal(url, '/api/vps-proxy?path=%2Fsynology%2Ffiles%3Ffolder%3Dvideos');
+});
+
+run('buildVpsUrl respeita metodo para rotas publicas com escrita protegida', () => {
+  const url = buildVpsUrl('/shipping/settings', {
+    env: {},
+    runtimeHostname: 'mercadodovale.com.br',
+    method: 'PATCH',
+  });
+  assert.equal(url, '/api/vps-proxy?path=%2Fshipping%2Fsettings');
+});
+
 console.log('ok');
