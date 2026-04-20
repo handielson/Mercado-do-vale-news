@@ -10,7 +10,7 @@ import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchB
 import { categoryService } from '../../../services/categories';
 import { modelService } from '../../../services/models-new';
 import { colorService } from '../../../services/colors';
-import { VPS_PROXY_BASE } from '../../../services/vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from '../../../services/vpsProxyBase';
 import { Category } from '../../../types/category';
 import { Model } from '../../../types/model-architecture';
 import { Color } from '../../../types/color';
@@ -429,8 +429,7 @@ export default function BlingPage() {
         setFiscalResult(null);
         try {
             // 1. Busca o produto na VPS pelo SKU para obter o bling_id
-            const vpsBase = import.meta.env.DEV ? '/vps-proxy' : (import.meta.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
-            const vpsRes = await fetch(`${vpsBase}/products?search=${encodeURIComponent(sku)}&limit=5`);
+            const vpsRes = await fetch(buildVpsUrl(`/products?search=${encodeURIComponent(sku)}&limit=5`));
             const vpsData = vpsRes.ok ? await vpsRes.json() : null;
             const products: any[] = Array.isArray(vpsData) ? vpsData : vpsData?.products ?? vpsData?.data ?? [];
             const product = products.find((p: any) =>
@@ -469,10 +468,11 @@ export default function BlingPage() {
                 const fiscalPath = `/products/${product.id}/fiscal`;
                 const { data } = await supabase.auth.getSession();
                 const token = data.session?.access_token;
-                fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(fiscalPath)}`, {
+                fetch(buildVpsUrl(fiscalPath), {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
+                        ...getVpsSyncHeaders(),
                         ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     },
                     body: JSON.stringify({ ncm: ncm || undefined, cest: fiscalCest.trim() || undefined }),

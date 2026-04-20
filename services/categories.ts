@@ -1,7 +1,7 @@
 import { Category, CategoryInput } from '../types/category';
 import { vpsApiService } from './vpsApiService';
 import { supabase } from './supabase';
-import { VPS_PROXY_BASE } from './vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
 /**
  * CATEGORY SERVICE — VPS-only implementation
@@ -9,8 +9,7 @@ import { VPS_PROXY_BASE } from './vpsProxyBase';
  */
 
 function proxyUrl(path: string): string {
-    const normalized = path.startsWith('/') ? path : `/${path}`;
-    return `${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`;
+    return buildVpsUrl(path);
 }
 
 function generateSlug(name: string): string {
@@ -118,6 +117,7 @@ async function updateSortOrder(orders: { id: string; sort_order: number; parent_
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',
+            ...getVpsSyncHeaders(),
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(orders),

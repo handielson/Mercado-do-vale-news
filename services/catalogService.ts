@@ -3,7 +3,7 @@ import type { CatalogProduct } from '@/types/catalog';
 import { vpsApiService } from '@/services/vpsApiService';
 import { normalizeProduct } from '@/services/productNormalizer';
 import { catalogConfigService } from '@/services/catalogConfigService';
-import { VPS_PROXY_BASE } from '@/services/vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from '@/services/vpsProxyBase';
 
 
 // Persistent Cache (Stale-While-Revalidate pattern)
@@ -426,12 +426,9 @@ export const catalogService = {
             }
         }
         // VPS é a fonte de verdade — busca produtos em destaque
-        const VPS_URL = (import.meta as any).env?.DEV
-            ? '/vps-proxy'
-            : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
         let products: CatalogProduct[] = [];
         try {
-            const res = await fetch(`${VPS_URL}/products?is_featured=true&limit=${limit}`);
+            const res = await fetch(buildVpsUrl(`/products?is_featured=true&limit=${limit}`));
             if (res.ok) {
                 const data = await res.json();
                 products = (data || []).map(normalizeProduct) as unknown as CatalogProduct[];
@@ -464,12 +461,9 @@ export const catalogService = {
             }
         }
         // VPS é a fonte de verdade — busca produtos novos
-        const VPS_URL = (import.meta as any).env?.DEV
-            ? '/vps-proxy'
-            : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
         let products: CatalogProduct[] = [];
         try {
-            const res = await fetch(`${VPS_URL}/products?is_new=true&limit=${limit}`);
+            const res = await fetch(buildVpsUrl(`/products?is_new=true&limit=${limit}`));
             if (res.ok) {
                 const data = await res.json();
                 products = (data || []).map(normalizeProduct) as unknown as CatalogProduct[];
@@ -509,10 +503,11 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites`;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
+            await fetch(buildVpsUrl(path), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    ...getVpsSyncHeaders(),
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
                 body: JSON.stringify({ productId }),
@@ -531,9 +526,12 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites/${productId}`;
             const { data } = await supabase.auth.getSession();
             const token = data.session?.access_token;
-            await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
+            await fetch(buildVpsUrl(path), {
                 method: 'DELETE',
-                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                headers: {
+                    ...getVpsSyncHeaders(),
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
             });
         } catch (error: any) {
             console.error('Error removing from favorites:', error);
@@ -549,9 +547,10 @@ export const catalogService = {
             const path = `/customers/${customerId}/favorites`;
             const { data: sessionData } = await supabase.auth.getSession();
             const token = sessionData.session?.access_token;
-            const res = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
+            const res = await fetch(buildVpsUrl(path), {
                 headers: {
                     Accept: 'application/json',
+                    ...getVpsSyncHeaders(),
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
                 signal: AbortSignal.timeout(5000),

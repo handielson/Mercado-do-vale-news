@@ -3,6 +3,7 @@ import type { CatalogSection, CreateSectionData, UpdateSectionData, SectionType 
 import type { CatalogProduct } from '@/types/catalog';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import { normalizeProduct } from '@/services/productNormalizer';
+import { buildVpsUrl } from '@/services/vpsProxyBase';
 
 class CatalogSectionsService {
     private cache: Map<string, { data: CatalogSection[]; timestamp: number }> = new Map();
@@ -237,9 +238,6 @@ class CatalogSectionsService {
             // Wait, pinned products ignore other filters typically, but we can pass them in the query,
             // or we might need to fetch them separately.
             let products = [] as CatalogProduct[];
-            const VPS_URL = (import.meta as any).env?.DEV
-                ? '/vps-proxy'
-                : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
 
             // Sorting — default seguro: updated_at DESC para qualquer seção sem sort configurado
             // MOTIVO: produtos movidos para novas subcategorias têm updated_at recente mas created_at antigo
@@ -254,7 +252,7 @@ class CatalogSectionsService {
             }
 
             // Fetch dynamic products
-            const res = await fetch(`${VPS_URL}/products?${params.toString()}`);
+            const res = await fetch(buildVpsUrl(`/products?${params.toString()}`));
             if (!res.ok) throw new Error(`VPS API returned ${res.status}`);
             const data = await res.json();
             
@@ -285,7 +283,7 @@ class CatalogSectionsService {
                     pinnedParams.append('limit', fetchLimit.toString());
                     pinnedParams.append('in_ids', section.pinned_product_ids.join(','));
                     
-                    const pinnedRes = await fetch(`${VPS_URL}/products?${pinnedParams.toString()}`);
+                    const pinnedRes = await fetch(buildVpsUrl(`/products?${pinnedParams.toString()}`));
                     if (pinnedRes.ok) {
                         const pinnedData = await pinnedRes.json();
                         // Preserve exact order from pinned_product_ids

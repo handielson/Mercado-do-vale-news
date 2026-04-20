@@ -10,7 +10,7 @@ import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
 import { supabase } from '../../services/supabase';
-import { VPS_PROXY_BASE } from '../../services/vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { getShopeeButtonVisualState, mapProductToShopeeLocalProduct } from './productCardShopee.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
@@ -82,7 +82,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             // Fallback para endpoint público legado
             try {
                 const path = `/public/check-video?sku=${encodeURIComponent(normalizedSku)}`;
-                const res = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
+                const res = await fetch(buildVpsUrl(path), {
                     headers: { Accept: 'application/json' },
                     cache: 'no-store',
                 });
@@ -132,9 +132,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             const renamedFile = new File([file], fileName, { type: file.type });
             formData.append('file', renamedFile);
 
-            const res = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(path)}`, {
+            const res = await fetch(buildVpsUrl(path), {
                 method: 'POST',
-                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                headers: {
+                    ...getVpsSyncHeaders(),
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 body: formData,
             });
 

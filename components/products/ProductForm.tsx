@@ -33,7 +33,7 @@ import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
 import { supabase } from '../../services/supabase';
-import { VPS_PROXY_BASE } from '../../services/vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
@@ -397,9 +397,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 const form = new FormData();
                 form.append('file', compressed, file.name);
                 const uploadPath = `/products/${productId}/upload-image`;
-                const res = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(uploadPath)}`, {
+                const res = await fetch(buildVpsUrl(uploadPath), {
                     method: 'POST',
-                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                    headers: {
+                        ...getVpsSyncHeaders(),
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
                     body: form,
                 });
                 if (res.ok) {

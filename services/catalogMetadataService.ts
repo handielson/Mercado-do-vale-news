@@ -1,6 +1,4 @@
-const VPS_BASE_URL = (import.meta as any).env?.DEV
-    ? '/vps-proxy'
-    : ((import.meta as any).env?.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br');
+import { buildVpsUrl } from './vpsProxyBase';
 
 const CACHE_TTL = 30 * 1000; // 30 segundos (evita ficar muito tempo com stale data na UI)
 
@@ -25,7 +23,7 @@ async function fetchMetadata(): Promise<MetadataCache | null> {
             
             // Bypass completo de cache de CDN e Browser
             const timestamp = Date.now();
-            const res = await fetch(`${VPS_BASE_URL}/catalog/metadata?_t=${timestamp}`, {
+            const res = await fetch(buildVpsUrl(`/catalog/metadata?_t=${timestamp}`), {
                 signal: controller.signal,
                 headers: { 
                     Accept: 'application/json',

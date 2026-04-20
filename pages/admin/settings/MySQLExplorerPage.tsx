@@ -5,7 +5,7 @@ import {
     Rows, LayoutList, Plus, Trash2, Pencil, Upload, Download, X, Save, AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
-import { VPS_PROXY_BASE } from '../../../services/vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from '../../../services/vpsProxyBase';
 const PAGE_SIZE = 50;
 
 // Tabelas somente-leitura (sistema interno — sem CRUD)
@@ -23,10 +23,11 @@ async function apiFetch(path: string, options?: RequestInit) {
     const normalized = path.startsWith('/') ? path : `/${path}`;
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
-    const r = await fetch(`${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`, {
+    const r = await fetch(buildVpsUrl(normalized), {
         ...options,
         headers: {
             'Content-Type': 'application/json',
+            ...getVpsSyncHeaders(),
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...(options?.headers ?? {}),
         },

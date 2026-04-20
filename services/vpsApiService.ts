@@ -5,15 +5,14 @@
  */
 
 import { supabase } from './supabase';
-import { VPS_PROXY_BASE } from './vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 60 * 1000; // 1 min (reduzido de 5min para evitar UI stale)
 
 function proxyUrl(path: string): string {
-  const normalized = path.startsWith('/') ? path : `/${path}`;
-  return `${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`;
+  return buildVpsUrl(path);
 }
 
 interface CacheEntry<T> {
@@ -44,6 +43,7 @@ class VpsApiService {
     const token = data.session?.access_token;
     return {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...getVpsSyncHeaders(),
       ...extra,
     };
   }
@@ -529,4 +529,3 @@ class VpsApiService {
 }
 
 export const vpsApiService = new VpsApiService();
-

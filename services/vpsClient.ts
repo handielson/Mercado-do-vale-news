@@ -5,26 +5,17 @@
  */
 
 import { supabase } from './supabase';
-import { VPS_PROXY_BASE } from './vpsProxyBase';
+import {
+    IS_VPS_PROXY_ROUTE,
+    buildVpsUrl,
+    getVpsSyncHeaders,
+    getVpsSyncKey,
+} from './vpsProxyBase';
 
 const CHECKPOINT_COOLDOWN_MS = 60_000;
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
 
 let checkpointBlockedUntil = 0;
 let hasWarnedMissingSyncKey = false;
-
-function getRuntimeProxyBase(): string {
-    if (typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname)) {
-        return '/vps-proxy';
-    }
-    return VPS_PROXY_BASE;
-}
-
-function buildProxyUrl(path: string): string {
-    const normalized = path.startsWith('/') ? path : `/${path}`;
-    // Sempre passa pelo Vite proxy (que encaminha para a VPS real)
-    return `${getRuntimeProxyBase()}?path=${encodeURIComponent(normalized)}`;
-}
 
 function isCheckpointBlockedNow(): boolean {
     return Date.now() < checkpointBlockedUntil;
@@ -49,30 +40,25 @@ function summarizeErrorBody(text: string): string {
     return trimmed;
 }
 
-function getVpsSyncKey(): string {
-    // Load from environment variable at runtime
-    return import.meta.env.VITE_VPS_SYNC_KEY || '';
-}
-
 async function buildHeaders(extra?: Record<string, string>): Promise<HeadersInit> {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     const syncKey = getVpsSyncKey();
-    
+
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(syncKey ? { 'x-sync-key': syncKey } : {}),
+        ...getVpsSyncHeaders(),
         ...extra,
     };
-    
-    // In production usamos /api/vps-proxy, que injeta o sync key no backend.
-    // Evita spam de console no cliente quando VITE_VPS_SYNC_KEY nao esta definido.
+
+    // Em dev local o proxy do Vite ainda pode suprir os headers.
+    // Em producao direta para a VPS, o sync key precisa existir no cliente.
     if (!syncKey && !hasWarnedMissingSyncKey && import.meta.env.DEV) {
         hasWarnedMissingSyncKey = true;
-        console.warn('[vpsClient] ⚠️ x-sync-key não configurado. Verifique VITE_VPS_SYNC_KEY');
+        console.warn('[vpsClient] âš ï¸ x-sync-key nÃ£o configurado. Verifique VITE_VPS_SYNC_KEY');
     }
-    
+
     return headers;
 }
 
@@ -80,18 +66,19 @@ async function handleResponse<T>(res: Response): Promise<T> {
     if (!res.ok) {
         const text = await res.text().catch(() => res.statusText);
         const summary = summarizeErrorBody(text);
-        if (res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
+        if (IS_VPS_PROXY_ROUTE && res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
             markCheckpointBlocked();
         }
-        throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` — ${summary}` : ''}`);
+        throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` â€” ${summary}` : ''}`);
     }
     return res.json() as Promise<T>;
 }
 
 function assertCheckpointNotBlocked(path: string): void {
+    if (!IS_VPS_PROXY_ROUTE) return;
     if (isCheckpointBlockedNow()) {
         const remaining = Math.max(0, Math.ceil((checkpointBlockedUntil - Date.now()) / 1000));
-        throw new Error(`[VPS] 403 ${buildProxyUrl(path)} — Vercel Security Checkpoint ativo (aguarde ${remaining}s)`);
+        throw new Error(`[VPS] 403 ${buildVpsUrl(path)} â€” Vercel Security Checkpoint ativo (aguarde ${remaining}s)`);
     }
 }
 
@@ -101,7 +88,7 @@ export const vpsClient = {
      */
     get: async <T>(path: string): Promise<T> => {
         assertCheckpointNotBlocked(path);
-        const res = await fetch(buildProxyUrl(path), {
+        const res = await fetch(buildVpsUrl(path), {
             headers: await buildHeaders(),
             cache: 'no-store',
         });
@@ -113,7 +100,7 @@ export const vpsClient = {
      */
     post: async <T>(path: string, body: unknown): Promise<T> => {
         assertCheckpointNotBlocked(path);
-        const res = await fetch(buildProxyUrl(path), {
+        const res = await fetch(buildVpsUrl(path), {
             method: 'POST',
             headers: await buildHeaders(),
             body: JSON.stringify(body),
@@ -126,7 +113,7 @@ export const vpsClient = {
      */
     patch: async <T>(path: string, body: unknown): Promise<T> => {
         assertCheckpointNotBlocked(path);
-        const res = await fetch(buildProxyUrl(path), {
+        const res = await fetch(buildVpsUrl(path), {
             method: 'PATCH',
             headers: await buildHeaders(),
             body: JSON.stringify(body),
@@ -139,7 +126,7 @@ export const vpsClient = {
      */
     put: async <T>(path: string, body: unknown): Promise<T> => {
         assertCheckpointNotBlocked(path);
-        const res = await fetch(buildProxyUrl(path), {
+        const res = await fetch(buildVpsUrl(path), {
             method: 'PUT',
             headers: await buildHeaders(),
             body: JSON.stringify(body),
@@ -153,13 +140,17 @@ export const vpsClient = {
     delete: async (path: string): Promise<void> => {
         assertCheckpointNotBlocked(path);
         const headers = await buildHeaders();
-        const res = await fetch(buildProxyUrl(path), {
+        const res = await fetch(buildVpsUrl(path), {
             method: 'DELETE',
             headers,
         });
         if (!res.ok) {
             const text = await res.text().catch(() => res.statusText);
-            throw new Error(`[VPS] ${res.status} ${res.url} — ${text}`);
+            const summary = summarizeErrorBody(text);
+            if (IS_VPS_PROXY_ROUTE && res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
+                markCheckpointBlocked();
+            }
+            throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` â€” ${summary}` : ''}`);
         }
     },
 
@@ -171,7 +162,7 @@ export const vpsClient = {
         assertCheckpointNotBlocked(path);
         const headers = await buildHeaders({});
         delete (headers as Record<string, string>)['Content-Type'];
-        const res = await fetch(buildProxyUrl(path), {
+        const res = await fetch(buildVpsUrl(path), {
             method: 'POST',
             headers,
             body: formData,
@@ -193,9 +184,11 @@ export const vpsClient = {
             }
             supabase.auth.getSession().then(({ data }) => {
                 const token = data.session?.access_token;
+                const syncKey = getVpsSyncKey();
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', buildProxyUrl(path));
+                xhr.open('POST', buildVpsUrl(path));
                 if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                if (syncKey) xhr.setRequestHeader('x-sync-key', syncKey);
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100), 'sending');
                 };
@@ -205,7 +198,7 @@ export const vpsClient = {
                         try { resolve(JSON.parse(xhr.responseText)); } catch { resolve(undefined as T); }
                     } else {
                         const summary = summarizeErrorBody(xhr.responseText || '');
-                        if (xhr.status === 403 && looksLikeVercelSecurityCheckpoint(xhr.responseText || '')) {
+                        if (IS_VPS_PROXY_ROUTE && xhr.status === 403 && looksLikeVercelSecurityCheckpoint(xhr.responseText || '')) {
                             markCheckpointBlocked();
                         }
                         reject(new Error(`HTTP ${xhr.status}${summary ? `: ${summary}` : ''}`));
@@ -217,4 +210,3 @@ export const vpsClient = {
         });
     },
 };
-

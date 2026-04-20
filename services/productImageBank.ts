@@ -1,10 +1,9 @@
 import imageCompression from 'browser-image-compression';
 import { supabase } from './supabase';
-import { VPS_PROXY_BASE } from './vpsProxyBase';
+import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
 function proxyUrl(path: string): string {
-    const normalized = path.startsWith('/') ? path : `/${path}`;
-    return `${VPS_PROXY_BASE}?path=${encodeURIComponent(normalized)}`;
+    return buildVpsUrl(path);
 }
 
 async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
@@ -12,6 +11,7 @@ async function authHeaders(extra: Record<string, string> = {}): Promise<Record<s
     const token = data.session?.access_token;
     return {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...getVpsSyncHeaders(),
         ...extra,
     };
 }
