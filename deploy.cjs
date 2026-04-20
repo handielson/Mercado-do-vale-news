@@ -1,5 +1,4 @@
 const { Client } = require('ssh2');
-const fs = require('fs');
 const path = require('path');
 
 const conn = new Client();
@@ -8,81 +7,113 @@ const VpsHost = '76.13.232.162';
 const VpsUser = 'root';
 const VpsPass = '@@@@Jsj2865@@@@';
 
-console.log('🔗 Conectando ao servidor VPS (' + VpsHost + ')...');
+function finishAndClose() {
+  conn.end();
+}
+
+function uploadFilesSequentially(sftp, files, done) {
+  const [current, ...rest] = files;
+  if (!current) return done(null);
+
+  console.log(`Uploading ${path.relative(__dirname, current.local)} -> ${current.remote}`);
+  sftp.fastPut(current.local, current.remote, (err) => {
+    if (err) return done(err);
+    console.log(`Uploaded ${path.basename(current.local)}`);
+    uploadFilesSequentially(sftp, rest, done);
+  });
+}
+
+console.log(`Connecting to VPS (${VpsHost})...`);
 
 conn.on('ready', () => {
-  console.log('✅ Conectado via SSH!');
+  console.log('SSH connected');
 
-  // Executa pm2 jlist para encontrar o diretório do projeto onde api.xiaomipetrolina.com.br está rodando
   conn.exec('pm2 jlist', (err, stream) => {
     if (err) throw err;
+
     let data = '';
-    stream.on('data', (d) => { data += d.toString(); });
+    stream.on('data', (chunk) => {
+      data += chunk.toString();
+    });
+
     stream.on('close', () => {
       try {
         const pm2List = JSON.parse(data);
         if (pm2List.length === 0) {
-           console.log('Nenhum processo PM2 rodando?! Tentando procurar pmdrops ou arquivos js na unha...');
-           return finishAndClose();
+          console.log('No PM2 process found');
+          return finishAndClose();
         }
-        
-        // Pega o processo que provávelmente é a API
-        const apiProc = pm2List.find(p => p.pm2_env.pm_exec_path.includes('server') || p.name.includes('api') || p.name.includes('vps'));
-        
+
+        const apiProc = pm2List.find((p) =>
+          p.pm2_env.pm_exec_path.includes('server') || p.name.includes('api') || p.name.includes('vps')
+        );
+
         if (!apiProc) {
-           console.log('Processos PM2:', pm2List.map(p => ({name: p.name, path: p.pm2_env.pm_cwd})));
-           return finishAndClose();
+          console.log('Unable to locate target PM2 app');
+          console.log(pm2List.map((p) => ({ name: p.name, cwd: p.pm2_env.pm_cwd })));
+          return finishAndClose();
         }
 
         const appDir = apiProc.pm2_env.pm_cwd;
-        const mainScript = apiProc.pm2_env.pm_exec_path;
-        console.log(`🚀 App PM2 encontrada! Diretório base: ${appDir} (Script: ${path.basename(mainScript)})`);
+        const remoteFiles = [
+          {
+            local: path.join(__dirname, 'vps_server.js'),
+            remote: `${appDir}/vps_server.js`,
+          },
+          {
+            local: path.join(__dirname, 'vps_server.js'),
+            remote: `${appDir}/server.js`,
+          },
+          {
+            local: path.join(__dirname, 'services', 'synologyNasStatusService.js'),
+            remote: `${appDir}/services/synologyNasStatusService.js`,
+          },
+          {
+            local: path.join(__dirname, 'services', 'synologyCommandQueueService.js'),
+            remote: `${appDir}/services/synologyCommandQueueService.js`,
+          },
+        ];
 
-        // Fazer upload do vps_server.js via SFTP
-        conn.sftp((err, sftp) => {
-          if (err) throw err;
-          
-          const localFilePath = path.join(__dirname, 'vps_server.js');
-          const remoteFilePath = appDir + '/vps_server.js';
-          const localServerPath = path.join(__dirname, 'server.js');
-          const remoteServerPath = appDir + '/server.js';
+        console.log(`PM2 app found at ${appDir}`);
 
-          console.log(`📤 Enviando vps_server.js para ${remoteFilePath} e ${remoteServerPath}...`);
-          
-          sftp.fastPut(localFilePath, remoteFilePath, (err) => {
-            if (err) {
-               console.log('❌ Erro no upload do vps_server.js:', err);
-               sftp.end();
-               return finishAndClose();
-            }
-            console.log('✅ vps_server.js enviado com sucesso!');
-            
-            // server.js é o entry point do PM2 — sempre sincronizar com vps_server.js
-            sftp.fastPut(localFilePath, remoteServerPath, (err) => {
-              if (err) {
-                 console.log('⚠️ Erro ao enviar server.js:', err);
-              } else {
-                 console.log('✅ server.js (entry PM2) sincronizado com vps_server.js!');
-              }
-              
-              const restartCmd = `pm2 restart ${apiProc.name}`;
-              console.log(`🔄 Reiniciando a aplicação: ${restartCmd}`);
-              conn.exec(restartCmd, (err, rStream) => {
-                if (err) throw err;
-                rStream.on('close', () => {
-                  console.log(`✅ App ${apiProc.name} reiniciada! A nova rota já deve estar ativa na VPS.`);
+        conn.exec(`mkdir -p ${appDir}/services`, (mkdirErr, mkdirStream) => {
+          if (mkdirErr) throw mkdirErr;
+
+          mkdirStream.on('close', () => {
+            conn.sftp((sftpErr, sftp) => {
+              if (sftpErr) throw sftpErr;
+
+              uploadFilesSequentially(sftp, remoteFiles, (uploadErr) => {
+                if (uploadErr) {
+                  console.log('Upload error:', uploadErr);
                   sftp.end();
-                  conn.end();
-                }).on('data', (d) => {
-                  console.log(d.toString().trim());
+                  return finishAndClose();
+                }
+
+                const restartCmd = `pm2 restart ${apiProc.name}`;
+                console.log(`Restarting app: ${restartCmd}`);
+                conn.exec(restartCmd, (restartErr, restartStream) => {
+                  if (restartErr) throw restartErr;
+
+                  restartStream
+                    .on('close', () => {
+                      console.log(`App ${apiProc.name} restarted`);
+                      sftp.end();
+                      conn.end();
+                    })
+                    .on('data', (chunk) => {
+                      console.log(chunk.toString().trim());
+                    });
                 });
               });
             });
           });
         });
-      } catch(e) {
-         console.log('Erro ao ler PM2:', data, e);
-         conn.end();
+      } catch (parseError) {
+        console.log('Error parsing PM2 output');
+        console.log(data);
+        console.log(parseError);
+        conn.end();
       }
     });
   });
@@ -90,9 +121,5 @@ conn.on('ready', () => {
   host: VpsHost,
   port: 22,
   username: VpsUser,
-  password: VpsPass
+  password: VpsPass,
 });
-
-function finishAndClose() {
-  conn.end();
-}

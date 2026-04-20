@@ -2399,8 +2399,40 @@ fastify.delete('/synology/file', { preHandler: requireSyncKey }, async (req, rep
 // Synology via DSM Task Scheduler consome a fila e executa localmente. Contorna
 // o caso em que o tunnel CF está caído e a VPS não alcança o Synology direto.
 
-let synoPendingCommand = null; // { id, command, enqueuedAt, status, completedAt?, result? }
 const SYNO_COMMAND_TTL_MS = 5 * 60 * 1000;
+let synologyLastStatusSnapshot = null;
+let synologyServicesPromise = null;
+let synologyCommandQueue = null;
+
+async function getSynologyServices() {
+  if (!synologyServicesPromise) {
+    synologyServicesPromise = Promise.all([
+      import('./services/synologyNasStatusService.js'),
+      import('./services/synologyCommandQueueService.js'),
+    ]).then(([statusService, queueService]) => {
+      if (!synologyCommandQueue) {
+        synologyCommandQueue = queueService.createSynologyCommandQueue({ ttlMs: SYNO_COMMAND_TTL_MS });
+      }
+
+      return {
+        buildSynologyStatusResponse: statusService.buildSynologyStatusResponse,
+        normalizeSynologyStatusPayload: statusService.normalizeSynologyStatusPayload,
+        createSynologyCommandQueue: queueService.createSynologyCommandQueue,
+      };
+    });
+  }
+
+  return synologyServicesPromise;
+}
+
+async function getSynologyCommandQueue() {
+  await getSynologyServices();
+  if (!synologyCommandQueue) {
+    const { createSynologyCommandQueue } = await getSynologyServices();
+    synologyCommandQueue = createSynologyCommandQueue({ ttlMs: SYNO_COMMAND_TTL_MS });
+  }
+  return synologyCommandQueue;
+}
 
 function requireSynoPollKey(request, reply, done) {
   const expected = process.env.SYNOLOGY_POLL_KEY;
@@ -2421,47 +2453,70 @@ fastify.post('/synology/enqueue-restart', { preHandler: requireSyncKey }, async 
   if (!process.env.SYNOLOGY_POLL_KEY) {
     return reply.code(500).send({ error: 'SYNOLOGY_POLL_KEY not configured on VPS' });
   }
-  synoPendingCommand = {
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-    command: 'restart-cloudflared',
-    enqueuedAt: new Date().toISOString(),
-    status: 'pending',
-  };
-  return { ok: true, command: synoPendingCommand };
+  const queue = await getSynologyCommandQueue();
+  const result = queue.enqueue('restart-cloudflared', new Date());
+  if (!result.ok) {
+    return reply.code(409).send({
+      error: 'Command already pending',
+      command: result.command,
+      reason: result.reason,
+    });
+  }
+  return { ok: true, command: result.command };
+});
+
+fastify.post('/synology/enqueue-reboot', { preHandler: requireSyncKey }, async (req, reply) => {
+  if (!process.env.SYNOLOGY_POLL_KEY) {
+    return reply.code(500).send({ error: 'SYNOLOGY_POLL_KEY not configured on VPS' });
+  }
+  const queue = await getSynologyCommandQueue();
+  const result = queue.enqueue('reboot-nas', new Date());
+  if (!result.ok) {
+    return reply.code(409).send({
+      error: 'Command already pending',
+      command: result.command,
+      reason: result.reason,
+    });
+  }
+  return { ok: true, command: result.command };
 });
 
 // Admin consulta status (pra UI mostrar "executado", "pendente", etc)
 fastify.get('/synology/command-status', { preHandler: requireSyncKey }, async () => {
-  if (!synoPendingCommand) return { command: null };
-  const age = Date.now() - new Date(synoPendingCommand.enqueuedAt).getTime();
-  if (synoPendingCommand.status === 'pending' && age > SYNO_COMMAND_TTL_MS) {
-    synoPendingCommand.status = 'expired';
-  }
-  return synoPendingCommand;
+  const queue = await getSynologyCommandQueue();
+  const command = queue.getStatus(new Date());
+  return command || null;
+});
+
+fastify.get('/synology/status', { preHandler: requireSyncKey }, async () => {
+  const { buildSynologyStatusResponse } = await getSynologyServices();
+  const queue = await getSynologyCommandQueue();
+  return buildSynologyStatusResponse({
+    snapshot: synologyLastStatusSnapshot,
+    command: queue.getStatus(new Date()),
+    now: new Date(),
+  });
+});
+
+fastify.post('/synology/report-status', { preHandler: requireSynoPollKey }, async (req) => {
+  const { normalizeSynologyStatusPayload } = await getSynologyServices();
+  synologyLastStatusSnapshot = normalizeSynologyStatusPayload(req.body || {}, new Date());
+  return {
+    ok: true,
+    snapshot: synologyLastStatusSnapshot,
+  };
 });
 
 // Synology consome a fila (polling periódico via DSM Task Scheduler)
 fastify.get('/synology/poll-command', { preHandler: requireSynoPollKey }, async () => {
-  if (!synoPendingCommand || synoPendingCommand.status !== 'pending') {
-    return { command: null };
-  }
-  const age = Date.now() - new Date(synoPendingCommand.enqueuedAt).getTime();
-  if (age > SYNO_COMMAND_TTL_MS) {
-    synoPendingCommand.status = 'expired';
-    return { command: null };
-  }
-  return { id: synoPendingCommand.id, command: synoPendingCommand.command };
+  const queue = await getSynologyCommandQueue();
+  return queue.poll(new Date());
 });
 
 // Synology confirma execução
 fastify.post('/synology/ack-command', { preHandler: requireSynoPollKey }, async (req) => {
-  const { id, status, result } = req.body || {};
-  if (synoPendingCommand && synoPendingCommand.id === id) {
-    synoPendingCommand.status = status === 'success' ? 'success' : 'failed';
-    synoPendingCommand.completedAt = new Date().toISOString();
-    if (result) synoPendingCommand.result = String(result).slice(0, 500);
-  }
-  return { ok: true };
+  const queue = await getSynologyCommandQueue();
+  return queue.ack(req.body || {}, new Date());
 });
 
 // ─── Customer Favorites ────────────────────────────────────────────────────────
