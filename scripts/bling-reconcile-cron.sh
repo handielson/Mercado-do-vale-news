@@ -11,7 +11,7 @@ if [ -f /var/www/mdv-api/.env ]; then
 fi
 
 SYNC_KEY="${VPS_SYNC_KEY:-${VITE_VPS_SYNC_KEY:-}}"
-RECONCILE_URL="${BLING_RECONCILE_URL:-https://www.mercadodovale.com.br/api/bling-reconcile}"
+RECONCILE_URL="${BLING_RECONCILE_URL:-https://www.mercadodovale.com.br/api/bling?resource=reconcile}"
 
 if [ -z "${SYNC_KEY}" ]; then
   echo "BLING reconcile cron aborted: VPS_SYNC_KEY/VITE_VPS_SYNC_KEY missing" >&2

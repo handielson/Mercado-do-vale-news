@@ -4,13 +4,237 @@
  * Consolida todas as rotas Bling em um único endpoint para respeitar o limite
  * de 12 Serverless Functions do plano Hobby da Vercel.
  *
- * Roteamento via query: ?resource=products|categories|stock|stock-sync|product-detail|finance|exchange|webhook
+ * Roteamento via query: ?resource=products|categories|stock|stock-sync|product-detail|finance|exchange|webhook|reconcile
  */
 import { createClient } from '@supabase/supabase-js';
 import blingWebhookHandler from './bling-webhook.js';
+import { buildBlingReconcilePlan } from './_lib/bling-reconcile-core.js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!;
 const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
+const blingApiBase = 'https://api.bling.com.br/Api/v3';
+const vpsBaseUrl = process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+const vpsSyncKey = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
+const reconcilePageSize = 100;
+const reconcileLocalPageSize = 1000;
+
+function isBlingReconcileAuthorized(req: any): boolean {
+    const authHeader = String(req.headers?.authorization || '');
+    const cronSecret = process.env.CRON_SECRET;
+    if (cronSecret) {
+        return authHeader === `Bearer ${cronSecret}`;
+    }
+
+    const syncHeader = String(req.headers?.['x-sync-key'] || req.headers?.['x-api-key'] || '');
+    if (vpsSyncKey && syncHeader === vpsSyncKey) {
+        return true;
+    }
+
+    const userAgent = String(req.headers?.['user-agent'] || '');
+    return userAgent.includes('vercel-cron/1.0');
+}
+
+async function getValidBlingAccessTokenForReconcile(supabase: any) {
+    const { data: settings } = await supabase
+        .from('company_settings')
+        .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
+        .limit(1)
+        .maybeSingle();
+
+    if (!settings?.bling_access_token) {
+        throw new Error('Bling not connected');
+    }
+
+    let accessToken: string | null = settings.bling_access_token;
+    const tokenExpired = settings.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date();
+    if (!tokenExpired) {
+        return accessToken;
+    }
+
+    const tokenRes = await fetch(`${blingApiBase}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: settings.bling_refresh_token,
+            client_id: settings.bling_client_id,
+            client_secret: settings.bling_client_secret,
+        }),
+        signal: AbortSignal.timeout(10000),
+    });
+
+    if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        accessToken = tokenData.access_token;
+        await supabase.from('company_settings').update({
+            bling_access_token: tokenData.access_token,
+            bling_refresh_token: tokenData.refresh_token,
+            bling_token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+        }).eq('id', settings.id);
+        return accessToken;
+    }
+
+    if (tokenRes.status === 400 || tokenRes.status === 401) {
+        await supabase.from('company_settings').update({
+            bling_access_token: null,
+        }).eq('id', settings.id);
+    }
+
+    throw new Error(`Bling token refresh failed (${tokenRes.status}): ${await tokenRes.text()}`);
+}
+
+async function fetchAllLocalProductsForReconcile(supabase: any) {
+    const localProducts: any[] = [];
+
+    for (let from = 0; ; from += reconcileLocalPageSize) {
+        const to = from + reconcileLocalPageSize - 1;
+        const { data, error } = await supabase
+            .from('products')
+            .select('id, sku, name, stock_quantity, bling_id')
+            .not('bling_id', 'is', null)
+            .range(from, to);
+
+        if (error) {
+            throw new Error(`Supabase products fetch failed: ${error.message}`);
+        }
+
+        const rows = data || [];
+        localProducts.push(...rows);
+
+        if (rows.length < reconcileLocalPageSize) {
+            break;
+        }
+    }
+
+    return localProducts;
+}
+
+async function fetchAllBlingProductsForReconcile(accessToken: string) {
+    const remoteProducts: any[] = [];
+
+    for (let page = 1; ; page += 1) {
+        const res = await fetch(`${blingApiBase}/produtos?pagina=${page}&limite=${reconcilePageSize}&criterio=5`, {
+            headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+            signal: AbortSignal.timeout(15000),
+        });
+
+        if (!res.ok) {
+            throw new Error(`Bling products fetch failed (${res.status}): ${await res.text()}`);
+        }
+
+        const json = await res.json();
+        const pageItems = Array.isArray(json?.data) ? json.data : [];
+        remoteProducts.push(...pageItems);
+
+        if (pageItems.length < reconcilePageSize) {
+            break;
+        }
+    }
+
+    return remoteProducts;
+}
+
+async function fetchAllBlingStocksForReconcile(accessToken: string) {
+    const remoteStocks: any[] = [];
+
+    for (let page = 1; ; page += 1) {
+        const res = await fetch(`${blingApiBase}/estoques/saldos?pagina=${page}&limite=${reconcilePageSize}`, {
+            headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+            signal: AbortSignal.timeout(15000),
+        });
+
+        if (res.status === 400) {
+            break;
+        }
+
+        if (!res.ok) {
+            throw new Error(`Bling stock fetch failed (${res.status}): ${await res.text()}`);
+        }
+
+        const json = await res.json();
+        const pageItems = Array.isArray(json?.data) ? json.data : [];
+        remoteStocks.push(...pageItems);
+
+        if (pageItems.length < reconcilePageSize) {
+            break;
+        }
+    }
+
+    return remoteStocks;
+}
+
+async function patchVpsForReconcile(path: string, body: object): Promise<boolean> {
+    if (!vpsSyncKey) return false;
+
+    try {
+        const res = await fetch(`${vpsBaseUrl}${path}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-sync-key': vpsSyncKey,
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(10000),
+        });
+
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+async function applyReconcileStockChanges(supabase: any, changes: any[]) {
+    const applied = [];
+    const failed = [];
+
+    for (const change of changes) {
+        const { error } = await supabase
+            .from('products')
+            .update({ stock_quantity: change.nextStock })
+            .eq('id', change.productId);
+
+        if (error) {
+            failed.push({ type: 'stock', sku: change.sku, blingId: change.blingId, reason: error.message });
+            continue;
+        }
+
+        const vpsUpdated = await patchVpsForReconcile(
+            '/products/stock',
+            change.blingId
+                ? { bling_id: change.blingId, stock_quantity: change.nextStock }
+                : { sku: change.sku, stock_quantity: change.nextStock },
+        );
+
+        applied.push({ ...change, vpsUpdated });
+    }
+
+    return { applied, failed };
+}
+
+async function applyReconcileNameChanges(supabase: any, changes: any[]) {
+    const applied = [];
+    const failed = [];
+
+    for (const change of changes) {
+        const { error } = await supabase
+            .from('products')
+            .update({ name: change.nextName })
+            .eq('id', change.productId);
+
+        if (error) {
+            failed.push({ type: 'name', sku: change.sku, blingId: change.blingId, reason: error.message });
+            continue;
+        }
+
+        const vpsUpdated = change.sku
+            ? await patchVpsForReconcile('/products/name', { sku: change.sku, name: change.nextName })
+            : false;
+
+        applied.push({ ...change, vpsUpdated });
+    }
+
+    return { applied, failed };
+}
 
 export default async function handler(req: any, res: any) {
     const resource = req.query.resource as string;
@@ -803,6 +1027,67 @@ export default async function handler(req: any, res: any) {
     // ─── PRODUCT-UPDATE-FISCAL: atualiza NCM/CEST de um produto no Bling ────────
     // Body: { blingId: number, ncm?: string, cest?: string, origem?: number }
     // Busca o produto completo, faz merge apenas em tributacao e envia PUT.
+    if (resource === 'reconcile') {
+        if (req.method !== 'GET' && req.method !== 'POST') {
+            return res.status(405).json({ error: 'Method not allowed' });
+        }
+        if (!isBlingReconcileAuthorized(req)) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        try {
+            const supabase = createClient(supabaseUrl, supabaseKey, {
+                auth: { persistSession: false, autoRefreshToken: false },
+            });
+            const dryRun = String(req.query?.dryRun || req.body?.dryRun || '').toLowerCase() === 'true';
+            const accessToken = await getValidBlingAccessTokenForReconcile(supabase);
+
+            const [localProducts, remoteProducts, remoteStocks] = await Promise.all([
+                fetchAllLocalProductsForReconcile(supabase),
+                fetchAllBlingProductsForReconcile(accessToken),
+                fetchAllBlingStocksForReconcile(accessToken),
+            ]);
+
+            const plan = buildBlingReconcilePlan({
+                localProducts,
+                remoteProducts,
+                remoteStocks,
+            });
+
+            if (dryRun) {
+                return res.status(200).json({
+                    ok: true,
+                    dryRun: true,
+                    planned: {
+                        stockChanges: plan.stockChanges.length,
+                        nameChanges: plan.nameChanges.length,
+                    },
+                    totals: plan.totals,
+                });
+            }
+
+            const stockResult = await applyReconcileStockChanges(supabase, plan.stockChanges);
+            const nameResult = await applyReconcileNameChanges(supabase, plan.nameChanges);
+
+            return res.status(200).json({
+                ok: true,
+                totals: plan.totals,
+                planned: {
+                    stockChanges: plan.stockChanges.length,
+                    nameChanges: plan.nameChanges.length,
+                },
+                applied: {
+                    stockChanges: stockResult.applied.length,
+                    nameChanges: nameResult.applied.length,
+                },
+                failed: [...stockResult.failed, ...nameResult.failed],
+            });
+        } catch (err: any) {
+            console.error('[bling reconcile] fatal:', err?.message || err);
+            return res.status(500).json({ ok: false, error: err?.message || 'Unknown error' });
+        }
+    }
+
     if (resource === 'product-update-fiscal') {
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
         const { blingId, ncm, cest, origem } = req.body || {};
@@ -879,7 +1164,7 @@ export default async function handler(req: any, res: any) {
         }
     }
 
-    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|nf-detail|sync-prices-vps|product-update-fiscal' });
+    return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|nf-detail|sync-prices-vps|product-update-fiscal|reconcile' });
 
 }
 

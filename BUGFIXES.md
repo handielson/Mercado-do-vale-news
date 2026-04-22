@@ -259,7 +259,7 @@ Webhook legado (valor e logs do painel): https://mercadodovale.com.br/api/bling?
 
 Além do webhook, o sistema agora possui uma reconciliação automática server-side:
 
-- Endpoint: `https://www.mercadodovale.com.br/api/bling-reconcile`
+- Endpoint: `https://www.mercadodovale.com.br/api/bling?resource=reconcile`
 - Agenda: cron horária na **VPS** chamando o endpoint com `x-sync-key`
 - Script versionado: `scripts/bling-reconcile-cron.sh`
 - Escopo: compara Bling × sistema por `bling_id` e corrige **nome** e **estoque** no Supabase + VPS
