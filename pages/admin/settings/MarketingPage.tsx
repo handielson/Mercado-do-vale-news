@@ -1,15 +1,46 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, Heart, MessageCircle, Send, Bookmark, MoreHorizontal, CheckCircle2, Calendar, Trash2, Clock, ToggleLeft, ToggleRight, ChevronRight } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { flushSync } from 'react-dom';
+import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, Trash2, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { toPng } from 'html-to-image';
+import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
 import type { CatalogProduct } from '../../../types/catalog';
 import { groupProductsByVariants } from '../../../services/productGrouping';
+import { getModelImageWithCache, prefetchModelImages } from '../../../services/modelImageCache';
+import { getMarketingBulkExportSlides, getMarketingExportSlides } from '../../../utils/marketing-carousel';
+import {
+    DEFAULT_MARKETING_STICKER_SETTINGS,
+    getMarketingCanvasSize,
+    getMarketingStickerExportTargets,
+    resolveMarketingStickerText,
+    sanitizeMarketingStickerSettings,
+    type MarketingAssetFormat,
+    type MarketingStickerExportMode,
+    type MarketingStickerSettings,
+} from '../../../utils/marketing-sticker';
+import { findMarketingTypographyFontOption } from '../../../utils/marketing-typography';
 import { formatCurrency } from '../../../utils/saleCalculations';
+import { hasRenderableMediaUrl, toBrowserSafeMediaUrl } from '../../../utils/media-url';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getCompanyData } from '../../../services/companyService';
 import { Company } from '../../../types/company';
-import { instagramScheduleService, InstagramSlot, CONTENT_TYPE_LABELS, DAY_LABELS, ContentType } from '../../../services/instagramScheduleService';
+import { instagramScheduleService, InstagramSlot, CONTENT_TYPE_LABELS, ContentType } from '../../../services/instagramScheduleService';
+import MarketingKitPanel from './marketing/MarketingKitPanel';
+import MarketingStickerTypographyEditor from './marketing/MarketingStickerTypographyEditor';
+import MarketingTypographyText from './marketing/MarketingTypographyText';
+import { ensureMarketingTypographyFontLoaded } from './marketing/marketingTypographyFonts';
+import {
+    DAY_LABELS_FULL,
+    DEFAULT_CATEGORY_PROFILE,
+    DEFAULT_DAY_RULES,
+    type MarketingCategoryProfile,
+    type MarketingCategoryProfileMap,
+    type MarketingCooldownCache,
+    type MarketingDayRule,
+    type MarketingManualPickMap,
+} from './marketing/marketingDefaults';
+import { buildTelegramDraft, pickEditorialCandidates } from './marketing/marketingEditorialEngine.js';
+import { pruneMarketingCooldownCache, readMarketingState, writeMarketingState } from './marketing/marketingStorage';
 
 const BACKGROUND_OPTIONS = [
     { id: 'dark', label: 'Dark Premium', class: 'bg-gradient-to-br from-slate-900 to-black' },
@@ -37,17 +68,183 @@ const TagBadge = ({ tag, colorClass }: { tag: string, colorClass: string }) => (
     </code>
 );
 
+const waitForNextFrame = () =>
+    new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+const waitForMarketingProductImage = async (
+    node: HTMLElement,
+    expectedImageUrl?: string | null,
+): Promise<void> => {
+    if (expectedImageUrl === undefined) return;
+
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+        const productImage = node.querySelector<HTMLImageElement>('img[data-marketing-product-image="true"]');
+        const currentImageUrl = productImage?.getAttribute('src') ?? null;
+
+        if (currentImageUrl === expectedImageUrl) return;
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
+    }
+
+    throw new Error('A imagem do produto nao foi atualizada a tempo para exportacao');
+};
+
+const getRenderableProductImages = (product?: CatalogProduct | null): string[] => {
+    if (!product) return [];
+
+    const usableImages = (Array.isArray(product.images) ? product.images : [])
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => toBrowserSafeMediaUrl(value))
+        .filter((value) => hasRenderableMediaUrl(value));
+
+    if (usableImages.length > 0) return usableImages;
+
+    const fallbackImageUrl = typeof product.image_url === 'string'
+        ? toBrowserSafeMediaUrl(product.image_url)
+        : '';
+
+    return hasRenderableMediaUrl(fallbackImageUrl) ? [fallbackImageUrl] : [];
+};
+
+const hydrateMarketingProductMedia = async (product: CatalogProduct): Promise<CatalogProduct> => {
+    const usableImages = getRenderableProductImages(product);
+    if (usableImages.length > 0) {
+        return {
+            ...product,
+            images: usableImages,
+            image_url: usableImages[0] ?? null,
+        };
+    }
+
+    if (!product.model_id) {
+        return {
+            ...product,
+            images: [],
+            image_url: null,
+        };
+    }
+
+    const fallbackUrl = await getModelImageWithCache(
+        product.model_id,
+        typeof product.specs?.color === 'string' ? product.specs.color : undefined,
+    );
+
+    const safeFallbackUrl = toBrowserSafeMediaUrl(fallbackUrl);
+    if (!hasRenderableMediaUrl(safeFallbackUrl)) {
+        return {
+            ...product,
+            images: [],
+            image_url: null,
+        };
+    }
+
+    return {
+        ...product,
+        images: [safeFallbackUrl],
+        image_url: safeFallbackUrl,
+    };
+};
+
+const prepareMarketingProducts = async (products: CatalogProduct[]): Promise<CatalogProduct[]> => {
+    const modelIdsNeedingFallback = [
+        ...new Set(
+            products
+                .filter((product) => getRenderableProductImages(product).length === 0 && product.model_id)
+                .map((product) => product.model_id!)
+        ),
+    ];
+
+    if (modelIdsNeedingFallback.length > 0) {
+        await prefetchModelImages(modelIdsNeedingFallback);
+    }
+
+    return Promise.all(products.map(hydrateMarketingProductMedia));
+};
+
+const waitForPreviewAssets = async (
+    node: HTMLElement,
+    expectedProductImageUrl?: string | null,
+): Promise<void> => {
+    if ('fonts' in document) {
+        try {
+            await document.fonts.ready;
+        } catch {
+            // Ignora falhas de fonte e segue para as imagens.
+        }
+    }
+
+    await waitForNextFrame();
+    await waitForNextFrame();
+    await waitForMarketingProductImage(node, expectedProductImageUrl);
+
+    const images = Array.from(node.querySelectorAll('img'));
+    await Promise.all(images.map((img) => new Promise<void>((resolve) => {
+        if (img.complete) {
+            resolve();
+            return;
+        }
+
+        let timeoutId: number | undefined;
+        const finish = () => {
+            img.removeEventListener('load', finish);
+            img.removeEventListener('error', finish);
+            if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+            resolve();
+        };
+
+        img.addEventListener('load', finish, { once: true });
+        img.addEventListener('error', finish, { once: true });
+        timeoutId = window.setTimeout(finish, 5000);
+    })));
+
+    await waitForNextFrame();
+};
+
+const buildMarketingDownloadName = (
+    productName?: string | null,
+    slideNumber: number = 1,
+    totalSlides: number = 1,
+): string => {
+    const baseName = productName
+        ? productName
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .toLowerCase()
+        : 'marketing';
+
+    const slideSuffix = totalSlides > 1 ? `-slide-${slideNumber}` : '';
+    return `oferta-${baseName || 'marketing'}${slideSuffix}.png`;
+};
+
+const triggerImageDownload = (href: string, filename: string) => {
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = href;
+    link.click();
+};
 export default function MarketingPage() {
     const { settings } = useTheme();
     const [selectedBg, setSelectedBg] = useState(BACKGROUND_OPTIONS[0]);
     const [customBgUrl, setCustomBgUrl] = useState<string | null>(null);
     const canvasRef = useRef<HTMLDivElement>(null);
+    const searchRequestRef = useRef(0);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isGeneratingBulk, setIsGeneratingBulk] = useState(false);
     const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
     const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
-    const [format, setFormat] = useState<'feed' | 'status'>('feed');
+    const [format, setFormat] = useState<MarketingAssetFormat>('sticker');
+    const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
     const [activeTab, setActiveTab] = useState<'studio' | 'agenda'>('studio');
+    const safeStickerSettings = sanitizeMarketingStickerSettings(stickerSettings);
+    const isStickerFormat = format === 'sticker';
+    const updateStickerSetting = <K extends keyof MarketingStickerSettings>(
+        key: K,
+        value: MarketingStickerSettings[K],
+    ) => {
+        setStickerSettings(prev => ({ ...prev, [key]: value }));
+    };
 
     // Agenda Instagram
     const [scheduleSlots, setScheduleSlots] = useState<InstagramSlot[]>([]);
@@ -68,6 +265,18 @@ export default function MarketingPage() {
         active: true,
         sort_order: 0
     });
+    const [dayRules, setDayRules] = useState<Record<number, MarketingDayRule>>(() =>
+        readMarketingState('dayRules', DEFAULT_DAY_RULES)
+    );
+    const [categoryProfiles, setCategoryProfiles] = useState<MarketingCategoryProfileMap>(() =>
+        readMarketingState('categoryProfiles', {})
+    );
+    const [manualPicksMap, setManualPicksMap] = useState<MarketingManualPickMap>(() =>
+        readMarketingState('manualPicks', {})
+    );
+    const [cooldownCache, setCooldownCache] = useState<MarketingCooldownCache>(() =>
+        readMarketingState('cooldown', {})
+    );
 
     // Carregar dados reais da empresa (Telefone, Instagram, Watermark)
     const loadCompanyData = async () => {
@@ -170,17 +379,48 @@ export default function MarketingPage() {
     const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
     const [generatedCopy, setGeneratedCopy] = useState('');
     const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+    const [carouselSlideIndex, setCarouselSlideIndex] = useState(0);
+    const [exportImageOverride, setExportImageOverride] = useState<string | null | undefined>(undefined);
+    const selectedProductImages = getRenderableProductImages(selectedProduct);
+    const carouselSlides = getMarketingExportSlides(selectedProductImages, format);
+    const activeCarouselSlide = carouselSlides[Math.min(carouselSlideIndex, Math.max(carouselSlides.length - 1, 0))] ?? carouselSlides[0];
+    const selectedProductImage = exportImageOverride !== undefined
+        ? exportImageOverride
+        : activeCarouselSlide?.imageUrl ?? null;
+    const showCarouselPreview = carouselSlides.length > 1;
 
+    const stageMarketingCanvasForExport = async (
+        product: CatalogProduct | null,
+        slideIndex: number,
+        imageUrl: string | null,
+    ) => {
+        flushSync(() => {
+            setSelectedProduct(product);
+            setCarouselSlideIndex(slideIndex);
+            setExportImageOverride(imageUrl);
+        });
+        await waitForNextFrame();
+        await waitForNextFrame();
+    };
     // Copywrighting Template Logic
     const [isEditingTemplate, setIsEditingTemplate] = useState(false);
     const [captionTemplate, setCaptionTemplate] = useState('');
+
+    useEffect(() => {
+        setCarouselSlideIndex(0);
+    }, [selectedProduct?.id, format]);
+
+    useEffect(() => {
+        if (carouselSlideIndex < carouselSlides.length) return;
+        setCarouselSlideIndex(0);
+    }, [carouselSlideIndex, carouselSlides.length]);
 
     useEffect(() => {
         const savedTemplate = localStorage.getItem('marketing_caption_template');
         if (savedTemplate) {
             setCaptionTemplate(savedTemplate);
         } else {
-            setCaptionTemplate(`🔥 OPORTUNIDADE! Máquina em mãos! \n\nO {produto} acabou de chegar e está disponível no nosso catálogo! \n\n✨ Tecnologia de ponta com um design premium que você merece.\n\n🏃‍♂️ Garanta já o seu antes que o estoque acabe!\n\n🔗 Compre Direto no Site:\n{link}\n\n👉 Ou tire dúvidas pelo WhatsApp {whatsapp}.\n\n#{marca} #{hashtag} #{instagram} #Tecnologia #Ofertas`);
+            setCaptionTemplate(`🔥 OPORTUNIDADE! Máquina em mãos! \n\nO {produto} acabou de chegar e está disponível no nosso catálogo! \n\n✨ Tecnologia de ponta com um design premium que você merece.\n\n🏃‍♂️ Garanta já o seu antes que o estoque acabe!\n\n🔗 Compre Direto no Site:\n{link}\n\n#{marca} #{hashtag} #Tecnologia #Ofertas`);
         }
     }, []);
 
@@ -194,6 +434,52 @@ export default function MarketingPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [categories, setCategories] = useState<{ id: string, name: string }[]>([]);
     const [groupedResults, setGroupedResults] = useState<any[]>([]);
+    const selectedCategoryName = selectedProduct?.category_id
+        ? categories.find((category) => category.id === selectedProduct.category_id)?.name ?? ''
+        : '';
+    const stickerTokenValues = {
+        name: selectedProduct?.name || safeStickerSettings.stickerName,
+        brand: selectedProduct?.brand || settings.company_name || 'Mercado do Vale',
+        priceLabel: selectedProduct ? formatCurrency(selectedProduct.price_retail || 0) : '',
+        sku: selectedProduct?.sku || '',
+        color: typeof selectedProduct?.specs?.color === 'string' ? selectedProduct.specs.color : '',
+        category: selectedCategoryName,
+    };
+    const stickerKickerText = resolveMarketingStickerText(safeStickerSettings.kickerText, stickerTokenValues);
+    const stickerMainText = resolveMarketingStickerText(safeStickerSettings.mainText, stickerTokenValues);
+    const stickerFooterText = resolveMarketingStickerText(safeStickerSettings.footerText, stickerTokenValues);
+    const stickerPriceText = resolveMarketingStickerText(safeStickerSettings.priceText, stickerTokenValues);
+    const stickerTypographyFields = safeStickerSettings.typography.fields;
+
+    useEffect(() => {
+        const loadedIds = new Set<string>();
+        const fontsToLoad: typeof safeStickerSettings.typography.fonts = [];
+
+        safeStickerSettings.typography.fonts.forEach((font) => {
+            if (loadedIds.has(font.id)) return;
+            loadedIds.add(font.id);
+            fontsToLoad.push(font);
+        });
+
+        const pushFont = (fontId: string) => {
+            const font = findMarketingTypographyFontOption(fontId, safeStickerSettings.typography.fonts);
+            if (!font || loadedIds.has(font.id)) return;
+
+            loadedIds.add(font.id);
+            fontsToLoad.push(font);
+        };
+
+        Object.values(stickerTypographyFields).forEach((field) => {
+            pushFont(field.simpleStyle.fontId);
+            field.segments.forEach((segment) => pushFont(segment.style.fontId));
+        });
+
+        fontsToLoad.forEach((font) => {
+            ensureMarketingTypographyFontLoaded(font).catch(() => {
+                // Segue com a fonte fallback se alguma fonte externa falhar.
+            });
+        });
+    }, [safeStickerSettings.typography.fonts, stickerTypographyFields]);
 
     useEffect(() => {
         catalogService.getCategoriesWithNames().then(setCategories);
@@ -264,9 +550,12 @@ export default function MarketingPage() {
     // Debounced Search & Category Fetch
     useEffect(() => {
         if ((!searchQuery || searchQuery.length < 2) && !selectedCategory) {
+            searchRequestRef.current += 1;
+            setIsSearching(false);
             setGroupedResults([]);
             return;
         }
+        const requestId = ++searchRequestRef.current;
         const timer = setTimeout(async () => {
             setIsSearching(true);
             try {
@@ -277,54 +566,436 @@ export default function MarketingPage() {
                 }, 1, 30);
 
                 // Agrupar produtos pelas variantes para não repetir cores do mesmo modelo
-                const grouped = groupProductsByVariants(res.products);
+                const preparedProducts = await prepareMarketingProducts(res.products);
+                if (requestId !== searchRequestRef.current) return;
+
+                const grouped = groupProductsByVariants(preparedProducts);
                 setGroupedResults(grouped);
+                setSelectedProduct((current) => {
+                    if (!current) return current;
+                    return preparedProducts.find((product) => product.id === current.id) ?? current;
+                });
                 setBulkSelectedIds(new Set());
             } catch (err) {
                 console.error(err);
             } finally {
-                setIsSearching(false);
+                if (requestId === searchRequestRef.current) {
+                    setIsSearching(false);
+                }
             }
         }, 500);
         return () => clearTimeout(timer);
     }, [searchQuery, selectedCategory]);
 
+    useEffect(() => {
+        writeMarketingState('dayRules', dayRules, {
+            fallback: DEFAULT_DAY_RULES,
+        });
+    }, [dayRules]);
+
+    useEffect(() => {
+        writeMarketingState('categoryProfiles', categoryProfiles, {
+            fallback: {},
+        });
+    }, [categoryProfiles]);
+
+    useEffect(() => {
+        writeMarketingState('manualPicks', manualPicksMap, {
+            fallback: {},
+        });
+    }, [manualPicksMap]);
+
+    const persistedCooldownCache = useMemo(
+        () => pruneMarketingCooldownCache(cooldownCache, categoryProfiles),
+        [categoryProfiles, cooldownCache],
+    );
+
+    useEffect(() => {
+        writeMarketingState('cooldown', persistedCooldownCache, {
+            fallback: {},
+        });
+    }, [persistedCooldownCache]);
+
+    const todayDayIndex = new Date().getDay();
+    const currentDayRule = dayRules[todayDayIndex] ?? DEFAULT_DAY_RULES[todayDayIndex];
+    const activeEditorialCategoryId = selectedCategory || currentDayRule.categoryId || selectedProduct?.category_id || '';
+    const activeCategoryProfile: MarketingCategoryProfile = useMemo(() => ({
+        ...DEFAULT_CATEGORY_PROFILE,
+        categoryId: activeEditorialCategoryId,
+        ...(activeEditorialCategoryId ? categoryProfiles[activeEditorialCategoryId] ?? {} : {}),
+    }), [activeEditorialCategoryId, categoryProfiles]);
+    const activeManualPicks = activeEditorialCategoryId ? manualPicksMap[activeEditorialCategoryId] ?? [] : [];
+    const candidatePool = useMemo(() => {
+        const map = new Map<string, CatalogProduct>();
+        groupedResults.forEach((group) => {
+            const product = group?.representativeProduct as CatalogProduct | undefined;
+            if (product?.id) map.set(product.id, product);
+        });
+
+        if (selectedProduct?.id) {
+            map.set(selectedProduct.id, selectedProduct);
+        }
+
+        return Array.from(map.values());
+    }, [groupedResults, selectedProduct]);
+    const cooldownProductIds = useMemo(() => {
+        const now = Date.now();
+        const limit = activeCategoryProfile.cooldownDays * 86_400_000;
+
+        return Object.entries(persistedCooldownCache)
+            .filter(([, iso]) => {
+                const timestamp = new Date(iso).getTime();
+                return Number.isFinite(timestamp) && now - timestamp < limit;
+            })
+            .map(([productId]) => productId);
+    }, [activeCategoryProfile.cooldownDays, persistedCooldownCache]);
+    const editorialSelection = useMemo(() => pickEditorialCandidates({
+        products: candidatePool,
+        dayRule: {
+            mode: currentDayRule.mode,
+            categoryId: activeEditorialCategoryId,
+        },
+        manualPicks: activeManualPicks,
+        cooldownProductIds,
+        nowIso: new Date().toISOString(),
+    }), [activeEditorialCategoryId, activeManualPicks, candidatePool, cooldownProductIds, currentDayRule.mode]);
+    const studioPrimaryProduct = selectedProduct ?? editorialSelection.primary;
+    const studioReserveProducts = useMemo(() => {
+        const currentPrimaryId = studioPrimaryProduct?.id;
+        return editorialSelection.reserves.filter((product) => product.id !== currentPrimaryId).slice(0, 2);
+    }, [editorialSelection.reserves, studioPrimaryProduct]);
+    const editorialCategoryLabel = activeEditorialCategoryId
+        ? categories.find((category) => category.id === activeEditorialCategoryId)?.name ?? 'Categoria em foco'
+        : 'Categoria livre';
+    const companyWhatsapp = (companyInfo as any)?.phone || (companyInfo as any)?.whatsapp || '';
+    const companyInstagram = (companyInfo as any)?.socialMedia?.instagram || (companyInfo as any)?.instagram || settings.company_name || 'mercadodovale';
+    const currentCreativeLabel = isStickerFormat ? 'Figurinha' : showCarouselPreview ? 'Carrossel' : format === 'status' ? 'Story' : 'Feed';
+    const marketingKit = useMemo(() => buildTelegramDraft({
+        categoryLabel: editorialCategoryLabel,
+        dayTheme: currentDayRule.label,
+        selection: {
+            primary: studioPrimaryProduct,
+            reserves: studioReserveProducts,
+        },
+        company: {
+            whatsapp: companyWhatsapp,
+            instagram: companyInstagram,
+        },
+        primaryFormat: format,
+        cta: activeCategoryProfile.defaultCta,
+        generatedCopy,
+    }), [
+        activeCategoryProfile.defaultCta,
+        companyInstagram,
+        companyWhatsapp,
+        currentDayRule.label,
+        editorialCategoryLabel,
+        format,
+        generatedCopy,
+        studioPrimaryProduct,
+        studioReserveProducts,
+    ]);
+    const kitStatusLabel = studioPrimaryProduct ? 'Pronto para postagem' : 'Aguardando curadoria';
+
+    useEffect(() => {
+        if (!studioPrimaryProduct) return;
+        writeMarketingState('lastKit', {
+            productId: studioPrimaryProduct.id,
+            generatedAt: new Date().toISOString(),
+            format,
+            summary: marketingKit.summary,
+            caption: marketingKit.caption,
+            cta: marketingKit.cta,
+            hashtags: marketingKit.hashtags,
+        });
+    }, [format, marketingKit.caption, marketingKit.cta, marketingKit.hashtags, marketingKit.summary, studioPrimaryProduct]);
+
+    useEffect(() => {
+        if (selectedProduct || !editorialSelection.primary) return;
+        setSelectedProduct(editorialSelection.primary);
+    }, [editorialSelection.primary, selectedProduct]);
+
+    const handleCopyKitValue = (label: string, value: string) => {
+        if (!value?.trim()) {
+            toast.error(`Nada para copiar em ${label.toLowerCase()}.`);
+            return;
+        }
+
+        navigator.clipboard.writeText(value);
+        toast.success(`${label} copiado com sucesso!`);
+    };
+
+    const ensureEditorialCategory = (product?: CatalogProduct | null) => {
+        const resolvedCategoryId = activeEditorialCategoryId || product?.category_id || '';
+        if (!resolvedCategoryId) return '';
+
+        if (!selectedCategory && product?.category_id) {
+            setSelectedCategory(product.category_id);
+        }
+
+        setDayRules((prev) => ({
+            ...prev,
+            [todayDayIndex]: {
+                ...(prev[todayDayIndex] ?? DEFAULT_DAY_RULES[todayDayIndex]),
+                categoryId: resolvedCategoryId,
+            },
+        }));
+
+        return resolvedCategoryId;
+    };
+
+    const updateCategoryProfile = (patch: Partial<MarketingCategoryProfile>) => {
+        const categoryId = patch.categoryId || activeEditorialCategoryId;
+        if (!categoryId) return;
+
+        setCategoryProfiles((prev) => ({
+            ...prev,
+            [categoryId]: {
+                ...DEFAULT_CATEGORY_PROFILE,
+                categoryId,
+                ...(prev[categoryId] ?? {}),
+                ...patch,
+            },
+        }));
+    };
+
+    const handleSetManualPrimary = (product?: CatalogProduct | null) => {
+        if (!product) {
+            toast.error('Selecione um produto para definir como principal.');
+            return;
+        }
+
+        const categoryId = ensureEditorialCategory(product);
+        if (!categoryId) {
+            toast.error('Defina uma categoria foco antes de marcar picks manuais.');
+            return;
+        }
+
+        setManualPicksMap((prev) => {
+            const existing = (prev[categoryId] ?? []).filter((pick) => pick.productId !== product.id);
+            return {
+                ...prev,
+                [categoryId]: [
+                    { productId: product.id, priority: 1 },
+                    ...existing.map((pick, index) => ({ ...pick, priority: index + 2 })),
+                ].slice(0, 3),
+            };
+        });
+        toast.success('Produto marcado como principal do dia.');
+    };
+
+    const handleAddManualReserve = (product?: CatalogProduct | null) => {
+        if (!product) {
+            toast.error('Selecione um produto para adicionar como reserva.');
+            return;
+        }
+
+        const categoryId = ensureEditorialCategory(product);
+        if (!categoryId) {
+            toast.error('Defina uma categoria foco antes de montar reservas.');
+            return;
+        }
+
+        setManualPicksMap((prev) => {
+            const existing = prev[categoryId] ?? [];
+            if (existing.some((pick) => pick.productId === product.id)) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                [categoryId]: [...existing, { productId: product.id, priority: existing.length + 1 }].slice(0, 3),
+            };
+        });
+        toast.success('Produto adicionado como reserva.');
+    };
+
+    const handleClearManualPicks = () => {
+        if (!activeEditorialCategoryId) {
+            toast.error('Nao ha categoria foco para limpar.');
+            return;
+        }
+
+        setManualPicksMap((prev) => {
+            const next = { ...prev };
+            delete next[activeEditorialCategoryId];
+            return next;
+        });
+        toast.success('Picks manuais limpos para a categoria atual.');
+    };
+
+    const recordCooldownForProduct = (product?: CatalogProduct | null) => {
+        if (!product?.id) return;
+        setCooldownCache((prev) => ({
+            ...prev,
+            [product.id]: new Date().toISOString(),
+        }));
+    };
+
+    const handleCreateSlotFromKit = () => {
+        if (!studioPrimaryProduct) {
+            toast.error('Selecione ou confirme um produto principal antes de criar o slot.');
+            return;
+        }
+
+        const slotType: ContentType = showCarouselPreview
+            ? 'carrossel'
+            : format === 'status' || isStickerFormat
+                ? 'story'
+                : 'post';
+
+        setSelectedDay(todayDayIndex);
+        setEditingSlot(null);
+        setSlotForm({
+            day_of_week: todayDayIndex,
+            scheduled_time: '09:00',
+            content_type: slotType,
+            hook: marketingKit.summary.split('\n')[1]?.replace('Principal: ', '') || studioPrimaryProduct.name,
+            caption: marketingKit.caption,
+            cta: marketingKit.cta,
+            hashtags: marketingKit.hashtags,
+            visual_notes: `${currentCreativeLabel} com fundo ${customBgUrl ? 'customizado' : selectedBg.label.toLowerCase()}.`,
+            send_telegram_reminder: true,
+            active: true,
+            sort_order: scheduleSlots.filter((slot) => slot.day_of_week === todayDayIndex).length,
+        });
+        setShowSlotForm(true);
+        setActiveTab('agenda');
+        recordCooldownForProduct(studioPrimaryProduct);
+    };
+
+    const exportCurrentCanvasPng = async (expectedProductImageUrl?: string | null) => {
+        if (!canvasRef.current) {
+            throw new Error('Canvas indisponivel para exportacao');
+        }
+
+        const expectedImageForCanvas = isStickerFormat && !safeStickerSettings.showProduct
+            ? null
+            : expectedProductImageUrl;
+        await waitForPreviewAssets(canvasRef.current, expectedImageForCanvas);
+        const { width, height } = getMarketingCanvasSize(format);
+
+        return toPng(canvasRef.current, {
+            cacheBust: true,
+            pixelRatio: 1,
+            quality: 1.0,
+            canvasWidth: width,
+            canvasHeight: height,
+            ...(isStickerFormat ? { backgroundColor: safeStickerSettings.backgroundColor } : {}),
+            fetchRequestInit: {
+                cache: 'no-cache',
+            }
+        });
+    };
+
+    const exportCurrentCanvasWebp = async (expectedProductImageUrl?: string | null) => {
+        if (!canvasRef.current) {
+            throw new Error('Canvas indisponivel para exportacao');
+        }
+
+        const expectedImageForCanvas = isStickerFormat && !safeStickerSettings.showProduct
+            ? null
+            : expectedProductImageUrl;
+        await waitForPreviewAssets(canvasRef.current, expectedImageForCanvas);
+        const { width, height } = getMarketingCanvasSize(format);
+
+        const blob = await toBlob(canvasRef.current, {
+            cacheBust: true,
+            pixelRatio: 1,
+            quality: 0.9,
+            canvasWidth: width,
+            canvasHeight: height,
+            type: 'image/webp',
+            ...(isStickerFormat ? { backgroundColor: safeStickerSettings.backgroundColor } : {}),
+            fetchRequestInit: {
+                cache: 'no-cache',
+            }
+        });
+
+        if (!blob) {
+            throw new Error('Nao foi possivel gerar WEBP');
+        }
+
+        return URL.createObjectURL(blob);
+    };
+
+    const downloadStickerFile = async (
+        mode: MarketingStickerExportMode,
+        expectedProductImageUrl: string | null,
+        baseName: string,
+        slideNumber: number = 1,
+        totalSlides: number = 1,
+    ) => {
+        const stickerName = totalSlides > 1 ? `${baseName} slide ${slideNumber}` : baseName;
+        const [target] = getMarketingStickerExportTargets(mode, stickerName);
+
+        if (target.extension === 'png') {
+            const pngDataUrl = await exportCurrentCanvasPng(expectedProductImageUrl);
+            triggerImageDownload(pngDataUrl, target.filename);
+            return;
+        }
+
+        const webpUrl = await exportCurrentCanvasWebp(expectedProductImageUrl);
+        triggerImageDownload(webpUrl, target.filename);
+        window.setTimeout(() => URL.revokeObjectURL(webpUrl), 1000);
+    };
+
     // Export to Image Logic
-    const handleDownload = async () => {
+    const handleDownload = async (stickerExportMode?: MarketingStickerExportMode) => {
         if (!canvasRef.current) return;
+
+        const previousSlideIndex = carouselSlideIndex;
+        const currentStickerExportMode = stickerExportMode ?? 'png';
 
         try {
             setIsGenerating(true);
-            const width = 1080;
-            const height = format === 'feed' ? 1080 : 1920;
+            const slidesToExport = getMarketingExportSlides(selectedProductImages, format);
 
-            const dataUrl = await toPng(canvasRef.current, {
-                cacheBust: true,
-                pixelRatio: 1, // Não precisamos de 2x pq a lona já é 1080/1920 nativa
-                quality: 1.0,
-                canvasWidth: width,
-                canvasHeight: height,
-                fetchRequest: {
-                    cache: 'no-cache',
+            for (const slide of slidesToExport) {
+                await stageMarketingCanvasForExport(selectedProduct ?? null, slide.slideNumber - 1, slide.imageUrl);
+                if (!canvasRef.current) break;
+
+                if (isStickerFormat) {
+                    await downloadStickerFile(
+                        currentStickerExportMode,
+                        slide.imageUrl,
+                        safeStickerSettings.stickerName,
+                        slide.slideNumber,
+                        slide.totalSlides,
+                    );
+                } else {
+                    const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
+                    triggerImageDownload(
+                        dataUrl,
+                        buildMarketingDownloadName(selectedProduct?.name, slide.slideNumber, slide.totalSlides),
+                    );
                 }
-            });
 
-            const link = document.createElement('a');
-            link.download = `oferta-${selectedProduct?.name ? selectedProduct.name.replace(/\s+/g, '-').toLowerCase() : 'marketing'}.png`;
-            link.href = dataUrl;
-            link.click();
+                await new Promise(resolve => window.setTimeout(resolve, 180));
+            }
 
-            toast.success('Arte gerada e baixada com sucesso! 🚀');
+            toast.success(
+                isStickerFormat
+                    ? `Figurinha ${currentStickerExportMode.toUpperCase()} gerada com sucesso! ${slidesToExport.length} arquivo(s) baixado(s).`
+                    : slidesToExport.length > 1
+                    ? `Carrossel gerado com sucesso! ${slidesToExport.length} slides baixados.`
+                    : 'Arte gerada e baixada com sucesso!'
+            );
+            recordCooldownForProduct(selectedProduct ?? studioPrimaryProduct);
         } catch (err) {
             console.error('Falha ao gerar imagem', err);
             toast.error('Ocorreu um erro ao gerar a arte, tente novamente.');
         } finally {
+            flushSync(() => {
+                setCarouselSlideIndex(previousSlideIndex);
+                setExportImageOverride(undefined);
+            });
             setIsGenerating(false);
         }
     };
-
-    const handleBulkDownload = async () => {
+    const handleBulkDownload = async (stickerExportMode?: MarketingStickerExportMode) => {
         if (!canvasRef.current || bulkSelectedIds.size === 0) return;
+        const currentStickerExportMode = stickerExportMode ?? 'png';
 
         const productsToGenerate = groupedResults
             .map(g => g.representativeProduct)
@@ -332,60 +1003,64 @@ export default function MarketingPage() {
 
         if (productsToGenerate.length === 0) return;
 
+        const slidesToGenerate = getMarketingBulkExportSlides(
+            productsToGenerate,
+            getRenderableProductImages,
+            format,
+        );
+        const totalSlides = slidesToGenerate.length;
+
         setIsGeneratingBulk(true);
-        setBulkProgress({ current: 0, total: productsToGenerate.length });
+        setBulkProgress({ current: 0, total: totalSlides });
 
         // Salva o produto que estava no palco para não perder a referência do usuário
         const productOnStage = selectedProduct;
-
+        const slideOnStage = carouselSlideIndex;
         try {
-            const width = 1080;
-            const height = format === 'feed' ? 1080 : 1920;
+            let completedSlides = 0;
 
-            for (let i = 0; i < productsToGenerate.length; i++) {
-                const product = productsToGenerate[i];
-
-                // Força o componente a renderizar este produto no palco
-                setSelectedProduct(product);
-
-                // Aguarda o DOM reagir e as imagens de internet carregarem (1.5 segundos de respiro)
-                await new Promise(resolve => setTimeout(resolve, 1500));
-
-                // Se a referência sumir no meio do caminho (usuário saiu da tela), aborta
+            for (const slide of slidesToGenerate) {
+                await stageMarketingCanvasForExport(slide.product, slide.slideNumber - 1, slide.imageUrl);
                 if (!canvasRef.current) break;
 
-                const dataUrl = await toPng(canvasRef.current, {
-                    cacheBust: true,
-                    pixelRatio: 1,
-                    quality: 1.0,
-                    canvasWidth: width,
-                    canvasHeight: height,
-                    fetchRequest: {
-                        cache: 'no-cache',
-                    }
-                });
+                if (isStickerFormat) {
+                    await downloadStickerFile(
+                        currentStickerExportMode,
+                        slide.imageUrl,
+                        `${safeStickerSettings.stickerName} ${slide.product.name}`,
+                        slide.slideNumber,
+                        slide.totalSlides,
+                    );
+                    completedSlides += 1;
+                } else {
+                    const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
+                    triggerImageDownload(
+                        dataUrl,
+                        buildMarketingDownloadName(slide.product.name, slide.slideNumber, slide.totalSlides),
+                    );
+                    completedSlides += 1;
+                }
 
-                const link = document.createElement('a');
-                link.download = `oferta-${product.name.replace(/\s+/g, '-').toLowerCase()}.png`;
-                link.href = dataUrl;
-                link.click();
+                setBulkProgress({ current: completedSlides, total: totalSlides });
 
-                setBulkProgress({ current: i + 1, total: productsToGenerate.length });
-
-                // Pausa antes do próximo download pra não travar o navegador
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => window.setTimeout(resolve, 180));
+                if (!canvasRef.current) break;
             }
 
-            toast.success(`Lote gerado com sucesso! ${productsToGenerate.length} imagens baixadas.`);
-            setBulkSelectedIds(new Set()); // Limpa selecoes apos o download
+            toast.success(`Lote gerado com sucesso! ${completedSlides} imagens baixadas.`);
+            setBulkSelectedIds(new Set());
+            productsToGenerate.forEach((product) => recordCooldownForProduct(product));
 
         } catch (error) {
             console.error('Erro ao gerar lote:', error);
             toast.error('Ocorreu um erro gerando o lote. Processo interrompido.');
         } finally {
             setIsGeneratingBulk(false);
-            // Devolve pro palco o produto original que o usuário estava editando
-            if (productOnStage) setSelectedProduct(productOnStage);
+            flushSync(() => {
+                setSelectedProduct(productOnStage ?? null);
+                setCarouselSlideIndex(slideOnStage);
+                setExportImageOverride(undefined);
+            });
         }
     };
 
@@ -413,55 +1088,244 @@ export default function MarketingPage() {
         setCustomBgUrl(null);
     };
 
+    const canvasSize = getMarketingCanvasSize(format);
+    const previewFrameClass = isStickerFormat
+        ? 'aspect-square w-[420px] rounded-[2rem] ring-4 ring-emerald-200 bg-slate-100'
+        : format === 'feed'
+            ? 'aspect-square w-[432px] rounded-xl ring-1 ring-slate-200'
+            : 'aspect-[9/16] w-[324px] rounded-3xl ring-4 ring-slate-200';
+    const previewScale = isStickerFormat ? 0.82 : format === 'feed' ? 0.40 : 0.30;
+    const canvasBackgroundStyle: React.CSSProperties = isStickerFormat
+        ? customBgUrl
+            ? {
+                backgroundImage: `url(${customBgUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+            }
+            : {
+                background: safeStickerSettings.backgroundColor,
+            }
+        : customBgUrl
+            ? {
+                backgroundImage: `url(${customBgUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+            }
+            : {};
+    const stickerShapeRadius = {
+        blob: '42% 58% 55% 45% / 50% 42% 58% 50%',
+        circulo: '9999px',
+        retangulo: '44px',
+        'sem-forma': '0px',
+    }[safeStickerSettings.shape];
+    const stickerShapeStyle: React.CSSProperties = {
+        background: safeStickerSettings.shape === 'sem-forma' ? 'transparent' : safeStickerSettings.accentColor,
+        borderRadius: stickerShapeRadius,
+        boxShadow: safeStickerSettings.shape === 'sem-forma' ? 'none' : '0 24px 48px rgba(15, 23, 42, 0.22)',
+    };
+    const stickerIsProductHeavy = safeStickerSettings.layout === 'produto' || safeStickerSettings.layout === 'produto-preco';
+    const stickerMainFontSize = stickerMainText.length > 58
+        ? '2.15rem'
+        : stickerMainText.length > 38
+            ? '2.65rem'
+            : safeStickerSettings.layout === 'selo'
+                ? '4.1rem'
+                : '3.35rem';
+    const checkerboardBackground: React.CSSProperties = {
+        backgroundColor: '#f8fafc',
+        backgroundImage: 'linear-gradient(45deg, #cbd5e1 25%, transparent 25%), linear-gradient(-45deg, #cbd5e1 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #cbd5e1 75%), linear-gradient(-45deg, transparent 75%, #cbd5e1 75%)',
+        backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
+        backgroundSize: '20px 20px',
+    };
+    const renderStickerArtwork = (markProductImage: boolean = true) => (
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden p-7">
+            <div
+                className={`relative flex h-full w-full flex-col items-center justify-center text-center ${safeStickerSettings.layout === 'texto-livre' ? 'gap-4 p-8' : 'gap-3 p-7'}`}
+                style={stickerShapeStyle}
+            >
+                {safeStickerSettings.showLogo && (
+                    <div className="absolute left-7 top-7 z-20 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-white/95 p-2 shadow-lg">
+                        {(companyInfo?.watermarkLogoUrl || settings.logo_url) ? (
+                            <img
+                                src={companyInfo?.watermarkLogoUrl || settings.logo_url}
+                                crossOrigin="anonymous"
+                                alt="Logo"
+                                className="h-full w-full object-contain"
+                                onError={(e) => { e.currentTarget.style.display = 'none' }}
+                            />
+                        ) : (
+                            <span className="text-[10px] font-black uppercase leading-none text-slate-800">
+                                {settings.company_name || 'MV'}
+                            </span>
+                        )}
+                    </div>
+                )}
+
+                {safeStickerSettings.showKicker && stickerKickerText && (
+                    <div
+                        className="max-w-[78%] rounded-full bg-white/90 px-4 py-1.5 text-sm font-black text-slate-900 shadow-md"
+                    >
+                        <MarketingTypographyText
+                            field={stickerTypographyFields.kicker}
+                            tokens={stickerTokenValues}
+                            fallbackText={stickerKickerText}
+                        />
+                    </div>
+                )}
+
+                {safeStickerSettings.showProduct && selectedProductImage && stickerIsProductHeavy && (
+                    <div className={`${safeStickerSettings.layout === 'produto' ? 'h-[220px] w-[300px]' : 'h-[165px] w-[245px]'} flex items-center justify-center rounded-[2rem] bg-white/95 p-4 shadow-xl`}>
+                        <img
+                            key={`${selectedProduct?.id ?? 'figurinha'}-${selectedProductImage}`}
+                            {...(markProductImage ? { 'data-marketing-product-image': 'true' } : {})}
+                            src={selectedProductImage}
+                            crossOrigin="anonymous"
+                            alt={selectedProduct?.name || 'Produto'}
+                            className="h-full w-full object-contain object-center"
+                        />
+                    </div>
+                )}
+
+                <h2
+                    className="mx-auto max-w-[86%] break-words font-black leading-[0.98] tracking-[-0.02em]"
+                    style={{ fontSize: stickerMainFontSize }}
+                >
+                    <MarketingTypographyText
+                        field={stickerTypographyFields.main}
+                        tokens={stickerTokenValues}
+                        fallbackText={stickerMainText || safeStickerSettings.stickerName}
+                    />
+                </h2>
+
+                {safeStickerSettings.showProduct && selectedProductImage && !stickerIsProductHeavy && (
+                    <div className="flex h-[118px] w-[180px] items-center justify-center rounded-[1.5rem] bg-white/95 p-3 shadow-lg">
+                        <img
+                            key={`${selectedProduct?.id ?? 'figurinha'}-${selectedProductImage}`}
+                            {...(markProductImage ? { 'data-marketing-product-image': 'true' } : {})}
+                            src={selectedProductImage}
+                            crossOrigin="anonymous"
+                            alt={selectedProduct?.name || 'Produto'}
+                            className="h-full w-full object-contain object-center"
+                        />
+                    </div>
+                )}
+
+                {safeStickerSettings.showPrice && stickerPriceText && (
+                    <div
+                        className="rounded-[1.25rem] px-6 py-2.5 text-[2.35rem] font-black leading-none shadow-lg"
+                        style={{
+                            background: 'rgba(255,255,255,0.95)',
+                        }}
+                    >
+                        <MarketingTypographyText
+                            field={stickerTypographyFields.price}
+                            tokens={stickerTokenValues}
+                            fallbackText={stickerPriceText}
+                        />
+                    </div>
+                )}
+
+                {safeStickerSettings.showFooter && stickerFooterText && (
+                    <div
+                        className="max-w-[86%] rounded-full bg-white/85 px-4 py-1.5 text-base font-black shadow-md"
+                    >
+                        <MarketingTypographyText
+                            field={stickerTypographyFields.footer}
+                            tokens={stickerTokenValues}
+                            fallbackText={stickerFooterText}
+                        />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+
     return (
         <div className="p-6 max-w-7xl mx-auto">
             {/* Cabeçalho */}
-            <div className="flex items-center gap-3 mb-8">
-                <div className="p-3 bg-pink-50 rounded-xl">
-                    <Sparkles className="w-6 h-6 text-pink-600" />
+            <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                <div className="flex items-start gap-3">
+                    <div className="rounded-xl bg-pink-50 p-3">
+                        <Sparkles className="w-6 h-6 text-pink-600" />
+                    </div>
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Marketing Studio</p>
+                        <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">Versão completa para teste</h1>
+                        <p className="mt-2 text-sm text-slate-500">
+                            Studio editorial, figurinha flexível e fase de agendamento no mesmo fluxo.
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Estúdio de Marketing</h1>
-                    <p className="text-sm text-slate-500">Crie artes, baixe em lote e gerencie o cronograma do Instagram</p>
+
+                <div className="inline-flex flex-wrap rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+                    <button
+                        onClick={() => setActiveTab('studio')}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                            activeTab === 'studio'
+                                ? 'bg-slate-900 text-white'
+                                : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                    >
+                        Studio
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('agenda')}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                            activeTab === 'agenda'
+                                ? 'bg-slate-900 text-white'
+                                : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                    >
+                        Fase de Agendamento
+                    </button>
                 </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-8 items-start">
-                {/* Menu Lateral */}
-                <div className="w-full md:w-64 flex-shrink-0 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm sticky top-24">
-                    <nav className="flex flex-col gap-1.5">
-                        <button
-                            onClick={() => setActiveTab('studio')}
-                            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'studio'
-                                ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                                }`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <Sparkles className={`w-5 h-5 ${activeTab === 'studio' ? 'text-blue-600' : 'text-slate-400'}`} />
-                                Gerador de Arte
-                            </div>
-                            {activeTab === 'studio' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
-                        </button>
+            <div className="space-y-6">
+                {activeTab === 'studio' && (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Missão do dia</p>
+                            <h2 className="mt-2 text-lg font-black text-slate-900">{DAY_LABELS_FULL[todayDayIndex] ?? 'Hoje'}</h2>
+                            <p className="mt-1 text-sm text-slate-500">{currentDayRule.label}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-500">Categoria foco</p>
+                            <h2 className="mt-2 text-lg font-black text-slate-900 line-clamp-2">{editorialCategoryLabel}</h2>
+                            <p className="mt-1 text-sm text-slate-500">{studioPrimaryProduct?.name || 'Selecione um produto principal'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-500">Pipeline</p>
+                            <h2 className="mt-2 text-lg font-black text-slate-900">{scheduleSlots.filter((slot) => slot.active).length} slots ativos</h2>
+                            <p className="mt-1 text-sm text-slate-500">{bulkSelectedIds.size} itens marcados para lote</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-purple-500">Kit operacional</p>
+                            <h2 className="mt-2 text-lg font-black text-slate-900">{kitStatusLabel}</h2>
+                            <p className="mt-1 text-sm text-slate-500">{marketingKit.shortCaption || 'Monte o kit do dia para enviar ao time.'}</p>
+                        </div>
+                    </div>
+                )}
 
-                        <button
-                            onClick={() => setActiveTab('agenda')}
-                            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'agenda'
-                                ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
-                                }`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <Calendar className={`w-5 h-5 ${activeTab === 'agenda' ? 'text-blue-600' : 'text-slate-400'}`} />
-                                Agenda Semanal
-                            </div>
-                            {activeTab === 'agenda' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
-                        </button>
-                    </nav>
-                </div>
-
-                {/* Conteúdo Principal */}
-                <div className="flex-1 min-w-0 space-y-6">
+                {activeTab === 'agenda' && (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Fase de agendamento</p>
+                            <h2 className="mt-2 text-lg font-black text-slate-900">{DAY_LABELS_FULL[selectedDay] ?? 'Dia selecionado'}</h2>
+                            <p className="mt-1 text-sm text-slate-500">{scheduleSlots.filter((slot) => slot.day_of_week === selectedDay).length} slot(s) no dia</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-500">Semana</p>
+                            <h2 className="mt-2 text-lg font-black text-slate-900">{scheduleSlots.length} slot(s) cadastrados</h2>
+                            <p className="mt-1 text-sm text-slate-500">{scheduleSlots.filter((slot) => slot.active).length} ativos no fluxo</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-500">Studio conectado</p>
+                            <h2 className="mt-2 text-lg font-black text-slate-900">{studioPrimaryProduct ? 'Pronto para virar slot' : 'Aguardando kit'}</h2>
+                            <p className="mt-1 text-sm text-slate-500">{studioPrimaryProduct?.name || 'Use o studio para empurrar um slot pronto.'}</p>
+                        </div>
+                    </div>
+                )}
 
                     {activeTab === 'studio' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
@@ -480,16 +1344,43 @@ export default function MarketingPage() {
                                     >
                                         Status (9:16)
                                     </button>
+                                    <button
+                                        onClick={() => setFormat('sticker')}
+                                        className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${format === 'sticker' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                                    >
+                                        Figurinha
+                                    </button>
                                 </div>
 
-                                <button
-                                    onClick={handleDownload}
-                                    disabled={isGenerating || (!selectedProduct && !customBgUrl)}
-                                    className="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-700 transition-colors disabled:opacity-50"
-                                >
-                                    <Download className="w-5 h-5" />
-                                    {isGenerating ? 'Gerando...' : 'Baixar Arte'}
-                                </button>
+                                {isStickerFormat ? (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => handleDownload('png')}
+                                            disabled={isGenerating}
+                                            className="bg-pink-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-700 transition-colors disabled:opacity-50"
+                                        >
+                                            <Download className="w-5 h-5" />
+                                            {isGenerating ? 'Gerando...' : 'Baixar PNG'}
+                                        </button>
+                                        <button
+                                            onClick={() => handleDownload('webp')}
+                                            disabled={isGenerating}
+                                            className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                        >
+                                            <Download className="w-5 h-5" />
+                                            {isGenerating ? 'Gerando...' : 'Baixar WEBP'}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => handleDownload()}
+                                        disabled={isGenerating || (!selectedProduct && !customBgUrl)}
+                                        className="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-700 transition-colors disabled:opacity-50"
+                                    >
+                                        <Download className="w-5 h-5" />
+                                        {isGenerating ? 'Gerando...' : showCarouselPreview ? 'Baixar Carrossel' : 'Baixar Arte'}
+                                    </button>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -559,6 +1450,150 @@ export default function MarketingPage() {
                                     </div>
 
                                     {/* Bloco 2: Seleção de Produto */}
+                                    {isStickerFormat && (
+                                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                                            <h2 className="text-sm font-bold flex items-center gap-2 mb-4 text-slate-800">
+                                                <Sparkles className="w-4 h-4 text-emerald-500" />
+                                                Figurinha flexivel
+                                            </h2>
+
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">Nome do arquivo</label>
+                                                    <input
+                                                        type="text"
+                                                        value={stickerSettings.stickerName}
+                                                        onChange={(e) => updateStickerSetting('stickerName', e.target.value)}
+                                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                        placeholder="Ex: Oferta caneta touch"
+                                                    />
+                                                </div>
+
+                                                <MarketingStickerTypographyEditor
+                                                    settings={stickerSettings}
+                                                    onChange={setStickerSettings}
+                                                />
+
+                                                <p className="text-[11px] text-slate-500 leading-relaxed flex flex-wrap gap-1.5 items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                                    <span className="font-bold mr-1 w-full text-slate-700">Tags para texto:</span>
+                                                    <TagBadge tag="{produto}" colorClass="text-emerald-600" />
+                                                    <TagBadge tag="{marca}" colorClass="text-emerald-600" />
+                                                    <TagBadge tag="{preco}" colorClass="text-emerald-600" />
+                                                    <TagBadge tag="{sku}" colorClass="text-emerald-600" />
+                                                    <TagBadge tag="{cor}" colorClass="text-emerald-600" />
+                                                    <TagBadge tag="{categoria}" colorClass="text-emerald-600" />
+                                                </p>
+
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Layout</label>
+                                                        <select
+                                                            value={stickerSettings.layout}
+                                                            onChange={(e) => updateStickerSetting('layout', e.target.value as MarketingStickerSettings['layout'])}
+                                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none bg-white focus:ring-2 focus:ring-emerald-500"
+                                                        >
+                                                            <option value="produto-preco">Produto + preco</option>
+                                                            <option value="selo">Selo chamativo</option>
+                                                            <option value="texto-livre">Texto livre</option>
+                                                            <option value="produto">Produto destaque</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Forma</label>
+                                                        <select
+                                                            value={stickerSettings.shape}
+                                                            onChange={(e) => updateStickerSetting('shape', e.target.value as MarketingStickerSettings['shape'])}
+                                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none bg-white focus:ring-2 focus:ring-emerald-500"
+                                                        >
+                                                            <option value="blob">Adesivo organico</option>
+                                                            <option value="circulo">Circulo</option>
+                                                            <option value="retangulo">Retangulo</option>
+                                                            <option value="sem-forma">Sem forma</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                                                    <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Cor da forma</span>
+                                                    <input
+                                                        type="color"
+                                                        value={safeStickerSettings.accentColor}
+                                                        onChange={(e) => updateStickerSetting('accentColor', e.target.value)}
+                                                        className="h-8 w-10 rounded border border-slate-200 bg-white cursor-pointer"
+                                                    />
+                                                </label>
+
+                                                <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+                                                    <label className="flex items-center justify-between gap-3">
+                                                        <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Fundo transparente</span>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={safeStickerSettings.backgroundColor === 'transparent'}
+                                                            onChange={(e) => updateStickerSetting('backgroundColor', e.target.checked ? 'transparent' : '#ffffff')}
+                                                            className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                                                        />
+                                                    </label>
+                                                    <label className="flex items-center justify-between gap-3">
+                                                        <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Cor do fundo</span>
+                                                        <input
+                                                            type="color"
+                                                            value={safeStickerSettings.backgroundColor === 'transparent' ? '#ffffff' : safeStickerSettings.backgroundColor}
+                                                            onChange={(e) => updateStickerSetting('backgroundColor', e.target.value)}
+                                                            className="h-8 w-10 rounded border border-slate-200 bg-white cursor-pointer"
+                                                        />
+                                                    </label>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
+                                                    {[
+                                                        ['showKicker', 'Mostrar topo'],
+                                                        ['showProduct', 'Mostrar produto'],
+                                                        ['showPrice', 'Mostrar preco'],
+                                                        ['showFooter', 'Mostrar rodape'],
+                                                        ['showLogo', 'Mostrar logo'],
+                                                        ['showOutline', 'Contorno texto'],
+                                                    ].map(([key, label]) => (
+                                                        <label key={key} className="flex items-center gap-2 text-xs font-semibold text-slate-600 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={Boolean(stickerSettings[key as keyof MarketingStickerSettings])}
+                                                                onChange={(e) => updateStickerSetting(key as keyof MarketingStickerSettings, e.target.checked as never)}
+                                                                className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                                                            />
+                                                            {label}
+                                                        </label>
+                                                    ))}
+                                                </div>
+
+                                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                                        <div>
+                                                            <p className="text-xs font-black uppercase tracking-widest text-emerald-700">Preview WEBP</p>
+                                                            <p className="text-[11px] font-semibold text-slate-500">Atualiza em tempo real</p>
+                                                        </div>
+                                                        <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 shadow-sm">
+                                                            512x512
+                                                        </span>
+                                                    </div>
+                                                    <div
+                                                        className="relative mx-auto h-[220px] w-[220px] overflow-hidden rounded-2xl border border-slate-200 shadow-inner"
+                                                        style={checkerboardBackground}
+                                                    >
+                                                        <div
+                                                            className="absolute left-1/2 top-1/2 h-[512px] w-[512px] origin-center"
+                                                            style={{
+                                                                ...canvasBackgroundStyle,
+                                                                transform: 'translate(-50%, -50%) scale(0.43)',
+                                                            }}
+                                                        >
+                                                            {renderStickerArtwork(false)}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                                         <h2 className="text-sm font-bold flex items-center gap-2 mb-4 text-slate-800">
                                             <Smartphone className="w-4 h-4 text-blue-500" />
@@ -576,9 +1611,9 @@ export default function MarketingPage() {
                                                         <X className="w-3 h-3" />
                                                     </button>
                                                     <div className="flex items-center gap-3">
-                                                        {selectedProduct.images && selectedProduct.images[0] ? (
+                                                        {selectedProductImage ? (
                                                             <div className="w-12 h-12 bg-white rounded shadow-sm flex items-center justify-center p-1">
-                                                                <img src={selectedProduct.images[0]} crossOrigin="anonymous" alt={selectedProduct.name} className="max-w-full max-h-full object-contain" />
+                                                                <img src={selectedProductImage} crossOrigin="anonymous" alt={selectedProduct.name} className="max-w-full max-h-full rounded-md object-contain object-center" />
                                                             </div>
                                                         ) : (
                                                             <div className="w-12 h-12 bg-slate-200 rounded flex items-center justify-center"><Smartphone className="w-5 h-5 text-slate-400" /></div>
@@ -589,6 +1624,11 @@ export default function MarketingPage() {
                                                             <p className="text-xs font-bold text-green-600">
                                                                 R$ {formatCurrency(selectedProduct.price_retail || 0)}
                                                             </p>
+                                                            {showCarouselPreview && (
+                                                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-600 mt-1">
+                                                                    Slide {activeCarouselSlide?.slideNumber ?? 1} de {activeCarouselSlide?.totalSlides ?? 1}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -641,6 +1681,7 @@ export default function MarketingPage() {
                                                     <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-[220px] overflow-y-auto bg-white shadow-inner">
                                                         {groupedResults.map(group => {
                                                             const p = group.representativeProduct;
+                                                            const groupPreviewImage = getRenderableProductImages(p)[0] ?? null;
                                                             const isSelectedPreview = selectedProduct?.id === p.id;
                                                             const isChecked = bulkSelectedIds.has(p.id);
                                                             return (
@@ -664,8 +1705,8 @@ export default function MarketingPage() {
                                                                         className="flex-1 flex items-center gap-3 text-left cursor-pointer"
                                                                         title="Clique para enviar este modelo para o Palco de Preview"
                                                                     >
-                                                                        {p.images && p.images[0] ? (
-                                                                            <img src={p.images[0]} crossOrigin="anonymous" alt={group.model} className="w-8 h-8 object-contain rounded" />
+                                                                        {groupPreviewImage ? (
+                                                                            <img src={groupPreviewImage} crossOrigin="anonymous" alt={group.model} className="h-8 w-8 rounded-md object-contain object-center" />
                                                                         ) : (
                                                                             <div className="w-8 h-8 bg-slate-100 rounded flex items-center justify-center"><Smartphone className="w-4 h-4 text-slate-400" /></div>
                                                                         )}
@@ -691,17 +1732,38 @@ export default function MarketingPage() {
                                             )}
 
                                             {bulkSelectedIds.size > 0 && (
-                                                <button
-                                                    onClick={handleBulkDownload}
-                                                    disabled={isGeneratingBulk}
-                                                    className="w-full flex items-center justify-center gap-2 py-3 mt-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-bold rounded-lg transition-all shadow-md active:scale-[0.98] disabled:opacity-70"
-                                                >
-                                                    <Layers className="w-5 h-5" />
-                                                    {isGeneratingBulk
-                                                        ? `Gerando lote... (${bulkProgress.current}/${bulkProgress.total})`
-                                                        : `Baixar os ${bulkSelectedIds.size} Selecionados`
-                                                    }
-                                                </button>
+                                                isStickerFormat ? (
+                                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                                        <button
+                                                            onClick={() => handleBulkDownload('png')}
+                                                            disabled={isGeneratingBulk}
+                                                            className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold rounded-lg transition-all shadow-md active:scale-[0.98] disabled:opacity-70"
+                                                        >
+                                                            <Layers className="w-4 h-4" />
+                                                            {isGeneratingBulk ? `Lote... (${bulkProgress.current}/${bulkProgress.total})` : `Lote PNG`}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleBulkDownload('webp')}
+                                                            disabled={isGeneratingBulk}
+                                                            className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-lg transition-all shadow-md active:scale-[0.98] disabled:opacity-70"
+                                                        >
+                                                            <Layers className="w-4 h-4" />
+                                                            {isGeneratingBulk ? `Lote... (${bulkProgress.current}/${bulkProgress.total})` : `Lote WEBP`}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => handleBulkDownload()}
+                                                        disabled={isGeneratingBulk}
+                                                        className="w-full flex items-center justify-center gap-2 py-3 mt-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-bold rounded-lg transition-all shadow-md active:scale-[0.98] disabled:opacity-70"
+                                                    >
+                                                        <Layers className="w-5 h-5" />
+                                                        {isGeneratingBulk
+                                                            ? `Gerando lote... (${bulkProgress.current}/${bulkProgress.total})`
+                                                            : `Baixar os ${bulkSelectedIds.size} Selecionados`
+                                                        }
+                                                    </button>
+                                                )
                                             )}
                                         </div>
                                     </div>
@@ -754,10 +1816,8 @@ export default function MarketingPage() {
                                                     <TagBadge tag="{processador}" colorClass="text-indigo-600" />
                                                     <TagBadge tag="{descricao}" colorClass="text-amber-600" />
 
-                                                    <span className="font-bold mr-1 w-full mt-1 text-slate-700">Contatos:</span>
+                                                    <span className="font-bold mr-1 w-full mt-1 text-slate-700">Links:</span>
                                                     <TagBadge tag="{link}" colorClass="text-emerald-600" />
-                                                    <TagBadge tag="{whatsapp}" colorClass="text-emerald-600" />
-                                                    <TagBadge tag="{instagram}" colorClass="text-emerald-600" />
                                                 </p>
                                                 <textarea
                                                     value={captionTemplate}
@@ -786,12 +1846,23 @@ export default function MarketingPage() {
                                 </div>
 
                                 {/* LADO DIREITO: O Palco (8 Colunas) */}
-                                <div className="lg:col-span-8 flex flex-col items-center justify-center bg-slate-200/50 rounded-2xl border-2 border-dashed border-slate-300 p-8 min-h-[600px] overflow-hidden relative">
+                                <div className="lg:col-span-8 lg:sticky lg:top-6 self-start">
 
                                     {/* O Palco Visível (A Janela Responsiva que esconde o que vaza do Zoom) */}
-                                    <div
-                                        className={`relative shadow-2xl bg-white overflow-hidden transition-all duration-300 origin-top flex-shrink-0 flex items-center justify-center
-                            ${format === 'feed' ? 'aspect-square w-[432px] rounded-xl ring-1 ring-slate-200' : 'aspect-[9/16] w-[324px] rounded-3xl ring-4 ring-slate-200'}`}
+                                    <div className="flex max-h-[calc(100vh-2rem)] flex-col items-stretch justify-start rounded-[2rem] border border-slate-300 bg-slate-100/80 p-5 shadow-[0_24px_70px_rgba(15,23,42,0.12)] backdrop-blur-sm lg:h-[calc(100vh-2rem)]">
+                                        <div className="mb-4 flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-600">Palco flutuante</p>
+                                                <p className="mt-1 text-sm font-medium text-slate-500">Acompanha a rolagem para ver as mudancas em tempo real</p>
+                                            </div>
+                                            <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-slate-600 shadow-sm">
+                                                {canvasSize.width}x{canvasSize.height}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-[1.75rem] border border-slate-200 bg-white/70 p-4">
+                                            <div
+                                        className={`relative shadow-2xl bg-white overflow-hidden transition-all duration-300 origin-top flex-shrink-0 flex items-center justify-center ${previewFrameClass}`}
                                     >
 
                                         {/* O Motor Real: Elemento GIGANTE e fixo em 1080x1080 ou 1080x1920 (Tamanho Nativo) */}
@@ -799,37 +1870,34 @@ export default function MarketingPage() {
                                         <div
                                             className="absolute top-0 left-0 origin-top-left"
                                             style={{
-                                                width: '1080px',
-                                                height: format === 'feed' ? '1080px' : '1920px',
-                                                transform: format === 'feed' ? 'scale(0.40)' : 'scale(0.30)',
+                                                width: `${canvasSize.width}px`,
+                                                height: `${canvasSize.height}px`,
+                                                transform: `scale(${previewScale})`,
                                             }}
                                         >
-
                                             <div
                                                 ref={canvasRef}
-                                                className={`w-[1080px] ${format === 'feed' ? 'h-[1080px]' : 'h-[1920px]'} flex flex-col items-center justify-center relative bg-white ${!customBgUrl ? selectedBg.class : ''}`}
-                                                style={customBgUrl ? {
-                                                    backgroundImage: `url(${customBgUrl})`,
-                                                    backgroundSize: 'cover',
-                                                    backgroundPosition: 'center'
-                                                } : {}}
+                                                className={`${isStickerFormat ? 'w-[512px] h-[512px]' : `w-[1080px] ${format === 'feed' ? 'h-[1080px]' : 'h-[1920px]'} bg-white ${!customBgUrl ? selectedBg.class : ''}`} flex flex-col items-center justify-center relative`}
+                                                style={canvasBackgroundStyle}
                                             >
                                                 {/* Conteúdo Placeholder */}
-                                                {!selectedProduct && !customBgUrl && (
+                                                {!isStickerFormat && !selectedProduct && !customBgUrl && (
                                                     <div className="text-center space-y-8">
                                                         <ImageIcon className="w-48 h-48 mx-auto text-white/20" />
                                                         <h3 className="text-white/50 font-bold text-5xl tracking-widest uppercase">{settings.company_name || 'MERCADO DO VALE'}</h3>
                                                     </div>
                                                 )}
 
-                                                {!selectedProduct && customBgUrl && (
+                                                {!isStickerFormat && !selectedProduct && customBgUrl && (
                                                     <div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center">
                                                         <h3 className="text-white font-bold text-5xl tracking-widest uppercase shadow-black/50 drop-shadow-lg">{settings.company_name || 'MERCADO DO VALE'}</h3>
                                                     </div>
                                                 )}
 
+                                                {isStickerFormat && renderStickerArtwork(true)}
+
                                                 {/* A ARTE RENDERIZADA AO VIVO (Tamanhos Grandes Oficiais em PX/REM) */}
-                                                {selectedProduct && (
+                                                {!isStickerFormat && selectedProduct && (
                                                     <div className={`absolute inset-0 flex flex-col ${format === 'feed' ? 'p-12 lg:p-16' : 'p-16 lg:p-24 pt-32 pb-48'}`}>
 
                                                         {/* Módulo Superior: Imagem num Bloco Branco */}
@@ -837,14 +1905,31 @@ export default function MarketingPage() {
 
                                                             {/* Gatilho Flutuante removido à pedido */}
 
+                                                            {showCarouselPreview && (
+                                                                <>
+                                                                    <div className="absolute inset-[8%] rounded-[3.75rem] border border-slate-200 bg-white/70 shadow-xl translate-x-10 -rotate-[4deg]" />
+                                                                    <div className="absolute inset-[5%] rounded-[3.75rem] border border-slate-200 bg-white/85 shadow-2xl translate-x-5 -rotate-[2deg]" />
+                                                                    <div className="absolute top-10 right-10 z-20 flex items-center gap-3 rounded-full bg-slate-900/90 px-6 py-3 text-white shadow-xl">
+                                                                        <Layers className="w-7 h-7" />
+                                                                        <span className="text-lg font-black uppercase tracking-[0.2em]">
+                                                                            Slide {activeCarouselSlide?.slideNumber ?? 1} de {activeCarouselSlide?.totalSlides ?? 1}
+                                                                        </span>
+                                                                    </div>
+                                                                </>
+                                                            )}
+
                                                             {/* Imagem */}
-                                                            {selectedProduct.images?.[0] && (
-                                                                <img
-                                                                    src={selectedProduct.images[0]}
-                                                                    crossOrigin="anonymous"
-                                                                    alt="Aparelho"
-                                                                    className={`max-w-[80%] max-h-[80%] object-contain ${customBgUrl ? 'drop-shadow-2xl' : 'mix-blend-multiply'}`}
-                                                                />
+                                                            {selectedProductImage && (
+                                                                <div className="relative z-10 flex aspect-square w-[72%] items-center justify-center overflow-hidden rounded-[3rem] bg-white/95 p-8 shadow-[0_30px_90px_rgba(15,23,42,0.18)]">
+                                                                    <img
+                                                                        key={`${selectedProduct.id}-${selectedProductImage}`}
+                                                                        data-marketing-product-image="true"
+                                                                        src={selectedProductImage}
+                                                                        crossOrigin="anonymous"
+                                                                        alt="Aparelho"
+                                                                        className="h-full w-full rounded-[2.25rem] object-contain object-center"
+                                                                    />
+                                                                </div>
                                                             )}
                                                         </div>
 
@@ -938,6 +2023,19 @@ export default function MarketingPage() {
                                                                             <span className="text-sm text-green-700 leading-tight">Cores e Variações Detalhadas no Site</span>
                                                                         </div>
                                                                     </div>
+                                                                    {showCarouselPreview && (
+                                                                        <div className="flex items-center justify-center gap-3 pt-2">
+                                                                            {carouselSlides.slice(0, 5).map((slide, index) => (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    key={`${selectedProduct?.id}-${index}-${slide.imageUrl ?? 'empty'}`}
+                                                                                    onClick={() => setCarouselSlideIndex(index)}
+                                                                                    className={`rounded-full transition-all ${index === carouselSlideIndex ? 'w-12 h-3 bg-slate-900' : 'w-3 h-3 bg-slate-300'}`}
+                                                                                    aria-label={`Ir para slide ${slide.slideNumber}`}
+                                                                                />
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -946,94 +2044,35 @@ export default function MarketingPage() {
                                                 )}
                                             </div>
 
-                                            {/* ========================================================== */}
-                                            {/* OVERLAY DE SIMULAÇÃO INSTAGRAM (FORA DO DOWNLOAD DA FOTO!) */}
-                                            {/* ========================================================== */}
-
-                                            {/* 1. Overlay FEED */}
-                                            {format === 'feed' && (
-                                                <>
-                                                    {/* Cabeçalho Instagram */}
-                                                    <div className="absolute top-0 left-0 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 px-8 py-5 flex items-center justify-between z-50">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-14 h-14 rounded-full bg-slate-200 border-2 border-pink-500 p-0.5 overflow-hidden shrink-0">
-                                                                {settings.logo_url && <img src={settings.logo_url} className="w-full h-full object-cover rounded-full" alt="Perfil" />}
-                                                            </div>
-                                                            <div className="flex flex-col text-left">
-                                                                <span className="font-bold text-2xl text-slate-800 tracking-tight leading-tight">{settings.company_name || 'Instagram'}</span>
-                                                                <span className="text-lg text-slate-500 leading-tight">Patrocinado</span>
-                                                            </div>
-                                                        </div>
-                                                        <MoreHorizontal className="w-10 h-10 text-slate-500" />
-                                                    </div>
-
-                                                    {/* Rodapé Instagram */}
-                                                    <div className="absolute bottom-0 left-0 w-full bg-white/95 backdrop-blur-md px-8 pt-5 pb-8 flex flex-col gap-5 z-50 text-left">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex gap-8">
-                                                                <Heart className="w-10 h-10 text-slate-800" />
-                                                                <MessageCircle className="w-10 h-10 text-slate-800" />
-                                                                <Send className="w-10 h-10 text-slate-800" />
-                                                            </div>
-                                                            <Bookmark className="w-10 h-10 text-slate-800" />
-                                                        </div>
-                                                        <div className="flex flex-col gap-3 mt-4">
-                                                            <span className="font-bold text-lg text-slate-800">1.240 curtidas</span>
-                                                            <p className="text-base text-slate-800">
-                                                                <strong className="mr-2">{settings.company_name?.replace(/\s+/g, '').toLowerCase() || 'sua_loja'}</strong>
-                                                                <span className="whitespace-pre-line line-clamp-2" title={generatedCopy || 'Aproveite essa promoção incrível e exclusiva! 🔥 Entregamos na mesma hora.'}>
-                                                                    {generatedCopy || 'Aproveite essa promoção incrível e exclusiva! 🔥 Entregamos na mesma hora.'}
-                                                                </span>
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
-
-                                            {/* 2. Overlay STATUS / STORIES */}
-                                            {format === 'status' && (
-                                                <>
-                                                    <div className="absolute top-0 left-0 w-full p-8 flex flex-col gap-6 z-50 pointer-events-none bg-gradient-to-b from-black/60 via-black/20 to-transparent pb-32">
-                                                        <div className="w-full flex gap-3">
-                                                            <div className="h-2 bg-white/40 rounded-full flex-1 overflow-hidden"><div className="w-1/3 h-full bg-white rounded-full bg-white" /></div>
-                                                            <div className="h-2 bg-white/40 rounded-full flex-1" />
-                                                        </div>
-                                                        <div className="flex items-center justify-between text-white">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="w-16 h-16 rounded-full bg-slate-200 border-2 border-white overflow-hidden shadow-lg shrink-0">
-                                                                    {settings.logo_url && <img src={settings.logo_url} className="w-full h-full object-cover" alt="Perfil" />}
-                                                                </div>
-                                                                <span className="font-bold text-2xl drop-shadow-md">{settings.company_name || 'Instagram'}</span>
-                                                                <span className="text-xl opacity-80 font-medium">10 h</span>
-                                                            </div>
-                                                            <div className="flex gap-6 items-center">
-                                                                <MoreHorizontal className="w-10 h-10 drop-shadow-md" />
-                                                                <X className="w-12 h-12 drop-shadow-md" />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="absolute bottom-0 left-0 w-full p-10 flex items-center gap-6 z-50 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-32">
-                                                        <div className="flex-1 rounded-full border-2 border-white/40 bg-black/20 backdrop-blur-md px-8 py-5 text-white/90 font-medium text-2xl flex items-center text-left">
-                                                            Enviar mensagem...
-                                                        </div>
-                                                        <Heart className="w-12 h-12 text-white drop-shadow-lg" />
-                                                        <Send className="w-12 h-12 text-white drop-shadow-lg" />
-                                                    </div>
-                                                </>
-                                            )}
                                         </div>
                                     </div>
 
-                                    <p className="text-slate-500 text-sm font-medium mt-6 flex items-center gap-2">
-                                        <Camera className="w-4 h-4" /> Preview Ao Vivo ({format === 'feed' ? '1080x1080' : '1080x1920'} Escalonado)
+                                        </div>
+                                    <p className="mt-4 flex items-center justify-center gap-2 text-sm font-medium text-slate-600">
+                                        <Camera className="w-4 h-4" /> Arte pronta para exportacao ({canvasSize.width}x{canvasSize.height} escalonado)
                                     </p>
+                                    </div>
                                 </div>
 
                             </div>
                         </div>
                     )}
                     {/* ═══════════ AGENDA SEMANAL ═══════════ */}
+                    {activeTab === 'studio' && (
+                        <MarketingKitPanel
+                            statusLabel={kitStatusLabel}
+                            summary={marketingKit.summary}
+                            instructions={marketingKit.instructions}
+                            fields={[
+                                { label: 'Legenda', value: marketingKit.caption },
+                                { label: 'CTA', value: marketingKit.cta },
+                                { label: 'Hashtags', value: marketingKit.hashtags },
+                                { label: 'Legenda curta', value: marketingKit.shortCaption },
+                            ]}
+                            onCopy={handleCopyKitValue}
+                            onCreateSlot={handleCreateSlotFromKit}
+                        />
+                    )}
                     {activeTab === 'agenda' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
 
@@ -1327,7 +2366,6 @@ export default function MarketingPage() {
                             )}
                         </div>
                     )}
-                </div>
             </div>
         </div>
     );
