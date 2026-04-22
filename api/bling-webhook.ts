@@ -26,8 +26,9 @@ function verifyBlingSignature(rawBody: string, signature: string | undefined): b
     if (!secret || !signature) return false;
 
     const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    const normalizedSignature = String(signature).trim().replace(/^sha256=/i, '');
     try {
-        return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+        return crypto.timingSafeEqual(Buffer.from(normalizedSignature), Buffer.from(expected));
     } catch {
         return false;
     }
@@ -67,7 +68,8 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const signature = req.headers['x-bling-signature'] as string | undefined;
+    const signature = (req.headers['x-bling-signature-256']
+        || req.headers['x-bling-signature']) as string | undefined;
     const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 
     if (process.env.BLING_WEBHOOK_SECRET && !verifyBlingSignature(rawBody, signature)) {

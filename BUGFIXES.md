@@ -255,6 +255,21 @@ Webhook legado (valor e logs do painel): https://mercadodovale.com.br/api/bling?
 
 ---
 
+### Fallback automático de reconciliação
+
+Além do webhook, o sistema agora possui uma reconciliação automática server-side:
+
+- Endpoint: `https://www.mercadodovale.com.br/api/bling-reconcile`
+- Agenda: cron da Vercel em `5 * * * *` (produção)
+- Escopo: compara Bling × sistema por `bling_id` e corrige **nome** e **estoque** no Supabase + VPS
+
+Importante:
+
+- Esse fallback **não substitui** o webhook em tempo real; ele cobre divergências quando o webhook do Bling para ou é desativado.
+- Se a tela de logs mostrar só `healthcheck` antigo e nenhum evento novo de `stock.updated`/`product.updated`, o webhook ainda precisa ser reativado no painel do Bling.
+
+---
+
 ### Procedimento completo de recuperação (quando o webhook parar)
 
 1. **Identificar o problema:** Acesse Admin → Configurações → Bling. Se aparecer o banner vermelho "Bling desconectado", o token expirou.

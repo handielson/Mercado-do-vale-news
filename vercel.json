@@ -1,6 +1,10 @@
 {
     "crons": [
         {
+            "path": "/api/bling-reconcile",
+            "schedule": "5 * * * *"
+        },
+        {
             "path": "/api/cron-dispatcher",
             "schedule": "0 22 * * *"
         }

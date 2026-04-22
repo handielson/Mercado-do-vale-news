@@ -25,4 +25,16 @@ assert.match(
   'after a rejected refresh the webhook must stop using the stale Bling access token',
 );
 
+assert.match(
+  webhookSource,
+  /req\.headers\['x-bling-signature-256'\][\s\S]*req\.headers\['x-bling-signature'\]/m,
+  'the webhook must accept the current Bling signature header name and keep compatibility with the legacy one',
+);
+
+assert.match(
+  webhookSource,
+  /replace\(\s*\/\^sha256=\/i,\s*''\s*\)/,
+  'the webhook must strip the sha256= prefix from Bling signatures before comparing the HMAC',
+);
+
 console.log('bling-webhook regression guard ok');

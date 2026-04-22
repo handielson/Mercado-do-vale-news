@@ -2163,13 +2163,13 @@ export default function BlingPage() {
                     {/* TAB: WEBHOOK                         */}
                     {/* ════════════════════════════════════ */}
                     {activeTab === 'webhook' && (() => {
-                        const webhookUrl = `${window.location.origin}/api/bling?resource=webhook`;
+                        const webhookUrl = `${window.location.origin}/api/bling-webhook`;
 
                         async function testWebhookPing() {
                             setTestingWebhook(true);
                             setWebhookTestResult(null);
                             try {
-                                const res = await fetch('/api/bling?resource=webhook');
+                                const res = await fetch('/api/bling-webhook');
                                 if (res.ok) {
                                     setWebhookTestResult({ ok: true, message: 'Endpoint respondeu com 200 — URL válida!' });
                                 } else {
@@ -2250,6 +2250,19 @@ export default function BlingPage() {
                                 setLoadingLogs(false);
                             }
                         }
+
+                        const latestWebhookLog = webhookLogs?.[0] || null;
+                        const latestLiveWebhookLog = webhookLogs?.find((log: any) => {
+                            const evt = String(log?.payload?.event || log?.payload?.evento || '').toLowerCase();
+                            return evt && evt !== 'healthcheck';
+                        }) || null;
+                        const latestWebhookAt = latestWebhookLog ? new Date(latestWebhookLog.received_at) : null;
+                        const latestLiveWebhookAt = latestLiveWebhookLog ? new Date(latestLiveWebhookLog.received_at) : null;
+                        const latestWebhookLabel = latestWebhookAt ? latestWebhookAt.toLocaleString('pt-BR') : null;
+                        const latestLiveWebhookLabel = latestLiveWebhookAt ? latestLiveWebhookAt.toLocaleString('pt-BR') : null;
+                        const webhookLooksStale = !!(webhookLogs && webhookLogs.length > 0 && (
+                            !latestLiveWebhookAt || (Date.now() - latestLiveWebhookAt.getTime()) > 24 * 60 * 60 * 1000
+                        ));
 
                         return (
                             <div className="space-y-4">
@@ -2473,9 +2486,25 @@ export default function BlingPage() {
 
                                     {webhookLogs !== null && webhookLogs.length > 0 && (
                                         <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                            <div className="bg-green-50 border-b border-green-200 px-4 py-2 text-xs font-semibold text-green-800">
-                                                ✓ {webhookLogs.length} evento(s) recebido(s) — Bling está chamando o servidor
+                                            <div className={`px-4 py-2 text-xs font-semibold border-b ${
+                                                webhookLooksStale
+                                                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                                    : 'bg-green-50 border-green-200 text-green-800'
+                                            }`}>
+                                                {webhookLooksStale
+                                                    ? `⚠️ Logs antigos: último evento real do Bling em ${latestLiveWebhookLabel || 'data desconhecida'}`
+                                                    : `✓ ${webhookLogs.length} evento(s) recebido(s) — Bling está chamando o servidor`}
                                             </div>
+                                            {webhookLooksStale && (
+                                                <div className="px-4 py-3 text-xs bg-amber-50 text-amber-900 border-b border-amber-200 space-y-1">
+                                                    <p>
+                                                        O registro mais novo nesta lista é <strong>{String(latestWebhookLog?.payload?.event || latestWebhookLog?.payload?.evento || 'desconhecido')}</strong> em <strong>{latestWebhookLabel || 'data desconhecida'}</strong>.
+                                                    </p>
+                                                    <p>
+                                                        Se você acabou de alterar nome ou estoque no Bling e nada novo apareceu aqui, o webhook está estagnado ou foi desativado no painel do Bling.
+                                                    </p>
+                                                </div>
+                                            )}
                                             <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
                                                 {webhookLogs.map((log, i) => {
                                                     const evt = log.payload?.event || log.payload?.evento || 'desconhecido';
