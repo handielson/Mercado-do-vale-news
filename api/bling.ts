@@ -748,7 +748,7 @@ export default async function handler(req: any, res: any) {
             // Lê dados do Supabase (fonte de verdade para preço/estoque)
             const { data: products, error: supErr, count } = await supabase
                 .from('products')
-                .select('id, name, sku, status, category_id, price_retail, price_reseller, price_wholesale, price_cost, stock_quantity, track_inventory, is_combo', { count: 'exact' })
+                .select('id, name, sku, status, category_id, price_retail, price_reseller, price_wholesale, price_cost, stock_quantity, track_inventory, is_combo, bling_id, bling_parent_id, parent_id', { count: 'exact' })
                 .range(from, to);
 
             if (supErr) return res.status(500).json({ error: supErr.message });
@@ -770,6 +770,9 @@ export default async function handler(req: any, res: any) {
                 stock_quantity: p.stock_quantity ?? 0,
                 track_inventory: p.track_inventory ?? true,
                 is_combo: p.is_combo ?? false,
+                bling_id: p.bling_id ?? null,
+                bling_parent_id: p.bling_parent_id ?? null,
+                parent_id: p.parent_id ?? null,
             }));
 
             const batchRes = await fetch(`${vpsBase}/products/batch`, {
