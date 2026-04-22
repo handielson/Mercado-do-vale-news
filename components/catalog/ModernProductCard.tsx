@@ -19,6 +19,8 @@ import { getActivePromoPrice } from '@/utils/promoPrice';
 import { ProductRatingBadge } from './ProductRatingBadge';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
+import { CATALOG_RETURN_STORAGE_KEY, createCatalogReturnState } from '../../pages/catalog/catalogPagination.js';
+import { selectCatalogCardImageProduct, selectCatalogCardProduct } from './modernProductCardState.js';
 
 // Utility to determine if a color is dark enough to need white text
 const isDarkColor = (colorHex: string) => {
@@ -79,13 +81,6 @@ export function ModernProductCard({
     const [variantInstallments, setVariantInstallments] = useState<Map<number, string>>(new Map());
     const [displayImageUrl, setDisplayImageUrl] = useState<string>('');
 
-    const hasMedia = (p: CatalogProduct) => {
-        if (Array.isArray(p.images) && p.images.some(img => typeof img === 'string' && img.trim().length > 0)) {
-            return true;
-        }
-        return typeof (p as any).image_url === 'string' && (p as any).image_url.trim().length > 0;
-    };
-
     // Calculate total stock across all variants/colors
     const totalGroupStock = useMemo(() => {
         if (productGroup?.variants) {
@@ -140,19 +135,11 @@ export function ModernProductCard({
 
     // Get the current product based on selected variant and color
     const currentProduct = useMemo(() => {
-        if (selectedVariant && selectedVariant.products.length > 0) {
-            // Try to find product with current color
-            const colorName = selectedVariant.colors[currentColorIndex]?.name;
-            if (colorName) {
-                const productWithColor = selectedVariant.products.find(
-                    p => p.specs?.color === colorName
-                );
-                if (productWithColor) return productWithColor;
-            }
-            // Fallback to first product in variant
-            return selectedVariant.products[0];
-        }
-        return product;
+        return selectCatalogCardProduct({
+            product,
+            selectedVariant,
+            currentColorIndex,
+        }) as CatalogProduct;
     }, [selectedVariant, currentColorIndex, product]);
 
     const { customer } = useSupabaseAuth();
@@ -251,9 +238,12 @@ export function ModernProductCard({
 
     // Get primary image — uses currentProduct (selected variant/color) not the representative product
     const getImageUrl = () => {
-        const productToUse = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
-            ? (selectedVariant.products.find(hasMedia) || selectedVariant.products[0])
-            : currentProduct;
+        const productToUse = selectCatalogCardImageProduct({
+            product,
+            currentProduct,
+            selectedVariant,
+            currentColorIndex,
+        }) as CatalogProduct;
 
         // Handle images as string array (from Product type)
         if (Array.isArray(productToUse.images) && productToUse.images.length > 0) {
@@ -300,6 +290,20 @@ export function ModernProductCard({
     const handleTitleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         const targetProduct = currentProduct || product;
+
+        if (typeof window !== 'undefined' && window.location.pathname === '/') {
+            try {
+                const returnState = createCatalogReturnState({
+                    pathname: window.location.pathname,
+                    search: window.location.search,
+                    scrollY: window.scrollY,
+                });
+                window.sessionStorage.setItem(CATALOG_RETURN_STORAGE_KEY, JSON.stringify(returnState));
+            } catch {
+                // sessionStorage can fail in restricted browser contexts; keep navigation working.
+            }
+        }
+
         navigate(`/produto/${targetProduct.slug || targetProduct.id}`);
     };
 

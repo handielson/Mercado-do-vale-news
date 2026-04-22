@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import { X, LayoutGrid, List, Heart, Search, MoreHorizontal } from 'lucide-react';
 import {
     BannerCarousel,
@@ -31,6 +31,14 @@ import { ShareCatalogButton } from '@/components/catalog/ShareCatalogButton';
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import type { CustomerType } from '@/services/bannerService';
 import { CartIcon } from '@/components/store/CartIcon';
+import {
+    buildCatalogPageHref,
+    CATALOG_RETURN_STORAGE_KEY,
+    getCatalogPageSlice,
+    needsCatalogPageData,
+    normalizeCatalogPage,
+    shouldRestoreCatalogState,
+} from './catalogPagination.js';
 
 
 function CatalogContent() {
@@ -70,9 +78,12 @@ function CatalogContent() {
     })();
 
     // Ler ?search= e ?categoria= da URL para suportar links compartilhados e botões de atalho
+    const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
     const initialSearchQuery = searchParams.get('search') ?? '';
     const initialCategory = searchParams.get('categoria') ?? undefined;
+    const currentPage = normalizeCatalogPage(searchParams.get('page'));
+    const restoreScrollRef = useRef(false);
 
     // bypassCache fixo: nunca muda após a primeira renderização, evitando reload quando auth carrega
     // Usuários ADMIN que precisam bypassar cache devem recarregar a página manualmente
@@ -101,11 +112,13 @@ function CatalogContent() {
     });
 
     // Sincronizar a busca do estado com a URL para permitir compartilhamento do link de busca
+    // e resetar a paginação quando o termo muda.
     useEffect(() => {
         setSearchParams(prevParams => {
             const newParams = new URLSearchParams(prevParams);
             const currentSearch = newParams.get('search') ?? '';
             const newSearch = searchQuery.trim();
+            let changed = false;
             
             if (currentSearch !== newSearch) {
                if (newSearch) {
@@ -113,19 +126,14 @@ function CatalogContent() {
                } else {
                    newParams.delete('search');
                }
-               return newParams;
+               newParams.delete('page');
+               changed = true;
             }
-            return prevParams;
+            return changed ? newParams : prevParams;
         }, { replace: true });
     }, [searchQuery, setSearchParams]);
 
     const productsPerPage = catalogSettings?.products_per_page || 12;
-    const [visibleCount, setVisibleCount] = useState(productsPerPage);
-
-    // Quando o catalogSettings carrega ou muda, ajusta o count inicial
-    useEffect(() => {
-        setVisibleCount(productsPerPage);
-    }, [productsPerPage]);
 
     // Carregar seções ativas
     useEffect(() => {
@@ -217,6 +225,23 @@ function CatalogContent() {
         }
     };
 
+    const syncCategoryUrl = useCallback((categoryIds: string[]) => {
+        setSearchParams(prevParams => {
+            const nextParams = new URLSearchParams(prevParams);
+            const firstId = categoryIds[0];
+
+            if (firstId) {
+                const categoryMetadata = filterStats?.categories.find(category => category.id === firstId);
+                nextParams.set('categoria', categoryMetadata ? categoryMetadata.name : firstId);
+            } else {
+                nextParams.delete('categoria');
+            }
+
+            nextParams.delete('page');
+            return nextParams;
+        }, { replace: true });
+    }, [filterStats?.categories, setSearchParams]);
+
     const isAdmin = customer?.customer_type === 'ADMIN';
 
     // Group products by variants (Brand + Model + RAM + Storage)
@@ -226,11 +251,6 @@ function CatalogContent() {
         const groups = groupProductsByVariants(products, includeOutOfStockForView);
         return groups;
     }, [products, isAdmin, catalogSettings.hide_out_of_stock]);
-
-
-    const visibleGroups = useMemo(() => {
-        return productGroups.slice(0, visibleCount);
-    }, [productGroups, visibleCount]);
 
     // Modo "Todos" — múltiplas categorias selecionadas (pai + filhos)
     const isAllChildrenMode = filters.categories.length > 1;
@@ -294,19 +314,82 @@ function CatalogContent() {
 
     // Ativa agrupamento quando há busca ativa, sem filtro de categoria e 2+ seções com 3+ itens
     const isSearchCategoryMode = !!searchQuery && !filters.categories.length && searchCategorySections.length >= 2;
+    const isPaginatedCatalogMode = !isAllChildrenMode && !isSearchCategoryMode;
+    const catalogPageSlice = useMemo(() => {
+        return getCatalogPageSlice(productGroups, currentPage, productsPerPage);
+    }, [productGroups, currentPage, productsPerPage]);
 
-    const actualHasMore = hasMore || visibleCount < productGroups.length;
+    const visibleGroups = useMemo(() => {
+        return isPaginatedCatalogMode ? catalogPageSlice.items : [];
+    }, [catalogPageSlice.items, isPaginatedCatalogMode]);
 
-    const handleLoadMore = useCallback(() => {
-        if (visibleCount < productGroups.length) {
-            // Mostrar mais do que já foi carregado
-            setVisibleCount(prev => prev + productsPerPage);
-        } else {
-            // Se já mostramos todos os grupos da memória, buscar mais
-            loadMore();
-            setVisibleCount(prev => prev + productsPerPage);
+    const needsMoreGroupsForPage = isPaginatedCatalogMode && needsCatalogPageData({
+        loadedGroupCount: productGroups.length,
+        currentPage,
+        pageSize: productsPerPage,
+        hasMore,
+        loading: loading || fetching,
+    });
+
+    const hasPreviousPage = currentPage > 1;
+    const hasNextPage = isPaginatedCatalogMode && (
+        hasMore || catalogPageSlice.endIndex < productGroups.length
+    );
+    const knownPageCount = Math.max(1, Math.ceil(productGroups.length / productsPerPage) || 1);
+    const lastPageForNavigation = hasNextPage ? Math.max(knownPageCount, currentPage + 1) : knownPageCount;
+    const paginationPages = useMemo(() => {
+        const pages = new Set<number>([1, currentPage - 1, currentPage, currentPage + 1, lastPageForNavigation]);
+        return Array.from(pages)
+            .filter(page => page >= 1 && page <= lastPageForNavigation)
+            .sort((left, right) => left - right);
+    }, [currentPage, lastPageForNavigation]);
+    const showPagination = isPaginatedCatalogMode && (hasPreviousPage || hasNextPage || paginationPages.length > 1);
+    const isCatalogGridLoading = (loading && productGroups.length === 0) || needsMoreGroupsForPage;
+
+    useEffect(() => {
+        if (!needsMoreGroupsForPage) return;
+        loadMore();
+    }, [needsMoreGroupsForPage, loadMore]);
+
+    useEffect(() => {
+        restoreScrollRef.current = false;
+    }, [location.pathname, location.search]);
+
+    useEffect(() => {
+        if (!isPaginatedCatalogMode || needsMoreGroupsForPage || loading || fetching || restoreScrollRef.current) {
+            return;
         }
-    }, [visibleCount, productGroups.length, productsPerPage, loadMore]);
+
+        if (typeof window === 'undefined') return;
+
+        const rawSavedState = window.sessionStorage.getItem(CATALOG_RETURN_STORAGE_KEY);
+        if (!rawSavedState) return;
+
+        try {
+            const savedState = JSON.parse(rawSavedState);
+            if (!shouldRestoreCatalogState(savedState, {
+                pathname: location.pathname,
+                search: location.search,
+            })) {
+                return;
+            }
+
+            restoreScrollRef.current = true;
+            window.sessionStorage.removeItem(CATALOG_RETURN_STORAGE_KEY);
+            window.requestAnimationFrame(() => {
+                window.scrollTo({ top: savedState.scrollY || 0, behavior: 'auto' });
+            });
+        } catch {
+            window.sessionStorage.removeItem(CATALOG_RETURN_STORAGE_KEY);
+        }
+    }, [
+        fetching,
+        isPaginatedCatalogMode,
+        loading,
+        location.pathname,
+        location.search,
+        needsMoreGroupsForPage,
+    ]);
 
 
     if (error) {
@@ -386,7 +469,11 @@ function CatalogContent() {
                         <div className="flex flex-col gap-2">
                             {/* Botão TODOS */}
                             <button
-                                onClick={() => { setFilters({ ...filters, categories: [], page: 1 }); setExpandCats(false); }}
+                                onClick={() => {
+                                    setFilters({ ...filters, categories: [] });
+                                    syncCategoryUrl([]);
+                                    setExpandCats(false);
+                                }}
                                 className={`flex items-center gap-3 py-3 px-4 rounded-xl border transition-all ${
                                     filters.categories.length === 0
                                         ? 'bg-slate-900 border-slate-900 text-white shadow-md'
@@ -409,7 +496,8 @@ function CatalogContent() {
                                         <button
                                             onClick={() => {
                                                 const ids = children.length > 0 ? [cat.id!, ...children.map(c => c.id!)] : [cat.id!];
-                                                setFilters({ ...filters, categories: ids, page: 1 });
+                                                setFilters({ ...filters, categories: ids });
+                                                syncCategoryUrl(ids);
                                                 setExpandCats(false);
                                             }}
                                             className={`flex items-center gap-3 py-2.5 px-3 transition-all ${
@@ -434,7 +522,9 @@ function CatalogContent() {
                                                         <button
                                                             key={child.id}
                                                             onClick={() => {
-                                                                setFilters({ ...filters, categories: [child.id!], page: 1 });
+                                                                const ids = [child.id!];
+                                                                setFilters({ ...filters, categories: ids });
+                                                                syncCategoryUrl(ids);
                                                                 setExpandCats(false);
                                                             }}
                                                             className={`flex items-center justify-between py-2 px-3 bg-white transition-all ${
@@ -508,17 +598,8 @@ function CatalogContent() {
                         ...filters,
                         categories: ids
                     });
-                    
-                    const newParams = new URLSearchParams(searchParams);
-                    const firstId = ids[0];
-                    if (firstId) {
-                        // Tentar usar o nome legível na URL se achado, senão o ID
-                        const catMetadata = filterStats?.categories.find(c => c.id === firstId);
-                        newParams.set('categoria', catMetadata ? catMetadata.name : firstId);
-                    } else {
-                        newParams.delete('categoria');
-                    }
-                    setSearchParams(newParams, { replace: true });
+
+                    syncCategoryUrl(ids);
                 }}
                 categories={(filterStats?.categories || []).map(cat => ({
                     id: cat.id,
@@ -789,23 +870,87 @@ function CatalogContent() {
                         ))}
                     </div>
                 ) : (
-                    <ProductGroupGrid
-                        groups={visibleGroups}
-                        loading={loading && productGroups.length === 0}
-                        hasMore={actualHasMore}
-                        onLoadMore={handleLoadMore}
-                        onFavorite={toggleFavorite}
-                        onShare={handleShare}
-                        favorites={favorites}
-                        mobileColumns={2}
-                        variant={mobileView === 'list' ? 'list' : 'grid'}
-                        columns={{
-                            mobile: 2,
-                            tablet: 3,
-                            desktop: 4,
-                            wide: 5
-                        }}
-                    />
+                    <>
+                        <ProductGroupGrid
+                            groups={visibleGroups}
+                            loading={isCatalogGridLoading}
+                            hasMore={false}
+                            onFavorite={toggleFavorite}
+                            onShare={handleShare}
+                            favorites={favorites}
+                            mobileColumns={2}
+                            variant={mobileView === 'list' ? 'list' : 'grid'}
+                            columns={{
+                                mobile: 2,
+                                tablet: 3,
+                                desktop: 4,
+                                wide: 5
+                            }}
+                        />
+
+                        {showPagination && (
+                            <nav
+                                aria-label="Paginação dos produtos"
+                                className="mt-8 flex flex-wrap items-center justify-center gap-2"
+                            >
+                                {hasPreviousPage && (
+                                    <Link
+                                        to={buildCatalogPageHref({
+                                            pathname: location.pathname,
+                                            searchParams,
+                                            page: currentPage - 1,
+                                        })}
+                                        className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                                    >
+                                        Anterior
+                                    </Link>
+                                )}
+
+                                {paginationPages.map((pageNumber, index) => {
+                                    const previousPage = paginationPages[index - 1];
+                                    const hasGapBefore = previousPage && pageNumber - previousPage > 1;
+
+                                    return (
+                                        <div key={`page-slot-${pageNumber}`} className="flex items-center gap-2">
+                                            {hasGapBefore && (
+                                                <span className="px-1 text-slate-400" aria-hidden="true">
+                                                    ...
+                                                </span>
+                                            )}
+                                            <Link
+                                                to={buildCatalogPageHref({
+                                                    pathname: location.pathname,
+                                                    searchParams,
+                                                    page: pageNumber,
+                                                })}
+                                                aria-current={pageNumber === currentPage ? 'page' : undefined}
+                                                className={`min-w-[44px] px-4 py-2 rounded-xl border text-center font-semibold transition-colors ${
+                                                    pageNumber === currentPage
+                                                        ? 'border-slate-900 bg-slate-900 text-white'
+                                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                {pageNumber}
+                                            </Link>
+                                        </div>
+                                    );
+                                })}
+
+                                {hasNextPage && (
+                                    <Link
+                                        to={buildCatalogPageHref({
+                                            pathname: location.pathname,
+                                            searchParams,
+                                            page: currentPage + 1,
+                                        })}
+                                        className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                                    >
+                                        Próxima
+                                    </Link>
+                                )}
+                            </nav>
+                        )}
+                    </>
                 )}
             </div>
 
