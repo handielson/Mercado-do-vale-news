@@ -260,12 +260,14 @@ Webhook legado (valor e logs do painel): https://mercadodovale.com.br/api/bling?
 Além do webhook, o sistema agora possui uma reconciliação automática server-side:
 
 - Endpoint: `https://www.mercadodovale.com.br/api/bling-reconcile`
-- Agenda: cron da Vercel em `5 * * * *` (produção)
+- Agenda: cron horária na **VPS** chamando o endpoint com `x-sync-key`
+- Script versionado: `scripts/bling-reconcile-cron.sh`
 - Escopo: compara Bling × sistema por `bling_id` e corrige **nome** e **estoque** no Supabase + VPS
 
 Importante:
 
 - Esse fallback **não substitui** o webhook em tempo real; ele cobre divergências quando o webhook do Bling para ou é desativado.
+- A Vercel deste projeto está em plano Hobby, então o agendamento horário não pode ficar no `vercel.json`.
 - Se a tela de logs mostrar só `healthcheck` antigo e nenhum evento novo de `stock.updated`/`product.updated`, o webhook ainda precisa ser reativado no painel do Bling.
 
 ---
