@@ -69,7 +69,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         setVideoInfo((prev) => ({ ...prev, checking: true }));
         let isMounted = true;
 
-        const normalizedSku = product.sku.trim().replace(/\s+/g, '').toUpperCase();
+        const normalizedSku = product.sku.trim().replace(/\s+/g, '');
         const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(normalizedSku)}.mp4`;
 
         const resolveVideoInfo = async () => {
@@ -128,7 +128,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         try {
             const formData = new FormData();
             const ext = file.name.split('.').pop()?.toLowerCase() || 'mp4';
-            const fileName = `${product.sku.toUpperCase()}.${ext}`;
+            const fileName = `${product.sku.trim().replace(/\s+/g, '')}.${ext}`;
             const renamedFile = new File([file], fileName, { type: file.type });
             formData.append('file', renamedFile);
 

@@ -3,6 +3,13 @@ const fastify = require('fastify')({ logger: false, bodyLimit: 50 * 1024 * 1024 
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
+const {
+  buildVideoCdnUrl,
+  buildVideoFileName,
+  cleanVideoExtension,
+  cleanVideoSku,
+  findCaseInsensitiveVideoFileName,
+} = require('./utils/video-file-name.cjs');
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -1726,43 +1733,148 @@ fastify.delete('/battery-healths/:id', { preHandler: requireSyncKey }, async (re
 const videoExistenceCache = new Map();
 const VIDEO_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutos
 
+async function checkVideoCdnHead(url) {
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) return true;
+
+    // Alguns origins/CDNs podem negar HEAD; Range GET evita baixar o arquivo inteiro.
+    if (res.status === 405 || res.status === 403) {
+      const rangeRes = await fetch(url, {
+        headers: { Range: 'bytes=0-0' },
+        signal: AbortSignal.timeout(5000),
+      });
+      return rangeRes.ok || rangeRes.status === 206;
+    }
+  } catch (err) {
+    console.warn('[check-video] CDN HEAD fallback failed:', err.message);
+  }
+  return false;
+}
+
+function videoCheckPayload(result) {
+  return {
+    exists: result.exists,
+    ...(result.url ? { url: result.url } : {}),
+    ...(result.fileName ? { fileName: result.fileName } : {}),
+  };
+}
+
+function videoCacheKey(cleanSku, ext) {
+  return buildVideoFileName(cleanSku, ext).toLowerCase();
+}
+
+async function getConfiguredVideoExtension() {
+  const [rows] = await pool.query('SELECT synology_video_extension FROM company_settings LIMIT 1').catch(() => [[]]);
+  return cleanVideoExtension(rows?.[0]?.synology_video_extension || '.mp4');
+}
+
+function synologyFilesFromResponse(data) {
+  return Array.isArray(data?.data?.files) ? data.data.files : [];
+}
+
+async function findSynologyVideoFileNameCaseInsensitive(requestedFileName, sid) {
+  const urlObj = new URL(SYNO_URL);
+  const limit = 1000;
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+
+  while (offset < total && offset < 50000) {
+    const data = await synoHttpGet(
+      urlObj,
+      `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list&folder_path=${encodeURIComponent(SYNO_FOLDERS.videos)}&limit=${limit}&offset=${offset}&_sid=${sid}`
+    );
+    if (data.success !== true) return null;
+
+    const files = synologyFilesFromResponse(data).filter(f => !f.isdir);
+    const match = findCaseInsensitiveVideoFileName(files, requestedFileName);
+    if (match) return match;
+
+    const received = synologyFilesFromResponse(data).length;
+    if (!received) return null;
+
+    const reportedTotal = Number(data.data?.total);
+    total = Number.isFinite(reportedTotal) && reportedTotal >= 0 ? reportedTotal : offset + received;
+    offset += received;
+  }
+
+  return null;
+}
+
+function findLocalVideoFileNameCaseInsensitive(requestedFileName) {
+  try {
+    const result = listLocalSynologyFiles('videos', 10000, 0);
+    if (!result.ok) return null;
+    return findCaseInsensitiveVideoFileName(result.data?.files || [], requestedFileName);
+  } catch {
+    return null;
+  }
+}
+
+async function resolveVideoBySku(cleanSku, ext) {
+  const requestedFileName = buildVideoFileName(cleanSku, ext);
+  const canonicalUrl = buildVideoCdnUrl(requestedFileName);
+
+  if (SYNO_USER && SYNO_PASS) {
+    try {
+      const sid = await synoLogin();
+      const filePath = `${SYNO_FOLDERS.videos}/${requestedFileName}`;
+      const urlObj = new URL(SYNO_URL);
+      const data = await synoHttpGet(urlObj,
+        `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`
+      );
+
+      const exactFileName = data.success === true ? synologyFilesFromResponse(data)[0]?.name : null;
+      if (exactFileName) {
+        return { exists: true, fileName: exactFileName, url: buildVideoCdnUrl(exactFileName) };
+      }
+
+      const matchedFileName = await findSynologyVideoFileNameCaseInsensitive(requestedFileName, sid);
+      if (matchedFileName) {
+        return { exists: true, fileName: matchedFileName, url: buildVideoCdnUrl(matchedFileName) };
+      }
+    } catch (err) {
+      console.warn('[check-video] Synology lookup failed, trying fallback:', err.message);
+    }
+  }
+
+  const localFileName = findLocalVideoFileNameCaseInsensitive(requestedFileName);
+  if (localFileName) {
+    return { exists: true, fileName: localFileName, url: buildVideoCdnUrl(localFileName) };
+  }
+
+  const exists = await checkVideoCdnHead(canonicalUrl);
+  return { exists, fileName: exists ? requestedFileName : null, url: exists ? canonicalUrl : null };
+}
+
+async function cachedVideoCheck(sku) {
+  const cleanSku = cleanVideoSku(sku);
+  if (!cleanSku) return null;
+
+  const ext = await getConfiguredVideoExtension();
+  const cacheKey = videoCacheKey(cleanSku, ext);
+  const cached = videoExistenceCache.get(cacheKey);
+  if (cached && (Date.now() - cached.cachedAt) < VIDEO_CACHE_TTL_MS) {
+    return cached;
+  }
+
+  const result = await resolveVideoBySku(cleanSku, ext);
+  const cachedResult = { ...result, cachedAt: Date.now() };
+  videoExistenceCache.set(cacheKey, cachedResult);
+  return cachedResult;
+}
+
 // GET /public/check-video?sku=SKU — verifica existência via Synology FileStation
 fastify.get('/public/check-video', async (req, reply) => {
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required' });
 
-  const cleanSku = sku.trim().replace(/\s+/g, '');
-  const [rows] = await pool.query('SELECT synology_video_extension FROM company_settings LIMIT 1').catch(() => [[]]);
-  const ext = rows?.[0]?.synology_video_extension || '.mp4';
-  const fileName = `${cleanSku}${ext}`;
-
-  // Retorna do cache se ainda válido
-  const cached = videoExistenceCache.get(cleanSku);
-  if (cached && (Date.now() - cached.cachedAt) < VIDEO_CACHE_TTL_MS) {
-    return reply.send({ exists: cached.exists, ...(cached.url ? { url: cached.url } : {}) });
-  }
-
-  const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
-
-  // Verifica existência via FileStation API (não depende do CDN)
-  try {
-    if (SYNO_USER && SYNO_PASS) {
-      const sid = await synoLogin();
-      const filePath = `${SYNO_FOLDERS.videos}/${fileName}`;
-      const urlObj = new URL(SYNO_URL);
-      const data = await synoHttpGet(urlObj,
-        `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`
-      );
-      const exists = data.success === true && data.data?.files?.[0]?.name != null;
-      videoExistenceCache.set(cleanSku, { exists, url: exists ? canonicalUrl : null, cachedAt: Date.now() });
-      return reply.send({ exists, ...(exists ? { url: canonicalUrl } : {}) });
-    }
-  } catch (err) {
-    console.warn('[public/check-video] Synology API error, fallback otimista:', err.message);
-  }
-
-  // Fallback conservador se Synology inacessível
-  return reply.send({ exists: false });
+  const result = await cachedVideoCheck(sku);
+  if (!result) return reply.code(400).send({ error: 'sku required' });
+  return reply.send(videoCheckPayload(result));
 });
 
 fastify.get('/team', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -2188,35 +2300,9 @@ fastify.get('/check-video', async (req, reply) => {
   reply.header('Cache-Control', 'public, max-age=300');
   const sku = req.query.sku;
   if (!sku) return reply.code(400).send({ error: 'sku required', exists: false });
-  try {
-    const [[setting]] = await pool.query(
-      'SELECT synology_video_extension FROM company_settings LIMIT 1'
-    ).catch(() => [[null]]);
-    const ext = (setting && setting.synology_video_extension) || '.mp4';
-    const cleanSku = sku.trim().replace(/\s+/g, '');
-    const fileName = `${cleanSku}${ext}`;
-    const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
-
-    if (SYNO_USER && SYNO_PASS) {
-      try {
-        const sid = await synoLogin();
-        const filePath = `${SYNO_FOLDERS.videos}/${fileName}`;
-        const urlObj = new URL(SYNO_URL);
-        const data = await synoHttpGet(urlObj,
-          `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`
-        );
-        const exists = data.success === true && data.data?.files?.[0]?.name != null;
-        return { exists, url: canonicalUrl };
-      } catch (synoErr) {
-        console.warn('[check-video] Synology inatível, fallback otimista:', synoErr.message);
-        return { exists: false };
-      }
-    }
-
-    return { exists: false };
-  } catch {
-    return { exists: false };
-  }
+  const result = await cachedVideoCheck(sku);
+  if (!result) return reply.code(400).send({ error: 'sku required', exists: false });
+  return videoCheckPayload(result);
 });
 
 // ─── Auto-migrations ────────────────────────────────────────────────────────
