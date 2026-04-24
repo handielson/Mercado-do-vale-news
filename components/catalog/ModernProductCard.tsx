@@ -20,7 +20,12 @@ import { ProductRatingBadge } from './ProductRatingBadge';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { CATALOG_RETURN_STORAGE_KEY, createCatalogReturnState } from '../../pages/catalog/catalogPagination.js';
-import { selectCatalogCardImageProduct, selectCatalogCardProduct } from './modernProductCardState.js';
+import {
+    formatCatalogVariationLabel,
+    getCatalogCardDisplayName,
+    selectCatalogCardImageProduct,
+    selectCatalogCardProduct,
+} from './modernProductCardState.js';
 
 // Utility to determine if a color is dark enough to need white text
 const isDarkColor = (colorHex: string) => {
@@ -420,6 +425,7 @@ export function ModernProductCard({
     const productForDisplay = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
         ? selectedVariant.products[0]
         : currentProduct;
+    const cardDisplayName = toTitleCase(getCatalogCardDisplayName({ product, productGroup }));
 
     // --- LOGICA DOS KITS ---
     const originalPriceCents = getEffectivePrice(productForDisplay, customer) || product.price_retail;
@@ -491,7 +497,7 @@ export function ModernProductCard({
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                         <p className="text-[11px] font-semibold text-slate-900 line-clamp-2 leading-tight">
-                            {toTitleCase(productForDisplay.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim())}
+                            {cardDisplayName}
                         </p>
                         {productForDisplay.brand && (
                             <p className="text-[10px] text-slate-400 mt-0.5">{productForDisplay.brand}</p>
@@ -687,7 +693,7 @@ export function ModernProductCard({
                             onClick={handleTitleClick}
                             className="font-medium text-xs sm:text-sm text-slate-900 line-clamp-3 hover:text-blue-600 transition-colors cursor-pointer"
                         >
-                            {toTitleCase(productForDisplay.name.replace(/,?\s*\d+GB\/\d+GB/gi, '').trim())}
+                            {cardDisplayName}
                         </h3>
                         {productForDisplay.brand && (
                             <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">{productForDisplay.brand}</p>
@@ -759,12 +765,12 @@ export function ModernProductCard({
                                                                         ? `${variant.ram}/${variant.storage}`
                                                                         : variant.colors.length > 1
                                                                             ? `${variant.colors.length} Cores`
-                                                                            : variant.colors[0]?.name || 'Padrão'
+                                                                            : formatCatalogVariationLabel(variant.colors[0]?.name) || 'Padrão'
                                                                     }
                                                                 </span>
                                                                 {isSelectedVariant && variant.colors.length > 0 && (
                                                                     <span className={`text-[9px] sm:text-[10px] mt-0.5 ${currentColorIndex !== -1 ? 'text-blue-500' : 'text-slate-400 animate-pulse'}`}>
-                                                                        {currentColorIndex !== -1 ? variant.colors[currentColorIndex]?.name : 'Escolha a cor'}
+                                                                        {currentColorIndex !== -1 ? formatCatalogVariationLabel(variant.colors[currentColorIndex]?.name) : 'Escolha a cor'}
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -823,7 +829,7 @@ export function ModernProductCard({
                                                                                         : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/50'}
                                                                                 `}
                                                                             >
-                                                                                {color.name}
+                                                                                {formatCatalogVariationLabel(color.name)}
                                                                             </button>
                                                                         );
                                                                     })}
@@ -844,7 +850,7 @@ export function ModernProductCard({
                                                         {/* Selected color label */}
                                                         {isSelectedVariant && currentColorIndex !== -1 && variant.colors[currentColorIndex] && (
                                                             <p className="text-[9px] text-blue-500 mt-1">
-                                                                Cor: <span className="font-semibold">{variant.colors[currentColorIndex].name}</span>
+                                                                Cor: <span className="font-semibold">{formatCatalogVariationLabel(variant.colors[currentColorIndex].name)}</span>
                                                             </p>
                                                         )}
                                                     </div>
@@ -884,7 +890,7 @@ export function ModernProductCard({
                                         <span className="font-medium text-[10px] sm:text-xs text-slate-500">
                                             {productGroup && productGroup.variants[0] && productGroup.variants[0].colors.length > 1
                                                 ? `${productGroup.variants[0].colors.length} Cores`
-                                                : product.specs?.color || ''}
+                                                : formatCatalogVariationLabel(product.specs?.color) || ''}
                                         </span>
                                     )}
                                     <div className="text-right">
@@ -918,9 +924,9 @@ export function ModernProductCard({
                                         <div
                                             className="w-3 h-3 rounded-full border border-slate-300"
                                             style={{ backgroundColor: product.specs.color_hex || '#gray' }}
-                                            title={product.specs.color}
+                                            title={formatCatalogVariationLabel(product.specs.color)}
                                         />
-                                        <span className="text-xs text-slate-600">{product.specs.color}</span>
+                                        <span className="text-xs text-slate-600">{formatCatalogVariationLabel(product.specs.color)}</span>
                                     </div>
                                 )}
 
@@ -932,7 +938,7 @@ export function ModernProductCard({
                                                 key={color.name}
                                                 className="w-3 h-3 rounded-full border border-slate-300"
                                                 style={{ backgroundColor: color.hex }}
-                                                title={color.name}
+                                                title={formatCatalogVariationLabel(color.name)}
                                             />
                                         ))}
                                         {productGroup.variants[0].colors.length > 4 && (

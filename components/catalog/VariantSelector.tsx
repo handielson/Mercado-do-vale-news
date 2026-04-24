@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
 import type { ProductVariants, VariantSpecs } from '@/services/productVariants';
+import { formatCatalogVariationLabel } from './modernProductCardState.js';
 
 interface VariantSelectorProps {
     variants: ProductVariants;
@@ -86,7 +87,7 @@ export function VariantSelector({
                         <div className="mb-4 rounded-lg overflow-hidden border-2 border-blue-500 shadow-lg">
                             <img
                                 src={productImages[hoveredColor]}
-                                alt={hoveredColor}
+                                alt={formatCatalogVariationLabel(hoveredColor)}
                                 className="w-full h-48 object-cover transition-opacity duration-300"
                             />
                         </div>
@@ -118,7 +119,7 @@ export function VariantSelector({
                                             style={{ backgroundColor: color.hex }}
                                         />
                                     )}
-                                    <span>{color.name}</span>
+                                    <span>{formatCatalogVariationLabel(color.name)}</span>
                                     {isSelected && (
                                         <Check className="w-4 h-4 ml-1" />
                                     )}

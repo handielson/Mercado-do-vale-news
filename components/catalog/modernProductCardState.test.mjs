@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
-import {
+import * as modernProductCardState from './modernProductCardState.js';
+
+const {
+  formatCatalogVariationLabel,
+  getCatalogCardDisplayName,
   productHasCatalogMedia,
   selectCatalogCardImageProduct,
   selectCatalogCardProduct,
-} from './modernProductCardState.js';
+} = modernProductCardState;
 
 const representedProduct = {
   id: 'sl6011',
@@ -76,6 +80,50 @@ assert.equal(
     currentColorIndex: -1,
   }).id,
   'other-sku',
+);
+
+assert.equal(
+  typeof getCatalogCardDisplayName,
+  'function',
+  'expected grouped card title helper to be exported',
+);
+
+assert.equal(
+  typeof formatCatalogVariationLabel,
+  'function',
+  'expected variation label formatter to be exported',
+);
+
+assert.equal(formatCatalogVariationLabel('PRETO'), 'Preto');
+assert.equal(formatCatalogVariationLabel('AZUL MARINHO'), 'Azul Marinho');
+assert.equal(formatCatalogVariationLabel('vErDe LiMÃo'), 'Verde Limão');
+assert.equal(formatCatalogVariationLabel(undefined), '');
+
+assert.equal(
+  getCatalogCardDisplayName({
+    product: {
+      id: 'a21-blue',
+      name: 'Capa Case Silicone Aveludada para Samsung A21 Cor:azul',
+      model: 'Capa Case Silicone Aveludada para Samsung A21 Cor:azul',
+      specs: { color: 'azul' },
+    },
+    productGroup: {
+      model: 'Capa Case Silicone Aveludada para Samsung A21 Cor:azul',
+    },
+  }),
+  'Capa Case Silicone Aveludada para Samsung A21',
+);
+
+assert.equal(
+  getCatalogCardDisplayName({
+    product: {
+      id: 'redmi-note-15',
+      name: 'Redmi Note 15, 8GB/256GB',
+      model: 'Redmi Note 15',
+      specs: {},
+    },
+  }),
+  'Redmi Note 15',
 );
 
 console.log('modernProductCardState.test.mjs: ok');

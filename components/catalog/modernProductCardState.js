@@ -9,6 +9,49 @@ export function productHasCatalogMedia(product) {
   return typeof product.image_url === 'string' && product.image_url.trim().length > 0;
 }
 
+export function formatCatalogVariationLabel(label) {
+  if (!label || typeof label !== 'string') return '';
+
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/(^|[\s/-]+)([a-zà-öø-ÿ])/g, (match, separator, character) => `${separator}${character.toUpperCase()}`);
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripCatalogMemorySuffix(name) {
+  return name.replace(/,?\s*\d+\s*[GT]B\s*\/\s*\d+\s*[GT]B/gi, '').trim();
+}
+
+function stripTrailingVariation(name, variation) {
+  if (!variation || typeof variation !== 'string') return name;
+
+  const normalizedVariation = variation.trim();
+  if (!normalizedVariation) return name;
+
+  return name
+    .replace(
+      new RegExp(`(?:[\\s,|/-]+)?(?:cor\\s*:?\\s*)?${escapeRegex(normalizedVariation)}$`, 'i'),
+      '',
+    )
+    .replace(/\s*cor\s*:?\s*$/i, '')
+    .replace(/[\s,|/-]+$/g, '')
+    .trim();
+}
+
+export function getCatalogCardDisplayName({ product, productGroup }) {
+  const fallbackName = product?.model || product?.name || 'Produto';
+  const baseName = productGroup?.model || product?.name || fallbackName;
+
+  let cleanedName = stripCatalogMemorySuffix(baseName);
+  cleanedName = stripTrailingVariation(cleanedName, product?.specs?.color);
+
+  return cleanedName || stripCatalogMemorySuffix(fallbackName) || 'Produto';
+}
+
 export function selectCatalogCardProduct({ product, selectedVariant, currentColorIndex }) {
   if (!selectedVariant || !Array.isArray(selectedVariant.products) || selectedVariant.products.length === 0) {
     return product;
