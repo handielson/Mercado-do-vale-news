@@ -4,6 +4,17 @@ Atualizado em `24/04/2026`.
 
 Este arquivo existe para evitar erro e retrabalho quando eu precisar comitar algo neste projeto de novo.
 
+## Regra-mestra a partir de agora
+
+Quando voce pedir para `comitar`, o entendimento padrao deve ser:
+
+1. fazer o commit
+2. fazer o `push`
+3. se a mudanca precisar refletir no projeto web, garantir que ela chegue em `main` e verificar a Vercel
+4. se a mudanca afetar runtime, servicos ou scripts da VPS, fazer tambem o deploy na VPS
+
+Ou seja: **nao parar no commit local**, salvo se voce pedir explicitamente para parar antes.
+
 ## Estado atual do sistema
 
 ### Git
@@ -65,21 +76,30 @@ eu devo seguir esta regra:
 3. stagear **somente** o(s) arquivo(s) pedido(s)
 4. criar commit com mensagem objetiva
 5. manter fora do commit qualquer mudanca paralela do worktree
-6. decidir se o commit precisa ficar so no Git ou tambem ir para `main`
-7. confirmar se precisa ou nao deploy na Vercel
-8. confirmar se precisa ou nao deploy na VPS
+6. fazer `push` depois do commit, por padrao
+7. se a mudanca precisar aparecer no projeto web, garantir que o commit chegue em `main`
+8. verificar se a Vercel criou o deployment esperado
+9. confirmar se precisa ou nao deploy na VPS
 
 ## Como decidir o destino do commit
 
-### Caso 1: so registrar no Git
+### Caso 1: commit sem impacto em Vercel ou VPS
 
-Se o pedido for apenas:
+Se o pedido for apenas algo como:
 
 - guardar historico
 - salvar documentacao
-- comitar um arquivo sem falar de Vercel
+- registrar um arquivo interno
 
-o commit pode ser feito primeiro na branch em que eu estiver trabalhando, desde que eu deixe claro onde ele ficou.
+mesmo assim eu **nao** devo parar no commit local.
+
+O padrao agora e:
+
+- fazer commit
+- fazer `push` para o remoto correto
+- informar onde o commit ficou
+
+Se nao houver impacto em Vercel nem em VPS, o fluxo termina depois do `push`.
 
 ### Caso 2: precisa aparecer na Vercel
 
@@ -98,6 +118,11 @@ Se eu estiver em `master` com worktree sujo, o procedimento correto e:
 2. aplicar o commit desejado nesse worktree, normalmente com `cherry-pick`
 3. dar `push origin main`
 4. verificar se a Vercel criou o deployment
+
+Importante:
+
+- `push` para `master` sozinho nao atende esse caso
+- so considero o fluxo completo quando o commit estiver em `main` e o deployment da Vercel tiver sido confirmado
 
 ## Como decidir se precisa deploy na VPS
 
@@ -127,6 +152,16 @@ Precisa avaliar deploy na VPS quando a mudanca afetar codigo ou scripts realment
 
 Se a mudanca mexer nisso, eu nao devo assumir que so Git + Vercel resolvem.
 
+### Regra nova para VPS
+
+Se a mudanca impactar a VPS, o fluxo padrao nao termina em:
+
+- commit
+- push
+- Vercel
+
+Nesses casos, depois disso eu tambem preciso executar o deploy operacional da VPS ou deixar explicitamente registrado por que ele nao foi feito.
+
 ## Procedimento padrao quando voce pedir "comita X" de novo
 
 ### Fluxo seguro
@@ -137,15 +172,19 @@ Se a mudanca mexer nisso, eu nao devo assumir que so Git + Vercel resolvem.
 4. stagear apenas esse arquivo
 5. commitar com mensagem curta e especifica
 6. informar o hash gerado
-7. se necessario, empurrar para o remoto
+7. fazer `push` para o remoto apropriado
 8. se houver necessidade de Vercel, garantir que o commit chegue em `main`
-9. se houver necessidade de VPS, informar explicitamente
+9. verificar o deployment da Vercel
+10. se houver necessidade de VPS, executar tambem o deploy da VPS
+11. informar com clareza onde o commit ficou, o status da Vercel e o status da VPS
 
 ### O que eu nao devo fazer
 
 - nao incluir arquivos nao pedidos no commit
 - nao assumir que `master` faz deploy na Vercel
-- nao empurrar mudancas para `main` sem necessidade
+- nao parar no commit local quando o pedido foi `comitar`
+- nao deixar de fazer `push` por padrao
+- nao deixar a Vercel sem verificacao quando a mudanca for do app web
 - nao ignorar worktree sujo
 - nao misturar documentacao com codigo nao relacionado no mesmo commit
 - nao presumir deploy na VPS para arquivos de documentacao
@@ -183,4 +222,4 @@ Isso evita quebrar ou incluir sem querer o que ja estava aberto localmente.
 
 Quando voce pedir para comitar de novo, a regra e:
 
-`comitar so o que foi pedido, decidir se precisa ir para main, verificar Vercel, e so falar em VPS quando a mudanca realmente atingir a VPS.`
+`comitar so o que foi pedido, fazer push, levar para main quando precisar aparecer na Vercel, verificar o deployment, e fazer deploy na VPS quando a mudanca atingir a VPS.`
