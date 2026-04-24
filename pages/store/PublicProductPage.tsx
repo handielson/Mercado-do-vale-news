@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers } from 'lucide-react';
@@ -27,6 +27,7 @@ import { normalizeProduct } from '@/services/productNormalizer';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { vpsApiService } from '@/services/vpsApiService';
+import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -64,6 +65,7 @@ export const PublicProductPage: React.FC = () => {
     // Resolved video URL: prioridade video_url → HEAD check automático por SKU
     const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(null);
     const [videoLoadError, setVideoLoadError] = useState(false);
+    const [videoPlaylistIndex, setVideoPlaylistIndex] = useState(0);
     const primaryColor = catalogTheme?.primary_color || '#2563eb';
     const secondaryColor = catalogTheme?.secondary_color || '#1d4ed8';
     const accentColor = catalogTheme?.accent_color || '#10b981';
@@ -71,6 +73,8 @@ export const PublicProductPage: React.FC = () => {
     const cardBackground = catalogTheme?.card_background || '#ffffff';
     const textPrimary = catalogTheme?.text_primary || '#0f172a';
     const textSecondary = catalogTheme?.text_secondary || '#64748b';
+    const productVideoPlaylist = useMemo(() => buildProductVideoPlaylist(effectiveVideoUrl), [effectiveVideoUrl]);
+    const currentVideoUrl = productVideoPlaylist[videoPlaylistIndex] || effectiveVideoUrl;
 
     useEffect(() => {
         let cancelled = false;
@@ -105,6 +109,10 @@ export const PublicProductPage: React.FC = () => {
 
         return () => { cancelled = true; };
     }, [product?.video_url, product?.sku]);
+
+    useEffect(() => {
+        setVideoPlaylistIndex(0);
+    }, [effectiveVideoUrl]);
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -754,27 +762,40 @@ export const PublicProductPage: React.FC = () => {
                     {/* Galeria de Imagens (Esquerda) */}
                     <div className="space-y-4">
                         <div className="aspect-square bg-slate-100 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-4">
-                            {selectedImage === 'VIDEO' && effectiveVideoUrl ? (
+                            {selectedImage === 'VIDEO' && currentVideoUrl ? (
                                 videoLoadError ? (
                                     <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-slate-500">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                                         <p className="text-sm font-medium">Vídeo temporariamente indisponível</p>
-                                        <a href={effectiveVideoUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">
+                                        <a href={currentVideoUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">
                                             Tentar abrir diretamente
                                         </a>
                                     </div>
-                                ) : effectiveVideoUrl.toLowerCase().endsWith('.mp4') ? (
-                                    <video src={effectiveVideoUrl} controls autoPlay className="w-full h-full object-contain shadow-lg rounded-lg bg-black" onError={() => setVideoLoadError(true)} />
+                                ) : isMp4VideoUrl(currentVideoUrl) ? (
+                                    <video
+                                        key={currentVideoUrl}
+                                        src={currentVideoUrl}
+                                        controls
+                                        autoPlay
+                                        className="w-full h-full object-contain shadow-lg rounded-lg bg-black"
+                                        onEnded={() => {
+                                            setVideoPlaylistIndex((index) => {
+                                                const nextIndex = index + 1;
+                                                return nextIndex < productVideoPlaylist.length ? nextIndex : index;
+                                            });
+                                        }}
+                                        onError={() => setVideoLoadError(true)}
+                                    />
                                 ) : (
                                     <div className="w-full h-full flex flex-col">
                                         <iframe
-                                            src={effectiveVideoUrl.includes('youtube.com/watch?v=') ? effectiveVideoUrl.replace('watch?v=', 'embed/') : effectiveVideoUrl.includes('youtu.be/') ? effectiveVideoUrl.replace('youtu.be/', 'youtube.com/embed/') : effectiveVideoUrl}
+                                            src={currentVideoUrl.includes('youtube.com/watch?v=') ? currentVideoUrl.replace('watch?v=', 'embed/') : currentVideoUrl.includes('youtu.be/') ? currentVideoUrl.replace('youtu.be/', 'youtube.com/embed/') : currentVideoUrl}
                                             className="w-full h-full rounded-lg shadow-sm bg-white"
                                             allowFullScreen
                                             title="Vídeo do Produto"
                                         ></iframe>
-                                        {!effectiveVideoUrl.includes('youtube.com') && !effectiveVideoUrl.includes('youtu.be') && (
-                                            <a href={effectiveVideoUrl} target="_blank" rel="noreferrer" className="mt-4 text-sm text-center font-bold text-blue-600 hover:underline">
+                                        {!currentVideoUrl.includes('youtube.com') && !currentVideoUrl.includes('youtu.be') && (
+                                            <a href={currentVideoUrl} target="_blank" rel="noreferrer" className="mt-4 text-sm text-center font-bold text-blue-600 hover:underline">
                                                 O vídeo não carregou? Clique aqui para abrir
                                             </a>
                                         )}
@@ -802,7 +823,11 @@ export const PublicProductPage: React.FC = () => {
                             <div className="flex gap-3 overflow-x-auto pb-2">
                                 {effectiveVideoUrl && (
                                     <button
-                                        onClick={() => setSelectedImage('VIDEO')}
+                                        onClick={() => {
+                                            setVideoLoadError(false);
+                                            setVideoPlaylistIndex(0);
+                                            setSelectedImage('VIDEO');
+                                        }}
                                         className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden flex items-center justify-center ${selectedImage === 'VIDEO' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
                                     >
                                         <div className="text-blue-600 flex flex-col items-center">
