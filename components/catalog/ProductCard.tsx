@@ -151,7 +151,15 @@ export function ProductCard({
                             <div className={`w-full h-full grid gap-0.5 ${product.images.length === 2 ? 'grid-cols-2' : 'grid-cols-2 grid-rows-2'}`}>
                                 {product.images.slice(0, 4).map((img, i) => (
                                     <div key={i} className={`relative bg-white overflow-hidden ${product.images!.length === 3 && i === 0 ? 'row-span-2' : ''}`}>
-                                        <img src={getCacheBustedUrl(img, product.updated || product.created)} className="w-full h-full object-contain p-0.5" />
+                                        <img
+                                            src={getCacheBustedUrl(img, product.updated || product.created)}
+                                            loading="lazy"
+                                            decoding="async"
+                                            width={128}
+                                            height={128}
+                                            className="w-full h-full object-contain p-0.5"
+                                            alt=""
+                                        />
                                     </div>
                                 ))}
                             </div>
@@ -159,6 +167,10 @@ export function ProductCard({
                             <img
                                 src={imageUrl}
                                 alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
+                                loading="lazy"
+                                decoding="async"
+                                width={128}
+                                height={128}
                                 onError={() => setImageError(true)}
                                 className="w-full h-full object-cover rounded-lg"
                             />
@@ -270,7 +282,15 @@ export function ProductCard({
                     <div className={`w-full h-full grid gap-0.5 bg-white ${product.images.length === 2 ? 'grid-cols-2' : 'grid-cols-2 grid-rows-2'}`}>
                         {product.images.slice(0, 4).map((img, i) => (
                             <div key={i} className={`relative bg-white overflow-hidden border border-slate-50 ${product.images!.length === 3 && i === 0 ? 'row-span-2' : ''}`}>
-                                <img src={getCacheBustedUrl(img, product.updated || product.created)} className={`w-full h-full object-contain p-1 transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'}`} />
+                                <img
+                                    src={getCacheBustedUrl(img, product.updated || product.created)}
+                                    loading="lazy"
+                                    decoding="async"
+                                    width={320}
+                                    height={240}
+                                    className={`w-full h-full object-contain p-1 transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'}`}
+                                    alt=""
+                                />
                             </div>
                         ))}
                     </div>
@@ -278,6 +298,10 @@ export function ProductCard({
                     <img
                         src={imageUrl}
                         alt={[product.name, product.specs?.color, product.brand].filter(Boolean).join(' ')}
+                        loading="lazy"
+                        decoding="async"
+                        width={320}
+                        height={240}
                         onError={() => setImageError(true)}
                         className={`w-full h-full object-cover transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
                             }`}
