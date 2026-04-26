@@ -4,6 +4,10 @@ const PROXIED_MEDIA_HOSTNAMES = new Set([
     'imagens.xiaomipetrolina.com.br',
 ]);
 
+const CACHEABLE_IMAGE_PROXY_HOSTNAMES = new Set([
+    'orgbling.s3.amazonaws.com',
+]);
+
 const AWS_SIGNED_QUERY_KEYS = [
     'AWSAccessKeyId',
     'Signature',
@@ -84,6 +88,10 @@ export const toBrowserSafeMediaUrl = (rawUrl?: string | null): string => {
         const parsed = new URL(rawUrl, origin);
         const isAbsolute = /^https?:\/\//i.test(rawUrl);
         if (!isAbsolute) return rawUrl;
+
+        if (CACHEABLE_IMAGE_PROXY_HOSTNAMES.has(parsed.hostname)) {
+            return `/api/bling?resource=image-proxy&url=${encodeURIComponent(rawUrl)}`;
+        }
 
         if (typeof window === 'undefined') return rawUrl;
         if (!LOCAL_HOSTNAMES.has(window.location.hostname)) return rawUrl;
