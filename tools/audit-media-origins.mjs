@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -250,7 +251,7 @@ export async function runAudit() {
   return report;
 }
 
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   runAudit()
     .then((report) => {
       console.log(`Media audit complete: ${report.summary.total} refs, ${report.summary.migrationCandidates} candidates`);
