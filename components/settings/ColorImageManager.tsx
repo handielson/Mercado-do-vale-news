@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
+import { uploadModelColorImageToVps } from '../../services/modelColorImageUpload';
 import { compressImage } from '../../utils/image-compression';
 import type { Color } from '../../types/color';
 
@@ -100,15 +101,12 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
 
             for (const file of Array.from(files)) {
                 const compressed = await compressImage(file);
-                const reader = new FileReader();
-                const base64Promise = new Promise<string>((resolve, reject) => {
-                    reader.onload = () => resolve(reader.result as string);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(compressed);
-                });
-
-                const base64String = await base64Promise;
-                uploadedImages.push(base64String);
+                const uploadedUrl = await uploadModelColorImageToVps(
+                    compressed,
+                    modelId,
+                    colorId
+                );
+                uploadedImages.push(uploadedUrl);
             }
 
             // Get current images for this color

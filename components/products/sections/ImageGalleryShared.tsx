@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Image as ImageIcon, Loader2, X, GripVertical } from 'lucide-react';
 import { modelColorImagesService } from '../../../services/model-color-images';
+import { uploadModelColorImageToVps } from '../../../services/modelColorImageUpload';
 import { compressImage } from '../../../utils/image-compression';
 
 interface ImageGallerySharedProps {
@@ -70,13 +71,12 @@ export function ImageGalleryShared({
 
             for (const file of files) {
                 const compressed = await compressImage(file);
-                const reader = new FileReader();
-                const base64 = await new Promise<string>((resolve, reject) => {
-                    reader.onload = () => resolve(reader.result as string);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(compressed);
-                });
-                newImages.push(base64);
+                const uploadedUrl = await uploadModelColorImageToVps(
+                    compressed,
+                    modelId,
+                    colorId
+                );
+                newImages.push(uploadedUrl);
             }
 
             await saveImages(newImages);

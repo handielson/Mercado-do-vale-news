@@ -3,6 +3,7 @@ const fastify = require('fastify')({ logger: false, bodyLimit: 50 * 1024 * 1024 
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
+const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -1104,11 +1105,12 @@ fastify.post('/images/upload', { preHandler: requireSyncKey }, async (req, reply
 
   if (!fileBuf || !filePath) return reply.code(400).send({ error: 'file and path required' });
 
-  // Sanitize: allow only products/{SKU}/{filename}.webp paths
-  const safe = path.normalize(filePath).replace(/^\/+/, '');
-  if (safe.startsWith('..') || !safe.startsWith('products/')) {
-    return reply.code(400).send({ error: 'Invalid path' });
+  // Sanitize: allow only approved media upload paths.
+  const validation = validateMediaUploadPath(filePath);
+  if (!validation.ok) {
+    return reply.code(400).send({ error: validation.error || 'Invalid path' });
   }
+  const safe = validation.safePath;
 
   const dest = path.join(UPLOADS_DIR, safe);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
