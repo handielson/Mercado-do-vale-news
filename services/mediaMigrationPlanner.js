@@ -89,6 +89,7 @@ function scopeMatches(ref, scope) {
 export function buildMediaMigrationPlan(report, options = {}) {
   const scope = options.scope || 'inline-data';
   const vpsBaseUrl = options.vpsBaseUrl || DEFAULT_VPS_BASE_URL;
+  const includeUploadPayloads = Boolean(options.includeUploadPayloads);
   const refs = Array.isArray(report?.refs) ? report.refs : [];
   const actions = [];
   const uniquePayloadHashes = new Set();
@@ -130,7 +131,7 @@ export function buildMediaMigrationPlan(report, options = {}) {
       ? plannedUrlForPath(plannedPath, vpsBaseUrl)
       : null;
     uniquePayloadHashes.add(decoded.sha256);
-    actions.push({
+    const action = {
       mode: 'dry-run',
       status: 'planned',
       reason: 'inline data image can be uploaded to VPS before URL replacement',
@@ -145,7 +146,14 @@ export function buildMediaMigrationPlan(report, options = {}) {
       plannedPath,
       plannedUrl: plannedUrlForPath(plannedPath, vpsBaseUrl),
       duplicateOf,
-    });
+    };
+
+    if (includeUploadPayloads) {
+      action.uploadPayloadBase64 = decoded.buffer.toString('base64');
+      action.uploadContentType = decoded.mimeType;
+    }
+
+    actions.push(action);
   }
 
   const planned = actions.filter((action) => action.status === 'planned').length;
