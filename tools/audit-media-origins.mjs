@@ -23,6 +23,8 @@ const JSON_REPORT_PATH = path.join(REPORT_DIR, 'media-origin-audit.json');
 const MD_REPORT_PATH = path.join(REPORT_DIR, 'media-origin-audit.md');
 const DEFAULT_VPS_BASE_URL = process.env.VITE_VPS_BASE_URL || process.env.VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
 const PRODUCT_LIMIT = process.env.MEDIA_AUDIT_PRODUCT_LIMIT || '5000';
+const MODEL_COLOR_LIMIT = Number(process.env.MEDIA_AUDIT_MODEL_COLOR_LIMIT || '2000');
+const MODEL_COLOR_PAGE_SIZE = Number(process.env.MEDIA_AUDIT_MODEL_COLOR_PAGE_SIZE || '50');
 
 function getSupabaseEnv() {
   return {
@@ -99,6 +101,36 @@ async function selectObject(promise, label, warnings) {
   return data || null;
 }
 
+async function selectPagedModelColorImages(supabase, warnings) {
+  const rows = [];
+  let offset = 0;
+
+  while (offset < MODEL_COLOR_LIMIT) {
+    const pageSize = Math.min(MODEL_COLOR_PAGE_SIZE, MODEL_COLOR_LIMIT - offset);
+    const { data, error } = await supabase
+      .from('model_color_images')
+      .select('id, model_id, color_id, images')
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      warnings.push(`model_color_images page ${offset}-${offset + pageSize - 1}: ${error.message}`);
+      break;
+    }
+
+    const page = Array.isArray(data) ? data : [];
+    rows.push(...page);
+
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  if (rows.length >= MODEL_COLOR_LIMIT) {
+    warnings.push(`model_color_images limited to ${MODEL_COLOR_LIMIT} rows; increase MEDIA_AUDIT_MODEL_COLOR_LIMIT for a larger audit`);
+  }
+
+  return rows;
+}
+
 async function fetchSupabaseRows(warnings) {
   const supabase = createSupabaseReadClient(warnings);
   if (!supabase) {
@@ -110,11 +142,7 @@ async function fetchSupabaseRows(warnings) {
   }
 
   const [modelColorImages, companySettings, catalogBanners] = await Promise.all([
-    selectArray(
-      supabase.from('model_color_images').select('id, model_id, color_id, images'),
-      'model_color_images',
-      warnings,
-    ),
+    selectPagedModelColorImages(supabase, warnings),
     selectObject(
       supabase
         .from('company_settings')
@@ -233,6 +261,8 @@ export async function runAudit() {
     readOnly: true,
     limits: {
       productLimit: PRODUCT_LIMIT,
+      modelColorLimit: MODEL_COLOR_LIMIT,
+      modelColorPageSize: MODEL_COLOR_PAGE_SIZE,
     },
     sources: {
       products: products.length,
