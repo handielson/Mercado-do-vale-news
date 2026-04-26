@@ -60,3 +60,7 @@ tsc_fix*.txt
 tmp_*.cjs
 diag-*.cjs
 sync-descriptions.cjs
+
+# Generated media audit reports
+reports/media-origin-audit*.json
+reports/media-origin-audit*.md
