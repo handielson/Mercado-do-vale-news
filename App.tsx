@@ -34,7 +34,9 @@ const App: React.FC = () => {
         <ThemeProvider>
           <CompareProvider>
             <OAuthHashRedirect />
-            <RouterProvider router={router} />
+            <React.Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+              <RouterProvider router={router} />
+            </React.Suspense>
             <CompareBar />
             <Toaster
               position="top-right"
