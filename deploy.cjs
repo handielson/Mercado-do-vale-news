@@ -72,6 +72,10 @@ conn.on('ready', () => {
             local: path.join(__dirname, 'services', 'synologyCommandQueueService.js'),
             remote: `${appDir}/services/synologyCommandQueueService.js`,
           },
+          {
+            local: path.join(__dirname, 'services', 'vpsUploadPathPolicy.cjs'),
+            remote: `${appDir}/services/vpsUploadPathPolicy.cjs`,
+          },
         ];
 
         console.log(`PM2 app found at ${appDir}`);

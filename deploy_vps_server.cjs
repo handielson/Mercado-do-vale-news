@@ -1,6 +1,6 @@
 /**
  * deploy_vps_server.cjs
- * Envia vps_server.js para a VPS e reinicia o PM2.
+ * Uploads vps_server.js and its runtime support files to the VPS, then restarts PM2.
  */
 const { Client } = require('ssh2');
 const fs = require('fs');
@@ -9,33 +9,75 @@ const path = require('path');
 const HOST = '76.13.232.162';
 const USER = 'root';
 const PASS = '@@@@Jsj2865@@@@';
-const REMOTE_PATH = '/var/www/mdv-api/server.js';
-const LOCAL_FILE = path.join(__dirname, 'vps_server.js');
+const APP_DIR = '/var/www/mdv-api';
 
-const content = fs.readFileSync(LOCAL_FILE);
+const FILES = [
+  {
+    local: path.join(__dirname, 'vps_server.js'),
+    remote: `${APP_DIR}/server.js`,
+  },
+  {
+    local: path.join(__dirname, 'services', 'vpsUploadPathPolicy.cjs'),
+    remote: `${APP_DIR}/services/vpsUploadPathPolicy.cjs`,
+  },
+];
+
+function uploadFilesSequentially(sftp, files, done) {
+  const [current, ...rest] = files;
+  if (!current) return done(null);
+
+  const content = fs.readFileSync(current.local);
+  const stream = sftp.createWriteStream(current.remote);
+  stream.on('close', () => {
+    console.log(`Uploaded ${path.relative(__dirname, current.local)} -> ${current.remote}`);
+    uploadFilesSequentially(sftp, rest, done);
+  });
+  stream.on('error', done);
+  stream.end(content);
+}
 
 const conn = new Client();
 conn.on('ready', () => {
-  console.log('✅ Conectado à VPS. Enviando vps_server.js...');
-  conn.sftp((err, sftp) => {
-    if (err) { console.error('SFTP error:', err); process.exit(1); }
-    const stream = sftp.createWriteStream(REMOTE_PATH);
-    stream.on('close', () => {
-      console.log('✅ vps_server.js enviado! Reiniciando PM2...');
-      conn.exec('pm2 restart all', (err2, s) => {
-        if (err2) { console.error('Exec error:', err2); process.exit(1); }
-        s.on('data', d => process.stdout.write(d.toString()));
-        s.stderr.on('data', d => process.stderr.write(d.toString()));
-        s.on('close', code => {
-          console.log(`✅ PM2 reiniciado! (exit: ${code})`);
-          conn.end();
+  console.log('Connected to VPS. Uploading files...');
+  conn.exec(`mkdir -p ${APP_DIR}/services`, (mkdirErr, mkdirStream) => {
+    if (mkdirErr) {
+      console.error('Exec error:', mkdirErr);
+      process.exit(1);
+    }
+
+    mkdirStream.on('close', () => {
+      conn.sftp((err, sftp) => {
+        if (err) {
+          console.error('SFTP error:', err);
+          process.exit(1);
+        }
+
+        uploadFilesSequentially(sftp, FILES, (uploadErr) => {
+          if (uploadErr) {
+            console.error('Upload error:', uploadErr);
+            process.exit(1);
+          }
+
+          console.log('Files uploaded. Restarting PM2...');
+          conn.exec('pm2 restart all', (err2, stream) => {
+            if (err2) {
+              console.error('Exec error:', err2);
+              process.exit(1);
+            }
+
+            stream.on('data', d => process.stdout.write(d.toString()));
+            stream.stderr.on('data', d => process.stderr.write(d.toString()));
+            stream.on('close', code => {
+              console.log(`PM2 restarted. Exit: ${code}`);
+              sftp.end();
+              conn.end();
+            });
+          });
         });
       });
     });
-    stream.on('error', err => { console.error('Stream error:', err); process.exit(1); });
-    stream.end(content);
   });
 }).on('error', err => {
-  console.error('❌ Erro de conexão SSH:', err.message);
+  console.error('SSH connection error:', err.message);
   process.exit(1);
 }).connect({ host: HOST, port: 22, username: USER, password: PASS });
