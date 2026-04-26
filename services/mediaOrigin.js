@@ -149,8 +149,8 @@ export function classifyMediaUrl(rawUrl) {
       normalizedUrl,
       sourceUrl: normalizedUrl,
       redactedUrl: 'data:REDACTED',
-      shouldMigrate: false,
-      reason: 'Inline data URL is not loaded from a remote image origin',
+      shouldMigrate: true,
+      reason: 'Inline data image should be decoded and copied to VPS when stored in data rows',
     };
   }
 

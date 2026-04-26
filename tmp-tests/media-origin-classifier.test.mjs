@@ -88,12 +88,12 @@ test('classifies local Bling image proxy and extracts original URL', () => {
   assert.equal(result.redactedUrl.includes('Signature=REDACTED'), true);
 });
 
-test('classifies data and blob URLs as non-migratable runtime media', () => {
+test('classifies data URLs as migration candidates and blob URLs as runtime media', () => {
   const dataResult = classifyMediaUrl('data:image/png;base64,abc');
   const blobResult = classifyMediaUrl('blob:https://mercadodovale.com.br/abc');
 
   assert.equal(dataResult.origin, 'inline-data');
-  assert.equal(dataResult.shouldMigrate, false);
+  assert.equal(dataResult.shouldMigrate, true);
   assert.equal(blobResult.origin, 'browser-blob');
   assert.equal(blobResult.shouldMigrate, false);
 });
