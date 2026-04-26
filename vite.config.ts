@@ -3,6 +3,20 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import * as fs from 'fs';
 
+const deferStylesheets = () => ({
+  name: 'defer-render-blocking-stylesheets',
+  apply: 'build' as const,
+  enforce: 'post' as const,
+  transformIndexHtml(html: string) {
+    return html.replace(
+      /<link rel="stylesheet" crossorigin href="([^"]+\.css)">/g,
+      (_match, href) =>
+        `<link rel="preload" crossorigin href="${href}" as="style" onload="this.onload=null;this.rel='stylesheet'">` +
+        `<noscript><link rel="stylesheet" crossorigin href="${href}"></noscript>`
+    );
+  },
+});
+
 export default defineConfig(({ mode }) => {
   // Load env from .env.local directly to ensure VITE_VPS_SYNC_KEY is available
   let syncKey = '';
@@ -89,7 +103,7 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    plugins: [react()],
+    plugins: [react(), deferStylesheets()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
