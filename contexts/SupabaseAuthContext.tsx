@@ -153,7 +153,9 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
             if (createError) {
                 console.error('[SupabaseAuth] Error creating customer:', createError)
-                toast.error('Erro ao criar registro de cliente')
+                toast.info('Quase lá! Complete seu cadastro para continuar.', {
+                    description: 'Informe CPF/CNPJ e telefone para finalizar compras e pagamentos.'
+                })
                 return
             }
 
