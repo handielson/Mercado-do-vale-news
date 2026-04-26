@@ -43,6 +43,9 @@ pb_data/
 *.backup
 backups/
 
+# Local git worktrees
+.worktrees/
+
 # OS files
 Thumbs.db
 
@@ -57,3 +60,7 @@ tsc_fix*.txt
 tmp_*.cjs
 diag-*.cjs
 sync-descriptions.cjs
+
+# Generated media audit reports
+reports/media-origin-audit*.json
+reports/media-origin-audit*.md
