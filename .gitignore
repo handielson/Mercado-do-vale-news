@@ -66,3 +66,6 @@ reports/media-origin-audit*.json
 reports/media-origin-audit*.md
 reports/media-migration-plan.json
 reports/media-migration-plan.md
+reports/media-migration-apply.json
+reports/media-migration-apply.md
+reports/media-migration-checkpoint.json
