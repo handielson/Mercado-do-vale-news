@@ -24,7 +24,7 @@ const MD_REPORT_PATH = path.join(REPORT_DIR, 'media-origin-audit.md');
 const DEFAULT_VPS_BASE_URL = process.env.VITE_VPS_BASE_URL || process.env.VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
 const PRODUCT_LIMIT = process.env.MEDIA_AUDIT_PRODUCT_LIMIT || '5000';
 const MODEL_COLOR_LIMIT = Number(process.env.MEDIA_AUDIT_MODEL_COLOR_LIMIT || '2000');
-const MODEL_COLOR_PAGE_SIZE = Number(process.env.MEDIA_AUDIT_MODEL_COLOR_PAGE_SIZE || '50');
+const MODEL_COLOR_PAGE_SIZE = Number(process.env.MEDIA_AUDIT_MODEL_COLOR_PAGE_SIZE || '5');
 
 function getSupabaseEnv() {
   return {
