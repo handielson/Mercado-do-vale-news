@@ -43,6 +43,9 @@ pb_data/
 *.backup
 backups/
 
+# Local git worktrees
+.worktrees/
+
 # OS files
 Thumbs.db
 
