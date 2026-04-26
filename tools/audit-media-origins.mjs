@@ -14,8 +14,9 @@ import {
   summarizeMediaRefs,
 } from '../services/mediaAuditExtractors.js';
 
-dotenv.config({ path: '.env.local' });
-dotenv.config();
+for (const envPath of ['.env.local', '.env', '../../.env.local', '../../.env']) {
+  dotenv.config({ path: envPath, quiet: true });
+}
 
 const REPORT_DIR = 'reports';
 const JSON_REPORT_PATH = path.join(REPORT_DIR, 'media-origin-audit.json');
