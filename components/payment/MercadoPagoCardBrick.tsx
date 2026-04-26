@@ -25,6 +25,31 @@ interface Props {
     submitting?: boolean;
 }
 
+let mercadoPagoSdkPromise: Promise<void> | null = null;
+
+function loadMercadoPagoSdk(): Promise<void> {
+    if ((window as any).MercadoPago) return Promise.resolve();
+    if (mercadoPagoSdkPromise) return mercadoPagoSdkPromise;
+
+    mercadoPagoSdkPromise = new Promise((resolve, reject) => {
+        const existingScript = document.querySelector<HTMLScriptElement>('script[src="https://sdk.mercadopago.com/js/v2"]');
+        if (existingScript) {
+            existingScript.addEventListener('load', () => resolve(), { once: true });
+            existingScript.addEventListener('error', reject, { once: true });
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://sdk.mercadopago.com/js/v2';
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+
+    return mercadoPagoSdkPromise;
+}
+
 export default function MercadoPagoCardBrick({ publicKey, amount, customerEmail, onSubmit, onError, submitting }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(true);
@@ -38,7 +63,9 @@ export default function MercadoPagoCardBrick({ publicKey, amount, customerEmail,
 
         const initBrick = async () => {
             try {
-                // Carrega o MercadoPago Global SDK
+                await loadMercadoPagoSdk();
+                if (cancelled) return;
+
                 const mp = new (window as any).MercadoPago(publicKey, {
                     locale: 'pt-BR'
                 });

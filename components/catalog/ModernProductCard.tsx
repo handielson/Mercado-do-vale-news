@@ -490,6 +490,10 @@ export function ModernProductCard({
                         <img
                             src={displayImageUrl || currentImage}
                             alt={productForDisplay.name}
+                            loading="lazy"
+                            decoding="async"
+                            width={64}
+                            height={64}
                             onError={() => setImageError(true)}
                             className="w-full h-full object-contain"
                         />
@@ -549,6 +553,10 @@ export function ModernProductCard({
                             currentColorIndex !== -1 ? variants?.colors[currentColorIndex]?.name : '',
                             productForDisplay.brand,
                         ].filter(Boolean).join(' ')}
+                        loading="lazy"
+                        decoding="async"
+                        width={320}
+                        height={240}
                         onError={() => setImageError(true)}
                         className={`w-full h-full object-contain transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
                             }`}
