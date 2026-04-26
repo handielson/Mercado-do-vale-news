@@ -14,6 +14,14 @@ import { toast } from 'sonner'
 const SupabaseAuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const COMPANY_ID = import.meta.env.VITE_COMPANY_ID || 'default-company-id'
+const AUTH_CALLBACK_PATH = '/auth/callback'
+const PRODUCTION_ORIGIN = 'https://www.mercadodovale.com.br'
+
+const getAuthCallbackUrl = () => {
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+    const origin = isLocalhost ? PRODUCTION_ORIGIN : window.location.origin
+    return new URL(AUTH_CALLBACK_PATH, origin).toString()
+}
 
 export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null)
@@ -179,7 +187,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: `${window.location.origin}/auth/callback`
+                    redirectTo: getAuthCallbackUrl()
                 }
             })
             if (error) throw error
@@ -196,7 +204,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'facebook',
                 options: {
-                    redirectTo: `${window.location.origin}/auth/callback`
+                    redirectTo: getAuthCallbackUrl()
                 }
             })
             if (error) throw error
@@ -251,7 +259,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                         name: data.cpf_cnpj, // Will be updated from customer
                         cpf_cnpj: data.cpf_cnpj
                     },
-                    emailRedirectTo: `${window.location.origin}/auth/callback`
+                    emailRedirectTo: getAuthCallbackUrl()
                 }
             })
 
@@ -294,7 +302,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
                         name: data.name,
                         cpf_cnpj: data.cpf_cnpj
                     },
-                    emailRedirectTo: `${window.location.origin}/auth/callback`
+                    emailRedirectTo: getAuthCallbackUrl()
                 }
             })
 

@@ -6,6 +6,7 @@ import { SupabaseAuthProvider } from './contexts/SupabaseAuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CompareProvider } from './contexts/CompareContext';
 import { CompareBar } from './components/catalog/CompareBar';
+import { OAuthHashRedirect } from './components/auth/OAuthHashRedirect';
 import { router } from './routes/index';
 import { useFavicon } from './hooks/useFavicon';
 import { useGoogleAnalytics } from './hooks/useGoogleAnalytics';
@@ -32,6 +33,7 @@ const App: React.FC = () => {
       <SupabaseAuthProvider>
         <ThemeProvider>
           <CompareProvider>
+            <OAuthHashRedirect />
             <RouterProvider router={router} />
             <CompareBar />
             <Toaster
