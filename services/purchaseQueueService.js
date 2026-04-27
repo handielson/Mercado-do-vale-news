@@ -47,6 +47,11 @@ function normalizeChannels(channels) {
   );
 }
 
+function isMissingPurchaseQueueTable(error) {
+  return error?.code === 'PGRST205'
+    || /purchase_queue_items/i.test(String(error?.message || ''));
+}
+
 function buildBaseQueueRow(summaryRow, now) {
   const itemKey = buildPurchaseQueueItemKey(summaryRow);
   return {
@@ -194,6 +199,7 @@ export async function getPurchaseQueueItems({
   }
 
   const { data, error } = await query;
+  if (isMissingPurchaseQueueTable(error)) return [];
   if (error) throw error;
   return data || [];
 }
@@ -210,6 +216,7 @@ export async function syncPurchaseQueueFromSummary(summaryRows = [], now = new D
     .select('*')
     .in('item_key', itemKeys);
 
+  if (isMissingPurchaseQueueTable(existingError)) return [];
   if (existingError) throw existingError;
 
   const upsertRows = mergeSalesDigestIntoPurchaseQueue({
@@ -225,6 +232,7 @@ export async function syncPurchaseQueueFromSummary(summaryRows = [], now = new D
     .from(PURCHASE_QUEUE_TABLE)
     .upsert(upsertRows, { onConflict: 'item_key' });
 
+  if (isMissingPurchaseQueueTable(upsertError)) return [];
   if (upsertError) throw upsertError;
 
   return getPurchaseQueueItems();

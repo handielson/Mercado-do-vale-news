@@ -83,6 +83,76 @@ async function getValidBlingAccessTokenForReconcile(supabase: any) {
     throw new Error(`Bling token refresh failed (${tokenRes.status}): ${await tokenRes.text()}`);
 }
 
+async function getStoredBlingAccessToken(supabase: any, forceRefresh = false): Promise<string> {
+    const { data: settings } = await supabase
+        .from('company_settings')
+        .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
+        .limit(1)
+        .maybeSingle();
+
+    if (!settings?.bling_access_token) {
+        throw new Error('Bling not connected');
+    }
+
+    const expiresAt = settings.bling_token_expires_at
+        ? new Date(settings.bling_token_expires_at).getTime()
+        : 0;
+    const shouldRefresh = forceRefresh || (expiresAt && expiresAt <= Date.now() + 5 * 60 * 1000);
+
+    if (!shouldRefresh) {
+        return settings.bling_access_token;
+    }
+
+    if (!settings.bling_refresh_token) {
+        return settings.bling_access_token;
+    }
+
+    const tokenRes = await fetch(`${blingApiBase}/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: settings.bling_refresh_token,
+            client_id: settings.bling_client_id,
+            client_secret: settings.bling_client_secret,
+        }),
+        signal: AbortSignal.timeout(10000),
+    });
+
+    if (!tokenRes.ok) {
+        throw new Error(`Bling token refresh failed (${tokenRes.status}): ${await tokenRes.text()}`);
+    }
+
+    const tokenData = await tokenRes.json();
+    await supabase.from('company_settings').update({
+        bling_access_token: tokenData.access_token,
+        bling_refresh_token: tokenData.refresh_token || settings.bling_refresh_token,
+        bling_token_expires_at: new Date(Date.now() + (Number(tokenData.expires_in) || 3600) * 1000).toISOString(),
+    }).eq('id', settings.id);
+
+    return tokenData.access_token;
+}
+
+function bearer(tokenOrHeader: string) {
+    return tokenOrHeader.startsWith('Bearer ') ? tokenOrHeader : `Bearer ${tokenOrHeader}`;
+}
+
+async function fetchBlingWithStoredTokenRetry(supabase: any, url: string, authHeader?: string) {
+    const initialAuth = authHeader || bearer(await getStoredBlingAccessToken(supabase));
+    let response = await fetch(url, {
+        headers: { 'Authorization': initialAuth, 'Accept': 'application/json' },
+    });
+
+    if (response.status === 401) {
+        const refreshedToken = await getStoredBlingAccessToken(supabase, true);
+        response = await fetch(url, {
+            headers: { 'Authorization': bearer(refreshedToken), 'Accept': 'application/json' },
+        });
+    }
+
+    return response;
+}
+
 async function fetchAllLocalProductsForReconcile(supabase: any) {
     const localProducts: any[] = [];
 
@@ -906,7 +976,6 @@ export default async function handler(req: any, res: any) {
     if (resource === 'nf-detail') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
         const authHeader = req.headers['authorization'];
-        if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
 
         const tipo = String(req.query.tipo || '').toLowerCase();
         const id = req.query.id;
@@ -914,9 +983,8 @@ export default async function handler(req: any, res: any) {
         if (!id) return res.status(400).json({ error: 'id is required' });
 
         try {
-            const r = await fetch(`https://api.bling.com.br/Api/v3/${tipo}/${id}`, {
-                headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
-            });
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const r = await fetchBlingWithStoredTokenRetry(supabase, `https://api.bling.com.br/Api/v3/${tipo}/${id}`, authHeader);
             if (!r.ok) {
                 const txt = await r.text();
                 return res.status(r.status).json({ error: `Bling ${tipo} detail error: ${r.status}`, detail: txt });
@@ -930,7 +998,6 @@ export default async function handler(req: any, res: any) {
     if (resource === 'nfe' || resource === 'nfce') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
         const authHeader = req.headers['authorization'];
-        if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
         const endpoint = resource === 'nfe' ? 'nfe' : 'nfce';
         const q = req.query as Record<string, string>;
         // Accept both blingNfService names (dataEmissaoInicio/Fim) and Bling native names
@@ -943,9 +1010,8 @@ export default async function handler(req: any, res: any) {
         if (fim)      url += `&dataEmissaoFinal=${fim}`;
         if (situacao) url += `&situacao=${situacao}`;
         try {
-            const r = await fetch(url, {
-                headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
-            });
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const r = await fetchBlingWithStoredTokenRetry(supabase, url, authHeader);
             if (!r.ok) {
                 const txt = await r.text();
                 return res.status(r.status).json({ error: `Bling ${endpoint} error: ${r.status}`, detail: txt });

@@ -8,7 +8,7 @@ export function buildShopeeDashboardLinks(counts) {
   ];
 }
 
-const SHOPEE_AUTH_ERRORS = new Set(['invalid_access_token', 'error_auth']);
+const SHOPEE_AUTH_ERRORS = new Set(['invalid_access_token', 'invalid_acceess_token', 'error_auth']);
 
 async function fetchShopeeOrderList({
   timeFrom,
@@ -30,8 +30,14 @@ async function fetchShopeeOrderList({
   const response = await fetch(`/api/shopee-actions?${params.toString()}`);
   const payload = await response.json();
   const errorCode = String(payload?.error || '').trim();
+  const errorMessage = String(payload?.message || payload?.error || '').toLowerCase();
 
-  if (SHOPEE_AUTH_ERRORS.has(errorCode) && retryOnAuth) {
+  if (
+    retryOnAuth &&
+    (SHOPEE_AUTH_ERRORS.has(errorCode) ||
+      errorMessage.includes('invalid access_token') ||
+      errorMessage.includes('invalid_access_token'))
+  ) {
     const refreshResponse = await fetch('/api/shopee-actions?action=refresh_token');
     if (refreshResponse.ok) {
       return fetchShopeeOrderList({

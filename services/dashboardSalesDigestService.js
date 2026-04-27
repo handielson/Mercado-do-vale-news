@@ -338,11 +338,19 @@ async function loadPdvSales(now) {
   start.setDate(start.getDate() - 14);
   start.setHours(0, 0, 0, 0);
 
-  const response = await supabase
+  let response = await supabase
     .from('sales')
     .select('id, created_at, status, items:sale_items(product_id, product_name, product_model, product_sku, quantity, total, unit_price, unit_cost)')
     .gte('created_at', start.toISOString())
     .lte('created_at', now.toISOString());
+
+  if (response.error?.code === '42703') {
+    response = await supabase
+      .from('sales')
+      .select('id, created_at, status, items:sale_items(product_id, product_name, quantity, total, unit_price, unit_cost)')
+      .gte('created_at', start.toISOString())
+      .lte('created_at', now.toISOString());
+  }
 
   if (response.error) throw response.error;
   return Array.isArray(response.data) ? response.data : [];

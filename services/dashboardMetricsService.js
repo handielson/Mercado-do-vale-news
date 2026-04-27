@@ -94,7 +94,7 @@ export async function getDashboardDailyMetrics(now = new Date()) {
 
   const { data, error } = await supabase
     .from('sales')
-    .select('created_at, total, total_amount, profit')
+    .select('created_at, total, profit')
     .eq('status', 'completed')
     .gte('created_at', rangeStart.toISOString())
     .lte('created_at', now.toISOString());
