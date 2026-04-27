@@ -1,0 +1,9 @@
+.restore-points/
+.worktrees/
+backups/
+tmp-tests/
+tmp-video-frames/
+uploads/
+node_modules/
+dist/
+*.log
