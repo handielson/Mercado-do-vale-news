@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { generateSlug } from '@/utils/urlHelpers';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { toast } from 'sonner';
+import { fetchAllSEOProducts } from './seoDashboardData';
 
 interface SEOStats {
     total: number;
@@ -24,12 +25,7 @@ export const SEODashboardPage: React.FC = () => {
     const fetchSEOData = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('products')
-                .select('id, name, slug, meta_title, meta_description, status, description')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
+            const data = await fetchAllSEOProducts(supabase);
 
             let missingSlug = 0;
             let missingTitle = 0;
