@@ -6,17 +6,26 @@ const BASE = '/api/bling?resource=finance';
 
 // ─── Generic fetch wrapper ───────────────────────────────────
 async function blingFetch(url: string, options: RequestInit = {}): Promise<any> {
-    const rawToken = await getValidToken();
-    const token = rawToken.startsWith('Bearer') ? rawToken : `Bearer ${rawToken}`;
+    const buildRequest = (rawToken: string): RequestInit => {
+        const token = rawToken.startsWith('Bearer') ? rawToken : `Bearer ${rawToken}`;
+        return {
+            ...options,
+            headers: {
+                ...(options.headers || {}),
+                Authorization: token,
+                'Content-Type': 'application/json',
+            },
+        };
+    };
 
-    const res = await fetch(url, {
-        ...options,
-        headers: {
-            ...(options.headers || {}),
-            Authorization: token,
-            'Content-Type': 'application/json',
-        },
-    });
+    const rawToken = await getValidToken();
+    let res = await fetch(url, buildRequest(rawToken));
+
+    if (res.status === 401) {
+        const refreshedToken = await getValidToken({ forceRefresh: true });
+        res = await fetch(url, buildRequest(refreshedToken));
+    }
+
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
         const hint = json?.hint ? ` — ${json.hint}` : '';

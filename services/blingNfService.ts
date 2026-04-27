@@ -48,7 +48,8 @@ async function fetchAllPages(
     tipo: 'nfe' | 'nfce',
     token: string,
     dataInicio: string,
-    dataFim: string
+    dataFim: string,
+    retryOnUnauthorized = true
 ): Promise<BlingNfItem[]> {
     const endpoint = tipo === 'nfe' ? 'nfe' : 'nfce';
     const all: BlingNfItem[] = [];
@@ -56,9 +57,16 @@ async function fetchAllPages(
 
     while (true) {
         const url = `/api/bling?resource=${endpoint}&dataEmissaoInicio=${dataInicio}&dataEmissaoFim=${dataFim}&situacao=2&pagina=${pagina}`;
-        const res = await fetch(url, {
+        let res = await fetch(url, {
             headers: { Authorization: `Bearer ${token}` },
         });
+
+        if (res.status === 401 && retryOnUnauthorized) {
+            const refreshedToken = await getValidToken({ forceRefresh: true });
+            res = await fetch(url, {
+                headers: { Authorization: `Bearer ${refreshedToken}` },
+            });
+        }
 
         if (!res.ok) break;
         const json = await res.json();

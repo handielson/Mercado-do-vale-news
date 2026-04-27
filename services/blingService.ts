@@ -396,7 +396,7 @@ async function getCompanyId(): Promise<string> {
 
 // ------- Token management -------
 
-export async function getValidToken(): Promise<string> {
+export async function getValidToken(options: { forceRefresh?: boolean } = {}): Promise<string> {
     const { data, error } = await supabase
         .from('company_settings')
         .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
@@ -405,6 +405,10 @@ export async function getValidToken(): Promise<string> {
 
     if (error || !data?.bling_access_token) {
         throw new Error('Bling não está conectado. Acesse Configurações → Bling e clique em "Conectar".');
+    }
+
+    if (options.forceRefresh && data.bling_refresh_token) {
+        return refreshToken(data as BlingTokenData);
     }
 
     // Check if token is still valid (with 5min buffer)
