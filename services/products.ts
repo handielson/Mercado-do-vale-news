@@ -10,22 +10,10 @@ import { buildProductVideoUrl } from '../utils/video-url';
  * Supabase ainda é usado para: models, companies, price_history (dados relacionais que não estão na VPS)
  */
 
-// ─── Company context (Supabase apenas para companies lookup) ──────────────────
-
-const TEMP_COMPANY_ID = 'mercado-do-vale';
-let _cachedCompanyId: string | null = null;
-
-async function getCompanyId(): Promise<string> {
-    if (_cachedCompanyId) return _cachedCompanyId;
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    _cachedCompanyId = data.id;
-    return data.id;
-}
+// ─── Company context — delegado ao cache global (./companyContext) ───────────
+// Lê VITE_COMPANY_ID e cacheia entre services. Antes, cada service repetia o
+// lookup, gerando 3+ chamadas idênticas /companies?slug=eq.mercado-do-vale na home.
+import { getCompanyId } from './companyContext';
 
 // ─── Transform ─────────────────────────────────────────────────────────────
 

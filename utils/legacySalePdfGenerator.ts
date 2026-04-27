@@ -7,7 +7,9 @@
  * Retorna um Blob pronto para upload no Synology.
  */
 
-import jsPDF from 'jspdf';
+// Performance: jspdf carregado dinamicamente dentro de generateLegacySalePdf.
+import type { default as JsPdfType } from 'jspdf';
+type JsPdfClass = typeof JsPdfType;
 import type { LegacySale, LegacyProduct, LegacyBrand } from '../services/legacyAPI';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,7 +82,9 @@ function mapConditionLabel(condition: string): string {
 export async function generateLegacySalePdf(data: LegacyReceiptData): Promise<Blob> {
   const { sale, customerName, customerCpf, items, company } = data;
 
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  // Lazy load jspdf — só baixa quando o usuário pede o comprovante.
+  const { default: JsPDF } = (await import('jspdf')) as { default: JsPdfClass };
+  const doc = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PAGE_W = 210;
   const MARGIN = 15;
   const CONTENT_W = PAGE_W - MARGIN * 2;

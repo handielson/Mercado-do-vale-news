@@ -1,0 +1,648 @@
+diff --git a/VERCEL_ENV_VARS.md b/VERCEL_ENV_VARS.md
+index 9722871..36be1c0 100644
+--- a/VERCEL_ENV_VARS.md
++++ b/VERCEL_ENV_VARS.md
+@@ -19,6 +19,15 @@ As seguintes variáveis de ambiente DEVEM estar configuradas no Vercel:
+ - **Obrigatório**: NÃO (mas recomendado)
+ - **Descrição**: Modo de desenvolvimento (deve ser false em produção)
+ 
++### 4. VITE_COMPANY_ID
++- **Valor**: `9717131e-7b14-4aec-84a4-4317c0489985`
++- **Obrigatório**: NÃO (mas FORTEMENTE recomendado em produção)
++- **Descrição**: UUID fixo da empresa "Mercado do Vale". Quando definido, evita o lookup
++  `/companies?slug=eq.mercado-do-vale` em cada service (centralizado em
++  `services/companyContext.ts`). Sem essa variável o app cai em fallback (lookup por
++  slug + cache global em memória) e funciona normalmente.
++- **Impacto**: ~3 chamadas Supabase a menos no carregamento inicial (–300 a 600 ms de LCP).
++
+ ## Como Configurar no Vercel
+ 
+ 1. Acesse: https://vercel.com/dashboard
+diff --git a/components/WeatherWidget.tsx b/components/WeatherWidget.tsx
+index 85cee8f..815eba7 100644
+--- a/components/WeatherWidget.tsx
++++ b/components/WeatherWidget.tsx
+@@ -45,21 +45,49 @@ function getWeatherLabel(code: number): string {
+     return 'Tempestade';
+ }
+ 
++// Deduplicação de requisições: o WeatherWidget é montado 2x no header (mobile + desktop).
++// Sem dedupe ambas instâncias disparariam fetchs concorrentes — exatamente o que o
++// Lighthouse mostrou (2× /v1/forecast, 2× /v1/search no caminho crítico).
++// Cada chave de URL guarda a Promise inflight; a segunda chamada apanha a mesma.
++const _coordsInflight = new Map<string, Promise<GeoResult[]>>();
++const _weatherInflight = new Map<string, Promise<{ temp: number; code: number }>>();
++
+ async function fetchCoords(cityName: string): Promise<GeoResult[]> {
+     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&country=BR&language=pt&count=5`;
+-    const res = await fetch(url);
+-    const data = await res.json();
+-    return data.results || [];
++    const existing = _coordsInflight.get(url);
++    if (existing) return existing;
++    const promise = (async () => {
++        try {
++            const res = await fetch(url);
++            const data = await res.json();
++            return (data.results || []) as GeoResult[];
++        } finally {
++            // Libera depois para permitir nova busca futura (não cachear erros indefinidamente).
++            setTimeout(() => _coordsInflight.delete(url), 100);
++        }
++    })();
++    _coordsInflight.set(url, promise);
++    return promise;
+ }
+ 
+ async function fetchWeather(lat: number, lng: number): Promise<{ temp: number; code: number }> {
+     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weathercode&timezone=America/Sao_Paulo`;
+-    const res = await fetch(url);
+-    const data = await res.json();
+-    return {
+-        temp: Math.round(data.current.temperature_2m),
+-        code: data.current.weathercode,
+-    };
++    const existing = _weatherInflight.get(url);
++    if (existing) return existing;
++    const promise = (async () => {
++        try {
++            const res = await fetch(url);
++            const data = await res.json();
++            return {
++                temp: Math.round(data.current.temperature_2m),
++                code: data.current.weathercode,
++            };
++        } finally {
++            setTimeout(() => _weatherInflight.delete(url), 100);
++        }
++    })();
++    _weatherInflight.set(url, promise);
++    return promise;
+ }
+ 
+ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ defaultCity, defaultState }) => {
+diff --git a/index.html b/index.html
+index f1bc37e..c24a457 100644
+--- a/index.html
++++ b/index.html
+@@ -5,6 +5,16 @@
+   <meta charset="UTF-8" />
+   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+   <link rel="icon" type="image/svg+xml" id="dynamic-favicon" href="/favicon.svg" />
++
++  <!-- Performance: pré-conexão com origens críticas (LCP) -->
++  <!-- Origens primárias (dados): preconnect estabelece DNS + TCP + TLS antecipadamente -->
++  <link rel="preconnect" href="https://cqbdyxxzmkgeghwkozts.supabase.co" crossorigin />
++  <link rel="preconnect" href="https://api.xiaomipetrolina.com.br" crossorigin />
++  <!-- Origens secundárias (clima, feriados): dns-prefetch é mais barato -->
++  <link rel="dns-prefetch" href="https://api.open-meteo.com" />
++  <link rel="dns-prefetch" href="https://geocoding-api.open-meteo.com" />
++  <link rel="dns-prefetch" href="https://brasilapi.com.br" />
++
+   <title>Mercado do Vale | Smartphones e Eletrônicos em Petrolina-PE</title>
+   <meta name="description" content="Mercado do Vale — Smartphones Xiaomi, Samsung, iPhones e eletrônicos com os melhores preços em Petrolina-PE. Compre online com entrega rápida e garantia!" />
+   <link rel="canonical" href="https://mercadodovale.com.br/" />
+@@ -23,11 +33,11 @@
+   <meta name="twitter:title" content="Mercado do Vale | Smartphones e Eletrônicos" />
+   <meta name="twitter:description" content="Smartphones Xiaomi, Samsung, iPhones e eletrônicos com os melhores preços em Petrolina-PE." />
+   <meta name="twitter:image" content="https://mercadodovale.com.br/og-cover.jpg" />
+-</head>
++</head>
+ 
+ <body class="bg-slate-50 text-slate-900">
+   <div id="root"></div>
+   <script type="module" src="/index.tsx"></script>
+ </body>
+ 
+-</html>
++</html>
+diff --git a/services/brands.ts b/services/brands.ts
+index 46f09e8..89c9455 100644
+--- a/services/brands.ts
++++ b/services/brands.ts
+@@ -7,22 +7,8 @@ import { vpsApiService } from './vpsApiService';
+  * Multi-tenant service with Row Level Security
+  */
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ /**
+  * Generate URL-friendly slug from brand name
+diff --git a/services/colors.ts b/services/colors.ts
+index aa65576..3185985 100644
+--- a/services/colors.ts
++++ b/services/colors.ts
+@@ -13,8 +13,8 @@ import { supabase } from './supabase';
+  * - Includes hex_code mapping for visual preview
+  */
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ // Color mapping for visual preview (fallback if hex_code not in DB)
+ export const COLOR_MAP: Record<string, string> = {
+@@ -124,20 +124,6 @@ export const COLOR_MAP: Record<string, string> = {
+ };
+ 
+ 
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
+-
+ /**
+  * Generate URL-friendly slug from color name
+  */
+diff --git a/services/customers.ts b/services/customers.ts
+index 6344e54..97a18b7 100644
+--- a/services/customers.ts
++++ b/services/customers.ts
+@@ -12,8 +12,8 @@ import { telegramBotService } from './telegramBot';
+  * - RLS policies enforce security
+  */
+ 
+-// Temporary company ID for development
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId as _getCompanyIdShared } from './companyContext';
+ 
+ class CustomerService {
+     private cache: Customer[] | null = null;
+@@ -21,17 +21,10 @@ class CustomerService {
+     private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+ 
+     /**
+-     * Get company ID from authenticated user or fallback to temp company
++     * Delegação ao cache global compartilhado entre services.
+      */
+     private async getCompanyId(): Promise<string> {
+-        const { data, error } = await supabase
+-            .from('companies')
+-            .select('id')
+-            .eq('slug', TEMP_COMPANY_ID)
+-            .single();
+-
+-        if (error) throw new Error(`Failed to get company: ${error.message}`);
+-        return data.id;
++        return _getCompanyIdShared();
+     }
+ 
+     /**
+diff --git a/services/model-color-images.ts b/services/model-color-images.ts
+index b06ff10..82b0c74 100644
+--- a/services/model-color-images.ts
++++ b/services/model-color-images.ts
+@@ -20,22 +20,8 @@ export interface ModelColorImagesInput {
+     images: string[];
+ }
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ /**
+  * Get images for a specific model-color variation
+diff --git a/services/modelColorImages.ts b/services/modelColorImages.ts
+index ee27ad6..eab8175 100644
+--- a/services/modelColorImages.ts
++++ b/services/modelColorImages.ts
+@@ -29,22 +29,8 @@ export interface ModelColorImageInput {
+     display_order?: number;
+ }
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ /**
+  * Get all images for a Model+Color combination
+diff --git a/services/modelImageCache.ts b/services/modelImageCache.ts
+index 552440e..790e2eb 100644
+--- a/services/modelImageCache.ts
++++ b/services/modelImageCache.ts
+@@ -1,21 +1,17 @@
+ import { supabase } from './supabase';
++import { getCompanyId as _getCompanyIdShared } from './companyContext';
+ 
+ // Cache em memória: "mercado-do-vale::[model_id]::[colorName]" -> imageUrl
+ const memoryCache: Record<string, string | null> = {};
+ const pendingPromises: Record<string, Promise<string | null>> = {};
+ 
+-// Company_id cacheado no módulo (evita 1 query extra por chamada)
+-let _cachedCompanyId: string | null = null;
+-
++// Wrapper que mantém a assinatura original (Promise<string | null>) sem propagar erros.
+ async function getCompanyId(): Promise<string | null> {
+-    if (_cachedCompanyId) return _cachedCompanyId;
+-    const { data } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', 'mercado-do-vale')
+-        .single();
+-    _cachedCompanyId = data?.id ?? null;
+-    return _cachedCompanyId;
++    try {
++        return await _getCompanyIdShared();
++    } catch {
++        return null;
++    }
+ }
+ 
+ /**
+diff --git a/services/models-new.ts b/services/models-new.ts
+index 34a281c..9452500 100644
+--- a/services/models-new.ts
++++ b/services/models-new.ts
+@@ -7,22 +7,8 @@ import { modelEANsService } from './model-eans';
+  * Multi-tenant service with Row Level Security
+  */
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ /**
+  * Generate URL-friendly slug from model name
+diff --git a/services/models.ts b/services/models.ts
+index efe2dc6..9578853 100644
+--- a/services/models.ts
++++ b/services/models.ts
+@@ -6,22 +6,9 @@ import { supabase } from './supabase';
+  * Multi-tenant service with Row Level Security
+  */
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId vive em ./companyContext (lê VITE_COMPANY_ID, fallback para Supabase).
++// Antes desta consolidação, cada service repetia o lookup → 3+ chamadas idênticas na home.
++import { getCompanyId } from './companyContext';
+ 
+ /**
+  * Generate URL-friendly slug from model name
+diff --git a/services/orderService.ts b/services/orderService.ts
+index 3ef36f4..580775f 100644
+--- a/services/orderService.ts
++++ b/services/orderService.ts
+@@ -23,7 +23,8 @@ import { unitService } from './units';
+ import { UnitStatus } from '../utils/field-standards';
+ 
+ 
+-const COMPANY_SLUG = 'mercado-do-vale';
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ // ─── Helper: monta dados para notificação Telegram ────────────────────────────
+ function buildOrderNotificationData(
+@@ -138,16 +139,6 @@ async function notifyPaidOrderTelegram(order: any, items: any[]) {
+     });
+ }
+ 
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', COMPANY_SLUG)
+-        .single();
+-    if (error || !data) throw new Error('Empresa não encontrada.');
+-    return data.id;
+-}
+-
+ // ─── Helper: auto-reserva de unidades serializadas ───────────────────────────
+ /**
+  * Para cada item do pedido, verifica se o produto possui unidades serializadas
+diff --git a/services/paymentIntegrationService.ts b/services/paymentIntegrationService.ts
+index 228f702..5ddbc89 100644
+--- a/services/paymentIntegrationService.ts
++++ b/services/paymentIntegrationService.ts
+@@ -1,18 +1,8 @@
+ import { supabase } from './supabase';
+ import type { PaymentIntegration, PaymentIntegrationInput, PaymentGatewayName } from '../types/paymentIntegration';
+ 
+-const COMPANY_SLUG = 'mercado-do-vale';
+-
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', COMPANY_SLUG)
+-        .single();
+-
+-    if (error || !data) throw new Error('Empresa não encontrada.');
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ export const paymentIntegrationService = {
+     async getIntegrations(): Promise<PaymentIntegration[]> {
+diff --git a/services/productService.ts b/services/productService.ts
+index 4a1e0e1..117536a 100644
+--- a/services/productService.ts
++++ b/services/productService.ts
+@@ -9,18 +9,8 @@ import { supabase } from './supabase';
+ import { Product } from '../types/product';
+ import { vpsApiService } from './vpsApiService';
+ 
+-const COMPANY_SLUG = 'mercado-do-vale';
+-
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', COMPANY_SLUG)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ /**
+  * Search products by multiple criteria.
+diff --git a/services/products.ts b/services/products.ts
+index 84e1cee..5c9a593 100644
+--- a/services/products.ts
++++ b/services/products.ts
+@@ -10,22 +10,10 @@ import { buildProductVideoUrl } from '../utils/video-url';
+  * Supabase ainda é usado para: models, companies, price_history (dados relacionais que não estão na VPS)
+  */
+ 
+-// ─── Company context (Supabase apenas para companies lookup) ──────────────────
+-
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-let _cachedCompanyId: string | null = null;
+-
+-async function getCompanyId(): Promise<string> {
+-    if (_cachedCompanyId) return _cachedCompanyId;
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    _cachedCompanyId = data.id;
+-    return data.id;
+-}
++// ─── Company context — delegado ao cache global (./companyContext) ───────────
++// Lê VITE_COMPANY_ID e cacheia entre services. Antes, cada service repetia o
++// lookup, gerando 3+ chamadas idênticas /companies?slug=eq.mercado-do-vale na home.
++import { getCompanyId } from './companyContext';
+ 
+ // ─── Transform ─────────────────────────────────────────────────────────────
+ 
+diff --git a/services/units.ts b/services/units.ts
+index c664a3f..ba88901 100644
+--- a/services/units.ts
++++ b/services/units.ts
+@@ -7,22 +7,8 @@ import { supabase } from './supabase';
+  * Multi-tenant service for inventory unit management
+  */
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ /**
+  * List units by product
+diff --git a/services/warrantyDocumentService.ts b/services/warrantyDocumentService.ts
+index 5da9ada..1c6cd72 100644
+--- a/services/warrantyDocumentService.ts
++++ b/services/warrantyDocumentService.ts
+@@ -6,22 +6,8 @@
+ import { supabase } from './supabase';
+ import { WarrantyDocument, WarrantyDocumentInput } from '../types/warrantyDocument';
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ 
+ export const warrantyDocumentService = {
+diff --git a/services/warrantyTemplates.ts b/services/warrantyTemplates.ts
+index 211387c..0c624d5 100644
+--- a/services/warrantyTemplates.ts
++++ b/services/warrantyTemplates.ts
+@@ -6,22 +6,8 @@ import { supabase } from './supabase';
+  * Multi-tenant service with Row Level Security
+  */
+ 
+-// TEMPORARY: Hardcoded company_id until we implement auth
+-const TEMP_COMPANY_ID = 'mercado-do-vale';
+-
+-/**
+- * Get company_id from companies table by slug
+- */
+-async function getCompanyId(): Promise<string> {
+-    const { data, error } = await supabase
+-        .from('companies')
+-        .select('id')
+-        .eq('slug', TEMP_COMPANY_ID)
+-        .single();
+-
+-    if (error) throw new Error(`Failed to get company: ${error.message}`);
+-    return data.id;
+-}
++// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
++import { getCompanyId } from './companyContext';
+ 
+ /**
+  * List all warranty templates for the current company
+diff --git a/utils/catalogPDFGenerator.ts b/utils/catalogPDFGenerator.ts
+index 86a81d8..0d86ed3 100644
+--- a/utils/catalogPDFGenerator.ts
++++ b/utils/catalogPDFGenerator.ts
+@@ -1,5 +1,8 @@
+-import jsPDF from 'jspdf';
+-import autoTable from 'jspdf-autotable';
++// Performance: jspdf (~128 KiB) é importado dinamicamente dentro de generateCatalogPDF.
++// O bundle principal não carrega esse pacote — só quem clica em "Gerar catálogo" paga o custo.
++// (O import estático ficava no caminho crítico do LCP da home.)
++import type { default as JsPdfType } from 'jspdf';
++type JsPdfClass = typeof JsPdfType;
+ import type { Product } from '@/types/product';
+ import type { CustomerType } from './catalogMessageGenerator';
+ import { formatPrice } from '@/services/installmentCalculator';
+@@ -158,8 +161,11 @@ export async function generateCatalogPDF(
+     customerType: CustomerType = 'retail',
+     categoryName?: string
+ ): Promise<void> {
++    // Lazy load: só baixa jspdf quando esta função é chamada (ex.: clique no botão de catálogo).
++    const { default: JsPDF } = (await import('jspdf')) as { default: JsPdfClass };
++
+     // Create PDF
+-    const doc = new jsPDF({
++    const doc = new JsPDF({
+         orientation: 'portrait',
+         unit: 'mm',
+         format: 'a4'
+diff --git a/utils/legacySalePdfGenerator.ts b/utils/legacySalePdfGenerator.ts
+index 8b655c8..86583d8 100644
+--- a/utils/legacySalePdfGenerator.ts
++++ b/utils/legacySalePdfGenerator.ts
+@@ -7,7 +7,9 @@
+  * Retorna um Blob pronto para upload no Synology.
+  */
+ 
+-import jsPDF from 'jspdf';
++// Performance: jspdf carregado dinamicamente dentro de generateLegacySalePdf.
++import type { default as JsPdfType } from 'jspdf';
++type JsPdfClass = typeof JsPdfType;
+ import type { LegacySale, LegacyProduct, LegacyBrand } from '../services/legacyAPI';
+ 
+ // ─── Types ────────────────────────────────────────────────────────────────────
+@@ -80,7 +82,9 @@ function mapConditionLabel(condition: string): string {
+ export async function generateLegacySalePdf(data: LegacyReceiptData): Promise<Blob> {
+   const { sale, customerName, customerCpf, items, company } = data;
+ 
+-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
++  // Lazy load jspdf — só baixa quando o usuário pede o comprovante.
++  const { default: JsPDF } = (await import('jspdf')) as { default: JsPdfClass };
++  const doc = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+   const PAGE_W = 210;
+   const MARGIN = 15;
+   const CONTENT_W = PAGE_W - MARGIN * 2;
+
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..0000001
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,20 @@
++# .env.example — front-end Vite (mercadodovale.com.br)
++# Copie para .env.local (local) e configure no Vercel (produção / preview).
++
++# Supabase
++VITE_SUPABASE_URL="https://cqbdyxxzmkgeghwkozts.supabase.co"
++VITE_SUPABASE_ANON_KEY=""
++
++# Modo dev (false em produção)
++VITE_DEV_MODE="false"
++
++# UUID fixo da empresa "Mercado do Vale".
++# Quando definido, services/companyContext.ts dispensa o lookup
++# /companies?slug=eq.mercado-do-vale e poupa ~3 chamadas Supabase no init.
++VITE_COMPANY_ID="9717131e-7b14-4aec-84a4-4317c0489985"
++
++# URL da API VPS (catálogo, pedidos)
++VITE_VPS_API_URL="https://api.xiaomipetrolina.com.br"
++
++# Chave compartilhada com a VPS (opcional — endpoints públicos não precisam)
++VITE_VPS_SYNC_KEY=""

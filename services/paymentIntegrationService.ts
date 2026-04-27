@@ -1,18 +1,8 @@
 import { supabase } from './supabase';
 import type { PaymentIntegration, PaymentIntegrationInput, PaymentGatewayName } from '../types/paymentIntegration';
 
-const COMPANY_SLUG = 'mercado-do-vale';
-
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', COMPANY_SLUG)
-        .single();
-
-    if (error || !data) throw new Error('Empresa não encontrada.');
-    return data.id;
-}
+// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
+import { getCompanyId } from './companyContext';
 
 export const paymentIntegrationService = {
     async getIntegrations(): Promise<PaymentIntegration[]> {

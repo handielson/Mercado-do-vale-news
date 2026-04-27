@@ -19,6 +19,15 @@ As seguintes variáveis de ambiente DEVEM estar configuradas no Vercel:
 - **Obrigatório**: NÃO (mas recomendado)
 - **Descrição**: Modo de desenvolvimento (deve ser false em produção)
 
+### 4. VITE_COMPANY_ID
+- **Valor**: `9717131e-7b14-4aec-84a4-4317c0489985`
+- **Obrigatório**: NÃO (mas FORTEMENTE recomendado em produção)
+- **Descrição**: UUID fixo da empresa "Mercado do Vale". Quando definido, evita o lookup
+  `/companies?slug=eq.mercado-do-vale` em cada service (centralizado em
+  `services/companyContext.ts`). Sem essa variável o app cai em fallback (lookup por
+  slug + cache global em memória) e funciona normalmente.
+- **Impacto**: ~3 chamadas Supabase a menos no carregamento inicial (–300 a 600 ms de LCP).
+
 ## Como Configurar no Vercel
 
 1. Acesse: https://vercel.com/dashboard

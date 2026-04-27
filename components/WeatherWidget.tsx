@@ -45,21 +45,49 @@ function getWeatherLabel(code: number): string {
     return 'Tempestade';
 }
 
+// Deduplicação de requisições: o WeatherWidget é montado 2x no header (mobile + desktop).
+// Sem dedupe ambas instâncias disparariam fetchs concorrentes — exatamente o que o
+// Lighthouse mostrou (2× /v1/forecast, 2× /v1/search no caminho crítico).
+// Cada chave de URL guarda a Promise inflight; a segunda chamada apanha a mesma.
+const _coordsInflight = new Map<string, Promise<GeoResult[]>>();
+const _weatherInflight = new Map<string, Promise<{ temp: number; code: number }>>();
+
 async function fetchCoords(cityName: string): Promise<GeoResult[]> {
     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&country=BR&language=pt&count=5`;
-    const res = await fetch(url);
-    const data = await res.json();
-    return data.results || [];
+    const existing = _coordsInflight.get(url);
+    if (existing) return existing;
+    const promise = (async () => {
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            return (data.results || []) as GeoResult[];
+        } finally {
+            // Libera depois para permitir nova busca futura (não cachear erros indefinidamente).
+            setTimeout(() => _coordsInflight.delete(url), 100);
+        }
+    })();
+    _coordsInflight.set(url, promise);
+    return promise;
 }
 
 async function fetchWeather(lat: number, lng: number): Promise<{ temp: number; code: number }> {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weathercode&timezone=America/Sao_Paulo`;
-    const res = await fetch(url);
-    const data = await res.json();
-    return {
-        temp: Math.round(data.current.temperature_2m),
-        code: data.current.weathercode,
-    };
+    const existing = _weatherInflight.get(url);
+    if (existing) return existing;
+    const promise = (async () => {
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            return {
+                temp: Math.round(data.current.temperature_2m),
+                code: data.current.weathercode,
+            };
+        } finally {
+            setTimeout(() => _weatherInflight.delete(url), 100);
+        }
+    })();
+    _weatherInflight.set(url, promise);
+    return promise;
 }
 
 export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ defaultCity, defaultState }) => {

@@ -9,18 +9,8 @@ import { supabase } from './supabase';
 import { Product } from '../types/product';
 import { vpsApiService } from './vpsApiService';
 
-const COMPANY_SLUG = 'mercado-do-vale';
-
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', COMPANY_SLUG)
-        .single();
-
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
-}
+// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
+import { getCompanyId } from './companyContext';
 
 /**
  * Search products by multiple criteria.

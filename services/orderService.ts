@@ -23,7 +23,8 @@ import { unitService } from './units';
 import { UnitStatus } from '../utils/field-standards';
 
 
-const COMPANY_SLUG = 'mercado-do-vale';
+// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
+import { getCompanyId } from './companyContext';
 
 // ─── Helper: monta dados para notificação Telegram ────────────────────────────
 function buildOrderNotificationData(
@@ -136,16 +137,6 @@ async function notifyPaidOrderTelegram(order: any, items: any[]) {
         endereco: getAddressLabel(order.shipping_address),
         data_pagamento: new Date().toLocaleString('pt-BR'),
     });
-}
-
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', COMPANY_SLUG)
-        .single();
-    if (error || !data) throw new Error('Empresa não encontrada.');
-    return data.id;
 }
 
 // ─── Helper: auto-reserva de unidades serializadas ───────────────────────────

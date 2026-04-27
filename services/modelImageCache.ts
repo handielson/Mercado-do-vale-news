@@ -1,21 +1,17 @@
 import { supabase } from './supabase';
+import { getCompanyId as _getCompanyIdShared } from './companyContext';
 
 // Cache em memória: "mercado-do-vale::[model_id]::[colorName]" -> imageUrl
 const memoryCache: Record<string, string | null> = {};
 const pendingPromises: Record<string, Promise<string | null>> = {};
 
-// Company_id cacheado no módulo (evita 1 query extra por chamada)
-let _cachedCompanyId: string | null = null;
-
+// Wrapper que mantém a assinatura original (Promise<string | null>) sem propagar erros.
 async function getCompanyId(): Promise<string | null> {
-    if (_cachedCompanyId) return _cachedCompanyId;
-    const { data } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', 'mercado-do-vale')
-        .single();
-    _cachedCompanyId = data?.id ?? null;
-    return _cachedCompanyId;
+    try {
+        return await _getCompanyIdShared();
+    } catch {
+        return null;
+    }
 }
 
 /**

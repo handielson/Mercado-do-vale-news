@@ -1,5 +1,8 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// Performance: jspdf (~128 KiB) é importado dinamicamente dentro de generateCatalogPDF.
+// O bundle principal não carrega esse pacote — só quem clica em "Gerar catálogo" paga o custo.
+// (O import estático ficava no caminho crítico do LCP da home.)
+import type { default as JsPdfType } from 'jspdf';
+type JsPdfClass = typeof JsPdfType;
 import type { Product } from '@/types/product';
 import type { CustomerType } from './catalogMessageGenerator';
 import { formatPrice } from '@/services/installmentCalculator';
@@ -158,8 +161,11 @@ export async function generateCatalogPDF(
     customerType: CustomerType = 'retail',
     categoryName?: string
 ): Promise<void> {
+    // Lazy load: só baixa jspdf quando esta função é chamada (ex.: clique no botão de catálogo).
+    const { default: JsPDF } = (await import('jspdf')) as { default: JsPdfClass };
+
     // Create PDF
-    const doc = new jsPDF({
+    const doc = new JsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'

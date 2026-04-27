@@ -29,22 +29,8 @@ export interface ModelColorImageInput {
     display_order?: number;
 }
 
-// TEMPORARY: Hardcoded company_id until we implement auth
-const TEMP_COMPANY_ID = 'mercado-do-vale';
-
-/**
- * Get company_id from companies table by slug
- */
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
-}
+// Cache global de companyId em ./companyContext (lê VITE_COMPANY_ID, fallback Supabase).
+import { getCompanyId } from './companyContext';
 
 /**
  * Get all images for a Model+Color combination
