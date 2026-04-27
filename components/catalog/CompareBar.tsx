@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { X, GitCompare, Trash2 } from 'lucide-react';
 import { useCompare } from '../../contexts/CompareContext';
-import { CompareModal } from './CompareModal';
 import type { CatalogProduct } from '../../types/catalog';
+
+const CompareModal = React.lazy(() => import('./CompareModal').then(module => ({ default: module.CompareModal })));
 
 /** Retorna nome do modelo sem sufixo de RAM/storage. Ex: "Redmi Note 15, 8GB/256GB" → "Redmi Note 15" */
 const cleanModelName = (p: CatalogProduct): string =>
@@ -90,7 +91,11 @@ export function CompareBar() {
             {/* Spacer so content above doesn't hide behind bar */}
             {visible && <div className="h-16" />}
 
-            {showModal && <CompareModal onClose={() => setShowModal(false)} />}
+            {showModal && (
+                <React.Suspense fallback={null}>
+                    <CompareModal onClose={() => setShowModal(false)} />
+                </React.Suspense>
+            )}
         </>
     );
 }

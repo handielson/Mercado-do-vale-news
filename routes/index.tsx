@@ -1,86 +1,79 @@
-
-
 import React from 'react';
-import { createBrowserRouter, Navigate, useNavigate } from 'react-router-dom';
-import { MessageSquareDashed } from 'lucide-react';
-import { AdminLoginPage } from '../pages/auth/AdminLoginPage';
-import { ClienteLoginPage } from '../pages/auth/ClienteLoginPage';
-import { ClienteRegisterPage } from '../pages/auth/ClienteRegisterPage';
-import { CadastroPage } from '../pages/auth/CadastroPage';
-import { AuthCallbackPage } from '../pages/auth/AuthCallbackPage';
-import { CompletarCadastroPage } from '../pages/auth/CompletarCadastroPage';
-import { RecuperarSenhaPage } from '../pages/auth/RecuperarSenhaPage';
-import { RedefinirSenhaPage } from '../pages/auth/RedefinirSenhaPage';
-import { CustomerCatalogPage } from '../pages/customer/CustomerCatalogPage';
-import { CustomerProfilePage } from '../pages/customer/CustomerProfilePage';
-import { CustomerFavoritesPage } from '../pages/customer/CustomerFavoritesPage';
+import { createBrowserRouter } from 'react-router-dom';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { SupabaseProtectedRoute } from '../components/SupabaseProtectedRoute';
-import { ClientTypes } from '../utils/field-standards';
-import { BulkRegistrationPage } from '../pages/admin/products/BulkRegistrationPage';
-import CategorySettingsPage from '../pages/admin/settings/categories/index';
-import NewCategoryPage from '../pages/admin/settings/categories/new';
-import FieldPresetsPage from '../pages/admin/settings/categories/presets';
-import EditCategoryPage from '../pages/admin/settings/categories/[id]/edit';
-import FieldsManagementPage from '../pages/admin/settings/fields';
-import { StoragesPage } from '../pages/admin/settings/StoragesPage';
-import { RamsPage } from '../pages/admin/settings/RamsPage';
-import { VersionsPage } from '../pages/admin/settings/VersionsPage';
-import { BatteryHealthsPage } from '../pages/admin/settings/BatteryHealthsPage';
-import { FieldConfigPage } from '../pages/admin/settings/FieldConfigPage';
-import { PaymentFeesPage } from '../pages/admin/settings/PaymentFeesPage';
-import { CustomFieldsLibraryPage } from '../pages/admin/settings/CustomFieldsLibraryPage';
-import CustomerFormPage from '../pages/customers/CustomerFormPage';
-import CustomerDetailsPage from '../pages/customers/CustomerDetailsPage';
-import TeamFormPage from '../pages/team/TeamFormPage';
-import TeamListPage from '../pages/team/TeamListPage';
-import { CompanyDataPage } from '../pages/admin/settings/CompanyDataPage';
-import DocumentSettingsPage from '../pages/admin/settings/DocumentSettingsPage';
-import WarrantyTemplatesPage from '../pages/admin/settings/WarrantyTemplatesPage';
-import MessagesPage from '../pages/admin/settings/MessagesPage';
-import BannerManagementPage from '../pages/admin/settings/BannerManagementPage';
-import CatalogSettingsPage from '../pages/admin/settings/CatalogSettingsPage';
-import ShippingPage from '../pages/admin/settings/ShippingPage';
-import FreightCalculatorPage from '../pages/admin/FreightCalculatorPage';
-import PermissionsManagementPage from '../pages/admin/settings/PermissionsManagementPage';
-import CouponsPage from '../pages/admin/CouponsPage';
-import CashbackPage from '../pages/admin/CashbackPage';
-import TelegramPage from '../pages/admin/settings/TelegramPage';
-import SystemTagsPage from '../pages/admin/settings/SystemTagsPage';
-import WhatsAppPage from '../pages/admin/settings/WhatsAppPage';
-import PaymentIntegrationsPage from '../pages/admin/settings/PaymentIntegrationsPage';
-import { TabsTestPage } from '../pages/test/TabsTestPage';
-import CatalogPage from '../pages/catalog/index';
-import CoinsInfoPage from '../pages/catalog/CoinsInfoPage';
-import LegacyMigrationPage from '../pages/LegacyMigration';
-import FieldMappingPage from '../pages/FieldMappingPage';
-import ExtendedWarrantyPage from '../pages/customer/ExtendedWarrantyPage';
-import { PromotionsPage as CustomerPromotionsPage } from '../pages/customer/PromotionsPage';
-import { FreeScreenProtectorRulesPage } from '../pages/customer/FreeScreenProtectorRulesPage';
-import { FeedbackListPage } from '../pages/admin/feedbacks/FeedbackListPage';
-import { PromotionsPage as AdminPromotionsPage } from '../pages/admin/promotions/PromotionsPage';
-import { AboutUsPage } from '../pages/catalog/AboutUsPage';
-import { FAQPage } from '../pages/catalog/FAQPage';
-import BlingCallbackPage from '../pages/admin/settings/BlingCallbackPage';
-import CartPage from '../pages/store/CartPage';
-import OrderConfirmationPage from '../pages/store/OrderConfirmationPage';
-import OrderTrackingPage from '../pages/store/OrderTrackingPage';
-import OnlineOrdersPage from '../pages/admin/orders/OnlineOrdersPage';
-import SerializedUnitsPage from '../pages/admin/inventory/SerializedUnitsPage';
 import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
-import { SEODashboardPage } from '../pages/admin/settings/SEODashboardPage';
-import { SEOBlacklistPage } from '../pages/admin/settings/SEOBlacklistPage';
-import { feedbackService } from '../services/feedbackService';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
-import { ReviewsPage } from '../pages/admin/catalog/ReviewsPage';
-import { RoadmapPage } from '../pages/admin/settings/RoadmapPage';
-import { VpsStatusPage } from '../pages/admin/settings/VpsStatusPage';
-import { SynologyFilesPage } from '../pages/admin/settings/SynologyFilesPage';
-import { SynologyConfigPage } from '../pages/admin/settings/SynologyConfigPage';
-import { FavoritesRankingReport } from '../pages/admin/reports/FavoritesRankingReport';
-import { AdminDashboardPage } from '../pages/admin/dashboard/AdminDashboardPage';
 
+const AdminLoginPage = React.lazy(() => import('../pages/auth/AdminLoginPage').then(module => ({ default: module.AdminLoginPage })));
+const ClienteLoginPage = React.lazy(() => import('../pages/auth/ClienteLoginPage').then(module => ({ default: module.ClienteLoginPage })));
+const ClienteRegisterPage = React.lazy(() => import('../pages/auth/ClienteRegisterPage').then(module => ({ default: module.ClienteRegisterPage })));
+const AuthCallbackPage = React.lazy(() => import('../pages/auth/AuthCallbackPage').then(module => ({ default: module.AuthCallbackPage })));
+const CompletarCadastroPage = React.lazy(() => import('../pages/auth/CompletarCadastroPage').then(module => ({ default: module.CompletarCadastroPage })));
+const RecuperarSenhaPage = React.lazy(() => import('../pages/auth/RecuperarSenhaPage').then(module => ({ default: module.RecuperarSenhaPage })));
+const RedefinirSenhaPage = React.lazy(() => import('../pages/auth/RedefinirSenhaPage').then(module => ({ default: module.RedefinirSenhaPage })));
+const CustomerProfilePage = React.lazy(() => import('../pages/customer/CustomerProfilePage').then(module => ({ default: module.CustomerProfilePage })));
+const CustomerFavoritesPage = React.lazy(() => import('../pages/customer/CustomerFavoritesPage').then(module => ({ default: module.CustomerFavoritesPage })));
+const BulkRegistrationPage = React.lazy(() => import('../pages/admin/products/BulkRegistrationPage').then(module => ({ default: module.BulkRegistrationPage })));
+const CategorySettingsPage = React.lazy(() => import('../pages/admin/settings/categories/index'));
+const NewCategoryPage = React.lazy(() => import('../pages/admin/settings/categories/new'));
+const FieldPresetsPage = React.lazy(() => import('../pages/admin/settings/categories/presets'));
+const EditCategoryPage = React.lazy(() => import('../pages/admin/settings/categories/[id]/edit'));
+const FieldsManagementPage = React.lazy(() => import('../pages/admin/settings/fields'));
+const StoragesPage = React.lazy(() => import('../pages/admin/settings/StoragesPage').then(module => ({ default: module.StoragesPage })));
+const RamsPage = React.lazy(() => import('../pages/admin/settings/RamsPage').then(module => ({ default: module.RamsPage })));
+const VersionsPage = React.lazy(() => import('../pages/admin/settings/VersionsPage').then(module => ({ default: module.VersionsPage })));
+const BatteryHealthsPage = React.lazy(() => import('../pages/admin/settings/BatteryHealthsPage').then(module => ({ default: module.BatteryHealthsPage })));
+const FieldConfigPage = React.lazy(() => import('../pages/admin/settings/FieldConfigPage').then(module => ({ default: module.FieldConfigPage })));
+const PaymentFeesPage = React.lazy(() => import('../pages/admin/settings/PaymentFeesPage').then(module => ({ default: module.PaymentFeesPage })));
+const CustomFieldsLibraryPage = React.lazy(() => import('../pages/admin/settings/CustomFieldsLibraryPage').then(module => ({ default: module.CustomFieldsLibraryPage })));
+const CustomerFormPage = React.lazy(() => import('../pages/customers/CustomerFormPage'));
+const CustomerDetailsPage = React.lazy(() => import('../pages/customers/CustomerDetailsPage'));
+const TeamFormPage = React.lazy(() => import('../pages/team/TeamFormPage'));
+const TeamListPage = React.lazy(() => import('../pages/team/TeamListPage'));
+const CompanyDataPage = React.lazy(() => import('../pages/admin/settings/CompanyDataPage').then(module => ({ default: module.CompanyDataPage })));
+const DocumentSettingsPage = React.lazy(() => import('../pages/admin/settings/DocumentSettingsPage'));
+const WarrantyTemplatesPage = React.lazy(() => import('../pages/admin/settings/WarrantyTemplatesPage'));
+const MessagesPage = React.lazy(() => import('../pages/admin/settings/MessagesPage'));
+const BannerManagementPage = React.lazy(() => import('../pages/admin/settings/BannerManagementPage'));
+const CatalogSettingsPage = React.lazy(() => import('../pages/admin/settings/CatalogSettingsPage'));
+const ShippingPage = React.lazy(() => import('../pages/admin/settings/ShippingPage'));
+const FreightCalculatorPage = React.lazy(() => import('../pages/admin/FreightCalculatorPage'));
+const PermissionsManagementPage = React.lazy(() => import('../pages/admin/settings/PermissionsManagementPage'));
+const CouponsPage = React.lazy(() => import('../pages/admin/CouponsPage'));
+const CashbackPage = React.lazy(() => import('../pages/admin/CashbackPage'));
+const TelegramPage = React.lazy(() => import('../pages/admin/settings/TelegramPage'));
+const SystemTagsPage = React.lazy(() => import('../pages/admin/settings/SystemTagsPage'));
+const WhatsAppPage = React.lazy(() => import('../pages/admin/settings/WhatsAppPage'));
+const PaymentIntegrationsPage = React.lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
+const TabsTestPage = React.lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
+const CatalogPage = React.lazy(() => import('../pages/catalog/index'));
+const CoinsInfoPage = React.lazy(() => import('../pages/catalog/CoinsInfoPage'));
+const LegacyMigrationPage = React.lazy(() => import('../pages/LegacyMigration'));
+const FieldMappingPage = React.lazy(() => import('../pages/FieldMappingPage'));
+const ExtendedWarrantyPage = React.lazy(() => import('../pages/customer/ExtendedWarrantyPage'));
+const CustomerPromotionsPage = React.lazy(() => import('../pages/customer/PromotionsPage').then(module => ({ default: module.PromotionsPage })));
+const FreeScreenProtectorRulesPage = React.lazy(() => import('../pages/customer/FreeScreenProtectorRulesPage').then(module => ({ default: module.FreeScreenProtectorRulesPage })));
+const FeedbackListPage = React.lazy(() => import('../pages/admin/feedbacks/FeedbackListPage').then(module => ({ default: module.FeedbackListPage })));
+const AdminPromotionsPage = React.lazy(() => import('../pages/admin/promotions/PromotionsPage').then(module => ({ default: module.PromotionsPage })));
+const AboutUsPage = React.lazy(() => import('../pages/catalog/AboutUsPage').then(module => ({ default: module.AboutUsPage })));
+const FAQPage = React.lazy(() => import('../pages/catalog/FAQPage').then(module => ({ default: module.FAQPage })));
+const BlingCallbackPage = React.lazy(() => import('../pages/admin/settings/BlingCallbackPage'));
+const CartPage = React.lazy(() => import('../pages/store/CartPage'));
+const OrderConfirmationPage = React.lazy(() => import('../pages/store/OrderConfirmationPage'));
+const OrderTrackingPage = React.lazy(() => import('../pages/store/OrderTrackingPage'));
+const OnlineOrdersPage = React.lazy(() => import('../pages/admin/orders/OnlineOrdersPage'));
+const SerializedUnitsPage = React.lazy(() => import('../pages/admin/inventory/SerializedUnitsPage'));
+const SEODashboardPage = React.lazy(() => import('../pages/admin/settings/SEODashboardPage').then(module => ({ default: module.SEODashboardPage })));
+const SEOBlacklistPage = React.lazy(() => import('../pages/admin/settings/SEOBlacklistPage').then(module => ({ default: module.SEOBlacklistPage })));
+const ReviewsPage = React.lazy(() => import('../pages/admin/catalog/ReviewsPage').then(module => ({ default: module.ReviewsPage })));
+const RoadmapPage = React.lazy(() => import('../pages/admin/settings/RoadmapPage'));
+const VpsStatusPage = React.lazy(() => import('../pages/admin/settings/VpsStatusPage').then(module => ({ default: module.VpsStatusPage })));
+const SynologyFilesPage = React.lazy(() => import('../pages/admin/settings/SynologyFilesPage').then(module => ({ default: module.SynologyFilesPage })));
+const SynologyConfigPage = React.lazy(() => import('../pages/admin/settings/SynologyConfigPage'));
+const FavoritesRankingReport = React.lazy(() => import('../pages/admin/reports/FavoritesRankingReport'));
+const AdminDashboardPage = React.lazy(() => import('../pages/admin/dashboard/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
+const AdminLayout = React.lazy(() => import('../layouts/AdminLayout').then(module => ({ default: module.AdminLayout })));
 const ProductListPage = React.lazy(() => import('../pages/admin/products/ProductListPage').then(module => ({ default: module.ProductListPage })));
 const ProductFormPage = React.lazy(() => import('../pages/admin/products/ProductFormPage').then(module => ({ default: module.ProductFormPage })));
 const ProductDetailPage = React.lazy(() => import('../pages/admin/products/ProductDetailPage').then(module => ({ default: module.ProductDetailPage })));
@@ -105,210 +98,6 @@ const AccountingPage = React.lazy(() => import('../pages/admin/accounting/Accoun
 const DataImportExportPage = React.lazy(() => import('../pages/admin/import/DataImportExportPage').then(module => ({ default: module.DataImportExportPage })));
 const MySQLExplorerPage = React.lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
 
-// Temporary components (will be moved to separate files in next phase)
-const DashboardPage = () => {
-  const navigate = useNavigate();
-  const [unreadFeedbacks, setUnreadFeedbacks] = React.useState(0);
-
-  React.useEffect(() => {
-    feedbackService.getUnreadCount().then(setUnreadFeedbacks).catch(() => { });
-  }, []);
-
-  return (
-    <div className="animate-in fade-in duration-500">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
-          <p className="text-slate-500">Gestão operacional do ecossistema.</p>
-        </div>
-        <a
-          href="/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-indigo-600 to-blue-700 text-white text-sm font-semibold rounded-xl shadow hover:shadow-md hover:-translate-y-0.5 transition-all whitespace-nowrap"
-        >
-          <span>🛒</span> Ver Loja ↗
-        </a>
-      </div>
-
-      {/* Alerta de Novas Mensagens */}
-      {unreadFeedbacks > 0 && (
-        <div
-          onClick={() => navigate('/admin/feedbacks')}
-          className="mt-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl shadow-sm cursor-pointer hover:bg-amber-100 transition-colors flex items-start gap-3"
-        >
-          <div className="bg-amber-100 p-2 rounded-lg text-amber-600">
-            <MessageSquareDashed size={20} />
-          </div>
-          <div>
-            <h3 className="text-amber-800 font-bold text-sm">Atenção: Novas Mensagens!</h3>
-            <p className="text-amber-700 text-sm mt-0.5">
-              Você tem <strong>{unreadFeedbacks}</strong> {unreadFeedbacks === 1 ? 'mensagem' : 'mensagens'} aguardando leitura na sua caixa de entrada. Clique aqui para ler.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Access Cards */}
-      <div className="mt-8 space-y-8">
-
-        {/* ── Grupo: Produtos & Catálogo ── */}
-        <div>
-          <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <span>📦</span> Produtos & Catálogo
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-
-            <button onClick={() => navigate('/admin/products')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                  <span className="text-lg">📦</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">Produtos</p>
-              </div>
-              <p className="text-xs text-slate-500">Cadastrar e gerenciar</p>
-            </button>
-
-            <button onClick={() => navigate('/admin/settings/models')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                  <span className="text-lg">📱</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">Modelos</p>
-              </div>
-              <p className="text-xs text-slate-500">Modelos e fotos por cor</p>
-            </button>
-
-            <button onClick={() => navigate('/admin/inventory')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-yellow-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-yellow-100 rounded-lg flex items-center justify-center group-hover:bg-yellow-200 transition-colors">
-                  <span className="text-lg">📊</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">Estoque</p>
-              </div>
-              <p className="text-xs text-slate-500">Movimentações e saldos</p>
-            </button>
-
-            <button onClick={() => navigate('/admin/settings/catalog')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
-                  <span className="text-lg">🛍️</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">Catálogo</p>
-              </div>
-              <p className="text-xs text-slate-500">Configurar catálogo</p>
-            </button>
-
-            <button onClick={() => navigate('/admin/settings/bling')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-orange-50 rounded-lg flex items-center justify-center group-hover:bg-orange-100 transition-colors">
-                  <span className="text-lg">🔗</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">Bling</p>
-              </div>
-              <p className="text-xs text-slate-500">Sync ERP / Webhook</p>
-            </button>
-
-          </div>
-        </div>
-
-        {/* ── Grupo: Operações Diárias ── */}
-        <div>
-          <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <span>⚡</span> Operações Diárias
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-
-            <button onClick={() => navigate('/admin/pdv')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-purple-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                  <span className="text-lg">💰</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">PDV</p>
-              </div>
-              <p className="text-xs text-slate-500">Ponto de venda</p>
-            </button>
-
-            <button onClick={() => navigate('/admin/sales')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-sky-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-sky-100 rounded-lg flex items-center justify-center group-hover:bg-sky-200 transition-colors">
-                  <span className="text-lg">📋</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">Vendas</p>
-              </div>
-              <p className="text-xs text-slate-500">Histórico de vendas</p>
-            </button>
-
-            <button onClick={() => navigate('/admin/orders')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-teal-100 rounded-lg flex items-center justify-center group-hover:bg-teal-200 transition-colors">
-                  <span className="text-lg">🛒</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">Pedidos</p>
-              </div>
-              <p className="text-xs text-slate-500">Pedidos online</p>
-            </button>
-
-            <button onClick={() => navigate('/admin/financeiro')}
-              className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer group text-left">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
-                  <span className="text-lg">💳</span>
-                </div>
-                <p className="font-semibold text-slate-800 text-sm">Financeiro</p>
-              </div>
-              <p className="text-xs text-slate-500">Contas e fluxo</p>
-            </button>
-
-            <button onClick={() => navigate('/admin/settings/shipping?tab=calcular')}
-              className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-xl shadow-sm hover:shadow-md transition-all text-left text-white">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center">
-                  <span className="text-lg">🚚</span>
-                </div>
-                <p className="font-semibold text-sm">Calcular Frete</p>
-              </div>
-              <p className="text-xs text-blue-100">Cotação avulsa</p>
-            </button>
-
-          </div>
-        </div>
-
-      </div>
-
-      {/* Stats Cards */}
-      <div className="mt-8">
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <span>📊</span> Visão Geral
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
-            <p className="text-xs font-semibold text-slate-500 uppercase">Total Operações</p>
-            <p className="text-2xl font-bold mt-1">R$ 0,00</p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-red-500">
-            <p className="text-xs font-semibold text-slate-500 uppercase">Alertas de Estoque</p>
-            <p className="text-2xl font-bold mt-1">0 itens</p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500">
-            <p className="text-xs font-semibold text-slate-500 uppercase">Requisições Atacado</p>
-            <p className="text-2xl font-bold mt-1">0</p>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  );
-};
-
 const StorePage = () => (
   <div className="p-8 animate-in slide-in-from-bottom-4 duration-500">
     <h1 className="text-3xl font-bold">Catálogo de Produtos</h1>
@@ -321,8 +110,6 @@ const StorePage = () => (
   </div>
 );
 
-// Layout wrappers
-import { AdminLayout } from '../layouts/AdminLayout';
 
 export const router = createBrowserRouter([
   // Redirect old login to new admin login (backward compatibility)
