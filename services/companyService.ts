@@ -202,10 +202,12 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     about_us_image_url: company.aboutUsImageUrl || null,
 });
 
+let companyDataPromise: Promise<Company> | null = null;
+
 /**
  * Get company data from Supabase
  */
-export const getCompanyData = async (): Promise<Company> => {
+const loadCompanyData = async (): Promise<Company> => {
     try {
         if (USE_VPS.company) {
             try {
@@ -251,6 +253,18 @@ export const getCompanyData = async (): Promise<Company> => {
     }
 };
 
+export const getCompanyData = async (): Promise<Company> => {
+    if (!companyDataPromise) {
+        companyDataPromise = loadCompanyData();
+    }
+
+    return companyDataPromise;
+};
+
+const invalidateCompanyDataCache = () => {
+    companyDataPromise = null;
+};
+
 /**
  * Save company data to Supabase
  */
@@ -262,6 +276,7 @@ export const saveCompanyData = async (data: Company): Promise<void> => {
             try {
                 console.log('Updating existing company settings record via VPS');
                 await vpsClient.patch('/company-settings', row);
+                invalidateCompanyDataCache();
                 return;
             } catch (vpsErr) {
                 console.error('[companyService] VPS update error:', vpsErr);
@@ -301,6 +316,7 @@ export const saveCompanyData = async (data: Company): Promise<void> => {
             }
             console.log('Insert successful');
         }
+        invalidateCompanyDataCache();
     } catch (error) {
         console.error('Error saving company data:', error);
         throw new Error('Erro ao salvar dados da empresa');
@@ -319,6 +335,7 @@ export const clearCompanyData = async (): Promise<void> => {
             .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all real records
 
         if (error) throw error;
+        invalidateCompanyDataCache();
     } catch (error) {
         console.error('Error clearing company data:', error);
         throw new Error('Erro ao limpar dados da empresa');

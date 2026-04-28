@@ -1,14 +1,27 @@
 import { useEffect } from 'react';
 import { getCompanyData } from '../services/companyService';
 
+const scheduleIdle = (callback: () => void) => {
+    if ('requestIdleCallback' in window) {
+        const id = window.requestIdleCallback(callback, { timeout: 2500 });
+        return () => window.cancelIdleCallback(id);
+    }
+
+    const id = window.setTimeout(callback, 1200);
+    return () => window.clearTimeout(id);
+};
+
 /**
  * Hook para aplicar o favicon da empresa dinamicamente
  */
 export const useFavicon = () => {
     useEffect(() => {
+        let cancelled = false;
+
         const loadAndApplyFavicon = async () => {
             try {
                 const companyData = await getCompanyData();
+                if (cancelled) return;
 
                 if (companyData.favicon) {
                     // Atualizar o favicon
@@ -36,6 +49,10 @@ export const useFavicon = () => {
             }
         };
 
-        loadAndApplyFavicon();
+        const cancelIdle = scheduleIdle(loadAndApplyFavicon);
+        return () => {
+            cancelled = true;
+            cancelIdle();
+        };
     }, []);
 };
