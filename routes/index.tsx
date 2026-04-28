@@ -782,6 +782,16 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/produtos",
+    element: (
+      <MaintenanceGuard>
+        <CartProvider>
+          <CatalogPage />
+        </CartProvider>
+      </MaintenanceGuard>
+    )
+  },
+  {
     path: "/quem-somos",
     element: (
       <MaintenanceGuard>

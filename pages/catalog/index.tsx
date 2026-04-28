@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useSearchParams, Link, useLocation } from 'react-router-dom';
+import { useSearchParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { X, LayoutGrid, List, Heart, Search, MoreHorizontal } from 'lucide-react';
 import {
     BannerCarousel,
@@ -35,6 +35,7 @@ import {
     buildCatalogPageHref,
     CATALOG_RETURN_STORAGE_KEY,
     getCatalogPageSlice,
+    getCatalogPaginationPathname,
     needsCatalogPageData,
     normalizeCatalogPage,
     shouldRestoreCatalogState,
@@ -79,10 +80,12 @@ function CatalogContent() {
 
     // Ler ?search= e ?categoria= da URL para suportar links compartilhados e botões de atalho
     const location = useLocation();
+    const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const initialSearchQuery = searchParams.get('search') ?? '';
     const initialCategory = searchParams.get('categoria') ?? undefined;
     const currentPage = normalizeCatalogPage(searchParams.get('page'));
+    const isAllProductsPage = location.pathname === '/produtos';
     const restoreScrollRef = useRef(false);
 
     // bypassCache fixo: nunca muda após a primeira renderização, evitando reload quando auth carrega
@@ -345,11 +348,51 @@ function CatalogContent() {
     }, [currentPage, lastPageForNavigation]);
     const showPagination = isPaginatedCatalogMode && (hasPreviousPage || hasNextPage || paginationPages.length > 1);
     const isCatalogGridLoading = (loading && productGroups.length === 0) || needsMoreGroupsForPage;
+    const isAllProductsListing = !filters.categories.length && !searchQuery;
+    const paginationPathname = getCatalogPaginationPathname({
+        pathname: location.pathname,
+        isAllProducts: isAllProductsListing,
+    });
 
     useEffect(() => {
         if (!needsMoreGroupsForPage) return;
         loadMore();
     }, [needsMoreGroupsForPage, loadMore]);
+
+    useEffect(() => {
+        if (!isAllProductsPage || needsMoreGroupsForPage || loading || fetching || restoreScrollRef.current) {
+            return;
+        }
+
+        if (typeof window === 'undefined') return;
+
+        const rawSavedState = window.sessionStorage.getItem(CATALOG_RETURN_STORAGE_KEY);
+        if (rawSavedState) {
+            try {
+                const savedState = JSON.parse(rawSavedState);
+                if (shouldRestoreCatalogState(savedState, {
+                    pathname: location.pathname,
+                    search: location.search,
+                })) {
+                    return;
+                }
+            } catch {
+                window.sessionStorage.removeItem(CATALOG_RETURN_STORAGE_KEY);
+            }
+        }
+
+        window.requestAnimationFrame(() => {
+            window.scrollTo({ top: 0, behavior: 'auto' });
+        });
+    }, [
+        currentPage,
+        fetching,
+        isAllProductsPage,
+        loading,
+        location.pathname,
+        location.search,
+        needsMoreGroupsForPage,
+    ]);
 
     useEffect(() => {
         restoreScrollRef.current = false;
@@ -472,6 +515,7 @@ function CatalogContent() {
                                 onClick={() => {
                                     setFilters({ ...filters, categories: [] });
                                     syncCategoryUrl([]);
+                                    navigate('/produtos');
                                     setExpandCats(false);
                                 }}
                                 className={`flex items-center gap-3 py-3 px-4 rounded-xl border transition-all ${
@@ -550,15 +594,17 @@ function CatalogContent() {
                 )}
             </div>
 
-            {/* Banner Carousel */}
-            <div className="bg-white border-b border-slate-200">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <BannerCarousel customerType={customerType} />
-                </div>
-            </div>
+            {!isAllProductsPage && (
+                <>
+                    {/* Banner Carousel */}
+                    <div className="bg-white border-b border-slate-200">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                            <BannerCarousel customerType={customerType} />
+                        </div>
+                    </div>
 
-            {/* Check-in Widget + Atalho de Favoritos */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-between gap-2 relative z-10 flex-nowrap">
+                    {/* Check-in Widget + Atalho de Favoritos */}
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 flex items-center justify-between gap-2 relative z-10 flex-nowrap">
 
                 {/* Atalho de Favoritos — só para clientes autenticados (não-admin) */}
                 {customer ? (
@@ -583,6 +629,8 @@ function CatalogContent() {
                     <CheckinWidget />
                 </div>
             </div>
+                </>
+            )}
 
             {/* Category Navigation - oculto no mobile (coberto pelo dropdown da sticky bar) */}
             <div className="hidden sm:block">
@@ -593,6 +641,16 @@ function CatalogContent() {
                     const ids = Array.isArray(categoryId)
                         ? categoryId
                         : categoryId ? [categoryId] : [];
+
+                    if (ids.length === 0) {
+                        setFilters({
+                            ...filters,
+                            categories: []
+                        });
+                        syncCategoryUrl([]);
+                        navigate('/produtos');
+                        return;
+                    }
 
                     setFilters({
                         ...filters,
@@ -778,7 +836,7 @@ function CatalogContent() {
                 </div>
 
                 {/* Seções do Catálogo - ocultar quando há filtro de categoria ativo ou busca */}
-                {!sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !searchQuery && (
+                {!isAllProductsPage && !sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !searchQuery && (
                     <div className="mb-12 space-y-12">
                         {sections.map((section) => (
                             <CatalogSectionComponent
@@ -896,7 +954,22 @@ function CatalogContent() {
                                 {hasPreviousPage && (
                                     <Link
                                         to={buildCatalogPageHref({
-                                            pathname: location.pathname,
+                                            pathname: paginationPathname,
+                                            searchParams,
+                                            page: 1,
+                                        })}
+                                        aria-label="Primeira pagina"
+                                        title="Primeira pagina"
+                                        className="min-w-[44px] px-3 py-2 rounded-xl border border-slate-200 bg-white text-center font-bold text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                                    >
+                                        &lt;&lt;
+                                    </Link>
+                                )}
+
+                                {hasPreviousPage && (
+                                    <Link
+                                        to={buildCatalogPageHref({
+                                            pathname: paginationPathname,
                                             searchParams,
                                             page: currentPage - 1,
                                         })}
@@ -919,7 +992,7 @@ function CatalogContent() {
                                             )}
                                             <Link
                                                 to={buildCatalogPageHref({
-                                                    pathname: location.pathname,
+                                                    pathname: paginationPathname,
                                                     searchParams,
                                                     page: pageNumber,
                                                 })}
@@ -939,13 +1012,28 @@ function CatalogContent() {
                                 {hasNextPage && (
                                     <Link
                                         to={buildCatalogPageHref({
-                                            pathname: location.pathname,
+                                            pathname: paginationPathname,
                                             searchParams,
                                             page: currentPage + 1,
                                         })}
                                         className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium hover:border-slate-300 hover:bg-slate-50 transition-colors"
                                     >
                                         Próxima
+                                    </Link>
+                                )}
+
+                                {hasNextPage && (
+                                    <Link
+                                        to={buildCatalogPageHref({
+                                            pathname: paginationPathname,
+                                            searchParams,
+                                            page: lastPageForNavigation,
+                                        })}
+                                        aria-label="Ultima pagina"
+                                        title="Ultima pagina"
+                                        className="min-w-[44px] px-3 py-2 rounded-xl border border-slate-200 bg-white text-center font-bold text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                                    >
+                                        &gt;&gt;
                                     </Link>
                                 )}
                             </nav>

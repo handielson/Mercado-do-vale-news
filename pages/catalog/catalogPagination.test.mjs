@@ -3,6 +3,7 @@ import {
   buildCatalogPageHref,
   createCatalogReturnState,
   getCatalogPageSlice,
+  getCatalogPaginationPathname,
   needsCatalogPageData,
   normalizeCatalogPage,
   shouldRestoreCatalogState,
@@ -34,6 +35,22 @@ assert.equal(
     page: 1,
   }),
   '/?search=adaptador&categoria=tomadas',
+);
+
+assert.equal(
+  getCatalogPaginationPathname({
+    pathname: '/',
+    isAllProducts: true,
+  }),
+  '/produtos',
+);
+
+assert.equal(
+  getCatalogPaginationPathname({
+    pathname: '/',
+    isAllProducts: false,
+  }),
+  '/',
 );
 
 assert.equal(

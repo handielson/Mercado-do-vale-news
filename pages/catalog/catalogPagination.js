@@ -34,6 +34,14 @@ export function buildCatalogPageHref({ pathname = '/', searchParams, page }) {
   return queryString ? `${pathname}?${queryString}` : pathname;
 }
 
+export function getCatalogPaginationPathname({
+  pathname = '/',
+  isAllProducts = false,
+  allProductsPathname = '/produtos',
+}) {
+  return isAllProducts ? allProductsPathname : pathname;
+}
+
 export function needsCatalogPageData({
   loadedGroupCount,
   currentPage,
