@@ -440,12 +440,12 @@ function CatalogContent() {
         return (
             <div className="min-h-screen bg-slate-50">
                 <PublicHeader />
-                <div className="flex items-center justify-center p-4 min-h-[calc(100vh-64px)]">
+                <main className="flex items-center justify-center p-4 min-h-[calc(100vh-64px)]">
                     <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6 max-w-md">
                         <h2 className="text-red-800 font-bold text-lg mb-2">❌ Erro ao carregar catálogo</h2>
                         <p className="text-red-600">{error}</p>
                     </div>
-                </div>
+                </main>
             </div>
         );
     }
@@ -469,6 +469,7 @@ function CatalogContent() {
             {/* Public Header */}
             <PublicHeader />
 
+            <main>
             {/* Mobile Sticky Search Bar + Categories Dropdown */}
             <div className="sm:hidden sticky z-40" style={{ top: headerHeight }}>
                 {/* Barra de busca */}
@@ -1041,6 +1042,7 @@ function CatalogContent() {
                     </>
                 )}
             </div>
+            </main>
 
             {/* Carrinho de Compras Online */}
             <CartIcon />

@@ -232,7 +232,7 @@ function CartPageContent() {
     // ─── Carrinho vazio ───────────────────────────────────────────────────────
     if (items.length === 0) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col items-center justify-center px-6">
+            <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col items-center justify-center px-6">
                 <div className="w-24 h-24 bg-white rounded-3xl shadow-lg flex items-center justify-center mb-6">
                     <ShoppingBag className="w-12 h-12 text-blue-300" />
                 </div>
@@ -244,7 +244,7 @@ function CartPageContent() {
                 >
                     Ver produtos
                 </Link>
-            </div>
+            </main>
         );
     }
 
@@ -735,7 +735,7 @@ function CartPageContent() {
         return (
             <div className="min-h-screen bg-gray-50">
                 {header}
-                <div className="px-4 pt-4 pb-44 space-y-3">
+                <main className="px-4 pt-4 pb-44 space-y-3">
                     {statusBanner}
                     {itemsList}
 
@@ -774,7 +774,7 @@ function CartPageContent() {
                             {couponDiscount > 0 && <div className="flex justify-between text-sm text-green-600"><span>Cupom</span><span>- {formatCurrency(couponDiscount)}</span></div>}
                         </div>
                     )}
-                </div>
+                </main>
 
                 {/* Bottom Sheet de pagamento */}
                 {paySheetOpen && (
@@ -935,13 +935,13 @@ function CartPageContent() {
         return (
             <div className="min-h-screen bg-gray-50">
                 {header}
-                <div className="max-w-2xl mx-auto px-6 py-6 space-y-4">
+                <main className="max-w-2xl mx-auto px-6 py-6 space-y-4">
                     {statusBanner}
                     {itemsList}
                     {continueShoppingBtn}
                     {optionsPanel}
                     {summaryPanel}
-                </div>
+                </main>
                 {showNewOrderModal && (
                     <NewOrderModal
                         items={items}
@@ -962,7 +962,7 @@ function CartPageContent() {
     return (
         <div className="min-h-screen bg-gray-50">
             {header}
-            <div className="max-w-6xl mx-auto px-8 py-8">
+            <main className="max-w-6xl mx-auto px-8 py-8">
                 <div className="grid grid-cols-[1fr_380px] gap-8 items-start">
 
                     {/* Coluna esquerda — itens + opções */}
@@ -979,7 +979,7 @@ function CartPageContent() {
                         {summaryPanel}
                     </div>
                 </div>
-            </div>
+            </main>
             {showNewOrderModal && (
                 <NewOrderModal
                     items={items}

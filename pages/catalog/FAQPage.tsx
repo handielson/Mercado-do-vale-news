@@ -203,7 +203,7 @@ export const FAQPage: React.FC = () => {
     const activeData = FAQ_DATA.find((c) => c.id === activeCategory)!;
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
+        <main className="min-h-screen bg-slate-50 flex flex-col">
             {/* Hero */}
             <div className="bg-gradient-to-br from-slate-900 to-blue-950 pt-16 pb-28 text-center px-4 relative overflow-hidden">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10" />
@@ -305,6 +305,6 @@ export const FAQPage: React.FC = () => {
                     </div>
                 )}
             </div>
-        </div>
+        </main>
     );
 };

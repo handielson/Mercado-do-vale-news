@@ -16,9 +16,9 @@ export const AboutUsPage: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <main className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
+            </main>
         );
     }
 
@@ -34,7 +34,7 @@ export const AboutUsPage: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 pb-20">
+        <main className="min-h-screen bg-slate-50 pb-20">
             {/* Hero Section */}
             <div className="bg-white border-b border-slate-200">
                 <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
@@ -122,6 +122,6 @@ export const AboutUsPage: React.FC = () => {
                     </div>
                 </div>
             </div>
-        </div>
+        </main>
     );
 };
