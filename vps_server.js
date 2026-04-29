@@ -1211,6 +1211,7 @@ fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
       u.reserved_at || null, u.sold_at || null,
     ]
   );
+  await syncProductStock(u.product_id);
   const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [id]);
   reply.code(201);
   return rows[0];
@@ -1223,6 +1224,7 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
     return reply.code(400).send({ error: 'Expected non-empty array' });
   }
   const results = { inserted: 0, errors: [] };
+  const productIds = new Set();
   for (const u of items) {
     try {
       if (!u.product_id) throw new Error('product_id required');
@@ -1241,11 +1243,13 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
           u.cost_price ?? null,
         ]
       );
+      productIds.add(u.product_id);
       results.inserted++;
     } catch (err) {
       results.errors.push({ serial: u.serial, imei_1: u.imei_1, error: err.message });
     }
   }
+  for (const pid of productIds) await syncProductStock(pid);
   return results;
 });
 
@@ -1270,13 +1274,16 @@ fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => 
   await pool.query(`UPDATE units SET ${sets.join(', ')} WHERE id = ?`, vals);
   const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [req.params.id]);
   if (!rows[0]) return reply.code(404).send({ error: 'Not found' });
+  await syncProductStock(rows[0].product_id);
   return rows[0];
 });
 
 // Deleta unidade
 fastify.delete('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [target] = await pool.query('SELECT product_id FROM units WHERE id = ?', [req.params.id]);
   const [result] = await pool.query('DELETE FROM units WHERE id = ?', [req.params.id]);
   if (result.affectedRows === 0) return reply.code(404).send({ error: 'Not found' });
+  if (target[0]) await syncProductStock(target[0].product_id);
   return { ok: true };
 });
 
@@ -3019,38 +3026,21 @@ async function runMigrations() {
   `);
   console.log('[migration] units table: OK');
 
-  // Triggers: mantém products.stock_quantity = COUNT(units WHERE status='available')
-  // Só dispara para products que tiverem units — produtos sem units mantêm stock manual.
-  await pool.query(`DROP TRIGGER IF EXISTS trg_units_after_insert`);
-  await pool.query(`
-    CREATE TRIGGER trg_units_after_insert AFTER INSERT ON units
-    FOR EACH ROW
-    UPDATE products SET stock_quantity = (
-      SELECT COUNT(*) FROM units u WHERE u.product_id = products.id AND u.status = 'available'
-    ), updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.product_id
-  `);
+  // Stock sync de units é feito em app-level (helper syncProductStock chamado pelos
+  // endpoints /units). Trigger MySQL exige privilégio SUPER que o usuário não tem
+  // (ER_BINLOG_CREATE_ROUTINE_NEED_SUPER quando binlog está ativo).
+}
 
-  await pool.query(`DROP TRIGGER IF EXISTS trg_units_after_update`);
-  await pool.query(`
-    CREATE TRIGGER trg_units_after_update AFTER UPDATE ON units
-    FOR EACH ROW
-    UPDATE products SET stock_quantity = (
-      SELECT COUNT(*) FROM units u WHERE u.product_id = products.id AND u.status = 'available'
-    ), updated_at = CURRENT_TIMESTAMP
-    WHERE id = NEW.product_id OR id = OLD.product_id
-  `);
-
-  await pool.query(`DROP TRIGGER IF EXISTS trg_units_after_delete`);
-  await pool.query(`
-    CREATE TRIGGER trg_units_after_delete AFTER DELETE ON units
-    FOR EACH ROW
-    UPDATE products SET stock_quantity = (
-      SELECT COUNT(*) FROM units u WHERE u.product_id = products.id AND u.status = 'available'
-    ), updated_at = CURRENT_TIMESTAMP
-    WHERE id = OLD.product_id
-  `);
-  console.log('[migration] units triggers: OK');
+// Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.
+async function syncProductStock(productId) {
+  if (!productId) return;
+  await pool.query(
+    `UPDATE products SET stock_quantity = (
+       SELECT COUNT(*) FROM units WHERE product_id = ? AND status = 'available'
+     ), updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [productId, productId]
+  );
 }
 
 // ─── Start ─────────────────────────────────────────────────────────────────
