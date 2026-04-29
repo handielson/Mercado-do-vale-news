@@ -131,9 +131,9 @@ export default function OnlineOrdersPage() {
         }
     };
 
-    const handlePrintReceipt = (order: OrderWithItems) => {
+    const handlePrintReceipt = async (order: OrderWithItems) => {
         if (!companySettings) { alert('Aguarde carregar as configurações da empresa.'); return; }
-        printDeliveryReceipt(order, companySettings);
+        await printDeliveryReceipt(order, companySettings);
     };
 
     // Detecta item de garantia estendida no pedido
