@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { PendingProduct } from '../../../types/bulk-product';
 import { productService } from '../../../services/products';
 import { categoryService } from '../../../services/categories';
+import { unitService } from '../../../services/units';
+import { vpsApiService } from '../../../services/vpsApiService';
+import { UnitStatus } from '../../../utils/field-standards';
 
 export function QuickRegisterForm() {
     const navigate = useNavigate();
@@ -227,7 +230,12 @@ export function QuickRegisterForm() {
             return;
         }
 
-        if (!confirm(`Salvar ${pendingProducts.length} produto(s)?`)) {
+        if (!baseProduct?.id) {
+            alert('Produto base não carregado. Escaneie o EAN antes.');
+            return;
+        }
+
+        if (!confirm(`Cadastrar ${pendingProducts.length} unidade(s) de "${baseProduct.name}"?`)) {
             return;
         }
 
@@ -237,32 +245,35 @@ export function QuickRegisterForm() {
 
         for (const pending of pendingProducts) {
             try {
-                // Create product with base data + unique fields
-                const productData = {
-                    ...baseProduct,
-                    ...pending.uniqueFields,
-                    id: undefined, // Remove ID to create new
-                    stock_quantity: 1 // Each unit is 1 item
-                };
-
-                await productService.create(productData);
+                await unitService.create({
+                    product_id: baseProduct.id,
+                    serial_number: pending.uniqueFields.serial,
+                    imei_1: pending.uniqueFields.imei1,
+                    imei_2: pending.uniqueFields.imei2,
+                    condition: 'new',
+                    status: UnitStatus.AVAILABLE,
+                });
                 successCount++;
                 setSavedProducts(prev => [...prev, pending]);
-            } catch (error) {
-                errors.push(`Serial ${pending.uniqueFields.serial}: ${error}`);
+            } catch (error: any) {
+                errors.push(`Serial ${pending.uniqueFields.serial}: ${error?.message || error}`);
             }
         }
 
         setIsSaving(false);
 
-        // Clear queue
+        // Limpa fila e cache (o stock_quantity do produto foi atualizado pelo trigger MySQL)
         setPendingProducts([]);
+        try {
+            localStorage.removeItem('admin_products_cache');
+            localStorage.removeItem('admin_products_cache_ts');
+        } catch { /* quota / privacy mode */ }
+        vpsApiService.invalidateProductCache();
 
-        // Show result
         if (errors.length > 0) {
-            alert(`✅ ${successCount} salvos\n❌ ${errors.length} erros:\n${errors.join('\n')}`);
+            alert(`✅ ${successCount} unidade(s) cadastrada(s)\n❌ ${errors.length} erro(s):\n${errors.join('\n')}`);
         } else {
-            alert(`✅ ${successCount} produto(s) salvos com sucesso!`);
+            alert(`✅ ${successCount} unidade(s) cadastrada(s) com sucesso!\nEstoque do produto atualizado automaticamente.`);
         }
     };
 

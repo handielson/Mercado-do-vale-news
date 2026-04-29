@@ -1156,6 +1156,130 @@ fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (r
   return { ok: true };
 });
 
+// ─── Units (inventory de unidades serializadas: 1 linha por aparelho) ──────
+
+// Lista unidades de um produto (FIFO por created_at)
+fastify.get('/units', async (req, reply) => {
+  const productId = req.query.product_id;
+  if (!productId) return reply.code(400).send({ error: 'product_id required' });
+  const status = req.query.status;
+  const params = [productId];
+  let where = 'product_id = ?';
+  if (status && status !== 'all') {
+    where += ' AND status = ?';
+    params.push(status);
+  }
+  const [rows] = await pool.query(
+    `SELECT * FROM units WHERE ${where} ORDER BY created_at ASC`,
+    params
+  );
+  return rows;
+});
+
+// Busca por IMEI 1, IMEI 2 ou serial (usado no PDV)
+fastify.get('/units/by-identifier/:q', async (req, reply) => {
+  const q = req.params.q;
+  if (!q) return reply.code(400).send({ error: 'identifier required' });
+  const [rows] = await pool.query(
+    `SELECT u.*, p.name AS product_name, p.sku AS product_sku
+       FROM units u
+       LEFT JOIN products p ON p.id = u.product_id
+      WHERE u.imei_1 = ? OR u.imei_2 = ? OR u.serial = ?`,
+    [q, q, q]
+  );
+  return rows;
+});
+
+// Cria 1 unidade
+fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
+  const u = req.body || {};
+  if (!u.product_id) return reply.code(400).send({ error: 'product_id required' });
+  const id = u.id || require('crypto').randomUUID();
+  await pool.query(
+    `INSERT INTO units (
+       id, product_id, imei_1, imei_2, serial, status, \`condition\`,
+       internal_notes, cost_price, order_id, sale_id, reserved_at, sold_at
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      id, u.product_id,
+      u.imei_1 || null, u.imei_2 || null, u.serial || null,
+      u.status || 'available',
+      u.condition || 'new',
+      u.internal_notes || null,
+      u.cost_price ?? null,
+      u.order_id || null, u.sale_id || null,
+      u.reserved_at || null, u.sold_at || null,
+    ]
+  );
+  const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [id]);
+  reply.code(201);
+  return rows[0];
+});
+
+// Cria N unidades em batch (usado pelo cadastro em massa)
+fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) => {
+  const items = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return reply.code(400).send({ error: 'Expected non-empty array' });
+  }
+  const results = { inserted: 0, errors: [] };
+  for (const u of items) {
+    try {
+      if (!u.product_id) throw new Error('product_id required');
+      const id = u.id || require('crypto').randomUUID();
+      await pool.query(
+        `INSERT INTO units (
+           id, product_id, imei_1, imei_2, serial, status, \`condition\`,
+           internal_notes, cost_price
+         ) VALUES (?,?,?,?,?,?,?,?,?)`,
+        [
+          id, u.product_id,
+          u.imei_1 || null, u.imei_2 || null, u.serial || null,
+          u.status || 'available',
+          u.condition || 'new',
+          u.internal_notes || null,
+          u.cost_price ?? null,
+        ]
+      );
+      results.inserted++;
+    } catch (err) {
+      results.errors.push({ serial: u.serial, imei_1: u.imei_1, error: err.message });
+    }
+  }
+  return results;
+});
+
+// Atualiza unidade (status, IMEIs, notes, vínculos com order/sale)
+fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const u = req.body || {};
+  const allowed = [
+    'imei_1', 'imei_2', 'serial', 'status', 'condition',
+    'internal_notes', 'cost_price', 'order_id', 'sale_id',
+    'reserved_at', 'sold_at',
+  ];
+  const sets = [];
+  const vals = [];
+  for (const k of allowed) {
+    if (k in u) {
+      sets.push(k === 'condition' ? '`condition` = ?' : `${k} = ?`);
+      vals.push(u[k] ?? null);
+    }
+  }
+  if (!sets.length) return reply.code(400).send({ error: 'No fields to update' });
+  vals.push(req.params.id);
+  await pool.query(`UPDATE units SET ${sets.join(', ')} WHERE id = ?`, vals);
+  const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [req.params.id]);
+  if (!rows[0]) return reply.code(404).send({ error: 'Not found' });
+  return rows[0];
+});
+
+// Deleta unidade
+fastify.delete('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [result] = await pool.query('DELETE FROM units WHERE id = ?', [req.params.id]);
+  if (result.affectedRows === 0) return reply.code(404).send({ error: 'Not found' });
+  return { ok: true };
+});
+
 // ─── Combos (write) ─────────────────────────────────────────────────────────
 
 fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -2867,6 +2991,66 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] field_presets table: OK');
+
+  // Tabela de unidades físicas serializadas (1 linha por aparelho com IMEI/serial)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS units (
+      id              CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      product_id      CHAR(36) NOT NULL,
+      imei_1          VARCHAR(20)  NULL,
+      imei_2          VARCHAR(20)  NULL,
+      serial          VARCHAR(100) NULL,
+      status          VARCHAR(20)  NOT NULL DEFAULT 'available',
+      \`condition\`     VARCHAR(20)  NOT NULL DEFAULT 'new',
+      internal_notes  TEXT NULL,
+      cost_price      INT NULL,
+      order_id        CHAR(36) NULL,
+      sale_id         CHAR(36) NULL,
+      reserved_at     TIMESTAMP NULL,
+      sold_at         TIMESTAMP NULL,
+      created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_units_product_id (product_id),
+      INDEX idx_units_imei_1     (imei_1),
+      INDEX idx_units_imei_2     (imei_2),
+      INDEX idx_units_serial     (serial),
+      INDEX idx_units_status     (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] units table: OK');
+
+  // Triggers: mantém products.stock_quantity = COUNT(units WHERE status='available')
+  // Só dispara para products que tiverem units — produtos sem units mantêm stock manual.
+  await pool.query(`DROP TRIGGER IF EXISTS trg_units_after_insert`);
+  await pool.query(`
+    CREATE TRIGGER trg_units_after_insert AFTER INSERT ON units
+    FOR EACH ROW
+    UPDATE products SET stock_quantity = (
+      SELECT COUNT(*) FROM units u WHERE u.product_id = products.id AND u.status = 'available'
+    ), updated_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.product_id
+  `);
+
+  await pool.query(`DROP TRIGGER IF EXISTS trg_units_after_update`);
+  await pool.query(`
+    CREATE TRIGGER trg_units_after_update AFTER UPDATE ON units
+    FOR EACH ROW
+    UPDATE products SET stock_quantity = (
+      SELECT COUNT(*) FROM units u WHERE u.product_id = products.id AND u.status = 'available'
+    ), updated_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.product_id OR id = OLD.product_id
+  `);
+
+  await pool.query(`DROP TRIGGER IF EXISTS trg_units_after_delete`);
+  await pool.query(`
+    CREATE TRIGGER trg_units_after_delete AFTER DELETE ON units
+    FOR EACH ROW
+    UPDATE products SET stock_quantity = (
+      SELECT COUNT(*) FROM units u WHERE u.product_id = products.id AND u.status = 'available'
+    ), updated_at = CURRENT_TIMESTAMP
+    WHERE id = OLD.product_id
+  `);
+  console.log('[migration] units triggers: OK');
 }
 
 // ─── Start ─────────────────────────────────────────────────────────────────

@@ -288,6 +288,81 @@ class VpsApiService {
     return this.fetchSafe<{ exists: boolean; url?: string }>(`/check-video?sku=${encodeURIComponent(sku.trim())}`, true);
   }
 
+  // ── Units (inventário serializado) ────────────────────────────────────
+
+  async getUnitsByProduct(productId: string, status?: string): Promise<any[] | null> {
+    const qs = new URLSearchParams({ product_id: productId });
+    if (status) qs.set('status', status);
+    return this.fetchSafe<any[]>(`/units?${qs.toString()}`, true);
+  }
+
+  async getUnitByIdentifier(identifier: string): Promise<any[] | null> {
+    return this.fetchSafe<any[]>(`/units/by-identifier/${encodeURIComponent(identifier)}`, true);
+  }
+
+  async createUnit(data: any): Promise<any | null> {
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(proxyUrl('/units', 'POST'), {
+        method: 'POST',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (err) {
+      console.error('[vpsApiService] createUnit error:', err);
+      return null;
+    }
+  }
+
+  async createUnitsBatch(items: any[]): Promise<{ inserted: number; errors: any[] }> {
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(proxyUrl('/units/batch', 'POST'), {
+        method: 'POST',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(items),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return { inserted: 0, errors: [{ error: res.statusText }] };
+      return await res.json();
+    } catch (err: any) {
+      console.error('[vpsApiService] createUnitsBatch error:', err);
+      return { inserted: 0, errors: [{ error: err.message }] };
+    }
+  }
+
+  async updateUnit(id: string, data: any): Promise<any | null> {
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(proxyUrl(`/units/${id}`, 'PUT'), {
+        method: 'PUT',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (err) {
+      console.error('[vpsApiService] updateUnit error:', err);
+      return null;
+    }
+  }
+
+  async deleteUnit(id: string): Promise<boolean> {
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(proxyUrl(`/units/${id}`, 'DELETE'), {
+        method: 'DELETE',
+        headers: await this.authHeaders(),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      return res.ok;
+    } catch { return false; }
+  }
+
   // ── WRITE (fire-and-forget após Supabase) ─────────────────────────────
 
   async createCombo(payload: unknown): Promise<{ok: boolean, id?: string}> {
