@@ -104,8 +104,21 @@ export async function generateBudgetText(
 
     // Grand total (pix/à vista)
     const grandTotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
-    lines.push('---');
-    lines.push(`Total: ${brl(grandTotal)}`);
+    if (items.length > 1) {
+        const grandPlans = await calculateInstallments(grandTotal, 12);
+        const grandPixPlan = grandPlans[0];
+        const grandPlan12 = grandPlans.find(p => p.installments === 12);
+
+        lines.push('---');
+        lines.push(`Total a vista: ${brl(grandPixPlan?.total ?? grandTotal)}`);
+
+        if (grandPlan12) {
+            lines.push(
+                `Total no cartao: 12x de ${brl(grandPlan12.value)} (Total: ${brl(grandPlan12.total)})`
+            );
+        }
+    }
+
     lines.push(SITE_BASE);
 
     return lines.join('\n');

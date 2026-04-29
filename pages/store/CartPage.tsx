@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
     Trash2, Plus, Minus, ShoppingBag, ChevronDown, Tag, CreditCard,
     MapPin, Shield, ArrowRight, X, Sparkles, ChevronUp, ArrowLeft,
-    ClipboardCopy, Check, MessageCircle
+    ClipboardCopy, Check, MessageCircle, Search, Store, Package
 } from 'lucide-react';
 import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -22,6 +22,25 @@ import { supabase } from '@/services/supabase';
 import { generateBudgetText } from '@/utils/cartShareUtils';
 import { NewOrderModal } from '@/components/cart/NewOrderModal';
 import { getCompanyData } from '@/services/companyService';
+import { vpsApiService } from '@/services/vpsApiService';
+
+type EmptyCartProduct = {
+    id: string;
+    name: string;
+    slug?: string;
+    images?: string[];
+    image_url?: string;
+    price_retail?: number;
+    price_pix?: number;
+    price?: number;
+};
+
+type EmptyCartCategory = {
+    id?: string;
+    name: string;
+    count?: number;
+    parent_id?: string | null;
+};
 
 export default function CartPage() {
     return (
@@ -47,6 +66,11 @@ function CartPageContent() {
     const [generatingBudget, setGeneratingBudget] = useState(false);
     const [showNewOrderModal, setShowNewOrderModal] = useState(false);
     const [companyPhone, setCompanyPhone] = useState('');
+    const [companyName, setCompanyName] = useState('Mercado do Vale');
+    const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+    const [emptyCartProducts, setEmptyCartProducts] = useState<EmptyCartProduct[]>([]);
+    const [emptyCartCategories, setEmptyCartCategories] = useState<EmptyCartCategory[]>([]);
+    const [emptyCartLoading, setEmptyCartLoading] = useState(false);
     const coupon = useCoupon(subtotal / 100, customer?.customer_type);
     const [storeStatus, setStoreStatus] = useState<StoreStatus | null>(null);
     const [warrantyOptions, setWarrantyOptions] = useState<WarrantyOption[]>([]);
@@ -109,8 +133,48 @@ function CartPageContent() {
                 setWarrantyOptions(s.extended_warranty_options.filter(o => o.active));
             }
         }).catch(() => { });
-        getCompanyData().then(c => setCompanyPhone(c.phone || '')).catch(() => { });
+        getCompanyData().then(c => {
+            setCompanyPhone(c.phone || '');
+            setCompanyName(c.name || 'Mercado do Vale');
+            setCompanyLogo(c.logo || c.logoUrl || null);
+        }).catch(() => { });
     }, []);
+
+    useEffect(() => {
+        if (items.length > 0 || emptyCartProducts.length > 0 || emptyCartLoading) return;
+
+        let cancelled = false;
+        setEmptyCartLoading(true);
+
+        Promise.all([
+            vpsApiService.getProducts({ status: 'active', limit: 4, compact: true }),
+            vpsApiService.getCategories(),
+        ])
+            .then(([products, categories]) => {
+                if (cancelled) return;
+
+                setEmptyCartProducts((products || [])
+                    .filter(product => product?.id && product?.name)
+                    .slice(0, 4));
+
+                setEmptyCartCategories((categories || [])
+                    .filter(category => category?.name && !category?.parent_id)
+                    .slice(0, 6));
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setEmptyCartProducts([]);
+                    setEmptyCartCategories([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setEmptyCartLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [emptyCartProducts.length, items.length]);
 
     useEffect(() => {
         const categoryIds = [...new Set(
@@ -231,19 +295,163 @@ function CartPageContent() {
 
     // ─── Carrinho vazio ───────────────────────────────────────────────────────
     if (items.length === 0) {
+        const whatsappHref = companyPhone
+            ? `https://wa.me/55${companyPhone.replace(/\D/g, '')}`
+            : '/';
+
         return (
-            <main className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col items-center justify-center px-6">
-                <div className="w-24 h-24 bg-white rounded-3xl shadow-lg flex items-center justify-center mb-6">
-                    <ShoppingBag className="w-12 h-12 text-blue-300" />
+            <main className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+                <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+                    <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+                        <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
+                            <div className="p-6 sm:p-8 lg:p-10">
+                                <Link to="/" className="mb-8 inline-flex items-center gap-3">
+                                    {companyLogo ? (
+                                        <img src={companyLogo} alt={companyName} className="h-12 w-auto object-contain" />
+                                    ) : (
+                                        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                                            <Store className="h-6 w-6" />
+                                        </span>
+                                    )}
+                                    <span className="text-sm font-bold uppercase tracking-[0.18em] text-slate-400">{companyName}</span>
+                                </Link>
+
+                                <div className="max-w-xl">
+                                    <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                                        <ShoppingBag className="h-4 w-4" />
+                                        Carrinho vazio
+                                    </div>
+                                    <h1 className="text-3xl font-black leading-tight text-slate-950 sm:text-4xl">
+                                        Continue escolhendo seus produtos
+                                    </h1>
+                                    <p className="mt-3 text-base leading-7 text-slate-600">
+                                        Seu orçamento ainda não tem itens. Veja novidades, navegue por categorias ou fale com a loja para encontrar o produto certo.
+                                    </p>
+
+                                    <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+                                        <Link
+                                            to="/"
+                                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 active:scale-95"
+                                        >
+                                            <Search className="h-4 w-4" />
+                                            Ver produtos
+                                        </Link>
+                                        {companyPhone && (
+                                            <a
+                                                href={whatsappHref}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700 active:scale-95"
+                                            >
+                                                <MessageCircle className="h-4 w-4" />
+                                                Falar no WhatsApp
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-slate-100 bg-slate-950 p-6 text-white lg:border-l lg:border-t-0 lg:p-8">
+                                <div className="flex h-full flex-col justify-between gap-8">
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-200">Atalhos rápidos</p>
+                                        <div className="mt-4 grid grid-cols-2 gap-2">
+                                            {(emptyCartCategories.length > 0 ? emptyCartCategories : [
+                                                { name: 'Celulares' },
+                                                { name: 'Acessórios' },
+                                                { name: 'Eletrônicos' },
+                                                { name: 'Promoções' },
+                                            ]).map(category => (
+                                                <Link
+                                                    key={category.id || category.name}
+                                                    to={`/?categoria=${encodeURIComponent(category.name)}`}
+                                                    className="group rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10"
+                                                >
+                                                    <Tag className="mb-3 h-5 w-5 text-blue-200 transition group-hover:text-white" />
+                                                    <span className="block text-sm font-bold leading-tight">{category.name}</span>
+                                                    {category.count ? (
+                                                        <span className="mt-1 block text-xs text-slate-400">{category.count} itens</span>
+                                                    ) : null}
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-2xl bg-white/10 p-4">
+                                        <p className="text-sm font-semibold">Compra fácil pelo orçamento</p>
+                                        <p className="mt-1 text-sm leading-6 text-slate-300">
+                                            Adicione produtos e envie tudo em uma mensagem pronta para atendimento.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                        <div className="mb-4 flex items-center justify-between gap-4">
+                            <div>
+                                <h2 className="text-lg font-black text-slate-950">Sugestões para começar</h2>
+                                <p className="text-sm text-slate-500">Produtos ativos do catálogo para você adicionar ao orçamento.</p>
+                            </div>
+                            <Link to="/" className="hidden text-sm font-bold text-blue-600 hover:text-blue-700 sm:inline-flex">
+                                Ver catálogo
+                            </Link>
+                        </div>
+
+                        {emptyCartLoading ? (
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                                {[0, 1, 2, 3].map(index => (
+                                    <div key={index} className="rounded-2xl border border-slate-100 p-3">
+                                        <div className="aspect-square animate-pulse rounded-xl bg-slate-100" />
+                                        <div className="mt-3 h-3 w-4/5 animate-pulse rounded bg-slate-100" />
+                                        <div className="mt-2 h-3 w-2/5 animate-pulse rounded bg-slate-100" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : emptyCartProducts.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                                {emptyCartProducts.map(product => {
+                                    const imageUrl = product.images?.[0] || product.image_url;
+                                    const productPrice = product.price_pix || product.price_retail || product.price || 0;
+                                    const productHref = product.slug ? `/produto/${product.slug}` : `/produto/${product.id}`;
+
+                                    return (
+                                        <Link
+                                            key={product.id}
+                                            to={productHref}
+                                            className="group rounded-2xl border border-slate-100 bg-white p-3 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg"
+                                        >
+                                            <div className="aspect-square overflow-hidden rounded-xl bg-slate-100">
+                                                {imageUrl ? (
+                                                    <img src={imageUrl} alt={product.name} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                                                ) : (
+                                                    <div className="flex h-full w-full items-center justify-center text-slate-300">
+                                                        <Package className="h-8 w-8" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <p className="mt-3 line-clamp-2 min-h-[2.5rem] text-sm font-bold leading-5 text-slate-900">
+                                                {product.name}
+                                            </p>
+                                            {productPrice > 0 && (
+                                                <p className="mt-2 text-sm font-black text-blue-600">{formatCurrency(productPrice)}</p>
+                                            )}
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                                <ShoppingBag className="mx-auto h-8 w-8 text-slate-300" />
+                                <p className="mt-3 text-sm font-semibold text-slate-700">Não foi possível carregar sugestões agora.</p>
+                                <Link to="/" className="mt-4 inline-flex text-sm font-bold text-blue-600 hover:text-blue-700">
+                                    Abrir catálogo
+                                </Link>
+                            </div>
+                        )}
+                    </section>
                 </div>
-                <h1 className="text-xl font-bold text-gray-800 mb-2 text-center">Carrinho vazio</h1>
-                <p className="text-gray-500 mb-8 text-center text-sm">Adicione produtos para continuar.</p>
-                <Link
-                    to="/"
-                    className="w-full max-w-xs bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-2xl font-bold text-center shadow-lg active:scale-95 transition-transform"
-                >
-                    Ver produtos
-                </Link>
             </main>
         );
     }
