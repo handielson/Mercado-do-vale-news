@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { ProtectedRoute } from '../components/ProtectedRoute';
@@ -5,98 +7,125 @@ import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
 
-const AdminLoginPage = React.lazy(() => import('../pages/auth/AdminLoginPage').then(module => ({ default: module.AdminLoginPage })));
-const ClienteLoginPage = React.lazy(() => import('../pages/auth/ClienteLoginPage').then(module => ({ default: module.ClienteLoginPage })));
-const ClienteRegisterPage = React.lazy(() => import('../pages/auth/ClienteRegisterPage').then(module => ({ default: module.ClienteRegisterPage })));
-const AuthCallbackPage = React.lazy(() => import('../pages/auth/AuthCallbackPage').then(module => ({ default: module.AuthCallbackPage })));
-const CompletarCadastroPage = React.lazy(() => import('../pages/auth/CompletarCadastroPage').then(module => ({ default: module.CompletarCadastroPage })));
-const RecuperarSenhaPage = React.lazy(() => import('../pages/auth/RecuperarSenhaPage').then(module => ({ default: module.RecuperarSenhaPage })));
-const RedefinirSenhaPage = React.lazy(() => import('../pages/auth/RedefinirSenhaPage').then(module => ({ default: module.RedefinirSenhaPage })));
-const CustomerProfilePage = React.lazy(() => import('../pages/customer/CustomerProfilePage').then(module => ({ default: module.CustomerProfilePage })));
-const CustomerFavoritesPage = React.lazy(() => import('../pages/customer/CustomerFavoritesPage').then(module => ({ default: module.CustomerFavoritesPage })));
-const BulkRegistrationPage = React.lazy(() => import('../pages/admin/products/BulkRegistrationPage').then(module => ({ default: module.BulkRegistrationPage })));
-const CategorySettingsPage = React.lazy(() => import('../pages/admin/settings/categories/index'));
-const NewCategoryPage = React.lazy(() => import('../pages/admin/settings/categories/new'));
-const FieldPresetsPage = React.lazy(() => import('../pages/admin/settings/categories/presets'));
-const EditCategoryPage = React.lazy(() => import('../pages/admin/settings/categories/[id]/edit'));
-const FieldsManagementPage = React.lazy(() => import('../pages/admin/settings/fields'));
-const StoragesPage = React.lazy(() => import('../pages/admin/settings/StoragesPage').then(module => ({ default: module.StoragesPage })));
-const RamsPage = React.lazy(() => import('../pages/admin/settings/RamsPage').then(module => ({ default: module.RamsPage })));
-const VersionsPage = React.lazy(() => import('../pages/admin/settings/VersionsPage').then(module => ({ default: module.VersionsPage })));
-const BatteryHealthsPage = React.lazy(() => import('../pages/admin/settings/BatteryHealthsPage').then(module => ({ default: module.BatteryHealthsPage })));
-const FieldConfigPage = React.lazy(() => import('../pages/admin/settings/FieldConfigPage').then(module => ({ default: module.FieldConfigPage })));
-const PaymentFeesPage = React.lazy(() => import('../pages/admin/settings/PaymentFeesPage').then(module => ({ default: module.PaymentFeesPage })));
-const CustomFieldsLibraryPage = React.lazy(() => import('../pages/admin/settings/CustomFieldsLibraryPage').then(module => ({ default: module.CustomFieldsLibraryPage })));
-const CustomerFormPage = React.lazy(() => import('../pages/customers/CustomerFormPage'));
-const CustomerDetailsPage = React.lazy(() => import('../pages/customers/CustomerDetailsPage'));
-const TeamFormPage = React.lazy(() => import('../pages/team/TeamFormPage'));
-const TeamListPage = React.lazy(() => import('../pages/team/TeamListPage'));
-const CompanyDataPage = React.lazy(() => import('../pages/admin/settings/CompanyDataPage').then(module => ({ default: module.CompanyDataPage })));
-const DocumentSettingsPage = React.lazy(() => import('../pages/admin/settings/DocumentSettingsPage'));
-const WarrantyTemplatesPage = React.lazy(() => import('../pages/admin/settings/WarrantyTemplatesPage'));
-const MessagesPage = React.lazy(() => import('../pages/admin/settings/MessagesPage'));
-const BannerManagementPage = React.lazy(() => import('../pages/admin/settings/BannerManagementPage'));
-const CatalogSettingsPage = React.lazy(() => import('../pages/admin/settings/CatalogSettingsPage'));
-const ShippingPage = React.lazy(() => import('../pages/admin/settings/ShippingPage'));
-const FreightCalculatorPage = React.lazy(() => import('../pages/admin/FreightCalculatorPage'));
-const PermissionsManagementPage = React.lazy(() => import('../pages/admin/settings/PermissionsManagementPage'));
-const CouponsPage = React.lazy(() => import('../pages/admin/CouponsPage'));
-const CashbackPage = React.lazy(() => import('../pages/admin/CashbackPage'));
-const TelegramPage = React.lazy(() => import('../pages/admin/settings/TelegramPage'));
-const SystemTagsPage = React.lazy(() => import('../pages/admin/settings/SystemTagsPage'));
-const WhatsAppPage = React.lazy(() => import('../pages/admin/settings/WhatsAppPage'));
-const PaymentIntegrationsPage = React.lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
-const TabsTestPage = React.lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
-const CatalogPage = React.lazy(() => import('../pages/catalog/index'));
-const CoinsInfoPage = React.lazy(() => import('../pages/catalog/CoinsInfoPage'));
-const LegacyMigrationPage = React.lazy(() => import('../pages/LegacyMigration'));
-const FieldMappingPage = React.lazy(() => import('../pages/FieldMappingPage'));
-const ExtendedWarrantyPage = React.lazy(() => import('../pages/customer/ExtendedWarrantyPage'));
-const CustomerPromotionsPage = React.lazy(() => import('../pages/customer/PromotionsPage').then(module => ({ default: module.PromotionsPage })));
-const FreeScreenProtectorRulesPage = React.lazy(() => import('../pages/customer/FreeScreenProtectorRulesPage').then(module => ({ default: module.FreeScreenProtectorRulesPage })));
-const FeedbackListPage = React.lazy(() => import('../pages/admin/feedbacks/FeedbackListPage').then(module => ({ default: module.FeedbackListPage })));
-const AdminPromotionsPage = React.lazy(() => import('../pages/admin/promotions/PromotionsPage').then(module => ({ default: module.PromotionsPage })));
-const AboutUsPage = React.lazy(() => import('../pages/catalog/AboutUsPage').then(module => ({ default: module.AboutUsPage })));
-const FAQPage = React.lazy(() => import('../pages/catalog/FAQPage').then(module => ({ default: module.FAQPage })));
-const BlingCallbackPage = React.lazy(() => import('../pages/admin/settings/BlingCallbackPage'));
-const CartPage = React.lazy(() => import('../pages/store/CartPage'));
-const OrderConfirmationPage = React.lazy(() => import('../pages/store/OrderConfirmationPage'));
-const OrderTrackingPage = React.lazy(() => import('../pages/store/OrderTrackingPage'));
-const OnlineOrdersPage = React.lazy(() => import('../pages/admin/orders/OnlineOrdersPage'));
-const SerializedUnitsPage = React.lazy(() => import('../pages/admin/inventory/SerializedUnitsPage'));
-const SEODashboardPage = React.lazy(() => import('../pages/admin/settings/SEODashboardPage').then(module => ({ default: module.SEODashboardPage })));
-const SEOBlacklistPage = React.lazy(() => import('../pages/admin/settings/SEOBlacklistPage').then(module => ({ default: module.SEOBlacklistPage })));
-const ReviewsPage = React.lazy(() => import('../pages/admin/catalog/ReviewsPage').then(module => ({ default: module.ReviewsPage })));
-const RoadmapPage = React.lazy(() => import('../pages/admin/settings/RoadmapPage'));
-const VpsStatusPage = React.lazy(() => import('../pages/admin/settings/VpsStatusPage').then(module => ({ default: module.VpsStatusPage })));
-const SynologyFilesPage = React.lazy(() => import('../pages/admin/settings/SynologyFilesPage').then(module => ({ default: module.SynologyFilesPage })));
-const SynologyConfigPage = React.lazy(() => import('../pages/admin/settings/SynologyConfigPage'));
-const FavoritesRankingReport = React.lazy(() => import('../pages/admin/reports/FavoritesRankingReport'));
-const AdminDashboardPage = React.lazy(() => import('../pages/admin/dashboard/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
-const AdminLayout = React.lazy(() => import('../layouts/AdminLayout').then(module => ({ default: module.AdminLayout })));
-const ProductListPage = React.lazy(() => import('../pages/admin/products/ProductListPage').then(module => ({ default: module.ProductListPage })));
-const ProductFormPage = React.lazy(() => import('../pages/admin/products/ProductFormPage').then(module => ({ default: module.ProductFormPage })));
-const ProductDetailPage = React.lazy(() => import('../pages/admin/products/ProductDetailPage').then(module => ({ default: module.ProductDetailPage })));
-const ProductCombosPage = React.lazy(() => import('../pages/admin/products/ProductCombosPage').then(module => ({ default: module.ProductCombosPage })));
-const ProductImageBankPage = React.lazy(() => import('../pages/admin/products/ProductImageBankPage').then(module => ({ default: module.ProductImageBankPage })));
-const InventoryPage = React.lazy(() => import('../pages/admin/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })));
-const BrandsPage = React.lazy(() => import('../pages/admin/settings/BrandsPage').then(module => ({ default: module.BrandsPage })));
-const ModelsPage = React.lazy(() => import('../pages/admin/settings/ModelsPage').then(module => ({ default: module.ModelsPage })));
-const ColorsPage = React.lazy(() => import('../pages/admin/settings/ColorsPage').then(module => ({ default: module.ColorsPage })));
-const CustomerListPage = React.lazy(() => import('../pages/customers/CustomerListPage'));
-const PDVPage = React.lazy(() => import('../pages/pdv/PDVPage'));
-const CatalogConfigPage = React.lazy(() => import('../pages/admin/CatalogConfigPage'));
-const CatalogEditorPage = React.lazy(() => import('../pages/admin/catalog-editor'));
-const MarketingPage = React.lazy(() => import('../pages/admin/settings/MarketingPage'));
-const SalesPage = React.lazy(() => import('../pages/admin/sales/SalesPage'));
-const BlingPage = React.lazy(() => import('../pages/admin/settings/BlingPage'));
-const ShopeePage = React.lazy(() => import('../pages/admin/settings/ShopeePage'));
-const CheckoutPage = React.lazy(() => import('../pages/store/CheckoutPage'));
-const PublicProductPage = React.lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
-const FinancialPage = React.lazy(() => import('../pages/admin/financial/FinancialPage'));
-const AccountingPage = React.lazy(() => import('../pages/admin/accounting/AccountingPage'));
-const DataImportExportPage = React.lazy(() => import('../pages/admin/import/DataImportExportPage').then(module => ({ default: module.DataImportExportPage })));
-const MySQLExplorerPage = React.lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
+// Wrapper de React.lazy que recarrega a página quando o chunk falha por causa
+// de deploy novo (Vercel já purgou os hashes antigos do CDN). Flag em
+// sessionStorage evita loop infinito caso a falha seja persistente (offline).
+const CHUNK_RELOAD_FLAG = '__chunk_reload_attempted';
+const isStaleChunkError = (e: any) => {
+    const msg = String(e?.message || e || '');
+    return /Failed to fetch dynamically imported module|Loading chunk \d+ failed|error loading dynamically imported module|Importing a module script failed/i.test(msg);
+};
+const lazy = <T extends React.ComponentType<any>>(importer: () => Promise<{ default: T }>) =>
+    React.lazy(async () => {
+        try {
+            return await importer();
+        } catch (err) {
+            if (isStaleChunkError(err)) {
+                try {
+                    if (sessionStorage.getItem(CHUNK_RELOAD_FLAG) !== '1') {
+                        sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1');
+                        window.location.reload();
+                        return new Promise<{ default: T }>(() => { /* never resolves; reload em curso */ });
+                    }
+                } catch { /* sessionStorage indisponível */ }
+            }
+            throw err;
+        }
+    });
+
+const AdminLoginPage = lazy(() => import('../pages/auth/AdminLoginPage').then(module => ({ default: module.AdminLoginPage })));
+const ClienteLoginPage = lazy(() => import('../pages/auth/ClienteLoginPage').then(module => ({ default: module.ClienteLoginPage })));
+const ClienteRegisterPage = lazy(() => import('../pages/auth/ClienteRegisterPage').then(module => ({ default: module.ClienteRegisterPage })));
+const AuthCallbackPage = lazy(() => import('../pages/auth/AuthCallbackPage').then(module => ({ default: module.AuthCallbackPage })));
+const CompletarCadastroPage = lazy(() => import('../pages/auth/CompletarCadastroPage').then(module => ({ default: module.CompletarCadastroPage })));
+const RecuperarSenhaPage = lazy(() => import('../pages/auth/RecuperarSenhaPage').then(module => ({ default: module.RecuperarSenhaPage })));
+const RedefinirSenhaPage = lazy(() => import('../pages/auth/RedefinirSenhaPage').then(module => ({ default: module.RedefinirSenhaPage })));
+const CustomerProfilePage = lazy(() => import('../pages/customer/CustomerProfilePage').then(module => ({ default: module.CustomerProfilePage })));
+const CustomerFavoritesPage = lazy(() => import('../pages/customer/CustomerFavoritesPage').then(module => ({ default: module.CustomerFavoritesPage })));
+const BulkRegistrationPage = lazy(() => import('../pages/admin/products/BulkRegistrationPage').then(module => ({ default: module.BulkRegistrationPage })));
+const CategorySettingsPage = lazy(() => import('../pages/admin/settings/categories/index'));
+const NewCategoryPage = lazy(() => import('../pages/admin/settings/categories/new'));
+const FieldPresetsPage = lazy(() => import('../pages/admin/settings/categories/presets'));
+const EditCategoryPage = lazy(() => import('../pages/admin/settings/categories/[id]/edit'));
+const FieldsManagementPage = lazy(() => import('../pages/admin/settings/fields'));
+const StoragesPage = lazy(() => import('../pages/admin/settings/StoragesPage').then(module => ({ default: module.StoragesPage })));
+const RamsPage = lazy(() => import('../pages/admin/settings/RamsPage').then(module => ({ default: module.RamsPage })));
+const VersionsPage = lazy(() => import('../pages/admin/settings/VersionsPage').then(module => ({ default: module.VersionsPage })));
+const BatteryHealthsPage = lazy(() => import('../pages/admin/settings/BatteryHealthsPage').then(module => ({ default: module.BatteryHealthsPage })));
+const FieldConfigPage = lazy(() => import('../pages/admin/settings/FieldConfigPage').then(module => ({ default: module.FieldConfigPage })));
+const PaymentFeesPage = lazy(() => import('../pages/admin/settings/PaymentFeesPage').then(module => ({ default: module.PaymentFeesPage })));
+const CustomFieldsLibraryPage = lazy(() => import('../pages/admin/settings/CustomFieldsLibraryPage').then(module => ({ default: module.CustomFieldsLibraryPage })));
+const CustomerFormPage = lazy(() => import('../pages/customers/CustomerFormPage'));
+const CustomerDetailsPage = lazy(() => import('../pages/customers/CustomerDetailsPage'));
+const TeamFormPage = lazy(() => import('../pages/team/TeamFormPage'));
+const TeamListPage = lazy(() => import('../pages/team/TeamListPage'));
+const CompanyDataPage = lazy(() => import('../pages/admin/settings/CompanyDataPage').then(module => ({ default: module.CompanyDataPage })));
+const DocumentSettingsPage = lazy(() => import('../pages/admin/settings/DocumentSettingsPage'));
+const WarrantyTemplatesPage = lazy(() => import('../pages/admin/settings/WarrantyTemplatesPage'));
+const MessagesPage = lazy(() => import('../pages/admin/settings/MessagesPage'));
+const BannerManagementPage = lazy(() => import('../pages/admin/settings/BannerManagementPage'));
+const CatalogSettingsPage = lazy(() => import('../pages/admin/settings/CatalogSettingsPage'));
+const ShippingPage = lazy(() => import('../pages/admin/settings/ShippingPage'));
+const FreightCalculatorPage = lazy(() => import('../pages/admin/FreightCalculatorPage'));
+const PermissionsManagementPage = lazy(() => import('../pages/admin/settings/PermissionsManagementPage'));
+const CouponsPage = lazy(() => import('../pages/admin/CouponsPage'));
+const CashbackPage = lazy(() => import('../pages/admin/CashbackPage'));
+const TelegramPage = lazy(() => import('../pages/admin/settings/TelegramPage'));
+const SystemTagsPage = lazy(() => import('../pages/admin/settings/SystemTagsPage'));
+const WhatsAppPage = lazy(() => import('../pages/admin/settings/WhatsAppPage'));
+const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
+const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
+const CatalogPage = lazy(() => import('../pages/catalog/index'));
+const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
+const LegacyMigrationPage = lazy(() => import('../pages/LegacyMigration'));
+const FieldMappingPage = lazy(() => import('../pages/FieldMappingPage'));
+const ExtendedWarrantyPage = lazy(() => import('../pages/customer/ExtendedWarrantyPage'));
+const CustomerPromotionsPage = lazy(() => import('../pages/customer/PromotionsPage').then(module => ({ default: module.PromotionsPage })));
+const FreeScreenProtectorRulesPage = lazy(() => import('../pages/customer/FreeScreenProtectorRulesPage').then(module => ({ default: module.FreeScreenProtectorRulesPage })));
+const FeedbackListPage = lazy(() => import('../pages/admin/feedbacks/FeedbackListPage').then(module => ({ default: module.FeedbackListPage })));
+const AdminPromotionsPage = lazy(() => import('../pages/admin/promotions/PromotionsPage').then(module => ({ default: module.PromotionsPage })));
+const AboutUsPage = lazy(() => import('../pages/catalog/AboutUsPage').then(module => ({ default: module.AboutUsPage })));
+const FAQPage = lazy(() => import('../pages/catalog/FAQPage').then(module => ({ default: module.FAQPage })));
+const BlingCallbackPage = lazy(() => import('../pages/admin/settings/BlingCallbackPage'));
+const CartPage = lazy(() => import('../pages/store/CartPage'));
+const OrderConfirmationPage = lazy(() => import('../pages/store/OrderConfirmationPage'));
+const OrderTrackingPage = lazy(() => import('../pages/store/OrderTrackingPage'));
+const OnlineOrdersPage = lazy(() => import('../pages/admin/orders/OnlineOrdersPage'));
+const SerializedUnitsPage = lazy(() => import('../pages/admin/inventory/SerializedUnitsPage'));
+const SEODashboardPage = lazy(() => import('../pages/admin/settings/SEODashboardPage').then(module => ({ default: module.SEODashboardPage })));
+const SEOBlacklistPage = lazy(() => import('../pages/admin/settings/SEOBlacklistPage').then(module => ({ default: module.SEOBlacklistPage })));
+const ReviewsPage = lazy(() => import('../pages/admin/catalog/ReviewsPage').then(module => ({ default: module.ReviewsPage })));
+const RoadmapPage = lazy(() => import('../pages/admin/settings/RoadmapPage'));
+const VpsStatusPage = lazy(() => import('../pages/admin/settings/VpsStatusPage').then(module => ({ default: module.VpsStatusPage })));
+const SynologyFilesPage = lazy(() => import('../pages/admin/settings/SynologyFilesPage').then(module => ({ default: module.SynologyFilesPage })));
+const SynologyConfigPage = lazy(() => import('../pages/admin/settings/SynologyConfigPage'));
+const FavoritesRankingReport = lazy(() => import('../pages/admin/reports/FavoritesRankingReport'));
+const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
+const AdminLayout = lazy(() => import('../layouts/AdminLayout').then(module => ({ default: module.AdminLayout })));
+
+const ProductListPage = lazy(() => import('../pages/admin/products/ProductListPage').then(module => ({ default: module.ProductListPage })));
+const ProductFormPage = lazy(() => import('../pages/admin/products/ProductFormPage').then(module => ({ default: module.ProductFormPage })));
+const ProductDetailPage = lazy(() => import('../pages/admin/products/ProductDetailPage').then(module => ({ default: module.ProductDetailPage })));
+const ProductCombosPage = lazy(() => import('../pages/admin/products/ProductCombosPage').then(module => ({ default: module.ProductCombosPage })));
+const ProductImageBankPage = lazy(() => import('../pages/admin/products/ProductImageBankPage').then(module => ({ default: module.ProductImageBankPage })));
+const InventoryPage = lazy(() => import('../pages/admin/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })));
+const BrandsPage = lazy(() => import('../pages/admin/settings/BrandsPage').then(module => ({ default: module.BrandsPage })));
+const ModelsPage = lazy(() => import('../pages/admin/settings/ModelsPage').then(module => ({ default: module.ModelsPage })));
+const ColorsPage = lazy(() => import('../pages/admin/settings/ColorsPage').then(module => ({ default: module.ColorsPage })));
+const CustomerListPage = lazy(() => import('../pages/customers/CustomerListPage'));
+const PDVPage = lazy(() => import('../pages/pdv/PDVPage'));
+const CatalogConfigPage = lazy(() => import('../pages/admin/CatalogConfigPage'));
+const CatalogEditorPage = lazy(() => import('../pages/admin/catalog-editor'));
+const MarketingPage = lazy(() => import('../pages/admin/settings/MarketingPage'));
+const SalesPage = lazy(() => import('../pages/admin/sales/SalesPage'));
+const BlingPage = lazy(() => import('../pages/admin/settings/BlingPage'));
+const ShopeePage = lazy(() => import('../pages/admin/settings/ShopeePage'));
+const CheckoutPage = lazy(() => import('../pages/store/CheckoutPage'));
+const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
+const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
+const AccountingPage = lazy(() => import('../pages/admin/accounting/AccountingPage'));
+const DataImportExportPage = lazy(() => import('../pages/admin/import/DataImportExportPage').then(module => ({ default: module.DataImportExportPage })));
+const MySQLExplorerPage = lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
 
 const StorePage = () => (
   <div className="p-8 animate-in slide-in-from-bottom-4 duration-500">
