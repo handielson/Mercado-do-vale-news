@@ -74,88 +74,102 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                 return;
             }
 
-            // Só emite termo para items serializados
-            const serializedItems = sale.items.filter((i: any) => i.serialized_unit_id);
-            if (serializedItems.length === 0) {
-                toast.error('Nenhum item serializado nesta venda — sem termo a imprimir');
-                return;
-            }
-
-            // Carrega units VPS pra resolver IMEI por sale_item.id
-            const units = await vpsApiService.getUnitsBySale(sale.id);
-            const unitById = new Map<string, any>();
-            (units || []).forEach((u: any) => unitById.set(u.id, u));
-
-            // Carrega brands pra resolver dias por marca
-            const { brandService } = await import('../../../services/brands');
-            const { categoryService } = await import('../../../services/categories');
-            const { productService } = await import('../../../services/products');
-            const brands = await brandService.list();
-            const brandsByName = new Map<string, { warranty_days?: number }>();
-            brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
-
-            const customer = sale.customer;
-            const declaracao = getWarrantyDeclaration(
-                sale.delivery_type === 'delivery' || sale.delivery_type === 'store_delivery' || sale.delivery_type === 'hybrid_delivery'
-                    ? 'delivery' : 'store_pickup'
-            );
-
+            const { warrantyDocumentService } = await import('../../../services/warrantyDocumentService');
             const sections: string[] = [];
-            for (const item of serializedItems) {
-                const product = item.product_id ? await productService.getById(item.product_id) : null;
-                const productSpecs = product?.specs || {};
-                const brand = product?.brand || (item as any).product_brand || '';
-                const model = product?.model || product?.name || item.product_name;
 
-                // Resolve dias
-                let days = 90;
-                if (product?.warranty_type === 'custom' && product.warranty_template_id) {
-                    const { data } = await supabase.from('warranty_templates').select('duration_days').eq('id', product.warranty_template_id).maybeSingle();
-                    if (data?.duration_days) days = data.duration_days;
-                } else {
-                    const b = brandsByName.get(brand.toLowerCase());
-                    if (b?.warranty_days) days = b.warranty_days;
-                    else if (product?.category_id) {
-                        const cat = await categoryService.getById(product.category_id);
-                        if (cat?.warranty_days) days = cat.warranty_days;
-                    }
+            // 1) Tenta usar docs já salvos (numero_documento estável). Inclui o que
+            //    foi assinado no momento da venda.
+            const savedDocs = await warrantyDocumentService.listBySaleId(sale.id);
+            if (savedDocs.length > 0) {
+                for (const doc of savedDocs) {
+                    const copy1 = doc.warranty_content;
+                    const copy2 = doc.warranty_content.replace(/Assinatura do Cliente/gi, 'Assinatura da Empresa');
+                    sections.push(`<div class="warranty-copy">${copy1}</div>`);
+                    sections.push(`<div class="warranty-copy">${copy2}</div>`);
+                }
+            } else {
+                // 2) Fallback: nenhum doc salvo (vendas migradas ou usuário fechou
+                //    modal sem salvar). Regenera dos sale_items serializados.
+                const serializedItems = sale.items.filter((i: any) => i.serialized_unit_id);
+                if (serializedItems.length === 0) {
+                    toast.error('Nenhum item serializado nesta venda — sem termo a imprimir');
+                    return;
                 }
 
-                const unit = unitById.get((item as any).serialized_unit_id) || {};
-                const tagData = {
-                    nome_loja: settings.company_name || '',
-                    endereco: settings.address || '',
-                    telefone: formatWarrantyPhone(settings.phone || ''),
-                    email: settings.email || '',
-                    cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
-                    logo: (settings as any).logo || settings.receipt_logo_url || '',
-                    nome_cliente: customer?.name || '',
-                    cpf_cliente: formatWarrantyCpfCnpj(customer?.cpf_cnpj || ''),
-                    telefone_cliente: '',
-                    email_cliente: '',
-                    numero_venda: sale.id.slice(0, 8),
-                    data_compra: formatWarrantyDate(sale.created_at),
-                    produto: item.product_name,
-                    marca: brand,
-                    modelo: model,
-                    cor: productSpecs.color || '',
-                    ram: productSpecs.ram || '',
-                    memoria: productSpecs.storage || '',
-                    imei1: unit.imei_1 || '',
-                    imei2: unit.imei_2 || '',
-                    dias_garantia: String(days),
-                    tipo_garantia: 'Garantia Legal',
-                    declaracao_recebimento: declaracao,
-                };
-                const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
-                const { copy1, copy2 } = renderWarrantyBothCopies(settings.warranty_template, filtered);
-                sections.push(`<div class="warranty-copy">${copy1}</div>`);
-                sections.push(`<div class="warranty-copy">${copy2}</div>`);
+                const units = await vpsApiService.getUnitsBySale(sale.id);
+                const unitById = new Map<string, any>();
+                (units || []).forEach((u: any) => unitById.set(u.id, u));
+
+                const { brandService } = await import('../../../services/brands');
+                const { categoryService } = await import('../../../services/categories');
+                const { productService } = await import('../../../services/products');
+                const brands = await brandService.list();
+                const brandsByName = new Map<string, { warranty_days?: number }>();
+                brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
+
+                const customer = sale.customer;
+                const declaracao = getWarrantyDeclaration(
+                    sale.delivery_type === 'delivery' || sale.delivery_type === 'store_delivery' || sale.delivery_type === 'hybrid_delivery'
+                        ? 'delivery' : 'store_pickup'
+                );
+
+                for (const item of serializedItems) {
+                    const product = item.product_id ? await productService.getById(item.product_id) : null;
+                    const productSpecs = product?.specs || {};
+                    const brand = product?.brand || (item as any).product_brand || '';
+                    const model = product?.model || product?.name || item.product_name;
+
+                    let days = 90;
+                    if (product?.warranty_type === 'custom' && product.warranty_template_id) {
+                        const { data } = await supabase.from('warranty_templates').select('duration_days').eq('id', product.warranty_template_id).maybeSingle();
+                        if (data?.duration_days) days = data.duration_days;
+                    } else {
+                        const b = brandsByName.get(brand.toLowerCase());
+                        if (b?.warranty_days) days = b.warranty_days;
+                        else if (product?.category_id) {
+                            const cat = await categoryService.getById(product.category_id);
+                            if (cat?.warranty_days) days = cat.warranty_days;
+                        }
+                    }
+
+                    const unit = unitById.get((item as any).serialized_unit_id) || {};
+                    const fallbackDocId = crypto.randomUUID();
+                    const tagData = {
+                        nome_loja: settings.company_name || '',
+                        endereco: settings.address || '',
+                        telefone: formatWarrantyPhone(settings.phone || ''),
+                        email: settings.email || '',
+                        cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
+                        logo: (settings as any).logo || settings.receipt_logo_url || '',
+                        nome_cliente: customer?.name || '',
+                        cpf_cliente: formatWarrantyCpfCnpj(customer?.cpf_cnpj || ''),
+                        telefone_cliente: '',
+                        email_cliente: '',
+                        numero_venda: sale.id.slice(0, 8).toUpperCase(),
+                        numero_documento: fallbackDocId.slice(0, 8).toUpperCase(),
+                        data_compra: formatWarrantyDate(sale.created_at),
+                        produto: item.product_name,
+                        marca: brand,
+                        modelo: model,
+                        cor: productSpecs.color || '',
+                        ram: productSpecs.ram || '',
+                        memoria: productSpecs.storage || '',
+                        imei1: unit.imei_1 || '',
+                        imei2: unit.imei_2 || '',
+                        dias_garantia: String(days),
+                        tipo_garantia: 'Garantia Legal',
+                        declaracao_recebimento: declaracao,
+                    };
+                    const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
+                    const { copy1, copy2 } = renderWarrantyBothCopies(settings.warranty_template, filtered);
+                    sections.push(`<div class="warranty-copy">${copy1}</div>`);
+                    sections.push(`<div class="warranty-copy">${copy2}</div>`);
+                }
             }
 
             const printWindow = window.open('', '_blank');
             if (!printWindow) { toast.error('Permita popups para imprimir'); return; }
-            printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termos de Garantia (${serializedItems.length} aparelho(s) × 2 vias)</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body>${sections.join('')}</body></html>`);
+            printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termos de Garantia (${sections.length / 2} aparelho(s) × 2 vias)</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body>${sections.join('')}</body></html>`);
             printWindow.document.close();
             printWindow.print();
         } catch (e) {

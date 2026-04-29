@@ -87,6 +87,8 @@ export default function PDVPage() {
     const [warrantyDeliveryType, setWarrantyDeliveryType] = useState<DeliveryTypeWarranty>('store_pickup');
     const [warrantyTemplate, setWarrantyTemplate] = useState('');
     const [warrantyTagDataList, setWarrantyTagDataList] = useState<Record<string, string>[]>([]);
+    // Meta de cada termo (id pré-gerado p/ numero_documento + unit vinculada) — paralelo ao warrantyContents
+    const [warrantyDocsMeta, setWarrantyDocsMeta] = useState<Array<{ id: string; serialized_unit_id: string }>>([]);
 
     // Entregadores reais do Supabase (role = 'delivery')
     const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string }[]>([]);
@@ -519,7 +521,8 @@ export default function PDVPage() {
         customer: Customer,
         settings: any,
         days: number,
-        type: DeliveryTypeWarranty
+        type: DeliveryTypeWarranty,
+        documentId: string
     ): WarrantyTagData => {
         const specs = (item as any).product_specs || {};
         const unit = (item as any).serialized_unit || {};
@@ -534,7 +537,8 @@ export default function PDVPage() {
             cpf_cliente: formatWarrantyCpfCnpj(customer.cpf_cnpj || ''),
             telefone_cliente: formatWarrantyPhone(customer.phone || ''),
             email_cliente: customer.email || '',
-            numero_venda: sale.id.slice(0, 8),
+            numero_venda: sale.id.slice(0, 8).toUpperCase(),
+            numero_documento: documentId.slice(0, 8).toUpperCase(),
             data_compra: formatWarrantyDate(new Date()),
             produto: item.product_name,
             marca: (item as any).product_brand || '',
@@ -573,18 +577,22 @@ export default function PDVPage() {
                 deliveryType === 'delivery' ? 'delivery' : 'store_pickup';
             const contents: string[] = [];
             const tagDataList: Record<string, string>[] = [];
+            const docsMeta: Array<{ id: string; serialized_unit_id: string }> = [];
 
             for (const item of serializedItems) {
                 const days = await resolveWarrantyDays(item, brandsByName);
-                const tagData = buildTagData(item, sale, customer, settings, days, initialType);
+                const docId = crypto.randomUUID();
+                const tagData = buildTagData(item, sale, customer, settings, days, initialType, docId);
                 const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
                 const content = replaceWarrantyTags(settings.warranty_template, filtered);
                 contents.push(content);
                 tagDataList.push(filtered as any);
+                docsMeta.push({ id: docId, serialized_unit_id: (item as any).serialized_unit.unitId });
             }
 
             setWarrantyContents(contents);
             setWarrantyTagDataList(tagDataList);
+            setWarrantyDocsMeta(docsMeta);
             setWarrantyTemplate(settings.warranty_template);
             setWarrantyDeliveryType(initialType);
             setShowWarrantyModal(true);
@@ -609,11 +617,15 @@ export default function PDVPage() {
         const brandsByName = new Map<string, { warranty_days?: number }>();
         brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
 
+        // Reaproveita os UUIDs já gerados em generateWarrantyTerm pra manter
+        // consistência do numero_documento (mesmo se mudar tipo de entrega).
         const contents: string[] = [];
         const tagDataList: Record<string, string>[] = [];
-        for (const item of serializedItems) {
+        for (let i = 0; i < serializedItems.length; i++) {
+            const item = serializedItems[i];
             const days = await resolveWarrantyDays(item, brandsByName);
-            const tagData = buildTagData(item, lastSaleData.sale, lastSaleData.customer, settings, days, type);
+            const docId = warrantyDocsMeta[i]?.id || crypto.randomUUID();
+            const tagData = buildTagData(item, lastSaleData.sale, lastSaleData.customer, settings, days, type, docId);
             const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
             const content = replaceWarrantyTags(settings.warranty_template, filtered);
             contents.push(content);
@@ -653,21 +665,34 @@ export default function PDVPage() {
         if (!lastSaleData) return;
 
         try {
-            // Concatena todos os termos num só warranty_content (1 doc por venda).
-            // Cada termo separado por page-break visível na renderização HTML.
-            const combined = warrantyContents
-                .map(c => `<div class="warranty-term">${c}</div>`)
-                .join('<hr style="page-break-after: always;" />');
+            // 1 documento por aparelho serializado, cada com seu UUID/numero_documento.
+            const failures: string[] = [];
+            for (let i = 0; i < warrantyContents.length; i++) {
+                const meta = warrantyDocsMeta[i];
+                if (!meta) continue;
+                try {
+                    await warrantyDocumentService.create({
+                        id: meta.id,
+                        sale_id: lastSaleId,
+                        customer_id: lastSaleData.customer.id,
+                        serialized_unit_id: meta.serialized_unit_id,
+                        delivery_type: warrantyDeliveryType,
+                        customer_signature: signature,
+                        warranty_content: warrantyContents[i],
+                    });
+                } catch (err) {
+                    console.error(`[warranty] Falha ao salvar termo ${i + 1}:`, err);
+                    failures.push(`Termo ${i + 1}`);
+                }
+            }
 
-            await warrantyDocumentService.create({
-                sale_id: lastSaleId,
-                customer_id: lastSaleData.customer.id,
-                delivery_type: warrantyDeliveryType,
-                customer_signature: signature,
-                warranty_content: combined
-            });
-
-            toast.success('Termo de garantia gerado com sucesso!');
+            if (failures.length === 0) {
+                toast.success(`${warrantyContents.length} termo(s) de garantia salvo(s)!`);
+            } else if (failures.length < warrantyContents.length) {
+                toast.error(`Falha parcial: ${failures.join(', ')} não foram salvos`);
+            } else {
+                throw new Error('Falha ao salvar todos os termos');
+            }
             setShowWarrantyModal(false);
         } catch (error) {
             console.error('Erro ao salvar termo de garantia:', error);

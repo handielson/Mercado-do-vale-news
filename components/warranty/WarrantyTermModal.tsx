@@ -138,18 +138,24 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
 
                     <div className="p-6 space-y-4">
                         {/* Preview de cada termo */}
-                        {warrantyContents.map((content, idx) => (
-                            <div key={idx} className="space-y-2">
-                                {warrantyContents.length > 1 && (
-                                    <div className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-3 py-1.5 rounded">
-                                        Aparelho {idx + 1} de {warrantyContents.length}
+                        {warrantyContents.map((content, idx) => {
+                            const docNumber = warrantyTagDataList?.[idx]?.numero_documento;
+                            return (
+                                <div key={idx} className="space-y-2">
+                                    {(warrantyContents.length > 1 || docNumber) && (
+                                        <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-3 py-1.5 rounded">
+                                            <span>Aparelho {idx + 1} de {warrantyContents.length}</span>
+                                            {docNumber && (
+                                                <span className="text-slate-500 font-mono">Doc #{docNumber}</span>
+                                            )}
+                                        </div>
+                                    )}
+                                    <div className="border border-slate-200 rounded-lg p-6 bg-white overflow-auto max-h-[500px]">
+                                        <div dangerouslySetInnerHTML={{ __html: content }} />
                                     </div>
-                                )}
-                                <div className="border border-slate-200 rounded-lg p-6 bg-white overflow-auto max-h-[500px]">
-                                    <div dangerouslySetInnerHTML={{ __html: content }} />
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
 
                         {/* Info sobre as vias */}
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">

@@ -14,6 +14,7 @@ export interface WarrantyDocument {
     sale_id?: string;          // PDV sale (optional for online orders)
     order_id?: string;         // Online order (optional for PDV sales)
     customer_id?: string;
+    serialized_unit_id?: string;  // Aparelho coberto (1 doc por unit em vendas com múltiplos serializados)
     delivery_type?: DeliveryTypeWarranty;
     customer_signature?: string;
     warranty_content: string;
@@ -25,9 +26,11 @@ export interface WarrantyDocument {
  * Input for creating warranty document
  */
 export interface WarrantyDocumentInput {
+    id?: string;               // UUID pré-gerado (necessário pra renderizar numero_documento antes do save)
     sale_id?: string;          // PDV: sale ID
     order_id?: string;         // Online: order ID
     customer_id?: string;
+    serialized_unit_id?: string;
     delivery_type?: DeliveryTypeWarranty;
     customer_signature?: string;
     warranty_content: string;
@@ -53,6 +56,7 @@ export interface WarrantyTagData {
 
     // Venda
     numero_venda: string;
+    numero_documento?: string;   // Número único do termo (1 por aparelho); diferente do numero_venda
     data_compra: string;
 
     // Produto (primeiro produto ou concatenação)
@@ -99,6 +103,7 @@ export const WARRANTY_TAGS: Record<string, string> = {
 
     // Venda
     numero_venda: 'Número da Venda',
+    numero_documento: 'Número do Termo (único por aparelho)',
     data_compra: 'Data da Compra',
 
     // Produto

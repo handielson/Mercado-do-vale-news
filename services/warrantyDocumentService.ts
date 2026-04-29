@@ -26,22 +26,27 @@ async function getCompanyId(): Promise<string> {
 
 export const warrantyDocumentService = {
     /**
-     * Create a new warranty document
+     * Create a new warranty document. Aceita `id` pré-gerado pra que o número
+     * do termo (numero_documento) possa ser renderizado no template antes do save.
      */
     async create(input: WarrantyDocumentInput): Promise<WarrantyDocument> {
         const companyId = await getCompanyId();
 
+        const payload: Record<string, any> = {
+            company_id: companyId,
+            sale_id: input.sale_id ?? null,
+            order_id: input.order_id ?? null,
+            customer_id: input.customer_id ?? null,
+            serialized_unit_id: input.serialized_unit_id ?? null,
+            delivery_type: input.delivery_type ?? null,
+            customer_signature: input.customer_signature,
+            warranty_content: input.warranty_content,
+        };
+        if (input.id) payload.id = input.id;
+
         const { data, error } = await supabase
             .from('warranty_documents')
-            .insert({
-                company_id: companyId,
-                sale_id: input.sale_id ?? null,
-                order_id: input.order_id ?? null,
-                customer_id: input.customer_id ?? null,
-                delivery_type: input.delivery_type ?? null,
-                customer_signature: input.customer_signature,
-                warranty_content: input.warranty_content
-            })
+            .insert(payload)
             .select()
             .single();
 
@@ -51,6 +56,24 @@ export const warrantyDocumentService = {
         }
 
         return data as WarrantyDocument;
+    },
+
+    /**
+     * Lista todos os documentos de uma venda (1 por aparelho serializado).
+     */
+    async listBySaleId(saleId: string): Promise<WarrantyDocument[]> {
+        const companyId = await getCompanyId();
+        const { data, error } = await supabase
+            .from('warranty_documents')
+            .select('*')
+            .eq('company_id', companyId)
+            .eq('sale_id', saleId)
+            .order('created_at', { ascending: true });
+        if (error) {
+            console.error('Error listing warranty documents by sale_id:', error);
+            throw new Error('Erro ao listar documentos de garantia');
+        }
+        return (data || []) as WarrantyDocument[];
     },
 
     /**
