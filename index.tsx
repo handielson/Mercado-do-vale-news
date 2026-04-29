@@ -58,6 +58,64 @@ window.addEventListener('load', () => {
   }, 5000);
 });
 
+// ─── Detecção proativa de nova versão (antes do erro acontecer) ───────────────
+// Captura o hash do bundle no carregamento e compara com /index.html em eventos
+// naturais (foco, visibilidade, primeira interação, intervalo). Se mudou, recarrega
+// SILENCIOSAMENTE antes do usuário clicar em rota lazy que daria 404.
+let initialBundleSig: string | null = null;
+let isReloadingForNewVersion = false;
+
+function captureCurrentBundleSig(): string | null {
+  // Vite gera <script type="module" src="/assets/index-HASH.js">
+  const scripts = document.querySelectorAll<HTMLScriptElement>('script[type="module"][src*="/assets/"]');
+  for (const s of Array.from(scripts)) {
+    const m = s.src.match(/\/assets\/index-([a-zA-Z0-9_-]+)\.js/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+async function checkForNewVersion() {
+  if (isReloadingForNewVersion || !initialBundleSig) return;
+  try {
+    const html = await fetch('/index.html', { cache: 'no-store' }).then(r => r.ok ? r.text() : '');
+    if (!html) return;
+    const match = html.match(/\/assets\/index-([a-zA-Z0-9_-]+)\.js/);
+    const latestSig = match?.[1] || null;
+    if (latestSig && latestSig !== initialBundleSig) {
+      isReloadingForNewVersion = true;
+      console.log('[version-check] nova versão detectada, recarregando silenciosamente…');
+      window.location.reload();
+    }
+  } catch { /* offline ou problema de rede — ignora */ }
+}
+
+window.addEventListener('load', () => {
+  initialBundleSig = captureCurrentBundleSig();
+  if (!initialBundleSig) return;
+
+  // Volta de aba inativa — é o caso mais comum: usuário deixa aba aberta, deploy acontece, volta
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkForNewVersion();
+  });
+
+  // Foco na janela (pode acontecer sem mudar visibilidade)
+  window.addEventListener('focus', checkForNewVersion);
+
+  // Primeira interação após >30s de inatividade (cobre casos onde aba ficou aberta sem foco)
+  let lastActivity = Date.now();
+  const onActivity = () => {
+    if (Date.now() - lastActivity > 30000) checkForNewVersion();
+    lastActivity = Date.now();
+  };
+  ['click', 'keydown', 'mousemove', 'touchstart'].forEach(ev =>
+    window.addEventListener(ev, onActivity, { passive: true })
+  );
+
+  // Polling de fallback pra sessões muito longas sem mudanças de foco/visibilidade
+  setInterval(checkForNewVersion, 5 * 60 * 1000);
+});
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");
