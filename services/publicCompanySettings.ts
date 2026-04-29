@@ -112,6 +112,7 @@ const PUBLIC_COMPANY_SETTINGS_COLUMNS = [
 ].join(',');
 
 let memCache: { data: PublicCompanySettings; expiresAt: number } | null = null;
+let settingsPromise: Promise<PublicCompanySettings | null> | null = null;
 let companyDataPromise: Promise<Company> | null = null;
 
 function parseJsonValue<T>(value: JsonLike<T>, fallback: T): T {
@@ -367,38 +368,47 @@ export const publicCompanySettingsService = {
       return cached;
     }
 
-    try {
-      const raw = USE_VPS.company
-        ? await loadFromPublicVps()
-        : await loadFromSupabase();
-      const sanitized = sanitizePublicCompanySettings(raw as Record<string, any>);
-
-      if (sanitized) {
-        memCache = { data: sanitized, expiresAt: Date.now() + MEM_TTL };
-        writeLocalStorage(sanitized);
-      }
-
-      return sanitized;
-    } catch {
-      if (USE_VPS.company) {
+    if (!settingsPromise) {
+      settingsPromise = (async () => {
         try {
-          const fallback = sanitizePublicCompanySettings((await loadFromSupabase()) as Record<string, any>);
-          if (fallback) {
-            memCache = { data: fallback, expiresAt: Date.now() + MEM_TTL };
-            writeLocalStorage(fallback);
+          const raw = USE_VPS.company
+            ? await loadFromPublicVps()
+            : await loadFromSupabase();
+          const sanitized = sanitizePublicCompanySettings(raw as Record<string, any>);
+
+          if (sanitized) {
+            memCache = { data: sanitized, expiresAt: Date.now() + MEM_TTL };
+            writeLocalStorage(sanitized);
           }
-          return fallback;
+
+          return sanitized;
         } catch {
+          if (USE_VPS.company) {
+            try {
+              const fallback = sanitizePublicCompanySettings((await loadFromSupabase()) as Record<string, any>);
+              if (fallback) {
+                memCache = { data: fallback, expiresAt: Date.now() + MEM_TTL };
+                writeLocalStorage(fallback);
+              }
+              return fallback;
+            } catch {
+              return null;
+            }
+          }
+
           return null;
         }
-      }
-
-      return null;
+      })().finally(() => {
+        settingsPromise = null;
+      });
     }
+
+    return settingsPromise;
   },
 
   clearCache(): void {
     memCache = null;
+    settingsPromise = null;
     companyDataPromise = null;
     if (typeof localStorage !== 'undefined') {
       try {

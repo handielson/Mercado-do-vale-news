@@ -293,7 +293,10 @@ export const PublicProductPage: React.FC = () => {
                 } else if (data.images.length > 0) {
                     setSelectedImage(data.images[0]);
                 }
-                
+
+                // Release the critical product view before secondary sections finish.
+                setLoading(false);
+
                 // -- Siblings (Variantes do mesmo modelo) via VPS --
                 // IMPORTANTE: a API da VPS pode ignorar o filtro model_id/parent_id e devolver
                 // produtos aleatórios. Por isso validamos cada resultado: só consideramos sibling
