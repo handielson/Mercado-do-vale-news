@@ -17,6 +17,7 @@ import { promotionService } from './promotionService';
 import { benefitService } from './benefitService';
 import { syncStockToBling } from './blingService';
 import { cancelReferralReward } from './cashbackService';
+import { unitService } from './units';
 
 /**
  * Create a new sale
@@ -63,7 +64,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         if (saleError) throw saleError;
         if (!sale) throw new Error('Failed to create sale');
 
-        // Insert sale items
+        // Insert sale items (persiste serialized_unit_id pra rastreio do IMEI)
         const saleItems = saleInput.items.map(item => ({
             sale_id: sale.id,
             product_id: item.product_id,
@@ -75,7 +76,8 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             discount: item.discount,
             subtotal: item.subtotal,
             total: item.total,
-            is_gift: item.is_gift
+            is_gift: item.is_gift,
+            serialized_unit_id: (item as any).serialized_unit?.unitId || null,
         }));
 
         const { error: itemsError } = await supabase
@@ -88,8 +90,21 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             throw itemsError;
         }
 
-        // Deduzir estoque dos produtos com track_inventory = true
-        const itemsWithInventory = saleInput.items.filter(item => item.track_inventory && item.product_id);
+        // Marca units serializadas como vendidas (VPS) — markAsSold dispara
+        // syncProductStock que decrementa products.stock_quantity automaticamente.
+        const serializedItems = saleInput.items.filter(i => (i as any).serialized_unit?.unitId);
+        for (const item of serializedItems) {
+            try {
+                await unitService.markAsSold((item as any).serialized_unit.unitId, undefined, sale.id);
+            } catch (err) {
+                console.error(`[saleService] Falha ao marcar unit como sold:`, err);
+            }
+        }
+
+        // Estoque manual (não-serializado) decrementa via RPC do Supabase
+        const itemsWithInventory = saleInput.items.filter(
+            item => item.track_inventory && item.product_id && !(item as any).serialized_unit?.unitId
+        );
         for (const item of itemsWithInventory) {
             const { error: stockError } = await supabase.rpc('decrement_stock', {
                 p_product_id: item.product_id,

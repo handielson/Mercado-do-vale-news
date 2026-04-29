@@ -1158,19 +1158,18 @@ fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (r
 
 // ─── Units (inventory de unidades serializadas: 1 linha por aparelho) ──────
 
-// Lista unidades de um produto (FIFO por created_at)
+// Lista unidades — filtra por product_id, order_id ou sale_id (FIFO por created_at)
 fastify.get('/units', async (req, reply) => {
-  const productId = req.query.product_id;
-  if (!productId) return reply.code(400).send({ error: 'product_id required' });
-  const status = req.query.status;
-  const params = [productId];
-  let where = 'product_id = ?';
-  if (status && status !== 'all') {
-    where += ' AND status = ?';
-    params.push(status);
-  }
+  const { product_id, order_id, sale_id, status } = req.query;
+  const conds = [];
+  const params = [];
+  if (product_id) { conds.push('product_id = ?'); params.push(product_id); }
+  if (order_id)   { conds.push('order_id = ?');   params.push(order_id); }
+  if (sale_id)    { conds.push('sale_id = ?');    params.push(sale_id); }
+  if (status && status !== 'all') { conds.push('status = ?'); params.push(status); }
+  if (conds.length === 0) return reply.code(400).send({ error: 'product_id, order_id or sale_id required' });
   const [rows] = await pool.query(
-    `SELECT * FROM units WHERE ${where} ORDER BY created_at ASC`,
+    `SELECT * FROM units WHERE ${conds.join(' AND ')} ORDER BY created_at ASC`,
     params
   );
   return rows;

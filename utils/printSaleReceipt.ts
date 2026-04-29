@@ -108,7 +108,10 @@ export function printSaleReceipt(
         : '';
 
     const itemsHtml = sale.items.map(item => {
-        const specs = productSpecs?.[(item as any).product_id] || {};
+        // Lookup priority: por sale_item.id (IMEI da unit serializada) → por product_id (specs gerais).
+        const itemSpecs = productSpecs?.[(item as any).id] || {};
+        const productLevelSpecs = productSpecs?.[(item as any).product_id] || {};
+        const specs = { ...productLevelSpecs, ...itemSpecs };
         const idParts: string[] = [];
         if (specs.imei1) idParts.push(`IMEI 1: ${specs.imei1}`);
         if (specs.imei2) idParts.push(`IMEI 2: ${specs.imei2}`);

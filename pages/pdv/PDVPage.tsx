@@ -521,8 +521,8 @@ export default function PDVPage() {
                 cor: (firstItem as any).product_specs?.color || '',
                 ram: (firstItem as any).product_specs?.ram || '',
                 memoria: (firstItem as any).product_specs?.storage || '',
-                imei1: (firstItem as any).product_specs?.imei1 || '',
-                imei2: (firstItem as any).product_specs?.imei2 || '',
+                imei1: (firstItem as any).serialized_unit?.imei1 || (firstItem as any).product_specs?.imei1 || '',
+                imei2: (firstItem as any).serialized_unit?.imei2 || (firstItem as any).product_specs?.imei2 || '',
 
                 // Garantia
                 dias_garantia: '90', // TODO: calcular baseado no produto
@@ -580,8 +580,8 @@ export default function PDVPage() {
                 cor: (firstItem as any).product_specs?.color || '',
                 ram: (firstItem as any).product_specs?.ram || '',
                 memoria: (firstItem as any).product_specs?.storage || '',
-                imei1: (firstItem as any).product_specs?.imei1 || '',
-                imei2: (firstItem as any).product_specs?.imei2 || '',
+                imei1: (firstItem as any).serialized_unit?.imei1 || (firstItem as any).product_specs?.imei1 || '',
+                imei2: (firstItem as any).serialized_unit?.imei2 || (firstItem as any).product_specs?.imei2 || '',
                 dias_garantia: '90',
                 tipo_garantia: 'Garantia Legal',
                 declaracao_recebimento: getWarrantyDeclaration(type)
@@ -598,7 +598,20 @@ export default function PDVPage() {
         if (!lastSaleData) return;
         try {
             const settings = await companySettingsService.get();
-            if (settings) printSaleReceipt(lastSaleData.sale, settings, {});
+            if (!settings) return;
+            // Monta map keyed por item.id com IMEI/serial da unit em memória
+            const specsByItem: Record<string, Record<string, string>> = {};
+            (lastSaleData.items || []).forEach((it: any) => {
+                if (it.serialized_unit) {
+                    specsByItem[it.id] = {
+                        imei1: it.serialized_unit.imei1 || '',
+                        imei2: it.serialized_unit.imei2 || '',
+                        serial: it.serialized_unit.serial || '',
+                    };
+                }
+            });
+            const saleForPrint = { ...lastSaleData.sale, items: lastSaleData.items };
+            printSaleReceipt(saleForPrint as any, settings, specsByItem);
         } catch (e) {
             console.error(e);
         }

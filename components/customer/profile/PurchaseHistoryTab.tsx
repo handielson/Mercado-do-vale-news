@@ -194,15 +194,36 @@ export const PurchaseHistoryTab: React.FC = () => {
                 );
 
                 setSales(combined);
+                const map: Record<string, Record<string, string>> = {};
                 const allIds = [...new Set(combined.flatMap(s => s.items.map(i => (i as any).product_id)).filter(Boolean))];
                 if (allIds.length) {
                     const { data: prods } = await supabase.from('products').select('id,specs').in('id', allIds);
-                    if (prods) {
-                        const map: Record<string, Record<string, string>> = {};
-                        prods.forEach(p => { map[p.id] = p.specs || {}; });
-                        setProductSpecs(map);
-                    }
+                    (prods || []).forEach(p => { map[p.id] = p.specs || {}; });
                 }
+                // IMEI por sale_item.id — busca units VPS para vendas com items serializados
+                try {
+                    const { vpsApiService } = await import('../../../services/vpsApiService');
+                    for (const sale of combined) {
+                        const hasSerialized = sale.items.some((i: any) => i.serialized_unit_id);
+                        if (!hasSerialized) continue;
+                        const units = await vpsApiService.getUnitsBySale(sale.id);
+                        const unitToItem = new Map<string, string>();
+                        sale.items.forEach((it: any) => {
+                            if (it.serialized_unit_id) unitToItem.set(it.serialized_unit_id, it.id);
+                        });
+                        (units || []).forEach((u: any) => {
+                            const itemId = unitToItem.get(u.id);
+                            if (!itemId) return;
+                            map[itemId] = {
+                                ...(map[itemId] || {}),
+                                imei1: u.imei_1 || '',
+                                imei2: u.imei_2 || '',
+                                serial: u.serial || '',
+                            };
+                        });
+                    }
+                } catch (e) { /* fallback: continua sem IMEI da unit */ }
+                setProductSpecs(map);
             } catch (e) {
                 console.error('Erro ao carregar histórico:', e);
             } finally {
@@ -336,7 +357,9 @@ export const PurchaseHistoryTab: React.FC = () => {
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Itens</h4>
                                         <div className="space-y-3">
                                             {sale.items.map((item, idx) => {
-                                                const specs = productSpecs[(item as any).product_id] || {};
+                                                const itemSpecs = productSpecs[(item as any).id] || {};
+                                                const productLevel = productSpecs[(item as any).product_id] || {};
+                                                const specs = { ...productLevel, ...itemSpecs };
                                                 const idParts: string[] = [];
                                                 if (specs.imei1) idParts.push(`IMEI 1: ${specs.imei1}`);
                                                 if (specs.imei2) idParts.push(`IMEI 2: ${specs.imei2}`);

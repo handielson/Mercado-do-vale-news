@@ -9,6 +9,7 @@ import { companySettingsService } from '../../../services/companySettingsService
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../../utils/warrantyTagReplacement';
 import { getCoinBalance } from '../../../services/cashbackService';
 import { benefitService } from '../../../services/benefitService';
+import { vpsApiService } from '../../../services/vpsApiService';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -25,26 +26,42 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const [isPrintingWarranty, setIsPrintingWarranty] = useState(false);
     const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
     const [isPrintingAll, setIsPrintingAll] = useState(false);
-    // Map: product_id -> {imei1, imei2, serial}
+    // Map keyed por product_id (specs gerais) e por sale_item.id (IMEI da unit serializada).
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
 
-    // Fetch specs for all items when modal opens
     useEffect(() => {
         if (!isOpen || !sale?.items?.length) return;
-        const ids = sale.items
-            .map(i => (i as any).product_id)
-            .filter(Boolean);
-        if (!ids.length) return;
-        supabase
-            .from('products')
-            .select('id, specs')
-            .in('id', ids)
-            .then(({ data }) => {
-                if (!data) return;
-                const map: Record<string, Record<string, string>> = {};
-                data.forEach(p => { map[p.id] = p.specs || {}; });
-                setProductSpecs(map);
+        let cancelled = false;
+        (async () => {
+            const map: Record<string, Record<string, string>> = {};
+
+            // Specs gerais por product_id (color, ram, storage)
+            const productIds = sale.items.map(i => (i as any).product_id).filter(Boolean);
+            if (productIds.length) {
+                const { data } = await supabase.from('products').select('id, specs').in('id', productIds);
+                (data || []).forEach(p => { map[p.id] = p.specs || {}; });
+            }
+
+            // IMEIs por sale_item.id — busca units da VPS pela sale_id
+            const units = await vpsApiService.getUnitsBySale(sale.id);
+            const itemsBySerializedUnit = new Map<string, string>();
+            sale.items.forEach((item: any) => {
+                if (item.serialized_unit_id) itemsBySerializedUnit.set(item.serialized_unit_id, item.id);
             });
+            (units || []).forEach((u: any) => {
+                const itemId = itemsBySerializedUnit.get(u.id);
+                if (!itemId) return;
+                map[itemId] = {
+                    ...(map[itemId] || {}),
+                    imei1: u.imei_1 || '',
+                    imei2: u.imei_2 || '',
+                    serial: u.serial || '',
+                };
+            });
+
+            if (!cancelled) setProductSpecs(map);
+        })();
+        return () => { cancelled = true; };
     }, [isOpen, sale?.id]);
 
     const handleReprintWarranty = async () => {
@@ -353,7 +370,9 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                         </div>
                                         <p className="text-xs text-slate-500 mt-1">
                                             {(() => {
-                                                const specs = productSpecs[(item as any).product_id] || {};
+                                                const itemSpecs = productSpecs[(item as any).id] || {};
+                                                const productLevel = productSpecs[(item as any).product_id] || {};
+                                                const specs = { ...productLevel, ...itemSpecs };
                                                 const parts: string[] = [];
                                                 if (specs.imei1) parts.push(`IMEI 1: ${specs.imei1}`);
                                                 if (specs.imei2) parts.push(`IMEI 2: ${specs.imei2}`);

@@ -186,21 +186,33 @@ async function autoReserveOrderItems(
 
 /**
  * Libera todas as unidades reservadas para um pedido, voltando para 'available'.
- * Chamado ao cancelar pedido.
+ * Chamado ao cancelar pedido. Units moram na VPS MySQL.
  */
 async function releaseOrderUnits(orderId: string): Promise<void> {
-    const { error } = await supabase
-        .from('units')
-        .update({
-            status: UnitStatus.AVAILABLE,
-            order_id: null,
-            reserved_at: null,
-        })
-        .eq('order_id', orderId)
-        .eq('status', UnitStatus.RESERVED);
+    try {
+        const { vpsApiService } = await import('./vpsApiService');
+        const reserved = await vpsApiService.getUnitsByOrder(orderId);
+        for (const u of (reserved || []).filter((x: any) => x.status === UnitStatus.RESERVED)) {
+            await unitService.release(u.id);
+        }
+    } catch (err) {
+        console.error(`[orderService] Falha ao liberar unidades do pedido ${orderId}:`, err);
+    }
+}
 
-    if (error) {
-        console.error(`[orderService] Falha ao liberar unidades do pedido ${orderId}:`, error.message);
+/**
+ * Marca todas as units reservadas de um pedido como vendidas. Disparado
+ * quando o pedido vira "completed" (entregue/concluído).
+ */
+async function markOrderUnitsAsSold(orderId: string): Promise<void> {
+    try {
+        const { vpsApiService } = await import('./vpsApiService');
+        const units = await vpsApiService.getUnitsByOrder(orderId);
+        for (const u of (units || []).filter((x: any) => x.status === UnitStatus.RESERVED)) {
+            await unitService.markAsSold(u.id, orderId);
+        }
+    } catch (err) {
+        console.error(`[orderService] Falha ao marcar unidades como sold (pedido ${orderId}):`, err);
     }
 }
 
@@ -478,6 +490,11 @@ export async function updateOrderStatus(id: string, status: OrderStatus): Promis
         .update({ status })
         .eq('id', id);
     if (error) throw new Error(error.message);
+    if (status === 'completed') {
+        markOrderUnitsAsSold(id).catch(e =>
+            console.error('[orderService] Falha ao baixar units (updateOrderStatus completed):', e)
+        );
+    }
 }
 
 // ─── Confirmar pagamento (via webhook do gateway) ─────────────────────────────
@@ -605,9 +622,12 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
     }
 
     // Auto-reserva de unidades serializadas (IMEI/Serial) — FIFO
-    autoReserveOrderItems(items, id).catch(e =>
-        console.error('[orderService] Falha parcial na reserva serializada (onDelivery):', e)
-    );
+    // Aguarda concluir antes de marcar como sold pra não perder units recém-reservadas.
+    autoReserveOrderItems(items, id)
+        .then(() => markOrderUnitsAsSold(id))
+        .catch(e =>
+            console.error('[orderService] Falha parcial na reserva/sold serializada (onDelivery):', e)
+        );
 }
 
 // ─── Cancelar pedido ──────────────────────────────────────────────────────────

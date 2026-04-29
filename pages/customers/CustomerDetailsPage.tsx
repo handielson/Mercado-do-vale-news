@@ -159,6 +159,17 @@ export default function CustomerDetailsPage() {
                 if (prod) { specs = prod.specs || {}; brand = prod.brand || ''; model = prod.model || prod.name || ''; }
             }
 
+            // Se o item tem unit serializada vinculada, IMEI vem da VPS units
+            const unitId = (firstItem as any).serialized_unit_id;
+            if (unitId) {
+                try {
+                    const { vpsApiService } = await import('../../services/vpsApiService');
+                    const units = await vpsApiService.getUnitsBySale(sale.id);
+                    const unit = (units || []).find((u: any) => u.id === unitId);
+                    if (unit) specs = { ...specs, imei1: unit.imei_1 || '', imei2: unit.imei_2 || '' };
+                } catch { /* fallback abaixo */ }
+            }
+
             // Para vendas legadas: extrai IMEI do product_sku ("imei1 / imei2") se specs vazio
             if (!specs.imei1 && firstItem.product_sku) {
                 const parts = firstItem.product_sku.split('/').map((s: string) => s.trim());
@@ -227,17 +238,38 @@ export default function CustomerDetailsPage() {
         try {
             const data = await getSales({ customer_id: customerId });
             setSalesHistory(data);
-            // Fetch specs for all products in this customer's purchases
+
+            const map: Record<string, Record<string, string>> = {};
+
+            // Specs gerais por product_id (ram, storage, color)
             const allProductIds = [...new Set(data.flatMap(s => s.items.map(i => (i as any).product_id)).filter(Boolean))];
             if (allProductIds.length) {
-                supabase.from('products').select('id,specs').in('id', allProductIds)
-                    .then(({ data: prods }) => {
-                        if (!prods) return;
-                        const map: Record<string, Record<string, string>> = {};
-                        prods.forEach(p => { map[p.id] = p.specs || {}; });
-                        setSaleProductSpecs(map);
-                    });
+                const { data: prods } = await supabase.from('products').select('id,specs').in('id', allProductIds);
+                (prods || []).forEach(p => { map[p.id] = p.specs || {}; });
             }
+
+            // IMEIs por sale_item.id — busca units VPS para cada venda com items serializados
+            const { vpsApiService } = await import('../../services/vpsApiService');
+            for (const sale of data) {
+                const hasSerialized = sale.items.some((i: any) => i.serialized_unit_id);
+                if (!hasSerialized) continue;
+                const units = await vpsApiService.getUnitsBySale(sale.id);
+                const unitToItem = new Map<string, string>();
+                sale.items.forEach((it: any) => {
+                    if (it.serialized_unit_id) unitToItem.set(it.serialized_unit_id, it.id);
+                });
+                (units || []).forEach((u: any) => {
+                    const itemId = unitToItem.get(u.id);
+                    if (!itemId) return;
+                    map[itemId] = {
+                        ...(map[itemId] || {}),
+                        imei1: u.imei_1 || '',
+                        imei2: u.imei_2 || '',
+                        serial: u.serial || '',
+                    };
+                });
+            }
+            setSaleProductSpecs(map);
         } catch (err) {
             console.error('Error loading sales history:', err);
         }
@@ -577,10 +609,11 @@ export default function CustomerDetailsPage() {
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Itens</h4>
                                         <div className="space-y-3">
                                             {sale.items.map((item, idx) => {
-                                                // Specs do catálogo (produtos novos) ou direto do item (vendas legadas)
+                                                // Lookup: por sale_item.id (IMEI da unit) → product_id (specs gerais) → item.product_specs (legacy)
+                                                const unitSpecs = saleProductSpecs?.[(item as any).id] || {};
                                                 const catalogSpecs = saleProductSpecs?.[(item as any).product_id] || {};
                                                 const itemSpecs = (item as any).product_specs || {};
-                                                const specs = { ...itemSpecs, ...catalogSpecs };
+                                                const specs = { ...itemSpecs, ...catalogSpecs, ...unitSpecs };
                                                 const idParts: string[] = [];
                                                 if (specs.imei1) idParts.push(`IMEI 1: ${specs.imei1}`);
                                                 if (specs.imei2) idParts.push(`IMEI 2: ${specs.imei2}`);

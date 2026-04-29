@@ -296,6 +296,14 @@ class VpsApiService {
     return this.fetchSafe<any[]>(`/units?${qs.toString()}`, true);
   }
 
+  async getUnitsByOrder(orderId: string): Promise<any[] | null> {
+    return this.fetchSafe<any[]>(`/units?order_id=${encodeURIComponent(orderId)}`, true);
+  }
+
+  async getUnitsBySale(saleId: string): Promise<any[] | null> {
+    return this.fetchSafe<any[]>(`/units?sale_id=${encodeURIComponent(saleId)}`, true);
+  }
+
   async getUnitByIdentifier(identifier: string): Promise<any[] | null> {
     return this.fetchSafe<any[]>(`/units/by-identifier/${encodeURIComponent(identifier)}`, true);
   }
