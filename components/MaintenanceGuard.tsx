@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getCompanyData } from '../services/companyService';
+import { matchesPublicMaintenanceBypass, publicCompanySettingsService } from '../services/publicCompanySettings';
 import { MaintenancePage } from '../pages/store/MaintenancePage';
 
 export const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -19,11 +19,12 @@ export const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ chil
 
         const checkMaintenanceStatus = async () => {
             try {
-                const company = await getCompanyData();
+                const settings = await publicCompanySettingsService.get();
                 if (!mounted) return;
 
                 const bypassKey = localStorage.getItem('@MercadoDoVale:maintenance_bypass');
-                setIsMaintenance(Boolean(company.maintenanceMode && bypassKey !== company.maintenanceBypassKey));
+                const isBypassed = await matchesPublicMaintenanceBypass(settings, bypassKey);
+                setIsMaintenance(Boolean(settings?.maintenance_mode && !isBypassed));
             } catch (error: any) {
                 if (!mounted) return;
 

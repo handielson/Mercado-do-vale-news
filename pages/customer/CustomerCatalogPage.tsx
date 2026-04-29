@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut, Grid, List, Search } from 'lucide-react';
 import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
 import { catalogService } from '../../services/catalogService';
-import { getCompanyData } from '../../services/companyService';
+import { getPublicCompanyData } from '../../services/publicCompanySettings';
 import type { Company } from '../../types/company';
 import type { CatalogProduct } from '../../types/catalog';
 import { ModernProductCard } from '../../components/catalog/ModernProductCard';
@@ -44,7 +44,7 @@ export const CustomerCatalogPage: React.FC = () => {
 
     const loadCompany = async () => {
         try {
-            const data = await getCompanyData();
+            const data = await getPublicCompanyData();
             setCompany(data);
         } catch (error) {
             console.error('Error loading company data:', error);

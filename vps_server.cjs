@@ -4,6 +4,7 @@ const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
+const crypto = require('crypto');
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -103,6 +104,93 @@ function requireSyncKey(request, reply, done) {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const jsonStr = (v) => v == null ? null : (typeof v === 'string' ? v : JSON.stringify(v));
+const optionalBool = (v) => v == null ? null : (v ? 1 : 0);
+
+function parsePublicJson(v, fallback) {
+  if (v == null || v === '') return fallback;
+  if (typeof v !== 'string') return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return fallback;
+  }
+}
+
+function buildPublicCompanyAddress(row) {
+  if (row.address) return String(row.address);
+
+  const parts = [];
+  if (row.address_street) parts.push(`${row.address_street}, ${row.address_number || 'S/N'}`);
+  if (row.address_complement) parts.push(row.address_complement);
+  if (row.address_neighborhood) parts.push(row.address_neighborhood);
+
+  const cityState = [row.address_city, row.address_state].filter(Boolean).join(' - ');
+  if (cityState) parts.push(cityState);
+  if (row.address_zip_code) parts.push(`CEP: ${row.address_zip_code}`);
+
+  return parts.filter(Boolean).join(' - ');
+}
+
+function sha256Hex(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function sanitizePublicCompanySettings(row) {
+  if (!row) return null;
+
+  const companyName = row.company_name || row.name || 'Mercado do Vale';
+
+  return {
+    id: row.id || undefined,
+    company_name: companyName,
+    name: row.name || companyName,
+    razao_social: row.razao_social || null,
+    cnpj: row.cnpj || null,
+    data_abertura: row.data_abertura || null,
+    phone: row.phone || null,
+    email: row.email || null,
+    logo: row.logo || null,
+    receipt_logo_url: row.receipt_logo_url || null,
+    favicon: row.favicon || null,
+    address: buildPublicCompanyAddress(row),
+    address_zip_code: row.address_zip_code || null,
+    address_street: row.address_street || null,
+    address_number: row.address_number || null,
+    address_complement: row.address_complement || null,
+    address_neighborhood: row.address_neighborhood || null,
+    address_city: row.address_city || null,
+    address_state: row.address_state || null,
+    address_lat: row.address_lat ?? null,
+    address_lng: row.address_lng ?? null,
+    social_instagram: row.social_instagram || null,
+    social_facebook: row.social_facebook || null,
+    social_youtube: row.social_youtube || null,
+    social_website: row.social_website || null,
+    google_reviews_link: row.google_reviews_link || null,
+    google_analytics_id: row.google_analytics_id || null,
+    pix_discount_percentage: row.pix_discount_percentage == null ? null : Number(row.pix_discount_percentage),
+    business_hours: parsePublicJson(row.business_hours, null),
+    holiday_overrides: parsePublicJson(row.holiday_overrides, []),
+    local_holidays: parsePublicJson(row.local_holidays, []),
+    business_hours_display_text: row.business_hours_display_text || null,
+    store_label_open: row.store_label_open || null,
+    store_label_closed: row.store_label_closed || null,
+    store_label_closing_soon: row.store_label_closing_soon || null,
+    store_label_lunch: row.store_label_lunch || null,
+    extended_warranty_options: parsePublicJson(row.extended_warranty_options, []),
+    extended_warranty_terms_text: row.extended_warranty_terms_text || null,
+    synology_video_base_url: row.synology_video_base_url || null,
+    synology_video_extension: row.synology_video_extension || '.mp4',
+    description: row.description || null,
+    catalog_footer_text: row.catalog_footer_text || null,
+    about_us_text: row.about_us_text || null,
+    about_us_image_url: row.about_us_image_url || null,
+    maintenance_mode: row.maintenance_mode === 1 || row.maintenance_mode === true,
+    maintenance_message: row.maintenance_message || null,
+    maintenance_bypass_hash: row.maintenance_bypass_key ? sha256Hex(row.maintenance_bypass_key) : null,
+    updated_at: row.updated_at || null,
+  };
+}
 
 // ─── Health ────────────────────────────────────────────────────────────────
 fastify.get('/health', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async () => ({
@@ -760,43 +848,61 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           meta_title, meta_description, keywords
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
-          name=VALUES(name), slug=VALUES(slug), sku=VALUES(sku),
-          ean=VALUES(ean), alternative_eans=VALUES(alternative_eans),
-          description=VALUES(description),
-          price_retail=VALUES(price_retail), price_wholesale=VALUES(price_wholesale),
-          price_cost=VALUES(price_cost), price_reseller=VALUES(price_reseller),
-          price_promo=VALUES(price_promo), promo_start=VALUES(promo_start),
-          promo_end=VALUES(promo_end),
-          stock_quantity=VALUES(stock_quantity), status=VALUES(status),
-          category_id=VALUES(category_id), brand=VALUES(brand),
-          model_id=VALUES(model_id), images=VALUES(images),
-          specs=VALUES(specs), custom_fields=VALUES(custom_fields),
-          dimensions=VALUES(dimensions), weight_kg=VALUES(weight_kg),
-          ncm=VALUES(ncm), cest=VALUES(cest), origin=VALUES(origin),
-          bling_id=VALUES(bling_id), bling_parent_id=VALUES(bling_parent_id),
-          parent_id=VALUES(parent_id), video_url=VALUES(video_url),
-          track_inventory=VALUES(track_inventory), is_gift=VALUES(is_gift),
-          is_virtual=VALUES(is_virtual),
-          warranty_type=VALUES(warranty_type),
-          warranty_template_id=VALUES(warranty_template_id),
-          kits=VALUES(kits),
-          meta_title=VALUES(meta_title), meta_description=VALUES(meta_description), keywords=VALUES(keywords),
+          name=IF(VALUES(name) IS NULL, name, VALUES(name)),
+          slug=IF(VALUES(slug) IS NULL, slug, VALUES(slug)),
+          sku=IF(VALUES(sku) IS NULL, sku, VALUES(sku)),
+          ean=IF(VALUES(ean) IS NULL, ean, VALUES(ean)),
+          alternative_eans=IF(VALUES(alternative_eans) IS NULL, alternative_eans, VALUES(alternative_eans)),
+          description=IF(VALUES(description) IS NULL, description, VALUES(description)),
+          price_retail=IF(VALUES(price_retail) IS NULL, price_retail, VALUES(price_retail)),
+          price_wholesale=IF(VALUES(price_wholesale) IS NULL, price_wholesale, VALUES(price_wholesale)),
+          price_cost=IF(VALUES(price_cost) IS NULL, price_cost, VALUES(price_cost)),
+          price_reseller=IF(VALUES(price_reseller) IS NULL, price_reseller, VALUES(price_reseller)),
+          price_promo=IF(VALUES(price_promo) IS NULL, price_promo, VALUES(price_promo)),
+          promo_start=IF(VALUES(promo_start) IS NULL, promo_start, VALUES(promo_start)),
+          promo_end=IF(VALUES(promo_end) IS NULL, promo_end, VALUES(promo_end)),
+          stock_quantity=IF(VALUES(stock_quantity) IS NULL, stock_quantity, VALUES(stock_quantity)),
+          status=IF(VALUES(status) IS NULL, status, VALUES(status)),
+          category_id=IF(VALUES(category_id) IS NULL, category_id, VALUES(category_id)),
+          brand=IF(VALUES(brand) IS NULL, brand, VALUES(brand)),
+          model_id=IF(VALUES(model_id) IS NULL, model_id, VALUES(model_id)),
+          images=IF(VALUES(images) IS NULL, images, VALUES(images)),
+          specs=IF(VALUES(specs) IS NULL, specs, VALUES(specs)),
+          custom_fields=IF(VALUES(custom_fields) IS NULL, custom_fields, VALUES(custom_fields)),
+          dimensions=IF(VALUES(dimensions) IS NULL, dimensions, VALUES(dimensions)),
+          weight_kg=IF(VALUES(weight_kg) IS NULL, weight_kg, VALUES(weight_kg)),
+          ncm=IF(VALUES(ncm) IS NULL, ncm, VALUES(ncm)),
+          cest=IF(VALUES(cest) IS NULL, cest, VALUES(cest)),
+          origin=IF(VALUES(origin) IS NULL, origin, VALUES(origin)),
+          bling_id=IF(VALUES(bling_id) IS NULL, bling_id, VALUES(bling_id)),
+          bling_parent_id=IF(VALUES(bling_parent_id) IS NULL, bling_parent_id, VALUES(bling_parent_id)),
+          parent_id=IF(VALUES(parent_id) IS NULL, parent_id, VALUES(parent_id)),
+          video_url=IF(VALUES(video_url) IS NULL, video_url, VALUES(video_url)),
+          track_inventory=IF(VALUES(track_inventory) IS NULL, track_inventory, VALUES(track_inventory)),
+          is_gift=IF(VALUES(is_gift) IS NULL, is_gift, VALUES(is_gift)),
+          is_virtual=IF(VALUES(is_virtual) IS NULL, is_virtual, VALUES(is_virtual)),
+          warranty_type=IF(VALUES(warranty_type) IS NULL, warranty_type, VALUES(warranty_type)),
+          warranty_template_id=IF(VALUES(warranty_template_id) IS NULL, warranty_template_id, VALUES(warranty_template_id)),
+          kits=IF(VALUES(kits) IS NULL, kits, VALUES(kits)),
+          meta_title=IF(VALUES(meta_title) IS NULL, meta_title, VALUES(meta_title)),
+          meta_description=IF(VALUES(meta_description) IS NULL, meta_description, VALUES(meta_description)),
+          keywords=IF(VALUES(keywords) IS NULL, keywords, VALUES(keywords)),
           updated_at=CURRENT_TIMESTAMP`,
         [
           p.id, p.name, p.slug || null, p.sku || null,
           p.ean || null, jsonStr(p.alternative_eans), p.description || null,
-          p.price_retail || null, p.price_wholesale || null,
-          p.price_cost || null, p.price_reseller || null,
-          p.price_promo || null, p.promo_start || null, p.promo_end || null,
-          p.stock_quantity || 0, p.status || 'active',
+          p.price_retail ?? null, p.price_wholesale ?? null,
+          p.price_cost ?? null, p.price_reseller ?? null,
+          p.price_promo ?? null, p.promo_start || null, p.promo_end || null,
+          p.stock_quantity ?? null, p.status ?? null,
           p.category_id || null, p.brand || null, p.model_id || null,
           jsonStr(p.images), jsonStr(p.specs), jsonStr(p.custom_fields),
           jsonStr(p.dimensions), p.weight_kg || null,
           p.ncm || null, p.cest || null, p.origin || null,
           p.bling_id || null, p.bling_parent_id || null, p.parent_id || null,
           p.video_url || null,
-          p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0, p.is_virtual ? 1 : 0,
-          p.warranty_type || 'brand', p.warranty_template_id || null,
+          optionalBool(p.track_inventory), optionalBool(p.is_gift), optionalBool(p.is_virtual),
+          p.warranty_type ?? null, p.warranty_template_id || null,
           p.company_id || null, jsonStr(p.kits),
           p.meta_title || null, p.meta_description || null, p.keywords || null,
         ]
@@ -804,6 +910,60 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
       results.upserted++;
     } catch (err) {
       results.errors.push({ id: p.id, name: p.name, error: err.message });
+    }
+  }
+
+  return results;
+});
+
+// Price/stock sync: deliberately updates only commercial fields.
+fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (req, reply) => {
+  const products = Array.isArray(req.body) ? req.body : req.body?.products;
+  if (!Array.isArray(products) || products.length === 0) {
+    return reply.code(400).send({ error: 'Expected non-empty array' });
+  }
+
+  const allowedFields = [
+    'price_retail',
+    'price_wholesale',
+    'price_cost',
+    'price_reseller',
+    'price_promo',
+    'promo_start',
+    'promo_end',
+    'stock_quantity',
+    'status',
+    'category_id',
+    'track_inventory',
+  ];
+  const results = { updated: 0, skipped: 0, errors: [] };
+
+  for (const p of products) {
+    try {
+      const sets = [];
+      const params = [];
+      for (const field of allowedFields) {
+        if (p[field] !== undefined) {
+          sets.push(`${field}=?`);
+          params.push(field === 'track_inventory' ? (p[field] ? 1 : 0) : p[field]);
+        }
+      }
+
+      if (sets.length === 0 || (!p.id && !p.sku)) {
+        results.skipped++;
+        continue;
+      }
+
+      sets.push('updated_at=CURRENT_TIMESTAMP');
+      const where = p.id ? 'id=?' : 'sku=?';
+      params.push(p.id || p.sku);
+      const [result] = await pool.query(
+        `UPDATE products SET ${sets.join(', ')} WHERE ${where}`,
+        params
+      );
+      results.updated += result.affectedRows || 0;
+    } catch (err) {
+      results.errors.push({ id: p.id, sku: p.sku, error: err.message });
     }
   }
 
@@ -1165,6 +1325,12 @@ fastify.get('/company-settings', { preHandler: requireSyncKey }, async (req, rep
   const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
   reply.header('Cache-Control', 'no-store');
   return rows[0] || null;
+});
+
+fastify.get('/public/company-settings', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
+  reply.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
+  return sanitizePublicCompanySettings(rows[0] || null);
 });
 
 // ─── Company Settings (PATCH) ─────────────────────────────────────────────

@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { MapPin, Instagram, Phone, Info } from 'lucide-react';
 import { Company } from '../../types/company';
-import { getCompanyData } from '../../services/companyService';
+import {
+    matchesPublicMaintenanceBypass,
+    publicCompanySettingsService,
+    publicCompanySettingsToCompany,
+} from '../../services/publicCompanySettings';
 
 interface MaintenancePageProps {
     onBypassComplete?: () => void;
@@ -16,10 +20,11 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({ onBypassComple
         const adminKey = urlParams.get('admin');
 
         const checkBypass = async () => {
-            const dbCompany = await getCompanyData();
+            const settings = await publicCompanySettingsService.get();
+            const dbCompany = publicCompanySettingsToCompany(settings);
             setCompany(dbCompany);
 
-            if (adminKey && adminKey === dbCompany.maintenanceBypassKey) {
+            if (adminKey && await matchesPublicMaintenanceBypass(settings, adminKey)) {
                 // Salva nos Cookies do PC do administrador que ele tem passagem livre
                 localStorage.setItem('@MercadoDoVale:maintenance_bypass', adminKey);
 

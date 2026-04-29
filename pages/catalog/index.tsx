@@ -21,7 +21,7 @@ import { promotionService, Promotion } from '@/services/promotionService';
 
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import { groupProductsByVariants } from '@/services/productGrouping';
-import { getCompanyData } from '@/services/companyService';
+import { getPublicCompanyData } from '@/services/publicCompanySettings';
 import type { CatalogProduct, ProductGroup } from '@/types/catalog';
 import type { CatalogSection } from '@/types/catalogSections';
 import { QuoteCartProvider } from '@/contexts/QuoteCartContext';
@@ -141,7 +141,7 @@ function CatalogContent() {
     // Carregar seções ativas
     useEffect(() => {
         loadSections();
-        getCompanyData().then(c => {
+        getPublicCompanyData().then(c => {
             if (c.catalogFooterText) setFooterText(c.catalogFooterText);
         }).catch(() => { });
 

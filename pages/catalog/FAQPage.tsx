@@ -10,7 +10,7 @@ import {
     MessageCircle,
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getCompanyData } from '../../services/companyService';
+import { getPublicCompanyData } from '../../services/publicCompanySettings';
 
 interface FAQItem {
     question: string;
@@ -189,7 +189,7 @@ export const FAQPage: React.FC = () => {
     const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null);
 
     useEffect(() => {
-        getCompanyData()
+        getPublicCompanyData()
             .then((company) => {
                 if (company?.phone) {
                     const digits = company.phone.replace(/\D/g, '');

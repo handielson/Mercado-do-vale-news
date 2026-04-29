@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Store, ShieldCheck, MapPin, Building2 } from 'lucide-react';
-import { getCompanyData } from '../../services/companyService';
+import { getPublicCompanyData } from '../../services/publicCompanySettings';
 import { Company } from '../../types/company';
 
 export const AboutUsPage: React.FC = () => {
@@ -8,7 +8,7 @@ export const AboutUsPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        getCompanyData()
+        getPublicCompanyData()
             .then(setCompany)
             .catch(() => setCompany(null))
             .finally(() => setIsLoading(false));

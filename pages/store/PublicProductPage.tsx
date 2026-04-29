@@ -17,13 +17,13 @@ import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiv
 import { getCashbackSettings } from '@/services/cashbackService';
 import type { CashbackSettings } from '@/types/cashback';
 import { paymentFeesService, PaymentFee } from '@/services/payment-fees';
-import { companySettingsService } from '@/services/companySettingsService';
+import { publicCompanySettingsService, type PublicCompanySettings } from '@/services/publicCompanySettings';
 import { generateGroupKey } from '@/services/productGrouping';
-import type { CompanySettings } from '@/types/companySettings';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { shippingService } from '@/services/shippingService';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { normalizeProduct } from '@/services/productNormalizer';
+import { trackViewItem } from '@/utils/analytics';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { vpsApiService } from '@/services/vpsApiService';
@@ -51,7 +51,7 @@ export const PublicProductPage: React.FC = () => {
     const [cep, setCep] = useState('');
     const [shippingResult, setShippingResult] = useState<{ name: string, price: string, days: string }[] | null>(null);
     const [cashbackSettings, setCashbackSettings] = useState<CashbackSettings | null>(null);
-    const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+    const [companySettings, setCompanySettings] = useState<PublicCompanySettings | null>(null);
     const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
     const [catalogTheme, setCatalogTheme] = useState<Pick<CatalogSettings, 'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'card_background' | 'text_primary' | 'text_secondary'> | null>(null);
     const [comboChildren, setComboChildren] = useState<any[]>([]);
@@ -117,7 +117,7 @@ export const PublicProductPage: React.FC = () => {
     useEffect(() => {
         window.scrollTo(0, 0);
         getCashbackSettings().then(setCashbackSettings).catch(console.error);
-        companySettingsService.get().then(setCompanySettings).catch(console.error);
+        publicCompanySettingsService.get().then(setCompanySettings).catch(console.error);
         paymentFeesService.list().then(setPaymentFees).catch(console.error);
         catalogConfigService
             .getSettings(customer?.user_id)
@@ -284,8 +284,9 @@ export const PublicProductPage: React.FC = () => {
                     // Garante que o frontend ache que tem uma string de marca
                     brand: typeof data.brand === 'object' ? data.brand?.name : (data.brand || ''),
                 };
-                
+
                 setProduct(formattedProduct as unknown as CatalogProduct);
+                trackViewItem(formattedProduct);
 
                 if (data.is_combo && data.tags?.includes('mosaic_combo') && data.images.length > 1) {
                     setSelectedImage('MOSAIC');

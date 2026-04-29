@@ -3,7 +3,7 @@ import { MapPin, Store, Loader2, Truck, Check, Map, ChevronDown } from 'lucide-r
 import type { Address } from '@/services/addressLookup';
 import { lookupCEP, formatCEP } from '@/services/addressLookup';
 import { shippingService } from '@/services/shippingService';
-import { companySettingsService } from '@/services/companySettingsService';
+import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 import type { ShippingOption } from '@/types/shipping';
 import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
 
@@ -34,7 +34,7 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
     const [missingForFree, setMissingForFree] = useState<number | undefined>(undefined);
 
     useEffect(() => {
-        companySettingsService.get().then(settings => {
+        publicCompanySettingsService.get().then(settings => {
             if (settings?.address) {
                 setStoreAddress(settings.address);
             }

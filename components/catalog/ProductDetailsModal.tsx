@@ -8,6 +8,7 @@ import { supabase } from '@/services/supabase';
 import { customFieldsService, CustomField } from '@/services/custom-fields';
 import { ProductReviewsList } from './ProductReviewsList';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
+import { trackViewItem } from '@/utils/analytics';
 
 interface ProductDetailsModalProps {
     product: CatalogProduct;
@@ -151,8 +152,9 @@ export function ProductDetailsModal({
     useEffect(() => {
         if (isOpen) {
             customFieldsService.list().then(setCustomFields).catch(console.error);
+            trackViewItem(product);
         }
-    }, [isOpen]);
+    }, [isOpen, product]);
 
     // Calculate 12x installment when modal opens (not for wholesale)
     useEffect(() => {

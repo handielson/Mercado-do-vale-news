@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getStoreStatus, StoreStatus } from '../../utils/storeStatus';
-import { companySettingsService } from '../../services/companySettingsService';
+import { publicCompanySettingsService } from '../../services/publicCompanySettings';
 
 interface StoreLabels {
     open: string;
@@ -25,8 +25,7 @@ export function StoreStatusBadge() {
 
         const checkStatus = async () => {
             try {
-                companySettingsService.clearCache(); // Garante dados frescos do banco
-                const settings = await companySettingsService.get();
+                const settings = await publicCompanySettingsService.get();
                 const currentStatus = await getStoreStatus(settings?.business_hours, settings?.holiday_overrides, settings?.local_holidays);
 
                 if (isMounted) {

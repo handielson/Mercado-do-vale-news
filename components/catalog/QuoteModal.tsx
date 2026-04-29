@@ -16,7 +16,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useCoupon } from '@/hooks/useCoupon';
 import { formatPrice } from '@/services/installmentCalculator';
 import { getCoinBalance, getCashbackSettings, coinsToReais, validateCoinRedeem } from '@/services/cashbackService';
-import { companySettingsService } from '@/services/companySettingsService';
+import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
 import type { WarrantyOption } from '@/types/companySettings';
 import { categoryService } from '@/services/categories';
@@ -228,7 +228,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
 
     // Carregar saldo de moedas do cliente e configs globais da empresa
     useEffect(() => {
-        companySettingsService.get().then(settings => {
+        publicCompanySettingsService.get().then(settings => {
             if (settings?.extended_warranty_options) {
                 setWarrantyOptions(settings.extended_warranty_options.filter(o => o.active));
             }

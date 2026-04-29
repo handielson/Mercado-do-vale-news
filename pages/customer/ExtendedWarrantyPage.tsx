@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Shield, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { companySettingsService } from '../../services/companySettingsService';
-import { CompanySettings, WarrantyOption } from '../../types/companySettings';
+import { publicCompanySettingsService, type PublicCompanySettings } from '../../services/publicCompanySettings';
 
 export default function ExtendedWarrantyPage() {
     const navigate = useNavigate();
-    const [settings, setSettings] = useState<CompanySettings | null>(null);
+    const [settings, setSettings] = useState<PublicCompanySettings | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -15,7 +14,7 @@ export default function ExtendedWarrantyPage() {
 
     const loadSettings = async () => {
         try {
-            const data = await companySettingsService.get();
+            const data = await publicCompanySettingsService.get();
             setSettings(data);
         } catch (error) {
             console.error('Error loading settings:', error);

@@ -14,14 +14,13 @@ import { DeliveryOptions, type DeliveryOption } from '@/components/catalog/Deliv
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { useCoupon } from '@/hooks/useCoupon';
 import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
-import { companySettingsService } from '@/services/companySettingsService';
+import { getPublicCompanyData, publicCompanySettingsService } from '@/services/publicCompanySettings';
 import type { WarrantyOption } from '@/types/companySettings';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import { categoryService } from '@/services/categories';
 import { supabase } from '@/services/supabase';
 import { generateBudgetText } from '@/utils/cartShareUtils';
 import { NewOrderModal } from '@/components/cart/NewOrderModal';
-import { getCompanyData } from '@/services/companyService';
 import { vpsApiService } from '@/services/vpsApiService';
 
 type EmptyCartProduct = {
@@ -128,12 +127,12 @@ function CartPageContent() {
 
     useEffect(() => {
         getStoreStatus().then(setStoreStatus).catch(() => { });
-        companySettingsService.get().then(s => {
+        publicCompanySettingsService.get().then(s => {
             if (s?.extended_warranty_options) {
                 setWarrantyOptions(s.extended_warranty_options.filter(o => o.active));
             }
         }).catch(() => { });
-        getCompanyData().then(c => {
+        getPublicCompanyData().then(c => {
             setCompanyPhone(c.phone || '');
             setCompanyName(c.name || 'Mercado do Vale');
             setCompanyLogo(c.logo || c.logoUrl || null);

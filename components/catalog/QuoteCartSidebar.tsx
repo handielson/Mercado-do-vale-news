@@ -2,7 +2,7 @@ import { ShoppingCart, X, Trash2, Copy, Check } from 'lucide-react';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { formatPrice } from '@/services/installmentCalculator';
 import { generateMultiProductWhatsAppLink, generateMultiProductQuoteMessage } from '@/utils/multiProductQuoteGenerator';
-import { companySettingsService } from '@/services/companySettingsService';
+import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 import { useEffect, useState } from 'react';
 import type { QuoteCartItem } from '@/contexts/QuoteCartContext';
 import toast from 'react-hot-toast';
@@ -41,7 +41,7 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     useEffect(() => {
         const loadWhatsAppNumber = async () => {
             try {
-                const data = await companySettingsService.get();
+                const data = await publicCompanySettingsService.get();
 
                 if (data?.phone) {
                     setWhatsappNumber(data.phone);

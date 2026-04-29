@@ -55,6 +55,14 @@ run('buildVpsUrl usa proxy server-side para company-settings em producao', () =>
   assert.equal(url, '/api/vps-proxy?path=%2Fcompany-settings');
 });
 
+run('buildVpsUrl usa VPS direta para company-settings publico em producao', () => {
+  const url = buildVpsUrl('/public/company-settings', {
+    env: {},
+    runtimeHostname: 'mercadodovale.com.br',
+  });
+  assert.equal(url, 'https://api.xiaomipetrolina.com.br/public/company-settings');
+});
+
 run('buildVpsUrl usa proxy server-side para favoritos em producao', () => {
   const url = buildVpsUrl('/customers/abc/favorites', {
     env: {},
