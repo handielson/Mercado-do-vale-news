@@ -1,6 +1,7 @@
 /**
  * WarrantyTermModal Component
- * Modal for displaying and generating warranty terms after sale
+ * Modal for displaying and generating warranty terms after sale.
+ * Aceita N termos (1 por aparelho serializado) — imprime 2 vias por termo.
  */
 
 import React, { useState } from 'react';
@@ -10,25 +11,28 @@ import { renderWarrantyBothCopies } from '../../utils/warrantyTagReplacement';
 interface WarrantyTermModalProps {
     isOpen: boolean;
     onClose: () => void;
-    warrantyContent: string;
+    /** HTML renderizado de cada termo (1 por aparelho). */
+    warrantyContents: string[];
     onGenerate: (signature: string) => Promise<void>;
+    /** Template bruto + tagData de cada termo (para reimprimir as 2 vias). */
     warrantyTemplate?: string;
-    warrantyTagData?: Record<string, string>;
+    warrantyTagDataList?: Record<string, string>[];
     onPrintReceipt?: () => void;
 }
 
 export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
     isOpen,
     onClose,
-    warrantyContent,
+    warrantyContents,
     onGenerate,
     warrantyTemplate,
-    warrantyTagData,
+    warrantyTagDataList,
     onPrintReceipt,
 }) => {
     const [isGenerating, setIsGenerating] = useState(false);
 
     if (!isOpen) return null;
+    if (!warrantyContents || warrantyContents.length === 0) return null;
 
     const handleGenerate = async () => {
         setIsGenerating(true);
@@ -43,20 +47,26 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
 
-        let copy1 = warrantyContent;
-        let copy2 = warrantyContent.replace(/Assinatura do Cliente/gi, 'Assinatura da Empresa');
-        if (warrantyTemplate && warrantyTagData) {
-            const copies = renderWarrantyBothCopies(warrantyTemplate, warrantyTagData);
-            copy1 = copies.copy1;
-            copy2 = copies.copy2;
-        }
+        // Para cada termo, gera as 2 vias (cliente + empresa). Total = 2N páginas.
+        const sections: string[] = [];
+        warrantyContents.forEach((content, idx) => {
+            let copy1 = content;
+            let copy2 = content.replace(/Assinatura do Cliente/gi, 'Assinatura da Empresa');
+            if (warrantyTemplate && warrantyTagDataList?.[idx]) {
+                const copies = renderWarrantyBothCopies(warrantyTemplate, warrantyTagDataList[idx]);
+                copy1 = copies.copy1;
+                copy2 = copies.copy2;
+            }
+            sections.push(`<div class="warranty-copy">${copy1}</div>`);
+            sections.push(`<div class="warranty-copy">${copy2}</div>`);
+        });
 
         printWindow.document.write(`
             <!DOCTYPE html>
             <html>
             <head>
                 <meta charset="UTF-8">
-                <title>Termo de Garantia - 2 Vias</title>
+                <title>Termos de Garantia (${warrantyContents.length} aparelho(s) × 2 vias)</title>
                 <style>
                     body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }
                     .warranty-copy { page-break-after: always; margin-bottom: 40px; }
@@ -65,8 +75,7 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
                 </style>
             </head>
             <body>
-                <div class="warranty-copy">${copy1}</div>
-                <div class="warranty-copy">${copy2}</div>
+                ${sections.join('\n')}
             </body>
             </html>
         `);
@@ -83,7 +92,11 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
                     <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10 gap-3 flex-wrap">
                         <div className="flex items-center gap-2">
                             <FileText className="text-blue-600" size={22} />
-                            <h2 className="text-lg font-bold">Termo de Garantia</h2>
+                            <h2 className="text-lg font-bold">
+                                {warrantyContents.length > 1
+                                    ? `Termos de Garantia (${warrantyContents.length} aparelhos)`
+                                    : 'Termo de Garantia'}
+                            </h2>
                         </div>
 
                         <div className="flex items-center gap-2 flex-wrap">
@@ -101,7 +114,9 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
                                 className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                             >
                                 <Printer size={16} />
-                                Imprimir Garantia
+                                {warrantyContents.length > 1
+                                    ? `Imprimir ${warrantyContents.length} Termos (${warrantyContents.length * 2} vias)`
+                                    : 'Imprimir Garantia'}
                             </button>
                             <button
                                 onClick={handleGenerate}
@@ -122,15 +137,24 @@ export const WarrantyTermModal: React.FC<WarrantyTermModalProps> = ({
                     </div>
 
                     <div className="p-6 space-y-4">
-                        {/* Warranty Term Preview */}
-                        <div className="border border-slate-200 rounded-lg p-6 bg-white overflow-auto max-h-[500px]">
-                            <div dangerouslySetInnerHTML={{ __html: warrantyContent }} />
-                        </div>
+                        {/* Preview de cada termo */}
+                        {warrantyContents.map((content, idx) => (
+                            <div key={idx} className="space-y-2">
+                                {warrantyContents.length > 1 && (
+                                    <div className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-3 py-1.5 rounded">
+                                        Aparelho {idx + 1} de {warrantyContents.length}
+                                    </div>
+                                )}
+                                <div className="border border-slate-200 rounded-lg p-6 bg-white overflow-auto max-h-[500px]">
+                                    <div dangerouslySetInnerHTML={{ __html: content }} />
+                                </div>
+                            </div>
+                        ))}
 
                         {/* Info sobre as vias */}
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                             <p className="text-sm text-amber-800">
-                                ℹ️ <strong>Importante:</strong> O termo será impresso em 2 vias:
+                                ℹ️ <strong>Importante:</strong> Cada aparelho será impresso em 2 vias:
                             </p>
                             <ul className="text-sm text-amber-700 mt-2 ml-6 list-disc space-y-1">
                                 <li><strong>Via da Empresa:</strong> Cliente assina fisicamente após impressão</li>

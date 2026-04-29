@@ -23,6 +23,10 @@ import { toast } from 'sonner';
 import { validateCoupon, applyCoupon, type Coupon } from '../../services/couponService';
 import { earnCoinsForPurchase } from '../../services/cashbackService';
 import { telegramBotService } from '../../services/telegramBot';
+import { brandService } from '../../services/brands';
+import { categoryService } from '../../services/categories';
+import { productService } from '../../services/products';
+import { supabase } from '../../services/supabase';
 import { teamService } from '../../services/team';
 import { getEffectiveRetailPrice } from '../../utils/promoPrice';
 
@@ -75,14 +79,14 @@ export default function PDVPage() {
     // Estado da Indicação (Moedas do Vale)
     const [referralCode, setReferralCode] = useState('');
 
-    // Estado do termo de garantia
+    // Estado do termo de garantia — N termos (1 por aparelho serializado)
     const [showWarrantyModal, setShowWarrantyModal] = useState(false);
     const [lastSaleId, setLastSaleId] = useState<string>('');
     const [lastSaleData, setLastSaleData] = useState<any>(null);
-    const [warrantyContent, setWarrantyContent] = useState('');
+    const [warrantyContents, setWarrantyContents] = useState<string[]>([]);
     const [warrantyDeliveryType, setWarrantyDeliveryType] = useState<DeliveryTypeWarranty>('store_pickup');
     const [warrantyTemplate, setWarrantyTemplate] = useState('');
-    const [warrantyTagData, setWarrantyTagData] = useState<Record<string, string>>({});
+    const [warrantyTagDataList, setWarrantyTagDataList] = useState<Record<string, string>[]>([]);
 
     // Entregadores reais do Supabase (role = 'delivery')
     const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string }[]>([]);
@@ -480,70 +484,109 @@ export default function PDVPage() {
         }
     };
 
-    // Gerar termo de garantia
+    // Resolve dias de garantia: product.warranty_template_id → brand → category → 90
+    const resolveWarrantyDays = async (
+        item: SaleItem,
+        brandsByName: Map<string, { warranty_days?: number }>
+    ): Promise<number> => {
+        try {
+            const product = item.product_id ? await productService.getById(item.product_id) : null;
+            if (product?.warranty_type === 'custom' && product.warranty_template_id) {
+                const { data } = await supabase
+                    .from('warranty_templates')
+                    .select('duration_days')
+                    .eq('id', product.warranty_template_id)
+                    .maybeSingle();
+                if (data?.duration_days) return data.duration_days;
+            }
+            const brandName = ((item as any).product_brand || product?.brand || '').toLowerCase();
+            const brand = brandsByName.get(brandName);
+            if (brand?.warranty_days) return brand.warranty_days;
+            if (product?.category_id) {
+                const cat = await categoryService.getById(product.category_id);
+                if (cat?.warranty_days) return cat.warranty_days;
+            }
+        } catch (e) {
+            console.warn('[warranty] Falha ao resolver dias de garantia, usando default 90:', e);
+        }
+        return 90;
+    };
+
+    // Constrói WarrantyTagData para um item serializado específico
+    const buildTagData = (
+        item: SaleItem,
+        sale: any,
+        customer: Customer,
+        settings: any,
+        days: number,
+        type: DeliveryTypeWarranty
+    ): WarrantyTagData => {
+        const specs = (item as any).product_specs || {};
+        const unit = (item as any).serialized_unit || {};
+        return {
+            nome_loja: settings.company_name || '',
+            endereco: settings.address || '',
+            telefone: formatWarrantyPhone(settings.phone || ''),
+            email: settings.email || '',
+            cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
+            logo: (settings as any).logo || settings.receipt_logo_url || '',
+            nome_cliente: customer.name,
+            cpf_cliente: formatWarrantyCpfCnpj(customer.cpf_cnpj || ''),
+            telefone_cliente: formatWarrantyPhone(customer.phone || ''),
+            email_cliente: customer.email || '',
+            numero_venda: sale.id.slice(0, 8),
+            data_compra: formatWarrantyDate(new Date()),
+            produto: item.product_name,
+            marca: (item as any).product_brand || '',
+            modelo: (item as any).product_model || '',
+            cor: specs.color || '',
+            ram: specs.ram || '',
+            memoria: specs.storage || '',
+            imei1: unit.imei1 || specs.imei1 || '',
+            imei2: unit.imei2 || specs.imei2 || '',
+            dias_garantia: String(days),
+            tipo_garantia: 'Garantia Legal',
+            declaracao_recebimento: getWarrantyDeclaration(type),
+        };
+    };
+
+    // Gera N termos (1 por aparelho serializado). Sem serializados → não abre modal.
     const generateWarrantyTerm = async (sale: any, customer: Customer, items: SaleItem[]) => {
         try {
-            // Buscar configurações da empresa
             const settings = await companySettingsService.get();
-
             if (!settings || !settings.warranty_template) {
                 console.warn('Template de garantia não configurado');
                 return;
             }
 
-            // Pegar primeiro produto (ou concatenar se múltiplos)
-            const firstItem = items[0];
+            const serializedItems = items.filter(i => (i as any).serialized_unit?.unitId);
+            if (serializedItems.length === 0) {
+                // Sem aparelho serializado — não emite termo (acessórios não geram garantia)
+                return;
+            }
 
-            // Preparar dados para substituição de tags
-            const tagData: WarrantyTagData = {
-                // Empresa
-                nome_loja: settings.company_name || '',
-                endereco: settings.address || '',
-                telefone: formatWarrantyPhone(settings.phone || ''),
-                email: settings.email || '',
-                cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
-                logo: (settings as any).logo || settings.receipt_logo_url || '',
+            const brands = await brandService.list();
+            const brandsByName = new Map<string, { warranty_days?: number }>();
+            brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
 
-                // Cliente
-                nome_cliente: customer.name,
-                cpf_cliente: formatWarrantyCpfCnpj(customer.cpf_cnpj || ''),
-                telefone_cliente: formatWarrantyPhone(customer.phone || ''),
-                email_cliente: customer.email || '',
+            const initialType: DeliveryTypeWarranty =
+                deliveryType === 'delivery' ? 'delivery' : 'store_pickup';
+            const contents: string[] = [];
+            const tagDataList: Record<string, string>[] = [];
 
-                // Venda
-                numero_venda: sale.id.slice(0, 8),
-                data_compra: formatWarrantyDate(new Date()),
+            for (const item of serializedItems) {
+                const days = await resolveWarrantyDays(item, brandsByName);
+                const tagData = buildTagData(item, sale, customer, settings, days, initialType);
+                const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
+                const content = replaceWarrantyTags(settings.warranty_template, filtered);
+                contents.push(content);
+                tagDataList.push(filtered as any);
+            }
 
-                // Produto (primeiro item)
-                produto: firstItem.product_name,
-                marca: (firstItem as any).product_brand || '',
-                modelo: (firstItem as any).product_model || '',
-                cor: (firstItem as any).product_specs?.color || '',
-                ram: (firstItem as any).product_specs?.ram || '',
-                memoria: (firstItem as any).product_specs?.storage || '',
-                imei1: (firstItem as any).serialized_unit?.imei1 || (firstItem as any).product_specs?.imei1 || '',
-                imei2: (firstItem as any).serialized_unit?.imei2 || (firstItem as any).product_specs?.imei2 || '',
-
-                // Garantia
-                dias_garantia: '90', // TODO: calcular baseado no produto
-                tipo_garantia: 'Garantia Legal',
-
-                // Declaração (será atualizada quando usuário selecionar tipo)
-                declaracao_recebimento: getWarrantyDeclaration(
-                    deliveryType === 'delivery' ? 'delivery' : 'store_pickup'
-                )
-            };
-
-            // Aplicar flags de exibição das configurações antes de substituir
-            const filteredTagData = applyWarrantyDisplayFlags(tagData as any, settings);
-
-            // Substituir tags no template
-            const content = replaceWarrantyTags(settings.warranty_template, filteredTagData);
-
-            setWarrantyContent(content);
+            setWarrantyContents(contents);
+            setWarrantyTagDataList(tagDataList);
             setWarrantyTemplate(settings.warranty_template);
-            setWarrantyTagData(filteredTagData as any);
-            setWarrantyDeliveryType(deliveryType === 'delivery' ? 'delivery' : 'store_pickup');
+            setWarrantyDeliveryType(initialType);
             setShowWarrantyModal(true);
         } catch (error) {
             console.error('Erro ao gerar termo de garantia:', error);
@@ -551,46 +594,34 @@ export default function PDVPage() {
         }
     };
 
-    // Atualizar tipo de entrega do termo
+    // Regenera todos os termos quando o tipo de entrega muda
     const handleWarrantyDeliveryTypeChange = async (type: DeliveryTypeWarranty) => {
         setWarrantyDeliveryType(type);
+        if (!lastSaleData) return;
 
-        // Regenerar termo com nova declaração
-        if (lastSaleData) {
-            const settings = await companySettingsService.get();
-            if (!settings || !settings.warranty_template) return;
+        const settings = await companySettingsService.get();
+        if (!settings || !settings.warranty_template) return;
 
-            const firstItem = lastSaleData.items[0];
-            const tagData: WarrantyTagData = {
-                nome_loja: settings.company_name || '',
-                endereco: settings.address || '',
-                telefone: formatWarrantyPhone(settings.phone || ''),
-                email: settings.email || '',
-                cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
-                logo: (settings as any).logo || settings.receipt_logo_url || '',
-                nome_cliente: lastSaleData.customer.name,
-                cpf_cliente: formatWarrantyCpfCnpj(lastSaleData.customer.cpf_cnpj || ''),
-                telefone_cliente: formatWarrantyPhone(lastSaleData.customer.phone || ''),
-                email_cliente: lastSaleData.customer.email || '',
-                numero_venda: lastSaleData.sale.id.slice(0, 8),
-                data_compra: formatWarrantyDate(new Date()),
-                produto: firstItem.product_name,
-                marca: (firstItem as any).product_brand || '',
-                modelo: (firstItem as any).product_model || '',
-                cor: (firstItem as any).product_specs?.color || '',
-                ram: (firstItem as any).product_specs?.ram || '',
-                memoria: (firstItem as any).product_specs?.storage || '',
-                imei1: (firstItem as any).serialized_unit?.imei1 || (firstItem as any).product_specs?.imei1 || '',
-                imei2: (firstItem as any).serialized_unit?.imei2 || (firstItem as any).product_specs?.imei2 || '',
-                dias_garantia: '90',
-                tipo_garantia: 'Garantia Legal',
-                declaracao_recebimento: getWarrantyDeclaration(type)
-            };
+        const serializedItems = (lastSaleData.items || []).filter((i: any) => i.serialized_unit?.unitId);
+        if (serializedItems.length === 0) return;
 
-            const filteredTagData = applyWarrantyDisplayFlags(tagData as any, settings);
-            const content = replaceWarrantyTags(settings.warranty_template, filteredTagData);
-            setWarrantyContent(content);
+        const brands = await brandService.list();
+        const brandsByName = new Map<string, { warranty_days?: number }>();
+        brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
+
+        const contents: string[] = [];
+        const tagDataList: Record<string, string>[] = [];
+        for (const item of serializedItems) {
+            const days = await resolveWarrantyDays(item, brandsByName);
+            const tagData = buildTagData(item, lastSaleData.sale, lastSaleData.customer, settings, days, type);
+            const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
+            const content = replaceWarrantyTags(settings.warranty_template, filtered);
+            contents.push(content);
+            tagDataList.push(filtered as any);
         }
+
+        setWarrantyContents(contents);
+        setWarrantyTagDataList(tagDataList);
     };
 
     // Imprimir recibo a partir do modal (dados da última venda)
@@ -622,12 +653,18 @@ export default function PDVPage() {
         if (!lastSaleData) return;
 
         try {
+            // Concatena todos os termos num só warranty_content (1 doc por venda).
+            // Cada termo separado por page-break visível na renderização HTML.
+            const combined = warrantyContents
+                .map(c => `<div class="warranty-term">${c}</div>`)
+                .join('<hr style="page-break-after: always;" />');
+
             await warrantyDocumentService.create({
                 sale_id: lastSaleId,
                 customer_id: lastSaleData.customer.id,
                 delivery_type: warrantyDeliveryType,
                 customer_signature: signature,
-                warranty_content: warrantyContent
+                warranty_content: combined
             });
 
             toast.success('Termo de garantia gerado com sucesso!');
@@ -782,10 +819,10 @@ export default function PDVPage() {
             <WarrantyTermModal
                 isOpen={showWarrantyModal}
                 onClose={() => setShowWarrantyModal(false)}
-                warrantyContent={warrantyContent}
+                warrantyContents={warrantyContents}
                 onGenerate={handleGenerateWarranty}
                 warrantyTemplate={warrantyTemplate}
-                warrantyTagData={warrantyTagData}
+                warrantyTagDataList={warrantyTagDataList}
                 onPrintReceipt={handlePrintReceiptFromModal}
             />
         </div>

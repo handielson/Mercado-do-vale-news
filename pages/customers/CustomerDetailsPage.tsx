@@ -149,65 +149,106 @@ export default function CustomerDetailsPage() {
         try {
             const settings = await companySettingsService.get();
             if (!settings?.warranty_template) { toast.error('Template de garantia não configurado'); return; }
-            const firstItem = sale.items[0];
-            let specs: Record<string, any> = (firstItem as any).product_specs || {};
-            let brand = (firstItem as any).product_brand || '';
-            let model = (firstItem as any).product_model || '';
 
-            if (firstItem.product_id) {
-                const { data: prod } = await supabase.from('products').select('*').eq('id', firstItem.product_id).single();
-                if (prod) { specs = prod.specs || {}; brand = prod.brand || ''; model = prod.model || prod.name || ''; }
-            }
+            const serializedItems = sale.items.filter((i: any) => i.serialized_unit_id);
+            // Sem serializados → fallback para venda legada (1 termo do firstItem) usando product_sku
+            const isLegacy = serializedItems.length === 0;
 
-            // Se o item tem unit serializada vinculada, IMEI vem da VPS units
-            const unitId = (firstItem as any).serialized_unit_id;
-            if (unitId) {
-                try {
-                    const { vpsApiService } = await import('../../services/vpsApiService');
-                    const units = await vpsApiService.getUnitsBySale(sale.id);
-                    const unit = (units || []).find((u: any) => u.id === unitId);
-                    if (unit) specs = { ...specs, imei1: unit.imei_1 || '', imei2: unit.imei_2 || '' };
-                } catch { /* fallback abaixo */ }
-            }
-
-            // Para vendas legadas: extrai IMEI do product_sku ("imei1 / imei2") se specs vazio
-            if (!specs.imei1 && firstItem.product_sku) {
-                const parts = firstItem.product_sku.split('/').map((s: string) => s.trim());
-                specs = { ...specs, imei1: parts[0] || '', imei2: parts[1] || '' };
-            }
-            // Extrai modelo e marca do product_name se ainda vazios
-            if (!model && firstItem.product_name) model = firstItem.product_name;
+            const { vpsApiService } = await import('../../services/vpsApiService');
+            const { brandService } = await import('../../services/brands');
+            const { categoryService } = await import('../../services/categories');
+            const units = isLegacy ? [] : (await vpsApiService.getUnitsBySale(sale.id) || []);
+            const unitById = new Map<string, any>();
+            units.forEach((u: any) => unitById.set(u.id, u));
+            const brands = await brandService.list();
+            const brandsByName = new Map<string, { warranty_days?: number }>();
+            brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
 
             const cust = sale.customer;
-            const tagData = {
-                nome_loja: settings.company_name || '',
-                endereco: settings.address || '',
-                telefone: formatWarrantyPhone(settings.phone || ''),
-                email: settings.email || '',
-                cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
-                logo: (settings as any).logo || settings.receipt_logo_url || '',
-                nome_cliente: cust?.name || '',
-                cpf_cliente: formatWarrantyCpfCnpj(cust?.cpf_cnpj || ''),
-                telefone_cliente: '',
-                email_cliente: '',
-                numero_venda: sale.id.slice(0, 8),
-                data_compra: formatWarrantyDate(sale.created_at),
-                produto: firstItem.product_name,
-                marca: brand, modelo: model,
-                cor: specs.color || '', ram: specs.ram || '',
-                memoria: specs.storage || '',
-                imei1: specs.imei1 || '', imei2: specs.imei2 || '',
-                dias_garantia: '90', tipo_garantia: 'Garantia Legal',
-                declaracao_recebimento: getWarrantyDeclaration(
-                    sale.delivery_type === 'delivery' || sale.delivery_type === 'store_delivery' || sale.delivery_type === 'hybrid_delivery'
-                        ? 'delivery' : 'store_pickup'
-                )
-            };
-            const filteredTagData = applyWarrantyDisplayFlags(tagData as any, settings);
-            const { copy1, copy2 } = renderWarrantyBothCopies(settings.warranty_template, filteredTagData);
+            const declaracao = getWarrantyDeclaration(
+                sale.delivery_type === 'delivery' || sale.delivery_type === 'store_delivery' || sale.delivery_type === 'hybrid_delivery'
+                    ? 'delivery' : 'store_pickup'
+            );
+
+            const itemsToRender = isLegacy ? sale.items.slice(0, 1) : serializedItems;
+            const sections: string[] = [];
+
+            for (const item of itemsToRender) {
+                let specs: Record<string, any> = (item as any).product_specs || {};
+                let brand = (item as any).product_brand || '';
+                let model = (item as any).product_model || '';
+                let categoryId: string | null | undefined = null;
+                let warrantyType: string | undefined;
+                let warrantyTemplateId: string | undefined;
+
+                if (item.product_id) {
+                    const { data: prod } = await supabase.from('products').select('*').eq('id', item.product_id).single();
+                    if (prod) {
+                        specs = prod.specs || specs;
+                        brand = prod.brand || brand;
+                        model = prod.model || prod.name || model;
+                        categoryId = prod.category_id;
+                        warrantyType = prod.warranty_type;
+                        warrantyTemplateId = prod.warranty_template_id;
+                    }
+                }
+
+                // IMEI: VPS units > legacy SKU "imei1 / imei2"
+                const unit = unitById.get((item as any).serialized_unit_id) || {};
+                let imei1 = unit.imei_1 || specs.imei1 || '';
+                let imei2 = unit.imei_2 || specs.imei2 || '';
+                if (!imei1 && item.product_sku) {
+                    const parts = item.product_sku.split('/').map((s: string) => s.trim());
+                    imei1 = parts[0] || '';
+                    imei2 = parts[1] || '';
+                }
+                if (!model) model = item.product_name;
+
+                // Resolve dias por marca/categoria
+                let days = 90;
+                if (warrantyType === 'custom' && warrantyTemplateId) {
+                    const { data } = await supabase.from('warranty_templates').select('duration_days').eq('id', warrantyTemplateId).maybeSingle();
+                    if (data?.duration_days) days = data.duration_days;
+                } else {
+                    const b = brandsByName.get(brand.toLowerCase());
+                    if (b?.warranty_days) days = b.warranty_days;
+                    else if (categoryId) {
+                        const cat = await categoryService.getById(categoryId);
+                        if (cat?.warranty_days) days = cat.warranty_days;
+                    }
+                }
+
+                const tagData = {
+                    nome_loja: settings.company_name || '',
+                    endereco: settings.address || '',
+                    telefone: formatWarrantyPhone(settings.phone || ''),
+                    email: settings.email || '',
+                    cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
+                    logo: (settings as any).logo || settings.receipt_logo_url || '',
+                    nome_cliente: cust?.name || '',
+                    cpf_cliente: formatWarrantyCpfCnpj(cust?.cpf_cnpj || ''),
+                    telefone_cliente: '',
+                    email_cliente: '',
+                    numero_venda: sale.id.slice(0, 8),
+                    data_compra: formatWarrantyDate(sale.created_at),
+                    produto: item.product_name,
+                    marca: brand, modelo: model,
+                    cor: specs.color || '', ram: specs.ram || '',
+                    memoria: specs.storage || '',
+                    imei1, imei2,
+                    dias_garantia: String(days),
+                    tipo_garantia: 'Garantia Legal',
+                    declaracao_recebimento: declaracao,
+                };
+                const filtered = applyWarrantyDisplayFlags(tagData as any, settings);
+                const { copy1, copy2 } = renderWarrantyBothCopies(settings.warranty_template, filtered);
+                sections.push(`<div class="warranty-copy">${copy1}</div>`);
+                sections.push(`<div class="warranty-copy">${copy2}</div>`);
+            }
+
             const pw = window.open('', '_blank');
             if (!pw) { toast.error('Permita popups para imprimir'); return; }
-            pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termo de Garantia</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body><div class="warranty-copy">${copy1}</div><div class="warranty-copy">${copy2}</div></body></html>`);
+            pw.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termos de Garantia</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body>${sections.join('')}</body></html>`);
             pw.document.close(); pw.print();
         } catch (e) {
             console.error(e); toast.error('Erro ao gerar o termo');
