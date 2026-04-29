@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { Model, ModelInput, ModelWithDetails } from '../types/model-architecture';
 import { modelEANsService } from './model-eans';
+import { fetchAllModelRows } from './modelPagination';
 
 /**
  * MODEL SERVICE - Supabase Implementation
@@ -42,15 +43,14 @@ function generateSlug(name: string): string {
 async function list(): Promise<Model[]> {
     const companyId = await getCompanyId();
 
-    const { data, error } = await supabase
-        .from('models')
-        .select('*')
-        .eq('company_id', companyId)
-        .order('name');
+    let data: any[];
+    try {
+        data = await fetchAllModelRows(supabase, { companyId });
+    } catch (error: any) {
+        throw new Error(`Failed to fetch models: ${error.message || error}`);
+    }
 
-    if (error) throw new Error(`Failed to fetch models: ${error.message}`);
-
-    return (data || []).map(row => ({
+    return data.map(row => ({
         id: row.id,
         company_id: row.company_id,
         name: row.name,
@@ -146,16 +146,14 @@ async function getById(id: string): Promise<Model | null> {
 async function listByBrand(brandId: string): Promise<Model[]> {
     const companyId = await getCompanyId();
 
-    const { data, error } = await supabase
-        .from('models')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('brand_id', brandId)
-        .order('name');
+    let data: any[];
+    try {
+        data = await fetchAllModelRows(supabase, { companyId, brandId });
+    } catch (error: any) {
+        throw new Error(`Failed to fetch models by brand: ${error.message || error}`);
+    }
 
-    if (error) throw new Error(`Failed to fetch models by brand: ${error.message}`);
-
-    return (data || []).map(row => ({
+    return data.map(row => ({
         id: row.id,
         company_id: row.company_id,
         name: row.name,
