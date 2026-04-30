@@ -8,11 +8,34 @@ import { supabase } from './supabase';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
+const PUBLIC_STOREFRONT_TIMEOUT_MS = 3500;
 const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 60 * 1000; // 1 min (reduzido de 5min para evitar UI stale)
 
 function proxyUrl(path: string, method: string = 'GET'): string {
   return buildVpsUrl(path, { method });
+}
+
+function isPublicStorefrontRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !/^\/(?:admin|pdv|auth|login)(?:\/|$)/.test(window.location.pathname);
+}
+
+function isPublicCatalogRead(path: string): boolean {
+  return (
+    path.startsWith('/products') ||
+    path.startsWith('/categories') ||
+    path.startsWith('/catalog-settings') ||
+    path.startsWith('/catalog/metadata') ||
+    path.startsWith('/shipping/') ||
+    path.startsWith('/public/')
+  );
+}
+
+function getReadTimeoutMs(path: string): number {
+  return isPublicStorefrontRuntime() && isPublicCatalogRead(path)
+    ? PUBLIC_STOREFRONT_TIMEOUT_MS
+    : TIMEOUT_MS;
 }
 
 interface CacheEntry<T> {
@@ -69,7 +92,7 @@ class VpsApiService {
     }
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      const timer = setTimeout(() => controller.abort(), getReadTimeoutMs(path));
       
       const separator = path.includes('?') ? '&' : '?';
       const fullPath = `${path}${separator}_t=${Date.now()}`;
@@ -82,8 +105,9 @@ class VpsApiService {
           'Pragma': 'no-cache'
         }),
         cache: 'no-store',
+      }).finally(() => {
+        clearTimeout(timer);
       });
-      clearTimeout(timer);
       if (!res.ok) return null;
       const data = (await res.json()) as T;
       if (!noCache) {

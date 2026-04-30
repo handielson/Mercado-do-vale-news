@@ -132,16 +132,17 @@ function getProxyBase(env = {}, runtimeHostname) {
 
 export function resolveVpsBase(env = {}, runtimeHostname, path, method = 'GET') {
   const proxyBase = getProxyBase(env, runtimeHostname);
+  const allowDirectPublicVps = env.VITE_ALLOW_DIRECT_PUBLIC_VPS === '1';
 
   if (proxyBase === DEV_VPS_PROXY_BASE) {
     return proxyBase;
   }
 
-  if (path && !isPublicVpsPath(path, method)) {
-    return proxyBase;
+  if (allowDirectPublicVps && path && isPublicVpsPath(path, method)) {
+    return normalizeVpsBase(env.VITE_VPS_BASE_URL || DEFAULT_VPS_BASE_URL);
   }
 
-  return normalizeVpsBase(env.VITE_VPS_BASE_URL || DEFAULT_VPS_BASE_URL);
+  return proxyBase;
 }
 
 export function buildVpsUrl(path, options = {}) {

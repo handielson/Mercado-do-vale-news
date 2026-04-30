@@ -13,9 +13,37 @@ import {
 } from './vpsProxyBase';
 
 const CHECKPOINT_COOLDOWN_MS = 60_000;
+const PUBLIC_STOREFRONT_READ_TIMEOUT_MS = 3500;
 
 let checkpointBlockedUntil = 0;
 let hasWarnedMissingSyncKey = false;
+
+function isPublicStorefrontRuntime(): boolean {
+    if (typeof window === 'undefined') return false;
+    return !/^\/(?:admin|pdv|auth|login)(?:\/|$)/.test(window.location.pathname);
+}
+
+function isPublicReadPath(path: string): boolean {
+    return (
+        path.startsWith('/banners') ||
+        path.startsWith('/battery-healths') ||
+        path.startsWith('/brands') ||
+        path.startsWith('/catalog-settings') ||
+        path.startsWith('/catalog/metadata') ||
+        path.startsWith('/categories') ||
+        path.startsWith('/payment-fees') ||
+        path.startsWith('/products') ||
+        path.startsWith('/public/') ||
+        path.startsWith('/shipping/') ||
+        path.startsWith('/status')
+    );
+}
+
+function getPublicStorefrontSignal(path: string): AbortSignal | undefined {
+    if (!isPublicStorefrontRuntime() || !isPublicReadPath(path)) return undefined;
+    if (typeof AbortSignal === 'undefined' || !('timeout' in AbortSignal)) return undefined;
+    return AbortSignal.timeout(PUBLIC_STOREFRONT_READ_TIMEOUT_MS);
+}
 
 function isCheckpointBlockedNow(): boolean {
     return Date.now() < checkpointBlockedUntil;
@@ -91,6 +119,7 @@ export const vpsClient = {
         const res = await fetch(buildVpsUrl(path, { method: 'GET' }), {
             headers: await buildHeaders(),
             cache: 'no-store',
+            signal: getPublicStorefrontSignal(path),
         });
         return handleResponse<T>(path, 'GET', res);
     },
@@ -104,6 +133,7 @@ export const vpsClient = {
             method: 'POST',
             headers: await buildHeaders(),
             body: JSON.stringify(body),
+            signal: getPublicStorefrontSignal(path),
         });
         return handleResponse<T>(path, 'POST', res);
     },

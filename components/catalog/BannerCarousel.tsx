@@ -47,7 +47,7 @@ export function BannerCarousel({
 
             // Registrar views
             data.forEach(banner => {
-                bannerService.trackBannerView(banner.id);
+                bannerService.trackBannerView(banner.id).catch(() => {});
             });
         } catch (error: any) {
             if (error.code !== '20' && error.name !== 'AbortError' && !error.message?.includes('aborted')) {
@@ -88,8 +88,8 @@ export function BannerCarousel({
             return;
         }
 
-        // Registrar clique
-        await bannerService.trackBannerClick(banner.id);
+        // Registrar clique sem bloquear a navegacao caso a VPS esteja instavel.
+        bannerService.trackBannerClick(banner.id).catch(() => {});
 
         // Bug fix: usar link_target (campo canônico) com fallback para link_url (campo legado real na tabela)
         const destination = banner.link_target ?? banner.link_url;

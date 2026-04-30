@@ -1,10 +1,17 @@
 import type { IncomingMessage } from 'http';
 import { createClient } from '@supabase/supabase-js';
 
-const VPS_BASE_URL = process.env.VPS_BASE_URL || process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+const VPS_API_HTTP_BASE_URL = 'http://api.xiaomipetrolina.com.br';
+const VPS_API_HTTPS_BASE_URL = 'https://api.xiaomipetrolina.com.br';
+const DEFAULT_VPS_BASE_URL = VPS_API_HTTPS_BASE_URL;
+const CONFIGURED_VPS_BASE_URL = normalizeVpsProxyBaseUrl(
+    process.env.VPS_BASE_URL || process.env.VITE_VPS_BASE_URL || DEFAULT_VPS_BASE_URL,
+);
 const VPS_SYNC_KEY = process.env.VPS_SYNC_KEY || '';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+const READ_TIMEOUT_MS = Number(process.env.VPS_PROXY_READ_TIMEOUT_MS || 7000);
+const WRITE_TIMEOUT_MS = Number(process.env.VPS_PROXY_WRITE_TIMEOUT_MS || 15000);
 
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
@@ -21,6 +28,11 @@ function normalizePath(input: unknown): string {
     if (!path) return '';
     if (!path.startsWith('/')) return '';
     return path;
+}
+
+export function normalizeVpsProxyBaseUrl(input: unknown): string {
+    const baseUrl = String(input || DEFAULT_VPS_BASE_URL).trim().replace(/\/+$/, '');
+    return baseUrl || DEFAULT_VPS_BASE_URL;
 }
 
 function getBearerToken(req: any): string | null {
@@ -63,9 +75,73 @@ function isSensitiveGetPath(path: string): boolean {
     );
 }
 
+function isPublicProductReadPath(pathname: string): boolean {
+    if (pathname === '/products' || pathname === '/products/category-counts') return true;
+    if (/^\/products\/by-category\/[^/]+$/u.test(pathname)) return true;
+    if (/^\/products\/by-(?:slug|ean)\/[^/]+$/u.test(pathname)) return true;
+    if (/^\/products\/[^/]+\/combo$/u.test(pathname)) return true;
+    return /^\/products\/[^/]+$/u.test(pathname);
+}
+
+export function isPublicProxyPath(path: string, method = 'GET'): boolean {
+    const normalizedMethod = String(method || 'GET').trim().toUpperCase();
+    const pathname = path.split('?')[0] || '/';
+
+    if (normalizedMethod === 'POST' && /^\/banners\/[^/]+\/(?:click|view)$/u.test(pathname)) {
+        return true;
+    }
+
+    if (normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD') {
+        return false;
+    }
+
+    if (
+        pathname === '/banners' ||
+        pathname === '/battery-healths' ||
+        pathname === '/brands' ||
+        pathname === '/catalog-settings' ||
+        pathname === '/catalog/metadata' ||
+        pathname === '/categories' ||
+        pathname === '/check-video' ||
+        pathname === '/field-presets' ||
+        pathname === '/payment-fees' ||
+        pathname === '/public/company-settings' ||
+        pathname === '/public/check-video' ||
+        pathname === '/rams' ||
+        pathname === '/shipping/settings' ||
+        pathname === '/shipping/zones' ||
+        pathname === '/status' ||
+        pathname === '/storages' ||
+        pathname === '/versions' ||
+        pathname === '/warranty-templates'
+    ) {
+        return true;
+    }
+
+    if (pathname.startsWith('/coupons/validate/')) return true;
+    if (pathname.startsWith('/video/')) return true;
+    if (/^\/versions\/[^/]+$/u.test(pathname)) return true;
+
+    return isPublicProductReadPath(pathname);
+}
+
+export function getVpsProxyTargetBaseUrl(path: string, method = 'GET', baseUrl = CONFIGURED_VPS_BASE_URL): string {
+    const normalizedBaseUrl = normalizeVpsProxyBaseUrl(baseUrl);
+
+    if (isPublicProxyPath(path, method) && normalizedBaseUrl === VPS_API_HTTPS_BASE_URL) {
+        return VPS_API_HTTP_BASE_URL;
+    }
+
+    return normalizedBaseUrl;
+}
+
 function extractFavoritesCustomerId(path: string): string | null {
     const m = path.match(/^\/customers\/([^/]+)\/favorites(?:\/[^/]+)?$/);
     return m?.[1] || null;
+}
+
+function getProxyTimeoutMs(method: string): number {
+    return method === 'GET' || method === 'HEAD' ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS;
 }
 
 export default async function handler(req: any, res: any) {
@@ -76,12 +152,9 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Missing or invalid query param: path' });
     }
 
-    if (!VPS_SYNC_KEY) {
-        return res.status(500).json({ error: 'VPS_SYNC_KEY not configured on server' });
-    }
-
     const auth = await getAuthContext(req);
     const isWrite = method !== 'GET' && method !== 'HEAD';
+    const isPublicPath = isPublicProxyPath(path, method);
     const favoritesCustomerId = extractFavoritesCustomerId(path);
     const isFavoritesRoute = Boolean(favoritesCustomerId);
     const isCartSyncRoute = path === '/cart/sync';
@@ -101,13 +174,20 @@ export default async function handler(req: any, res: any) {
         return res.status(403).json({ error: 'Admin required' });
     }
 
-    const target = `${VPS_BASE_URL}${path}`;
+    if (!isPublicPath && !VPS_SYNC_KEY) {
+        return res.status(500).json({ error: 'VPS_SYNC_KEY not configured on server' });
+    }
+
+    const targetBaseUrl = getVpsProxyTargetBaseUrl(path, method);
+    const target = `${targetBaseUrl}${path}`;
 
     try {
         const headers = new Headers();
         const contentType = req.headers['content-type'];
         if (contentType) headers.set('content-type', String(contentType));
-        headers.set('x-sync-key', VPS_SYNC_KEY);
+        if (!isPublicPath) {
+            headers.set('x-sync-key', VPS_SYNC_KEY);
+        }
         headers.set('accept', String(req.headers['accept'] || 'application/json'));
 
         let body: BodyInit | undefined;
@@ -127,10 +207,16 @@ export default async function handler(req: any, res: any) {
             }
         }
 
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), getProxyTimeoutMs(method));
+
         const upstream = await fetch(target, {
             method,
             headers,
             body,
+            signal: controller.signal,
+        }).finally(() => {
+            clearTimeout(timeout);
         });
 
         res.status(upstream.status);
@@ -142,6 +228,10 @@ export default async function handler(req: any, res: any) {
         const arrayBuffer = await upstream.arrayBuffer();
         return res.send(Buffer.from(arrayBuffer));
     } catch (error: any) {
+        if (error?.name === 'AbortError') {
+            return res.status(504).json({ error: 'Proxy request timed out', detail: `${method} ${path}` });
+        }
+
         return res.status(502).json({ error: 'Proxy request failed', detail: String(error?.message || error) });
     }
 }

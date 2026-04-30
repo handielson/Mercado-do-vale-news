@@ -60,6 +60,7 @@ const PUBLIC_COMPANY_SETTINGS_PATH = '/public/company-settings';
 const LS_KEY = 'mdv_public_company_settings';
 const LS_TTL = 10 * 60 * 1000;
 const MEM_TTL = 5 * 60 * 1000;
+const PUBLIC_FETCH_TIMEOUT_MS = 3500;
 
 const PUBLIC_COMPANY_SETTINGS_COLUMNS = [
   'id',
@@ -208,8 +209,12 @@ async function loadFromSupabase(): Promise<unknown | null> {
 
 async function loadFromPublicVps(): Promise<unknown | null> {
   const { buildVpsUrl } = await import('./vpsProxyBase');
+  const signal = typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+    ? AbortSignal.timeout(PUBLIC_FETCH_TIMEOUT_MS)
+    : undefined;
   const response = await fetch(buildVpsUrl(PUBLIC_COMPANY_SETTINGS_PATH, { method: 'GET' }), {
     headers: { Accept: 'application/json' },
+    signal,
   });
 
   if (!response.ok) {

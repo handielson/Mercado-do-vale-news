@@ -5,6 +5,8 @@ import { catalogConfigService } from '@/services/catalogConfigService';
 import { normalizeProduct } from '@/services/productNormalizer';
 import { buildVpsUrl } from '@/services/vpsProxyBase';
 
+const PUBLIC_STOREFRONT_TIMEOUT_MS = 3500;
+
 class CatalogSectionsService {
     private cache: Map<string, { data: CatalogSection[]; timestamp: number }> = new Map();
     private cacheDuration = 5 * 60 * 1000; // 5 minutos
@@ -15,6 +17,24 @@ class CatalogSectionsService {
 
     // Helper to safely access localStorage (prevents SSR errors)
     private getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
+
+    private getAbortSignal = () => typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+        ? AbortSignal.timeout(PUBLIC_STOREFRONT_TIMEOUT_MS)
+        : undefined;
+
+    private readCachedProducts(cacheKey: string): CatalogProduct[] | null {
+        const storage = this.getStorage();
+        if (!storage) return null;
+
+        try {
+            const cachedStr = storage.getItem(cacheKey);
+            if (!cachedStr) return null;
+            const cached = JSON.parse(cachedStr);
+            return Array.isArray(cached?.data) ? cached.data : null;
+        } catch {
+            return null;
+        }
+    }
 
     // ==================== CRUD ====================
 
@@ -252,7 +272,9 @@ class CatalogSectionsService {
             }
 
             // Fetch dynamic products
-            const res = await fetch(buildVpsUrl(`/products?${params.toString()}`));
+            const res = await fetch(buildVpsUrl(`/products?${params.toString()}`), {
+                signal: this.getAbortSignal(),
+            });
             if (!res.ok) throw new Error(`VPS API returned ${res.status}`);
             const data = await res.json();
             
@@ -283,7 +305,9 @@ class CatalogSectionsService {
                     pinnedParams.append('limit', fetchLimit.toString());
                     pinnedParams.append('in_ids', section.pinned_product_ids.join(','));
                     
-                    const pinnedRes = await fetch(buildVpsUrl(`/products?${pinnedParams.toString()}`));
+                    const pinnedRes = await fetch(buildVpsUrl(`/products?${pinnedParams.toString()}`), {
+                        signal: this.getAbortSignal(),
+                    });
                     if (pinnedRes.ok) {
                         const pinnedData = await pinnedRes.json();
                         // Preserve exact order from pinned_product_ids
@@ -375,7 +399,7 @@ class CatalogSectionsService {
             return products;
         } catch (error) {
             console.error('Erro ao buscar produtos da seção:', error);
-            return [];
+            return this.readCachedProducts(cacheKey) || [];
         }
     }
 
