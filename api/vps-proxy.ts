@@ -193,8 +193,10 @@ export default async function handler(req: any, res: any) {
         let body: BodyInit | undefined;
         if (method !== 'GET' && method !== 'HEAD') {
             if (req.body != null) {
-                if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
-                    body = req.body as BodyInit;
+                if (typeof req.body === 'string') {
+                    body = req.body;
+                } else if (Buffer.isBuffer(req.body)) {
+                    body = new Uint8Array(req.body);
                 } else {
                     body = JSON.stringify(req.body);
                     if (!headers.has('content-type')) {
@@ -203,7 +205,7 @@ export default async function handler(req: any, res: any) {
                 }
             } else {
                 const raw = await readRawBody(req);
-                if (raw.length > 0) body = raw;
+                if (raw.length > 0) body = new Uint8Array(raw);
             }
         }
 
