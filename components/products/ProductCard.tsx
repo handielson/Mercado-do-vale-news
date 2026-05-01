@@ -24,6 +24,117 @@ interface ProductCardProps {
     onToggleSelect?: (product: Product) => void;
 }
 
+type VideoUploadPhase = 'idle' | 'uploading' | 'processing' | 'verifying' | 'success' | 'error';
+
+type VideoUploadState = {
+    phase: VideoUploadPhase;
+    progress: number;
+    message: string;
+    detail?: string;
+};
+
+type SynologyUploadResponse = {
+    ok?: boolean;
+    uploadId?: string;
+    name?: string;
+    url?: string;
+    error?: string;
+    detail?: string;
+};
+
+type SynologyUploadStatus = {
+    status?: 'queued' | 'uploading' | 'success' | 'error';
+    progress?: number;
+    message?: string;
+    error?: string | null;
+    detail?: string | null;
+    name?: string;
+    url?: string;
+};
+
+const idleVideoUploadState: VideoUploadState = {
+    phase: 'idle',
+    progress: 0,
+    message: '',
+};
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const readJsonSafe = <T,>(text: string): T | null => {
+    if (!text) return null;
+    try {
+        return JSON.parse(text) as T;
+    } catch {
+        return null;
+    }
+};
+
+const getUploadErrorMessage = (payload: SynologyUploadResponse | SynologyUploadStatus | null, fallback: string) => {
+    const detail = payload?.detail ? ` (${payload.detail})` : '';
+    return `${payload?.error || fallback}${detail}`;
+};
+
+const uploadVideoWithProgress = (
+    formData: FormData,
+    token: string | undefined,
+    onProgress: (progress: number) => void,
+) => new Promise<SynologyUploadResponse>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', buildVpsUrl('/synology/upload?folder=videos', { method: 'POST' }));
+
+    const headers = getVpsSyncHeaders();
+    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const progress = Math.max(1, Math.min(90, Math.round((event.loaded / event.total) * 90)));
+        onProgress(progress);
+    };
+
+    xhr.onerror = () => reject(new Error('Falha de rede ao enviar o video para a VPS'));
+    xhr.ontimeout = () => reject(new Error('Tempo esgotado ao enviar o video para a VPS'));
+    xhr.onload = () => {
+        const payload = readJsonSafe<SynologyUploadResponse>(xhr.responseText);
+        if (xhr.status < 200 || xhr.status >= 300) {
+            reject(new Error(getUploadErrorMessage(payload, `Erro HTTP ${xhr.status} no upload para a VPS`)));
+            return;
+        }
+        resolve(payload || { ok: true });
+    };
+
+    xhr.send(formData);
+});
+
+const pollSynologyUploadStatus = async (uploadId: string, token: string | undefined) => {
+    const headers = {
+        ...getVpsSyncHeaders(),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: 'application/json',
+    };
+
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+        const res = await fetch(buildVpsUrl(`/synology/upload-status?id=${encodeURIComponent(uploadId)}`, { method: 'GET' }), {
+            method: 'GET',
+            headers,
+            cache: 'no-store',
+        });
+        const status = await res.json().catch(() => null) as SynologyUploadStatus | null;
+
+        if (!res.ok) {
+            throw new Error(getUploadErrorMessage(status, 'Nao foi possivel consultar o status do upload'));
+        }
+        if (status?.status === 'success') return status;
+        if (status?.status === 'error') {
+            throw new Error(getUploadErrorMessage(status, 'Falha ao gravar video no Synology'));
+        }
+
+        await wait(1500);
+    }
+
+    throw new Error('O Synology ainda nao confirmou o upload depois de 135 segundos');
+};
+
 
 /**
  * ProductCard Component
@@ -40,6 +151,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     // Video checking and uploading state
     const [videoInfo, setVideoInfo] = useState<{ exists: boolean; url: string | null; checking: boolean }>({ exists: false, url: null, checking: true });
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+    const [videoUpload, setVideoUpload] = useState<VideoUploadState>(idleVideoUploadState);
     const videoInputRef = useRef<HTMLInputElement>(null);
     const [shopeeItemId, setShopeeItemId] = useState<number | null>(() => {
         const parsed = Number(product.shopee_item_id);
@@ -120,37 +232,76 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         // Reset input value to allow uploading the same file again if it fails
         e.target.value = '';
 
-        const path = '/synology/upload?folder=videos';
         const { data } = await supabase.auth.getSession();
         const token = data.session?.access_token;
-        
+        const normalizedSku = product.sku.trim().replace(/\s+/g, '');
+
         setIsUploadingVideo(true);
+        setVideoUpload({
+            phase: 'uploading',
+            progress: 0,
+            message: 'Enviando video para a VPS...',
+        });
         try {
             const formData = new FormData();
             const ext = file.name.split('.').pop()?.toLowerCase() || 'mp4';
-            const fileName = `${product.sku.trim().replace(/\s+/g, '')}.${ext}`;
+            const fileName = `${normalizedSku}.${ext}`;
             const renamedFile = new File([file], fileName, { type: file.type });
             formData.append('file', renamedFile);
 
-            const res = await fetch(buildVpsUrl(path, { method: 'POST' }), {
-                method: 'POST',
-                headers: {
-                    ...getVpsSyncHeaders(),
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                body: formData,
+            const upload = await uploadVideoWithProgress(formData, token, (progress) => {
+                setVideoUpload({
+                    phase: 'uploading',
+                    progress,
+                    message: 'Enviando video para a VPS...',
+                });
             });
 
-            if (!res.ok) {
-                const errJson = await res.json().catch(() => ({}));
-                throw new Error(errJson.error || 'Erro no upload para a VPS');
+            if (!upload.ok && !upload.uploadId) {
+                throw new Error(getUploadErrorMessage(upload, 'A VPS nao iniciou o upload'));
             }
 
-            const data = await res.json();
-            toast.success(`Upload iniciado: ${data.name}`);
-            setVideoInfo({ exists: true, url: data.url, checking: false });
+            setVideoUpload({
+                phase: 'processing',
+                progress: 92,
+                message: 'Gravando video no Synology...',
+            });
+
+            const finalStatus = upload.uploadId
+                ? await pollSynologyUploadStatus(upload.uploadId, token)
+                : { status: 'success', progress: 100, name: upload.name, url: upload.url } as SynologyUploadStatus;
+
+            setVideoUpload({
+                phase: 'verifying',
+                progress: 98,
+                message: 'Confirmando arquivo no Synology...',
+            });
+
+            const confirmed = await vpsApiService.checkVideoBySku(normalizedSku);
+            if (!confirmed?.exists) {
+                throw new Error('A VPS informou sucesso, mas o video ainda nao apareceu no Synology para este SKU');
+            }
+
+            const videoUrl = confirmed.url || finalStatus.url || upload.url || null;
+            toast.success(`Video enviado com sucesso: ${finalStatus.name || upload.name || fileName}`);
+            setVideoInfo({ exists: true, url: videoUrl, checking: false });
+            setVideoUpload({
+                phase: 'success',
+                progress: 100,
+                message: 'Video enviado com sucesso',
+            });
+            window.setTimeout(() => {
+                setVideoUpload((current) => current.phase === 'success' ? idleVideoUploadState : current);
+            }, 5000);
         } catch (error: any) {
-            toast.error(`Falha ao iniciar upload: ${error.message}`);
+            const message = error?.message || 'Erro desconhecido no upload';
+            toast.error('Falha no envio do video', { description: message });
+            setVideoUpload({
+                phase: 'error',
+                progress: 100,
+                message: 'Falha no envio do video',
+                detail: message,
+            });
         } finally {
             setIsUploadingVideo(false);
         }
@@ -587,6 +738,40 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         </button>
                     </div>
                 </div>
+
+                {videoUpload.phase !== 'idle' && (
+                    <div
+                        className={cn(
+                            'rounded-md border px-2.5 py-2 text-[11px]',
+                            videoUpload.phase === 'error'
+                                ? 'border-red-200 bg-red-50 text-red-700'
+                                : videoUpload.phase === 'success'
+                                    ? 'border-green-200 bg-green-50 text-green-700'
+                                    : 'border-blue-200 bg-blue-50 text-blue-700'
+                        )}
+                    >
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 truncate font-medium">{videoUpload.message}</span>
+                            <span className="shrink-0 font-mono">{videoUpload.progress}%</span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/80">
+                            <div
+                                className={cn(
+                                    'h-full rounded-full transition-all duration-300',
+                                    videoUpload.phase === 'error'
+                                        ? 'bg-red-500'
+                                        : videoUpload.phase === 'success'
+                                            ? 'bg-green-500'
+                                            : 'bg-blue-500'
+                                )}
+                                style={{ width: `${Math.max(4, Math.min(100, videoUpload.progress))}%` }}
+                            />
+                        </div>
+                        {videoUpload.detail && (
+                            <p className="mt-1.5 break-words text-[10px] leading-snug">{videoUpload.detail}</p>
+                        )}
+                    </div>
+                )}
 
                 {/* Status Badge */}
                 <div className="flex flex-wrap items-center gap-1.5">

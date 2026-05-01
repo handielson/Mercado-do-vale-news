@@ -2600,6 +2600,63 @@ fastify.get('/synology/files', { preHandler: requireSyncKey }, async (req, reply
   return files;
 });
 
+const SYNOLOGY_UPLOAD_STATUS_TTL_MS = 30 * 60 * 1000;
+const synologyUploadStatus = new Map();
+
+function createSynologyUploadStatus({ folder, fileName, url }) {
+  const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const now = Date.now();
+  const job = {
+    id,
+    folder,
+    fileName,
+    url,
+    status: 'queued',
+    progress: 90,
+    message: 'Aguardando envio ao Synology',
+    createdAt: now,
+    updatedAt: now,
+  };
+  synologyUploadStatus.set(id, job);
+  const cleanup = setTimeout(() => synologyUploadStatus.delete(id), SYNOLOGY_UPLOAD_STATUS_TTL_MS);
+  if (typeof cleanup.unref === 'function') cleanup.unref();
+  return job;
+}
+
+function updateSynologyUploadStatus(id, patch) {
+  const job = synologyUploadStatus.get(id);
+  if (!job) return null;
+  Object.assign(job, patch, { updatedAt: Date.now() });
+  return job;
+}
+
+function serializeSynologyUploadStatus(job) {
+  return {
+    id: job.id,
+    folder: job.folder,
+    name: job.fileName,
+    url: job.url,
+    status: job.status,
+    progress: job.progress,
+    message: job.message,
+    error: job.error || null,
+    detail: job.detail || null,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
+fastify.get('/synology/upload-status', { preHandler: requireSyncKey }, async (req, reply) => {
+  const id = String(req.query.id || '').trim();
+  if (!id) return reply.code(400).send({ error: 'id required' });
+
+  const job = synologyUploadStatus.get(id);
+  if (!job) return reply.code(404).send({ error: 'Upload status not found or expired' });
+
+  reply.header('Cache-Control', 'no-store');
+  return serializeSynologyUploadStatus(job);
+});
+
 // POST /synology/upload?folder=imagens|videos|arquivos
 fastify.post('/synology/upload', { preHandler: requireSyncKey }, async (req, reply) => {
   const folder = req.query.folder;
@@ -2623,13 +2680,19 @@ fastify.post('/synology/upload', { preHandler: requireSyncKey }, async (req, rep
 
   const folderPath = SYNO_FOLDERS[folder];
   const cdnUrl = `${SYNO_CDN[folder]}/${fileName}`;
+  const uploadJob = createSynologyUploadStatus({ folder, fileName, url: cdnUrl });
 
   // ── Responde 200 IMEDIATAMENTE (evita timeout 524 do Cloudflare) ──────────
-  reply.code(200).send({ ok: true, name: fileName, url: cdnUrl });
+  reply.code(200).send({ ok: true, uploadId: uploadJob.id, status: uploadJob.status, name: fileName, url: cdnUrl });
 
   // ── Upload ao Synology em background (sem bloquear o cliente) ─────────────
   setImmediate(async () => {
     try {
+      updateSynologyUploadStatus(uploadJob.id, {
+        status: 'uploading',
+        progress: 95,
+        message: 'Enviando arquivo ao Synology',
+      });
       const sid = await synoLogin();
       const boundary = `MDVBoundary${Date.now()}`;
 
@@ -2665,11 +2728,29 @@ fastify.post('/synology/upload', { preHandler: requireSyncKey }, async (req, rep
       });
 
       if (result.success) {
+        updateSynologyUploadStatus(uploadJob.id, {
+          status: 'success',
+          progress: 100,
+          message: 'Upload concluido no Synology',
+        });
         console.log(`[synology] Upload OK: ${folderPath}/${fileName}`);
       } else {
+        updateSynologyUploadStatus(uploadJob.id, {
+          status: 'error',
+          progress: 100,
+          message: 'Synology recusou o upload',
+          error: 'Synology upload failed',
+          detail: JSON.stringify(result.error || result),
+        });
         console.error(`[synology] Upload FAILED: ${fileName}`, result.error);
       }
     } catch (err) {
+      updateSynologyUploadStatus(uploadJob.id, {
+        status: 'error',
+        progress: 100,
+        message: 'Erro ao enviar ao Synology',
+        error: err.message,
+      });
       console.error(`[synology] Background upload error: ${fileName}`, err.message);
     }
   });
