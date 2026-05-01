@@ -10,19 +10,40 @@ export interface PriceSnapshot {
     changed_at: string;
 }
 
+function normalizePriceValue(value: unknown): number {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function normalizePricePayload(prices: {
+    price_cost: unknown;
+    price_retail: unknown;
+    price_reseller: unknown;
+    price_wholesale: unknown;
+}) {
+    return {
+        price_cost: normalizePriceValue(prices.price_cost),
+        price_retail: normalizePriceValue(prices.price_retail),
+        price_reseller: normalizePriceValue(prices.price_reseller),
+        price_wholesale: normalizePriceValue(prices.price_wholesale),
+    };
+}
+
 /** Grava uma entrada no histórico de preços de um produto */
 export async function logPriceChange(
     productId: string,
-    prices: { price_cost: number; price_retail: number; price_reseller: number; price_wholesale: number }
+    prices: { price_cost: number | null | undefined; price_retail: number | null | undefined; price_reseller: number | null | undefined; price_wholesale: number | null | undefined }
 ): Promise<void> {
+    const normalizedPrices = normalizePricePayload(prices);
+
     const { error } = await supabase
         .from('product_price_history')
         .insert({
             product_id: productId,
-            price_cost: prices.price_cost,
-            price_retail: prices.price_retail,
-            price_reseller: prices.price_reseller,
-            price_wholesale: prices.price_wholesale,
+            price_cost: normalizedPrices.price_cost,
+            price_retail: normalizedPrices.price_retail,
+            price_reseller: normalizedPrices.price_reseller,
+            price_wholesale: normalizedPrices.price_wholesale,
         });
 
     if (error) console.error('[priceHistory] log error:', error.message);
@@ -73,9 +94,10 @@ export async function applyPricesToVariation(
     if (error) throw new Error('[priceHistory] apply prices error: ' + error.message);
 
     // 2. Grava histórico para cada um
+    const normalizedPrices = normalizePricePayload(newPrices);
     const inserts = ids.map(id => ({
         product_id: id,
-        ...newPrices,
+        ...normalizedPrices,
     }));
 
     const { error: histError } = await supabase

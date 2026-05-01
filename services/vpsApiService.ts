@@ -11,6 +11,7 @@ const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const PUBLIC_STOREFRONT_TIMEOUT_MS = 3500;
 const WRITE_TIMEOUT_MS = 15000;
 const CACHE_DURATION = 60 * 1000; // 1 min (reduzido de 5min para evitar UI stale)
+const VIDEO_CHECK_CACHE_DURATION = 5 * 60 * 1000;
 
 function proxyUrl(path: string, method: string = 'GET'): string {
   return buildVpsUrl(path, { method });
@@ -60,6 +61,8 @@ export interface FieldPresetInput {
 
 class VpsApiService {
   private cache = new Map<string, CacheEntry<unknown>>();
+  private videoCheckCache = new Map<string, CacheEntry<{ exists: boolean; url?: string } | null>>();
+  private videoCheckInFlight = new Map<string, Promise<{ exists: boolean; url?: string } | null>>();
 
   private async authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
     const { data } = await supabase.auth.getSession();
@@ -95,16 +98,17 @@ class VpsApiService {
       const timer = setTimeout(() => controller.abort(), getReadTimeoutMs(path));
       
       const separator = path.includes('?') ? '&' : '?';
-      const fullPath = `${path}${separator}_t=${Date.now()}`;
+      const fullPath = noCache ? `${path}${separator}_t=${Date.now()}` : path;
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (noCache) {
+        headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        headers.Pragma = 'no-cache';
+      }
       
       const res = await fetch(proxyUrl(fullPath, 'GET'), {
         signal: controller.signal,
-        headers: await this.authHeaders({
-          Accept: 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }),
-        cache: 'no-store',
+        headers: await this.authHeaders(headers),
+        cache: noCache ? 'no-store' : 'default',
       }).finally(() => {
         clearTimeout(timer);
       });
@@ -309,7 +313,27 @@ class VpsApiService {
 
   async checkVideoBySku(sku: string): Promise<{ exists: boolean; url?: string } | null> {
     if (!sku?.trim()) return null;
-    return this.fetchSafe<{ exists: boolean; url?: string }>(`/check-video?sku=${encodeURIComponent(sku.trim())}`, true);
+    const normalizedSku = sku.trim();
+    const cached = this.videoCheckCache.get(normalizedSku);
+    if (cached && Date.now() - cached.timestamp <= VIDEO_CHECK_CACHE_DURATION) {
+      return cached.data;
+    }
+
+    const inFlight = this.videoCheckInFlight.get(normalizedSku);
+    if (inFlight) return inFlight;
+
+    const request = this.fetchSafe<{ exists: boolean; url?: string }>(
+      `/check-video?sku=${encodeURIComponent(normalizedSku)}`,
+      false,
+    ).then((result) => {
+      this.videoCheckCache.set(normalizedSku, { data: result, timestamp: Date.now() });
+      return result;
+    }).finally(() => {
+      this.videoCheckInFlight.delete(normalizedSku);
+    });
+
+    this.videoCheckInFlight.set(normalizedSku, request);
+    return request;
   }
 
   // ── Units (inventário serializado) ────────────────────────────────────
@@ -483,8 +507,8 @@ class VpsApiService {
     for (let i = 0; i < products.length; i += CHUNK) {
       const chunk = products.slice(i, i + CHUNK);
       try {
-        const res = await fetch(proxyUrl('/products/batch', 'POST'), {
-          method: 'POST',
+        const res = await fetch(proxyUrl('/products/prices-stock', 'PATCH'), {
+          method: 'PATCH',
           headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(chunk),
           signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),

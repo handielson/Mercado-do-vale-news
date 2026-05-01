@@ -34,6 +34,7 @@ import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
 import { supabase } from '../../services/supabase';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
+import { vpsApiService } from '../../services/vpsApiService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
@@ -539,9 +540,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 ) return;
 
                 // Verifica se o arquivo realmente existe (opcional no form pra não travar)
-                const response = await fetch(candidateUrl, { method: 'HEAD', cache: 'no-store' });
-                if (response.ok) {
-                    setValue('video_url', candidateUrl, { shouldDirty: true });
+                const videoCheck = await vpsApiService.checkVideoBySku(currentSkuForVideo);
+                if (videoCheck?.exists) {
+                    setValue('video_url', videoCheck.url || candidateUrl, { shouldDirty: true });
                     toast.info(`🎥 Vídeo vinculado automaticamente pelo SKU.`, { id: 'video-auto-fill' });
                 } else if (!currentVideoUrl) {
                     // preenche mesmo se não der HTTP 200, pois pode existir na rede interna e a gente assume o formato

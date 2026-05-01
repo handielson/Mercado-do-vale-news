@@ -8,6 +8,15 @@ interface NcmResult {
   descricao: string;
 }
 
+async function fetchNcmResults(searchTerm: string): Promise<NcmResult[]> {
+  const term = searchTerm.trim();
+  if (!term) return [];
+
+  const res = await fetch(`/api/brasilapi-ncm?search=${encodeURIComponent(term)}`);
+  if (!res.ok) throw new Error(`BrasilAPI HTTP ${res.status}`);
+  return res.json();
+}
+
 /**
  * Mapa NCM → CEST para eletrônicos comuns (Tabela CONFAZ / Conv. ICMS 142/2018).
  * Fonte: https://www.confaz.fazenda.gov.br
@@ -351,8 +360,7 @@ export function NcmSearchWidget({
     if (currentNcm && !selectedDesc) {
       const code = currentNcm.replace(/\D/g, '');
       const formatted = `${code.slice(0,4)}.${code.slice(4,6)}.${code.slice(6,8)}`;
-      fetch(`https://brasilapi.com.br/api/ncm/v1?search=${formatted}`)
-        .then(r => r.ok ? r.json() : [])
+      fetchNcmResults(formatted)
         .then((data: NcmResult[]) => {
           const match = data.find(r => r.codigo.replace(/\./g, '') === code);
           if (match) setSelectedDesc(match.descricao);
@@ -377,11 +385,7 @@ export function NcmSearchWidget({
     if (!term.trim() || term.trim().length < 3) { setResults([]); setOpen(false); return; }
     setLoading(true);
     try {
-      const res = await fetch(
-        `https://brasilapi.com.br/api/ncm/v1?search=${encodeURIComponent(term.trim())}`
-      );
-      if (!res.ok) throw new Error(`BrasilAPI HTTP ${res.status}`);
-      const data: NcmResult[] = await res.json();
+      const data = await fetchNcmResults(term);
       // Filtra apenas códigos folha (8+ dígitos sem pontos)
       const leaves = data.filter(r => r.codigo.replace(/\./g, '').length >= 8).slice(0, 25);
       setResults(leaves);
@@ -494,15 +498,12 @@ export function NcmSearchWidget({
       const formatted = code.length === 8
         ? `${code.slice(0,4)}.${code.slice(4,6)}.${code.slice(6,8)}`
         : code;
-      const res = await fetch(`https://brasilapi.com.br/api/ncm/v1?search=${encodeURIComponent(formatted)}`);
-      if (res.ok) {
-        const data: NcmResult[] = await res.json();
-        const match = data.find(r => r.codigo.replace(/\./g, '') === code)
-          ?? data.find(r => r.codigo.replace(/\./g, '').startsWith(code.slice(0, 6)));
-        if (match) setLookupDesc(match.descricao);
-        // Refina info se ainda não tinha
-        if (!info.posInfo) setLookupInfo(getNcmInfo(code));
-      }
+      const data = await fetchNcmResults(formatted);
+      const match = data.find(r => r.codigo.replace(/\./g, '') === code)
+        ?? data.find(r => r.codigo.replace(/\./g, '').startsWith(code.slice(0, 6)));
+      if (match) setLookupDesc(match.descricao);
+      // Refina info se ainda não tinha
+      if (!info.posInfo) setLookupInfo(getNcmInfo(code));
     } catch { toast.error('Erro ao consultar BrasilAPI.'); }
     finally { setLookupLoading(false); }
   };

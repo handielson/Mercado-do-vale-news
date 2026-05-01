@@ -53,7 +53,7 @@ fastify.register(require('@fastify/static'), {
 
 // Multipart support for file uploads
 fastify.register(require('@fastify/multipart'), {
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  limits: { fileSize: 500 * 1024 * 1024 }, // Synology video uploads can be large; smaller routes set their own limits.
 });
 
 
