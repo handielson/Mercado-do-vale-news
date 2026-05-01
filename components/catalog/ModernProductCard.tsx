@@ -46,6 +46,7 @@ interface ModernProductCardProps {
     isFavorite?: boolean;
     onCompareToast?: (msg: string) => void;
     listMode?: boolean; // layout horizontal compacto
+    priorityImage?: boolean;
 }
 
 export function ModernProductCard({
@@ -57,6 +58,7 @@ export function ModernProductCard({
     isFavorite = false,
     onCompareToast,
     listMode = false,
+    priorityImage = false,
 }: ModernProductCardProps) {
     const [imageError, setImageError] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
@@ -486,8 +488,9 @@ export function ModernProductCard({
                         <img
                             src={displayImageUrl || currentImage}
                             alt={productForDisplay.name}
-                            loading="lazy"
-                            decoding="async"
+                            loading={priorityImage ? 'eager' : 'lazy'}
+                            decoding={priorityImage ? 'sync' : 'async'}
+                            fetchPriority={priorityImage ? 'high' : 'auto'}
                             width={64}
                             height={64}
                             onError={() => setImageError(true)}
@@ -549,8 +552,9 @@ export function ModernProductCard({
                             currentColorIndex !== -1 ? variants?.colors[currentColorIndex]?.name : '',
                             productForDisplay.brand,
                         ].filter(Boolean).join(' ')}
-                        loading="lazy"
-                        decoding="async"
+                        loading={priorityImage ? 'eager' : 'lazy'}
+                        decoding={priorityImage ? 'sync' : 'async'}
+                        fetchPriority={priorityImage ? 'high' : 'auto'}
                         width={320}
                         height={240}
                         onError={() => setImageError(true)}

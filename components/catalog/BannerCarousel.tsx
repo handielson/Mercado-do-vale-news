@@ -140,6 +140,11 @@ export function BannerCarousel({
                             <img
                                 src={banner.image_url}
                                 alt={banner.title}
+                                loading={index === 0 ? 'eager' : 'lazy'}
+                                decoding={index === 0 ? 'sync' : 'async'}
+                                fetchPriority={index === 0 ? 'high' : 'auto'}
+                                width={1280}
+                                height={549}
                                 className="w-full h-full object-cover"
                             />
 

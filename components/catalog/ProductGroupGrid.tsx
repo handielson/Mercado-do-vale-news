@@ -16,6 +16,7 @@ interface ProductGroupGridProps {
         desktop?: number;
         wide?: number;
     };
+    priorityImageCount?: number;
     mobileColumns?: 2 | 4; // toggle mobile: 2 colunas (padrão) ou 4
 }
 
@@ -53,6 +54,7 @@ export function ProductGroupGrid({
     variant = 'grid',
     columns = { mobile: 2, tablet: 3, desktop: 4, wide: 5 },
     mobileColumns,
+    priorityImageCount = 0,
 }: ProductGroupGridProps) {
     const effectiveMobile = mobileColumns ?? columns.mobile ?? 2;
 
@@ -103,7 +105,7 @@ export function ProductGroupGrid({
         <div>
             {/* Grid / Lista de produtos */}
             <div className={variant === 'list' ? 'space-y-2' : gridClasses}>
-                {groups.map((group) => (
+                {groups.map((group, index) => (
                     <ModernProductCard
                         key={group.groupKey}
                         product={group.representativeProduct}
@@ -112,6 +114,7 @@ export function ProductGroupGrid({
                         onShare={onShare ? () => onShare(group.representativeProduct) : undefined}
                         isFavorite={favorites.has(group.representativeProduct.id)}
                         listMode={variant === 'list'}
+                        priorityImage={index < priorityImageCount}
                     />
                 ))}
 

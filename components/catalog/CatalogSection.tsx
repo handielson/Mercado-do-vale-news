@@ -134,7 +134,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
             {/* Grid/Carousel/Lista de Produtos */}
             {section.layout_style === 'grid' && mobileView === 'list' && (
                 <div className="space-y-2">
-                    {displayItems.map((item) => (
+                    {displayItems.map((item, index) => (
                         <ModernProductCard
                             key={item.key}
                             product={item.product}
@@ -143,6 +143,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                             onShare={onShare ? () => onShare(item.product) : undefined}
                             isFavorite={favorites.has(item.product.id)}
                             listMode
+                            priorityImage={index < 4}
                         />
                     ))}
                 </div>
@@ -150,7 +151,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
 
             {section.layout_style === 'grid' && mobileView === 'grid' && (
                 <div className="grid gap-2 sm:gap-4 md:gap-6 grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {displayItems.map((item) => (
+                    {displayItems.map((item, index) => (
                         <ModernProductCard
                             key={item.key}
                             product={item.product}
@@ -158,6 +159,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                             onFavorite={onFavorite}
                             onShare={onShare ? () => onShare(item.product) : undefined}
                             isFavorite={favorites.has(item.product.id)}
+                            priorityImage={index < 4}
                         />
                     ))}
                 </div>
@@ -166,7 +168,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
             {section.layout_style === 'carousel' && (
                 <div className="overflow-x-auto">
                     <div className="flex gap-4 pb-4">
-                        {displayItems.map((item) => (
+                        {displayItems.map((item, index) => (
                             <div key={item.key} className="flex-shrink-0 w-80">
                                 <ModernProductCard
                                     product={item.product}
@@ -174,6 +176,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                                     onFavorite={onFavorite}
                                     onShare={onShare ? () => onShare(item.product) : undefined}
                                     isFavorite={favorites.has(item.product.id)}
+                                    priorityImage={index < 3}
                                 />
                             </div>
                         ))}
@@ -183,7 +186,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
 
             {section.layout_style === 'list' && (
                 <div className="space-y-4">
-                    {displayItems.map((item) => (
+                    {displayItems.map((item, index) => (
                         <ModernProductCard
                             key={item.key}
                             product={item.product}
@@ -191,6 +194,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                             onFavorite={onFavorite}
                             onShare={onShare ? () => onShare(item.product) : undefined}
                             isFavorite={favorites.has(item.product.id)}
+                            priorityImage={index < 4}
                         />
                     ))}
                 </div>
