@@ -11,6 +11,10 @@
             "destination": "/api/bling?resource=oauth-callback"
         },
         {
+            "source": "/api/brasilapi-ncm",
+            "destination": "/api/vps-proxy?brasilapi=ncm"
+        },
+        {
             "source": "/api/(.*)",
             "destination": "/api/$1"
         },

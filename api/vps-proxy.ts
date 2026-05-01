@@ -12,6 +12,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL |
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 const READ_TIMEOUT_MS = Number(process.env.VPS_PROXY_READ_TIMEOUT_MS || 7000);
 const WRITE_TIMEOUT_MS = Number(process.env.VPS_PROXY_WRITE_TIMEOUT_MS || 15000);
+const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
 
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
@@ -28,6 +29,37 @@ function normalizePath(input: unknown): string {
     if (!path) return '';
     if (!path.startsWith('/')) return '';
     return path;
+}
+
+function getFirstQueryParam(value: unknown): string {
+    if (Array.isArray(value)) return String(value[0] || '').trim();
+    return String(value || '').trim();
+}
+
+async function handleBrasilapiNcm(req: any, res: any) {
+    if (req.method !== 'GET') {
+        res.setHeader('Allow', 'GET');
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const search = getFirstQueryParam(req.query?.search);
+    if (!search || search.length < 2) {
+        return res.status(400).json({ error: 'Missing or invalid search parameter' });
+    }
+
+    try {
+        const upstream = await fetch(`${BRASILAPI_NCM_URL}?search=${encodeURIComponent(search)}`, {
+            headers: { Accept: 'application/json' },
+        });
+
+        const body = await upstream.text();
+        res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+        return res.status(upstream.status).send(body);
+    } catch (error) {
+        console.error('[brasilapi-ncm] proxy error:', error);
+        return res.status(502).json({ error: 'BrasilAPI unavailable' });
+    }
 }
 
 export function normalizeVpsProxyBaseUrl(input: unknown): string {
@@ -146,6 +178,10 @@ function getProxyTimeoutMs(method: string): number {
 
 export default async function handler(req: any, res: any) {
     const method = req.method || 'GET';
+    if (req.query?.brasilapi === 'ncm') {
+        return handleBrasilapiNcm(req, res);
+    }
+
     const path = normalizePath(req.query?.path);
 
     if (!path) {
