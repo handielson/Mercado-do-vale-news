@@ -4,6 +4,7 @@ import { vpsApiService } from '@/services/vpsApiService';
 import { normalizeProduct } from '@/services/productNormalizer';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import { buildVpsUrl, getVpsSyncHeaders } from '@/services/vpsProxyBase';
+import type { CatalogSettings } from '@/types/catalogSettings';
 
 
 // Persistent Cache (Stale-While-Revalidate pattern)
@@ -34,7 +35,8 @@ export const catalogService = {
         },
         page: number = 1,
         pageSize: number = 20,
-        bypassCache: boolean = false
+        bypassCache: boolean = false,
+        settingsOverride?: CatalogSettings
     ): Promise<{ products: CatalogProduct[], total: number, hasMore: boolean }> => {
         const cacheKey = `${CACHE_KEY_PREFIX}products:${JSON.stringify({ filters, page, pageSize })}`;
 
@@ -59,7 +61,7 @@ export const catalogService = {
             const [vpsRaw, vpsCats, settings] = await Promise.all([
                 vpsApiService.getProducts({ search: searchTerm, status: 'active', limit: 500, noCache: true }),
                 vpsApiService.getCategories(),
-                catalogConfigService.getSettings(),
+                settingsOverride ? Promise.resolve(settingsOverride) : catalogConfigService.getSettings(),
             ]);
 
             if (!vpsRaw) return { products: [], total: 0, hasMore: false };
@@ -124,7 +126,7 @@ export const catalogService = {
             }
 
             if (vpsRaw === null) return null;
-            const settings = await catalogConfigService.getSettings();
+            const settings = settingsOverride ?? await catalogConfigService.getSettings();
 
             const catSlugMap = new Map<string, string>(
                 (vpsCats || []).map((c: any) => [c.id, c.slug])

@@ -124,7 +124,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 favoritesOnly: filters.favoritesOnly,
                 customerId: effectiveCustomerId,
                 sortBy: filters.sortBy as 'recent' | 'price_asc' | 'price_desc' | 'featured' | undefined
-            }, currentPage, pageSize, bypassCache);
+            }, currentPage, pageSize, bypassCache, catalogSettings);
 
             console.log('[useCatalog] Products loaded:', {
                 count: response.products.length,
@@ -173,7 +173,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
                 setFetching(false);
             }
         }
-    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache, effectiveCustomerId]);
+    }, [searchQuery, filters, pageSize, applyVisibilityRules, bypassCache, effectiveCustomerId, catalogSettings]);
 
     // Manter ref sempre atualizada com a versão mais recente de loadProducts
     loadProductsRef.current = loadProducts;
@@ -181,9 +181,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     // Recarregar quando filtros, busca ou configurações mudarem
     // ⚠️ loadProducts NÃO entra nas deps: usamos a ref para evitar loop de re-criação
     useEffect(() => {
-        if (!settingsLoading) {
-            loadProductsRef.current?.(true);
-        }
+        loadProductsRef.current?.(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchQuery, filters, catalogSettings, settingsLoading]);
 
@@ -305,7 +303,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
 
     return {
         products,
-        loading: loading || settingsLoading,
+        loading,
         fetching, // refetch silencioso — não apaga a lista
         error,
         searchQuery,

@@ -75,7 +75,8 @@ const SystemTagsPage = lazy(() => import('../pages/admin/settings/SystemTagsPage
 const WhatsAppPage = lazy(() => import('../pages/admin/settings/WhatsAppPage'));
 const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
-const CatalogPage = lazy(() => import('../pages/catalog/index'));
+const catalogPagePromise = import('../pages/catalog/index');
+const CatalogPage = lazy(() => catalogPagePromise);
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
 const LegacyMigrationPage = lazy(() => import('../pages/LegacyMigration'));
 const FieldMappingPage = lazy(() => import('../pages/FieldMappingPage'));
@@ -897,4 +898,3 @@ export const router = createBrowserRouter([
     element: <div className="p-20 text-center font-medium text-slate-500">404 - Página não encontrada</div>
   }
 ]);
-
