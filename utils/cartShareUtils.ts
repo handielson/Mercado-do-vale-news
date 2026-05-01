@@ -16,12 +16,109 @@ export function getProductUrl(product: any): string {
     return `${SITE_BASE}/produto/${slug}`;
 }
 
-/** Fetch distinct colors of sibling products (same model_id) */
-export async function fetchSiblingColors(product: any): Promise<string[]> {
+type VariationSummary = Array<{ label: string; values: string[] }>;
+
+const VARIATION_LABELS: Record<string, string> = {
+    color: 'Cores',
+    cor: 'Cores',
+    colour: 'Cores',
+    storage: 'Memórias',
+    memoria: 'Memórias',
+    memory: 'Memórias',
+    armazenamento: 'Memórias',
+    ram: 'RAMs',
+    material: 'Materiais',
+};
+
+const IGNORED_SPEC_KEYS = new Set([
+    'color_hex',
+    'cor_hex',
+    'imei',
+    'imei1',
+    'imei2',
+    'serial',
+    'inmetro_certificate',
+]);
+
+function normalizeSpecKey(key: string): string {
+    return key
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+}
+
+function titleizeSpecKey(key: string): string {
+    return key
+        .replace(/[_-]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/(^|\s)(\S)/g, (_, sep, char) => `${sep}${char.toUpperCase()}`);
+}
+
+function pluralizeSpecLabel(key: string): string {
+    const normalized = normalizeSpecKey(key);
+    if (VARIATION_LABELS[normalized]) return VARIATION_LABELS[normalized];
+
+    const label = titleizeSpecKey(key);
+    if (!label) return 'Variações';
+    if (/[sS]$/.test(label)) return label;
+    if (/[lL]$/.test(label)) return `${label.slice(0, -1)}is`;
+    return `${label}s`;
+}
+
+function formatSpecValue(value: unknown): string | null {
+    if (value === null || value === undefined || typeof value === 'object') return null;
+    const formatted = String(value).trim();
+    if (!formatted || formatted === 'no-ram' || formatted === 'no-storage') return null;
+    return formatted;
+}
+
+function buildVariationSummary(rows: Array<{ specs?: Record<string, unknown> }>): VariationSummary {
+    const valuesByKey = new Map<string, { originalKey: string; values: Set<string> }>();
+
+    for (const row of rows) {
+        const specs = row.specs || {};
+
+        for (const [key, rawValue] of Object.entries(specs)) {
+            const normalizedKey = normalizeSpecKey(key);
+            if (IGNORED_SPEC_KEYS.has(normalizedKey)) continue;
+
+            const value = formatSpecValue(rawValue);
+            if (!value) continue;
+
+            const entry = valuesByKey.get(normalizedKey) || { originalKey: key, values: new Set<string>() };
+            entry.values.add(value);
+            valuesByKey.set(normalizedKey, entry);
+        }
+    }
+
+    return Array.from(valuesByKey.entries())
+        .map(([normalizedKey, entry]) => ({
+            normalizedKey,
+            label: pluralizeSpecLabel(entry.originalKey),
+            values: Array.from(entry.values),
+        }))
+        .sort((a, b) => {
+            const priority: Record<string, number> = {
+                color: 0,
+                cor: 0,
+                storage: 1,
+                memoria: 1,
+                memory: 1,
+                ram: 2,
+            };
+            return (priority[a.normalizedKey] ?? 10) - (priority[b.normalizedKey] ?? 10)
+                || a.label.localeCompare(b.label, 'pt-BR');
+        })
+        .map(({ label, values }) => ({ label, values }));
+}
+
+/** Fetch distinct available variations of sibling products (same model_id) */
+export async function fetchSiblingVariations(product: any): Promise<VariationSummary> {
     const modelId = product.model_id;
     if (!modelId) {
-        const color = product.specs?.color || product.specs?.Cor;
-        return color ? [color] : [];
+        return buildVariationSummary([{ specs: product.specs || {} }]);
     }
 
     try {
@@ -29,22 +126,19 @@ export async function fetchSiblingColors(product: any): Promise<string[]> {
             .from('products')
             .select('specs')
             .eq('model_id', modelId)
-            .gt('stock', 0); // apenas em estoque
+            .gt('stock_quantity', 0); // apenas em estoque
 
         if (!data) return [];
-
-        const colors = [
-            ...new Set(
-                data
-                    .map((p: any) => p.specs?.color || p.specs?.Cor)
-                    .filter(Boolean)
-            )
-        ] as string[];
-
-        return colors;
+        return buildVariationSummary(data);
     } catch {
         return [];
     }
+}
+
+/** Fetch distinct colors of sibling products (same model_id) */
+export async function fetchSiblingColors(product: any): Promise<string[]> {
+    const variations = await fetchSiblingVariations(product);
+    return variations.find(v => v.label === 'Cores')?.values || [];
 }
 
 /** Format date as DD/MM/YYYY */
@@ -80,8 +174,8 @@ export async function generateBudgetText(
         const plan12 = plans.find(p => p.installments === 12);
         const pixPlan = plans[0]; // à vista
 
-        // Sibling colors
-        const colors = await fetchSiblingColors(product);
+        // Sibling variations
+        const variations = await fetchSiblingVariations(product);
 
         // Product name + optional qty
         const qtyLabel = quantity > 1 ? ` (${quantity}x)` : '';
@@ -95,8 +189,10 @@ export async function generateBudgetText(
             );
         }
 
-        if (colors.length > 0) {
-            lines.push(`  Cores disponíveis: ${colors.join(', ')}`);
+        for (const variation of variations) {
+            if (variation.values.length > 0) {
+                lines.push(`  ${variation.label} disponíveis: ${variation.values.join(', ')}`);
+            }
         }
 
         lines.push('');

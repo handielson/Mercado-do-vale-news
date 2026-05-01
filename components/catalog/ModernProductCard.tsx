@@ -278,12 +278,8 @@ export function ModernProductCard({
     // Handlers
     const handleCardClick = async (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
-        if (currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)) {
-            alert('Por favor, selecione uma cor antes de adicionar ao orçamento.');
-            return;
-        }
 
-        // Add proper item to retail cart
+        // Admin budget can use the representative product and list all available variations in the copied quote.
         addToCartContext(currentProduct);
         
         // Visual feedback
@@ -1046,18 +1042,13 @@ export function ModernProductCard({
                         {isAdmin ? (
                             <button
                                 onClick={handleCardClick}
-                                disabled={currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1)}
                                 className={`w-full py-1.5 sm:py-2 px-2 sm:px-4 text-[11px] sm:text-sm font-medium rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 sm:gap-2 
-                                    ${(currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1))
-                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
-                                        : (isInCart || addedToCart)
-                                            ? 'bg-green-500 text-white shadow hover:bg-green-600'
-                                            : 'bg-blue-600 text-white shadow hover:bg-blue-700'
+                                    ${(isInCart || addedToCart)
+                                        ? 'bg-green-500 text-white shadow hover:bg-green-600'
+                                        : 'bg-blue-600 text-white shadow hover:bg-blue-700'
                                     }`}
                             >
-                                {currentColorIndex === -1 && productGroup?.variants && (productGroup.variants.length > 1 || productGroup.variants[0].colors.length > 1) ? (
-                                    <>Escolha uma cor</>
-                                ) : (isInCart || addedToCart) ? (
+                                {(isInCart || addedToCart) ? (
                                     <><Check className="w-3.5 h-3.5" />Adicionado</>
                                 ) : (
                                     <><ShoppingCart className="w-3.5 h-3.5" />{cartBtnLabel}</>
