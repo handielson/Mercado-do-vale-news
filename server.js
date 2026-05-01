@@ -1,5 +1,5 @@
 require('dotenv').config();
-const fastify = require('fastify')({ logger: false, bodyLimit: 50 * 1024 * 1024 }); // 50MB
+const fastify = require('fastify')({ logger: false, bodyLimit: 500 * 1024 * 1024 }); // 500MB
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');

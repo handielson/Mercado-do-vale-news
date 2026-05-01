@@ -1,5 +1,5 @@
 require('dotenv').config();
-const fastify = require('fastify')({ logger: false, bodyLimit: 50 * 1024 * 1024 }); // 50MB
+const fastify = require('fastify')({ logger: false, bodyLimit: 500 * 1024 * 1024 }); // 500MB
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
@@ -2308,7 +2308,7 @@ function listLocalSynologyFiles(folder, limit = 10000, offset = 0) {
     return { ok: false, error: e.message };
   }
 }
-function synoHttpGet(urlObj, path) {
+function synoHttpGet(urlObj, path, timeoutMs = 15000) {
   const https = require('https');
   const port = urlObj.port ? parseInt(urlObj.port) : (urlObj.protocol === 'https:' ? 443 : 80);
   return new Promise((resolve, reject) => {
@@ -2326,15 +2326,15 @@ function synoHttpGet(urlObj, path) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(15000, () => { req.destroy(new Error('Synology request timeout (15s)')); });
+    req.setTimeout(timeoutMs, () => { req.destroy(new Error(`Synology request timeout (${Math.round(timeoutMs / 1000)}s)`)); });
   });
 }
 
-async function synoLogin() {
+async function synoLogin(timeoutMs = 15000) {
   const qs = `api=SYNO.API.Auth&version=7&method=login&account=${encodeURIComponent(SYNO_USER)}&passwd=${encodeURIComponent(SYNO_PASS)}&session=FileStation&format=sid`;
   const urlObj = new URL(SYNO_URL);
   try {
-    const j = await synoHttpGet(urlObj, `/webapi/auth.cgi?${qs}`);
+    const j = await synoHttpGet(urlObj, `/webapi/auth.cgi?${qs}`, timeoutMs);
     if (j.success) return j.data.sid;
     console.error('[synoLogin] Auth failed:', j.error);
     throw new Error('Synology login failed: ' + JSON.stringify(j.error || j));
@@ -2694,14 +2694,30 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
     const fileName = `${cleanSku}${ext}`;
     const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
 
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const headResp = await fetch(canonicalUrl, { method: 'HEAD', signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (headResp.ok) {
+        return { exists: true, url: canonicalUrl };
+      }
+      if (headResp.status === 404) {
+        return { exists: false, url: null };
+      }
+    } catch (headErr) {
+      console.warn('[check-video] HEAD direto falhou, tentando Synology curto:', headErr.message);
+    }
+
     // Tenta validar via Synology primeiramente
     if (SYNO_USER && SYNO_PASS) {
       try {
-        const sid = await synoLogin();
+        const sid = await synoLogin(2500);
         const filePath = `${SYNO_FOLDERS.videos}/${fileName}`;
         const urlObj = new URL(SYNO_URL);
         const data = await synoHttpGet(urlObj,
-          `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`
+          `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=getinfo&path=${encodeURIComponent(filePath)}&_sid=${sid}`,
+          2500
         );
         const exists = data.success === true && data.data?.files?.[0]?.name != null;
         return { exists, url: exists ? canonicalUrl : null };
