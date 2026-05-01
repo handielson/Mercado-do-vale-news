@@ -10,7 +10,7 @@ import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
 import { supabase } from '../../services/supabase';
-import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
+import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { getShopeeButtonVisualState, mapProductToShopeeLocalProduct } from './productCardShopee.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
@@ -80,7 +80,8 @@ const uploadVideoWithProgress = (
     onProgress: (progress: number) => void,
 ) => new Promise<SynologyUploadResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', buildVpsUrl('/synology/upload?folder=videos', { method: 'POST' }));
+    // Video files are too large for the Vercel proxy body limit, so upload directly to the VPS.
+    xhr.open('POST', `${VPS_DIRECT_BASE_URL}/synology/upload?folder=videos`);
 
     const headers = getVpsSyncHeaders();
     Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
