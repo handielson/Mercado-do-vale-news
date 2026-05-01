@@ -1,6 +1,7 @@
 import type { CatalogProduct, ProductVariant, ProductGroup } from '@/types/catalog';
 import { ProductStatus } from '@/utils/field-standards';
 import { getColorHex } from './colors';
+import { generateCatalogGroupKey } from './productGroupingCore.js';
 
 /**
  * Color option with hex value
@@ -78,58 +79,7 @@ function normalizeRAMAndStorage(ram?: string, storage?: string): { ram: string; 
  * Falls back to brand + model name for products without model_id.
  */
 export function generateGroupKey(product: CatalogProduct): string {
-    // Use model_id (UUID) as the grouping key — most reliable
-    if (product.model_id) return product.model_id;
-
-    // Fallback: brand + base name
-    const brand = product.brand || 'unknown';
-    
-    // Prioritize product.name over product.model because Bling often sets model to a generic category (e.g., "Capa de Silicone")
-    // If we use that generic category, ALL silicone covers merge into one card.
-    let baseName = product.name || product.model || 'unknown';
-    
-    // Intelligent variant stripping:
-    // Bling often appends the variant/color to the end of the product name (e.g. "Capa 360 - Azul" or just "Capa 360 Azul").
-    // To correctly group identical siblings without blending completely different models, 
-    // we strip known variant values off the very end of the baseName.
-    const lowerBase = baseName.toLowerCase();
-    const color = product.specs?.color?.trim().toLowerCase();
-    const ram = product.specs?.ram?.trim().toLowerCase();
-    const storage = product.specs?.storage?.trim().toLowerCase();
-
-    // Check explicitly provided specs first
-    if (color && lowerBase.endsWith(color)) {
-        baseName = baseName.slice(0, -product.specs.color.length).trim();
-    } else if (ram && lowerBase.endsWith(ram)) {
-        baseName = baseName.slice(0, -product.specs.ram.length).trim();
-    } else if (storage && lowerBase.endsWith(storage)) {
-        baseName = baseName.slice(0, -product.specs.storage.length).trim();
-    } else {
-        // Fallback checks for common colors at the end of the string, if no spec was defined
-        const commonColors = ['preto', 'preta', 'branco', 'branca', 'azul', 'vermelho', 'vermelha', 'rosa', 'verde', 'amarelo', 'amarela', 'cinza', 'prata', 'dourado', 'ouro', 'incolor', 'transparente', 'grafite', 'lilas', 'lilás', 'roxo', 'roxa'];
-        for (const c of commonColors) {
-            if (lowerBase.endsWith(c) && lowerBase !== c) {
-                baseName = baseName.slice(0, -c.length).trim();
-                break;
-            }
-        }
-    }
-
-    // Clean up trailing separators that might be left over (e.g. "Capa 360 - " -> "Capa 360")
-    if (baseName.endsWith('-')) {
-        baseName = baseName.slice(0, -1).trim();
-    }
-    
-    // Normaliza: remove artigos PT iniciais ("o ", "a ", "os ", "as ") para agrupar
-    const model = baseName.replace(/^(o|a|os|as|um|uma)\s+/i, '');
-    const finalKey = `${brand}_${model}`.toLowerCase().replace(/\s+/g, '-');
-    
-    // TEMPORARY DEBUG LOG FOR CATALOG GROUPS
-    if (product.name?.includes('360') || product.name?.includes('Note 60')) {
-        console.log(`[GROUP DEBUG] name="${product.name}" color="${color}" -> baseName="${baseName}" -> KEY="${finalKey}"`);
-    }
-    
-    return finalKey;
+    return generateCatalogGroupKey(product);
 }
 
 /**

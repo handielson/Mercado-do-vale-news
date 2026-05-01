@@ -40,6 +40,7 @@ import {
     normalizeCatalogPage,
     shouldRestoreCatalogState,
 } from './catalogPagination.js';
+import { mergeCategoryDisplayCounts } from './catalogCategoryCounts.js';
 
 
 function CatalogContent() {
@@ -254,6 +255,20 @@ function CatalogContent() {
         const groups = groupProductsByVariants(products, includeOutOfStockForView);
         return groups;
     }, [products, isAdmin, catalogSettings.hide_out_of_stock]);
+
+    const categoryNavCategories = useMemo(() => {
+        const baseCategories = filterStats?.categories || [];
+        if (!baseCategories.length || hasMore || loading || fetching) {
+            return baseCategories;
+        }
+
+        const selectedIds = filters.categories;
+        return mergeCategoryDisplayCounts(
+            baseCategories,
+            productGroups,
+            selectedIds.length > 0 ? { onlyCategoryIds: selectedIds } : undefined,
+        );
+    }, [fetching, filterStats?.categories, filters.categories, hasMore, loading, productGroups]);
 
     // Modo "Todos" — múltiplas categorias selecionadas (pai + filhos)
     const isAllChildrenMode = filters.categories.length > 1;
@@ -660,7 +675,7 @@ function CatalogContent() {
 
                     syncCategoryUrl(ids);
                 }}
-                categories={(filterStats?.categories || []).map(cat => ({
+                categories={categoryNavCategories.map(cat => ({
                     id: cat.id,
                     name: cat.name,
                     parent_id: cat.parent_id,
