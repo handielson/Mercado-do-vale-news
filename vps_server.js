@@ -19,6 +19,9 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_AUTH_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
 const CORS_ORIGINS = [
   'https://www.mercadodovale.com.br',
   'https://mercadodovale.com.br',
@@ -100,6 +103,58 @@ function requireSyncKey(request, reply, done) {
     return;
   }
   done();
+}
+
+function getBearerToken(request) {
+  const auth = String(request.headers.authorization || '');
+  if (!auth.toLowerCase().startsWith('bearer ')) return '';
+  return auth.slice(7).trim();
+}
+
+async function isAdminBearerToken(request) {
+  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) return false;
+  const token = getBearerToken(request);
+  if (!token) return false;
+
+  try {
+    const authRes = await fetch(`${SUPABASE_URL.replace(/\/+$/, '')}/auth/v1/user`, {
+      headers: {
+        apikey: SUPABASE_AUTH_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!authRes.ok) return false;
+
+    const user = await authRes.json();
+    const userId = user?.id;
+    if (!userId) return false;
+
+    const customerRes = await fetch(
+      `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/customers?select=customer_type&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+      {
+        headers: {
+          apikey: SUPABASE_AUTH_KEY,
+          Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
+        },
+        signal: AbortSignal.timeout(5000),
+      }
+    );
+    if (!customerRes.ok) return false;
+
+    const customers = await customerRes.json();
+    return customers?.[0]?.customer_type === 'ADMIN';
+  } catch (err) {
+    console.warn('[auth] Supabase admin Bearer validation failed:', err.message);
+    return false;
+  }
+}
+
+async function requireSyncKeyOrAdmin(request, reply) {
+  const key = request.headers['x-sync-key'] || request.headers['x-api-key'];
+  if (key && key === process.env.SYNC_SECRET) return;
+  if (await isAdminBearerToken(request)) return;
+  return reply.code(401).send({ error: 'Unauthorized' });
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -2658,7 +2713,7 @@ fastify.get('/synology/upload-status', { preHandler: requireSyncKey }, async (re
 });
 
 // POST /synology/upload?folder=imagens|videos|arquivos
-fastify.post('/synology/upload', { preHandler: requireSyncKey }, async (req, reply) => {
+fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const folder = req.query.folder;
   if (!SYNO_FOLDERS[folder]) return reply.code(400).send({ error: 'Invalid folder' });
   if (!SYNO_USER || !SYNO_PASS) return reply.code(500).send({ error: 'Synology credentials not configured' });
