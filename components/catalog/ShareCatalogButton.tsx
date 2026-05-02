@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Share2, MessageCircle, Copy, Check, FileText } from 'lucide-react';
 import { generateFullCatalogMessage, generateCategoryMessage } from '@/utils/catalogMessageGenerator';
-import { generateFullCatalogPDF, generateCategoryPDF } from '@/utils/catalogPDFGenerator';
 import toast from 'react-hot-toast';
 
 interface ShareCatalogButtonProps {
@@ -60,6 +59,8 @@ export function ShareCatalogButton({ categoryId }: ShareCatalogButtonProps) {
     const handleDownloadPDF = async () => {
         setIsLoading(true);
         try {
+            const { generateFullCatalogPDF, generateCategoryPDF } = await import('@/utils/catalogPDFGenerator');
+
             if (categoryId) {
                 await generateCategoryPDF(categoryId, 'retail');
             } else {

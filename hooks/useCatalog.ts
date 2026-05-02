@@ -181,6 +181,10 @@ export function useCatalog(options: UseCatalogOptions = {}) {
     // Recarregar quando filtros, busca ou configurações mudarem
     // ⚠️ loadProducts NÃO entra nas deps: usamos a ref para evitar loop de re-criação
     useEffect(() => {
+        if (settingsLoading) {
+            return;
+        }
+
         loadProductsRef.current?.(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchQuery, filters, catalogSettings, settingsLoading]);
