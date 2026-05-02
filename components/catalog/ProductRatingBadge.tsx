@@ -3,14 +3,26 @@ import { Star } from 'lucide-react';
 import { reviewService } from '../../services/reviews';
 import { ProductReview } from '../../types/review';
 
-const scheduleIdle = (callback: () => void) => {
-    if ('requestIdleCallback' in window) {
-        const id = window.requestIdleCallback(callback, { timeout: 3500 });
-        return () => window.cancelIdleCallback(id);
-    }
+const STARTUP_RATING_DELAY_MS = 7000;
 
-    const id = window.setTimeout(callback, 2500);
-    return () => window.clearTimeout(id);
+const scheduleIdle = (callback: () => void) => {
+    let idleId: number | null = null;
+
+    const timeoutId = window.setTimeout(() => {
+        if ('requestIdleCallback' in window) {
+            idleId = window.requestIdleCallback(callback, { timeout: 3000 });
+            return;
+        }
+
+        callback();
+    }, STARTUP_RATING_DELAY_MS);
+
+    return () => {
+        window.clearTimeout(timeoutId);
+        if (idleId !== null) {
+            window.cancelIdleCallback(idleId);
+        }
+    };
 };
 
 interface ProductRatingBadgeProps {

@@ -6,6 +6,27 @@ import type { CashbackSettings } from '@/types/cashback';
 // Global cache for settings to prevent multiple fetches across cards
 let cachedSettings: CashbackSettings | null = null;
 let fetchPromise: Promise<CashbackSettings> | null = null;
+const STARTUP_CASHBACK_DELAY_MS = 7000;
+
+const scheduleIdle = (callback: () => void) => {
+    let idleId: number | null = null;
+
+    const timeoutId = window.setTimeout(() => {
+        if ('requestIdleCallback' in window) {
+            idleId = window.requestIdleCallback(callback, { timeout: 3000 });
+            return;
+        }
+
+        callback();
+    }, STARTUP_CASHBACK_DELAY_MS);
+
+    return () => {
+        window.clearTimeout(timeoutId);
+        if (idleId !== null) {
+            window.cancelIdleCallback(idleId);
+        }
+    };
+};
 
 interface CashbackBadgeProps {
     paidAmountBrl: number;
@@ -22,26 +43,39 @@ export function CashbackBadge({ paidAmountBrl, className = '', variant = 'minima
             return;
         }
 
-        if (!fetchPromise) {
-            fetchPromise = getCashbackSettings().then(s => {
-                cachedSettings = s;
-                return s;
-            }).catch(() => {
-                // Return fallback disabled state on error
-                return {
-                    active: false,
-                    coins_per_real: 0,
-                    coins_to_brl_rate: 0,
-                    min_purchase_for_coins: 0,
-                    min_coins_to_redeem: 0,
-                    max_redeem_percent: 0,
-                    created_at: '',
-                    updated_at: ''
-                } as unknown as CashbackSettings;
-            });
-        }
+        let mounted = true;
 
-        fetchPromise.then(setSettings);
+        const loadSettings = () => {
+            if (!fetchPromise) {
+                fetchPromise = getCashbackSettings().then(s => {
+                    cachedSettings = s;
+                    return s;
+                }).catch(() => {
+                    // Return fallback disabled state on error
+                    return {
+                        active: false,
+                        coins_per_real: 0,
+                        coins_to_brl_rate: 0,
+                        min_purchase_for_coins: 0,
+                        min_coins_to_redeem: 0,
+                        max_redeem_percent: 0,
+                        created_at: '',
+                        updated_at: ''
+                    } as unknown as CashbackSettings;
+                });
+            }
+
+            fetchPromise.then((value) => {
+                if (mounted) setSettings(value);
+            });
+        };
+
+        const cancelIdle = scheduleIdle(loadSettings);
+
+        return () => {
+            mounted = false;
+            cancelIdle();
+        };
     }, []);
 
     if (!settings || !settings.active) return null;
