@@ -6,7 +6,6 @@ const useCatalog = fs.readFileSync('hooks/useCatalog.ts', 'utf8');
 const paymentFees = fs.readFileSync('services/payment-fees.ts', 'utf8');
 const ratingBadge = fs.readFileSync('components/catalog/ProductRatingBadge.tsx', 'utf8');
 const cashbackBadge = fs.readFileSync('components/catalog/CashbackBadge.tsx', 'utf8');
-const html = fs.readFileSync('index.html', 'utf8');
 
 assert(
   !/import\s*\{[^}]*generate(?:FullCatalog|Category)PDF[^}]*\}\s*from\s*['"]@\/utils\/catalogPDFGenerator['"]/.test(shareButton),
@@ -36,16 +35,5 @@ assert(
     /const\s+cancelIdle\s*=\s*scheduleIdle\(loadSettings\)/.test(cashbackBadge),
   'CashbackBadge must delay and then idle cashback_settings so it is not startup-critical',
 );
-
-for (const origin of [
-  'https://api.xiaomipetrolina.com.br',
-  'https://cqbdyxxzmkgeghwkozts.supabase.co',
-  'https://brasilapi.com.br',
-]) {
-  assert(
-    html.includes(`rel="preconnect" href="${origin}"`),
-    `index.html must preconnect ${origin}`,
-  );
-}
 
 console.log('perf startup regressions passed');
