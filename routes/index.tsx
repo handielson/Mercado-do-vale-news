@@ -75,8 +75,7 @@ const SystemTagsPage = lazy(() => import('../pages/admin/settings/SystemTagsPage
 const WhatsAppPage = lazy(() => import('../pages/admin/settings/WhatsAppPage'));
 const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
-const catalogPagePromise = import('../pages/catalog/index');
-const CatalogPage = lazy(() => catalogPagePromise);
+const CatalogPage = lazy(() => import('../pages/catalog/index'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
 const LegacyMigrationPage = lazy(() => import('../pages/LegacyMigration'));
 const FieldMappingPage = lazy(() => import('../pages/FieldMappingPage'));

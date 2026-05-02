@@ -1,7 +1,6 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { supabase } from '../services/supabase';
 
 interface ThemeSettings {
   company_name: string;
@@ -33,16 +32,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       try {
         console.log('[ThemeContext] Fetching company settings in background...');
 
-        // Fetch company settings from Supabase (background load)
-        const { data, error } = await supabase
-          .from('company_settings')
-          .select('*')
-          .maybeSingle();
-
-        if (error) {
-          console.warn('[ThemeContext] Error fetching settings, keeping defaults:', error);
-          return;
-        }
+        const { getPublicCompanyData } = await import('../services/publicCompanySettings');
+        const data = await getPublicCompanyData();
 
         if (!data) {
           console.warn('[ThemeContext] No company_settings found, keeping defaults');
@@ -50,13 +41,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         const themeSettings: ThemeSettings = {
-          company_name: data.company_name || 'Mercado do Vale',
-          theme_colors: data.theme_colors || { primary: '#3b82f6', secondary: '#1e293b' },
-          logo_main: data.logo || null,
-          logo_dark: data.logo_dark,
-          data_abertura: data.data_abertura || undefined,
-          address_city: data.address_city || undefined,
-          address_state: data.address_state || undefined,
+          company_name: data.name || 'Mercado do Vale',
+          theme_colors: { primary: '#3b82f6', secondary: '#1e293b' },
+          logo_main: data.logo || data.logoUrl || undefined,
+          data_abertura: data.dataAbertura || undefined,
+          address_city: data.address?.city || undefined,
+          address_state: data.address?.state || undefined,
         };
 
         // Update settings (will cause seamless re-render)

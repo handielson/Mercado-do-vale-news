@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { matchesPublicMaintenanceBypass, publicCompanySettingsService } from '../services/publicCompanySettings';
-import { MaintenancePage } from '../pages/store/MaintenancePage';
+
+const MaintenancePage = React.lazy(() =>
+    import('../pages/store/MaintenancePage').then((module) => ({ default: module.MaintenancePage })),
+);
 
 export const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [isChecking, setIsChecking] = useState(true);
@@ -50,7 +53,11 @@ export const MaintenanceGuard: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
     if (!isChecking && isMaintenance) {
-        return <MaintenancePage onBypassComplete={() => window.location.reload()} />;
+        return (
+            <React.Suspense fallback={null}>
+                <MaintenancePage onBypassComplete={() => window.location.reload()} />
+            </React.Suspense>
+        );
     }
 
     return <>{children}</>;

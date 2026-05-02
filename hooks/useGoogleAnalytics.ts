@@ -10,13 +10,22 @@ declare global {
 }
 
 const scheduleIdle = (callback: () => void) => {
-    if ('requestIdleCallback' in window) {
-        const id = window.requestIdleCallback(callback, { timeout: 3000 });
-        return () => window.cancelIdleCallback(id);
-    }
+    let idleCleanup: (() => void) | undefined;
 
-    const id = window.setTimeout(callback, 1500);
-    return () => window.clearTimeout(id);
+    const delayId = window.setTimeout(() => {
+        if ('requestIdleCallback' in window) {
+            const idleId = window.requestIdleCallback(callback, { timeout: 8000 });
+            idleCleanup = () => window.cancelIdleCallback(idleId);
+            return;
+        }
+
+        callback();
+    }, 8000);
+
+    return () => {
+        window.clearTimeout(delayId);
+        idleCleanup?.();
+    };
 };
 
 /**

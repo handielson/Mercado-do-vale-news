@@ -5,11 +5,9 @@
  */
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { toast } from 'sonner';
 import type { CatalogProduct } from '@/types/catalog';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '../hooks/useEffectiveCustomerType';
-import { vpsApiService } from '../services/vpsApiService';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +34,10 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | null>(null);
 
 const STORAGE_KEY = 'mercado_do_vale_cart';
+
+const notifyStockError = (message: string) => {
+    import('sonner').then(({ toast }) => toast.error(message));
+};
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
@@ -84,7 +86,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         
         const timeoutId = setTimeout(() => {
             const payload = items.map(i => ({ product_id: i.product.id, quantity: i.quantity }));
-            vpsApiService.syncCart(customer.id, payload).catch(() => {
+            import('../services/vpsApiService').then(({ vpsApiService }) => vpsApiService.syncCart(customer.id, payload)).catch(() => {
                 // Silencioso: endpoint /cart/sync pode não existir ainda na VPS
             });
         }, 1500); // 1.5s debounce
@@ -133,7 +135,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             if (existing) {
                 const totalWanted = existing.quantity + quantity;
                 if (product.track_inventory && product.stock_quantity !== undefined && totalWanted > product.stock_quantity) {
-                    toast.error(`Apenas ${product.stock_quantity} unidades disponíveis em estoque do produto ${product.name}.`);
+                    notifyStockError(`Apenas ${product.stock_quantity} unidades disponíveis em estoque do produto ${product.name}.`);
                     return prev;
                 }
                 const newUnitPrice = calculateUnitPrice(product, totalWanted);
@@ -144,7 +146,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                 );
             } else {
                 if (product.track_inventory && product.stock_quantity !== undefined && quantity > product.stock_quantity) {
-                    toast.error(`Apenas ${product.stock_quantity} unidades disponíveis em estoque.`);
+                    notifyStockError(`Apenas ${product.stock_quantity} unidades disponíveis em estoque.`);
                     return prev;
                 }
 
@@ -182,7 +184,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             const item = prev.find(i => i.id === id);
             if (item && item.product.track_inventory && item.product.stock_quantity !== undefined) {
                 if (quantity > item.product.stock_quantity) {
-                    toast.error(`Estoque máximo atingido: ${item.product.stock_quantity} unidades.`);
+                    notifyStockError(`Estoque máximo atingido: ${item.product.stock_quantity} unidades.`);
                     return prev;
                 }
             }

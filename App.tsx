@@ -1,7 +1,6 @@
 import React from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { RouterProvider } from 'react-router-dom';
-import { Toaster } from 'sonner';
 import { SupabaseAuthProvider } from './contexts/SupabaseAuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CompareProvider } from './contexts/CompareContext';
@@ -10,6 +9,8 @@ import { OAuthHashRedirect } from './components/auth/OAuthHashRedirect';
 import { router } from './routes/index';
 import { useFavicon } from './hooks/useFavicon';
 import { useGoogleAnalytics } from './hooks/useGoogleAnalytics';
+
+const LazyToaster = React.lazy(() => import('sonner').then((module) => ({ default: module.Toaster })));
 
 const AppRouteFallback: React.FC = () => (
   <div className="min-h-screen bg-slate-50">
@@ -62,7 +63,32 @@ const AppRouteFallback: React.FC = () => (
   </div>
 );
 
+const DeferredToaster: React.FC = () => {
+  const [enabled, setEnabled] = React.useState(false);
 
+  React.useEffect(() => {
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(() => setEnabled(true), { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+
+    const id = window.setTimeout(() => setEnabled(true), 2500);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  if (!enabled) return null;
+
+  return (
+    <React.Suspense fallback={null}>
+      <LazyToaster
+        position="top-right"
+        richColors
+        closeButton
+        duration={3000}
+      />
+    </React.Suspense>
+  );
+};
 
 /**
  * App Root
@@ -89,12 +115,7 @@ const App: React.FC = () => {
               <RouterProvider router={router} />
             </React.Suspense>
             <CompareBar />
-            <Toaster
-              position="top-right"
-              richColors
-              closeButton
-              duration={3000}
-            />
+            <DeferredToaster />
           </CompareProvider>
         </ThemeProvider>
       </SupabaseAuthProvider>
