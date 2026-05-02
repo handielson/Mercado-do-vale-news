@@ -19,6 +19,7 @@ const FEES_SUCCESS_TTL_MS = 5 * 60 * 1000;
 const FEES_FAILURE_TTL_MS = 60 * 1000;
 let feesCache: { data: PaymentFee[]; expiresAt: number } | null = null;
 let failureCooldownUntil = 0;
+let feesRequest: Promise<PaymentFee[]> | null = null;
 
 /** Normaliza campos da VPS para o padrão do frontend (types/payment-fees.ts) */
 function normalize(raw: RawPaymentFee): PaymentFee {
@@ -41,18 +42,28 @@ export const paymentFeesService = {
             return feesCache.data;
         }
 
+        if (feesRequest) {
+            return feesRequest;
+        }
+
         if (Date.now() < failureCooldownUntil) {
             return feesCache?.data || [];
         }
 
-        try {
+        feesRequest = (async () => {
             const raw = await vpsClient.get<RawPaymentFee[]>('/payment-fees');
             const normalized = raw.map(normalize);
             feesCache = { data: normalized, expiresAt: Date.now() + FEES_SUCCESS_TTL_MS };
             return normalized;
+        })();
+
+        try {
+            return await feesRequest;
         } catch (error) {
             failureCooldownUntil = Date.now() + FEES_FAILURE_TTL_MS;
             return feesCache?.data || [];
+        } finally {
+            feesRequest = null;
         }
     },
 

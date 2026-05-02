@@ -3,6 +3,16 @@ import { Star } from 'lucide-react';
 import { reviewService } from '../../services/reviews';
 import { ProductReview } from '../../types/review';
 
+const scheduleIdle = (callback: () => void) => {
+    if ('requestIdleCallback' in window) {
+        const id = window.requestIdleCallback(callback, { timeout: 3500 });
+        return () => window.cancelIdleCallback(id);
+    }
+
+    const id = window.setTimeout(callback, 2500);
+    return () => window.clearTimeout(id);
+};
+
 interface ProductRatingBadgeProps {
     productId: string;
     className?: string;
@@ -38,10 +48,11 @@ export const ProductRatingBadge: React.FC<ProductRatingBadgeProps> = ({ productI
             }
         };
 
-        fetchRating();
+        const cancelIdle = scheduleIdle(fetchRating);
         
         return () => {
             isMounted = false;
+            cancelIdle();
         };
     }, [productId]);
 
