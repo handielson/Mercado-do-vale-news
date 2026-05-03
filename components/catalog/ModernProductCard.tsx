@@ -19,6 +19,7 @@ import { getActivePromoPrice } from '@/utils/promoPrice';
 import { ProductRatingBadge } from './ProductRatingBadge';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
+import { buildResponsiveImageSources } from '@/utils/responsive-image-sources.js';
 import { CATALOG_RETURN_STORAGE_KEY, createCatalogReturnState } from '../../pages/catalog/catalogPagination.js';
 import {
     formatCatalogVariationLabel,
@@ -61,6 +62,7 @@ export function ModernProductCard({
     priorityImage = false,
 }: ModernProductCardProps) {
     const [imageError, setImageError] = useState(false);
+    const [optimizedImageFailed, setOptimizedImageFailed] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showQuoteModal, setShowQuoteModal] = useState(false);
@@ -385,6 +387,10 @@ export function ModernProductCard({
     const currentImage = currentColorIndex === -1
         ? imageUrl
         : (colorImages[currentColorIndex] || imageUrl);
+    const activeImageUrl = displayImageUrl || currentImage;
+    const responsiveImageSources = optimizedImageFailed
+        ? null
+        : buildResponsiveImageSources(activeImageUrl, { kind: 'product' });
 
     useEffect(() => {
         let objectUrl: string | null = null;
@@ -419,6 +425,18 @@ export function ModernProductCard({
             if (objectUrl) URL.revokeObjectURL(objectUrl);
         };
     }, [currentImage]);
+
+    useEffect(() => {
+        setOptimizedImageFailed(false);
+    }, [currentImage]);
+
+    const handleProductImageError = () => {
+        if (responsiveImageSources && !optimizedImageFailed) {
+            setOptimizedImageFailed(true);
+            return;
+        }
+        setImageError(true);
+    };
 
     const productForDisplay = currentColorIndex === -1 && selectedVariant && selectedVariant.products.length > 0
         ? selectedVariant.products[0]
@@ -485,17 +503,25 @@ export function ModernProductCard({
                 >
                     {/* Imagem */}
                     <div className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-slate-100">
-                        <img
-                            src={displayImageUrl || currentImage}
-                            alt={productForDisplay.name}
-                            loading={priorityImage ? 'eager' : 'lazy'}
-                            decoding={priorityImage ? 'sync' : 'async'}
-                            fetchPriority={priorityImage ? 'high' : 'auto'}
-                            width={64}
-                            height={64}
-                            onError={() => setImageError(true)}
-                            className="w-full h-full object-contain"
-                        />
+                        <picture>
+                            {responsiveImageSources && (
+                                <>
+                                    <source type="image/avif" srcSet={responsiveImageSources.avifSrcSet} sizes="64px" />
+                                    <source type="image/webp" srcSet={responsiveImageSources.webpSrcSet} sizes="64px" />
+                                </>
+                            )}
+                            <img
+                                src={activeImageUrl}
+                                alt={productForDisplay.name}
+                                loading={priorityImage ? 'eager' : 'lazy'}
+                                decoding="async"
+                                fetchPriority={priorityImage ? 'high' : 'auto'}
+                                width={64}
+                                height={64}
+                                onError={handleProductImageError}
+                                className="w-full h-full object-contain"
+                            />
+                        </picture>
                     </div>
                     {/* Info */}
                     <div className="flex-1 min-w-0">
@@ -545,22 +571,30 @@ export function ModernProductCard({
                     className="relative aspect-[4/3] overflow-hidden bg-slate-100 cursor-pointer"
                     onClick={handleTitleClick}
                 >
-                    <img
-                        src={displayImageUrl || currentImage}
-                        alt={[
-                            productForDisplay.name || product.name,
-                            currentColorIndex !== -1 ? variants?.colors[currentColorIndex]?.name : '',
-                            productForDisplay.brand,
-                        ].filter(Boolean).join(' ')}
-                        loading={priorityImage ? 'eager' : 'lazy'}
-                        decoding={priorityImage ? 'sync' : 'async'}
-                        fetchPriority={priorityImage ? 'high' : 'auto'}
-                        width={320}
-                        height={240}
-                        onError={() => setImageError(true)}
-                        className={`w-full h-full object-contain transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
-                            }`}
-                    />
+                    <picture>
+                        {responsiveImageSources && (
+                            <>
+                                <source type="image/avif" srcSet={responsiveImageSources.avifSrcSet} sizes={responsiveImageSources.sizes} />
+                                <source type="image/webp" srcSet={responsiveImageSources.webpSrcSet} sizes={responsiveImageSources.sizes} />
+                            </>
+                        )}
+                        <img
+                            src={activeImageUrl}
+                            alt={[
+                                productForDisplay.name || product.name,
+                                currentColorIndex !== -1 ? variants?.colors[currentColorIndex]?.name : '',
+                                productForDisplay.brand,
+                            ].filter(Boolean).join(' ')}
+                            loading={priorityImage ? 'eager' : 'lazy'}
+                            decoding="async"
+                            fetchPriority={priorityImage ? 'high' : 'auto'}
+                            width={320}
+                            height={240}
+                            onError={handleProductImageError}
+                            className={`w-full h-full object-contain transition-transform duration-500 ${isHovered ? 'scale-110' : 'scale-100'
+                                }`}
+                        />
+                    </picture>
 
                     {/* Carousel Navigation Arrows (only show if multiple colors) */}
                     {colorImages.length > 1 && (

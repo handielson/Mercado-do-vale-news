@@ -904,7 +904,7 @@ function CatalogContent() {
                                     favorites={favorites}
                                     mobileColumns={2}
                                     variant={mobileView === 'list' ? 'list' : 'grid'}
-                                    priorityImageCount={4}
+                                    priorityImageCount={1}
                                     columns={{
                                         mobile: 2,
                                         tablet: 3,
@@ -939,7 +939,7 @@ function CatalogContent() {
                                     favorites={favorites}
                                     mobileColumns={2}
                                     variant={mobileView === 'list' ? 'list' : 'grid'}
-                                    priorityImageCount={4}
+                                    priorityImageCount={1}
                                     columns={{ mobile: 2, tablet: 3, desktop: 4, wide: 5 }}
                                 />
                             </div>
@@ -956,7 +956,7 @@ function CatalogContent() {
                             favorites={favorites}
                             mobileColumns={2}
                             variant={mobileView === 'list' ? 'list' : 'grid'}
-                            priorityImageCount={isAllProductsListing ? 4 : 0}
+                            priorityImageCount={isAllProductsListing ? 1 : 0}
                             columns={{
                                 mobile: 2,
                                 tablet: 3,

@@ -107,7 +107,9 @@ export const PublicHeader: React.FC = () => {
                             <img
                                 src={themeSettings.logo_main}
                                 alt={themeSettings.company_name}
-                                className="h-10 w-auto object-contain"
+                                width={112}
+                                height={40}
+                                className="h-10 w-[112px] object-contain"
                             />
                         ) : (
                             <>

@@ -143,7 +143,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                             onShare={onShare ? () => onShare(item.product) : undefined}
                             isFavorite={favorites.has(item.product.id)}
                             listMode
-                            priorityImage={index < 4}
+                            priorityImage={index < 1}
                         />
                     ))}
                 </div>
@@ -159,7 +159,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                             onFavorite={onFavorite}
                             onShare={onShare ? () => onShare(item.product) : undefined}
                             isFavorite={favorites.has(item.product.id)}
-                            priorityImage={index < 4}
+                            priorityImage={index < 1}
                         />
                     ))}
                 </div>
@@ -176,7 +176,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                                     onFavorite={onFavorite}
                                     onShare={onShare ? () => onShare(item.product) : undefined}
                                     isFavorite={favorites.has(item.product.id)}
-                                    priorityImage={index < 3}
+                                    priorityImage={index < 1}
                                 />
                             </div>
                         ))}
@@ -194,7 +194,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
                             onFavorite={onFavorite}
                             onShare={onShare ? () => onShare(item.product) : undefined}
                             isFavorite={favorites.has(item.product.id)}
-                            priorityImage={index < 4}
+                            priorityImage={index < 1}
                         />
                     ))}
                 </div>
