@@ -8,6 +8,7 @@ export interface ProductFiltersState {
     status: ProductStatus | 'all';
     sortBy: 'newest' | 'oldest' | 'name_asc' | 'name_desc';
     imageStatus: 'all' | 'with_image' | 'without_image';
+    parentVisibility: 'hide_parents' | 'show_all' | 'only_parents';
 }
 
 interface ProductFiltersProps {
@@ -23,7 +24,8 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
         search: '',
         status: 'all',
         sortBy: 'newest',
-        imageStatus: 'all'
+        imageStatus: 'all',
+        parentVisibility: 'hide_parents'
     });
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,13 +52,19 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
         onFilterChange(newFilters);
     };
 
+    const handleParentVisibilityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newFilters = { ...filters, parentVisibility: e.target.value as ProductFiltersState['parentVisibility'] };
+        setFilters(newFilters);
+        onFilterChange(newFilters);
+    };
+
     const handleClearFilters = () => {
-        const clearedFilters: ProductFiltersState = { search: '', status: 'all', sortBy: 'newest', imageStatus: 'all' };
+        const clearedFilters: ProductFiltersState = { search: '', status: 'all', sortBy: 'newest', imageStatus: 'all', parentVisibility: 'hide_parents' };
         setFilters(clearedFilters);
         onFilterChange(clearedFilters);
     };
 
-    const hasActiveFilters = filters.search !== '' || filters.status !== 'all' || filters.imageStatus !== 'all';
+    const hasActiveFilters = filters.search !== '' || filters.status !== 'all' || filters.imageStatus !== 'all' || filters.parentVisibility !== 'hide_parents';
 
     return (
         <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -100,6 +108,21 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
                         <option value="without_image">Sem Foto</option>
                     </select>
                 </div>
+
+                {/* Parent Visibility Select */}
+                <div className="w-full md:w-48">
+                    <select
+                        value={filters.parentVisibility}
+                        onChange={handleParentVisibilityChange}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    >
+                        <option value="hide_parents">Ocultar Pais</option>
+                        <option value="show_all">Mostrar Todos</option>
+                        <option value="only_parents">Apenas Pais</option>
+                    </select>
+                </div>
+
+
 
                 {/* Sort Select */}
                 <div className="w-full md:w-56">
