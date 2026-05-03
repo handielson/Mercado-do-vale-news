@@ -187,6 +187,13 @@ export const PublicProductPage: React.FC = () => {
 
 
 
+                // Pai (agregador) - backend retorna redirect_to_slug pro primeiro filho disponivel.
+                // Navega imediatamente pra URL do filho (replace=true para nao poluir historico).
+                if (data?.is_parent_redirect && data?.redirect_to_slug) {
+                    navigate(`/produto/${data.redirect_to_slug}`, { replace: true });
+                    return;
+                }
+
                 if (!data || data.error || data.status === 'inactive') {
                     console.error('Produto não encontrado ou inativo na VPS:', slug);
                     toast.error('Produto não encontrado');
