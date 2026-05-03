@@ -259,6 +259,19 @@ function sha256Hex(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
+// Branding inline (data:image/...;base64,...) é caro de transferir/cachear.
+// Substitui por URL pra endpoint dedicado /public/branding/:field que serve
+// o binário decodificado com cache forte (browser + CDN).
+const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+
+function publicBrandingValue(value, fieldName) {
+  if (!value) return null;
+  if (typeof value === 'string' && value.startsWith('data:')) {
+    return `${PUBLIC_API_BASE_URL}/public/branding/${fieldName}`;
+  }
+  return value;
+}
+
 function sanitizePublicCompanySettings(row) {
   if (!row) return null;
 
@@ -273,9 +286,9 @@ function sanitizePublicCompanySettings(row) {
     data_abertura: row.data_abertura || null,
     phone: row.phone || null,
     email: row.email || null,
-    logo: row.logo || null,
-    receipt_logo_url: row.receipt_logo_url || null,
-    favicon: row.favicon || null,
+    logo: publicBrandingValue(row.logo, 'logo'),
+    receipt_logo_url: publicBrandingValue(row.receipt_logo_url, 'receipt_logo_url'),
+    favicon: publicBrandingValue(row.favicon, 'favicon'),
     address: buildPublicCompanyAddress(row),
     address_zip_code: row.address_zip_code || null,
     address_street: row.address_street || null,
@@ -751,6 +764,22 @@ fastify.delete('/brands/:id', { preHandler: requireSyncKey }, async (req, reply)
 });
 
 // ─── Products (read) ───────────────────────────────────────────────────────
+// Batch fetch: GET /products/by-ids?ids=id1,id2,id3 — usado pelo catalogService
+// pra hidratar imagens em 1 round-trip em vez de N fetches individuais.
+fastify.get('/products/by-ids', { config: { rateLimit: { max: 600, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const idsParam = String(req.query.ids || '').trim();
+  if (!idsParam) return [];
+  const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, 100);
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT * FROM products WHERE id IN (${placeholders})`,
+    ids
+  );
+  reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=600');
+  return rows;
+});
+
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;
@@ -1595,6 +1624,50 @@ fastify.get('/public/company-settings', { config: { rateLimit: { max: 240, timeW
   const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
   reply.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
   return sanitizePublicCompanySettings(rows[0] || null);
+});
+
+// Serve branding binário (logo, favicon, receipt_logo_url) decodificado de
+// data URI base64. Cache forte: 1d browser, 7d CDN. Reduz o payload do
+// /public/company-settings de ~340KB pra ~3KB e permite cache imutável das imagens.
+const ALLOWED_BRANDING_FIELDS = new Set(['logo', 'favicon', 'receipt_logo_url']);
+const brandingCache = new Map();
+const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000;
+
+fastify.get('/public/branding/:field', { config: { rateLimit: { max: 600, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const field = req.params.field;
+  if (!ALLOWED_BRANDING_FIELDS.has(field)) return reply.code(404).send({ error: 'unknown branding field' });
+
+  const cached = brandingCache.get(field);
+  let payload = cached && Date.now() < cached.expiresAt ? cached : null;
+
+  if (!payload) {
+    const [rows] = await pool.query(`SELECT \`${field}\` AS val FROM company_settings LIMIT 1`);
+    const dataUri = rows[0]?.val;
+    if (!dataUri || typeof dataUri !== 'string' || !dataUri.startsWith('data:')) {
+      return reply.code(404).send({ error: 'no inline branding stored' });
+    }
+    const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) return reply.code(500).send({ error: 'malformed data URI' });
+    payload = {
+      mime: match[1],
+      buffer: Buffer.from(match[2], 'base64'),
+      etag: '"' + require('crypto').createHash('md5').update(match[2]).digest('hex') + '"',
+      expiresAt: Date.now() + BRANDING_CACHE_TTL_MS,
+    };
+    brandingCache.set(field, payload);
+  }
+
+  // ETag conditional GET — 304 Not Modified evita reenviar o binário quando o cliente já tem.
+  if (req.headers['if-none-match'] === payload.etag) {
+    reply.code(304);
+    return;
+  }
+
+  reply
+    .header('Content-Type', payload.mime)
+    .header('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000')
+    .header('ETag', payload.etag);
+  return payload.buffer;
 });
 
 // ─── Company Settings (PATCH) ─────────────────────────────────────────────

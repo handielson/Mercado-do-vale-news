@@ -273,6 +273,13 @@ class VpsApiService {
     return this.fetchSafe<any[]>(`/products/by-ean/${encodeURIComponent(ean)}`, true);
   }
 
+  /** Busca múltiplos produtos por id em 1 round-trip (até 100 ids). */
+  async getProductsByIds(ids: string[]): Promise<any[] | null> {
+    if (!ids.length) return [];
+    const idsParam = encodeURIComponent(ids.slice(0, 100).join(','));
+    return this.fetchSafe<any[]>(`/products/by-ids?ids=${idsParam}`);
+  }
+
   async getProductsByParentId(parentId: string): Promise<any[] | null> {
     return this.fetchSafe<any[]>(`/products?parent_id=${encodeURIComponent(parentId)}&status=all&limit=500`, true);
   }

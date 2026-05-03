@@ -278,24 +278,25 @@ export const catalogService = {
 
             let hydratedPaginated = paginated;
             if (missingMedia.length > 0) {
-                const fullRows = await Promise.all(
-                    missingMedia.map(async (product: any) => {
-                        const full = await vpsApiService.getProductById(product.id, true);
-                        if (!full) return null;
+                // Batch fetch: 1 request com .in(ids) em vez de N fetches individuais.
+                // Antes: 24× /products/{id} em paralelo (~3s cada → 60s+ de wait time agregado).
+                // Agora: 1× /products/by-ids?ids=... → ~500ms.
+                const ids = missingMedia.map((p: any) => p.id).filter(Boolean);
+                const fullRowsRaw = await vpsApiService.getProductsByIds(ids) || [];
+                const fullRows = fullRowsRaw
+                    .map((full: any) => {
                         const normalized = normalizeProduct(full as any);
                         if (!hasMedia(normalized)) return null;
                         return {
-                            id: product.id,
+                            id: full.id,
                             images: normalized.images,
                             image_url: normalized.image_url || normalized.images?.[0] || null,
                         };
                     })
-                );
+                    .filter(Boolean);
 
                 const mediaById = new Map(
-                    fullRows
-                        .filter(Boolean)
-                        .map((row: any) => [row.id, row])
+                    fullRows.map((row: any) => [row.id, row])
                 );
 
                 hydratedPaginated = paginated.map((product: any) => {

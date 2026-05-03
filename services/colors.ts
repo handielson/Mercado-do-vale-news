@@ -134,29 +134,48 @@ function generateSlug(name: string): string {
         .replace(/^-+|-+$/g, '');
 }
 
+// Cache + dedup de list() — várias telas montam ProductCards/filtros simultaneamente
+// e a lista de cores é praticamente estática (admin só altera ocasionalmente).
+let listCache: { data: Color[]; expiresAt: number } | null = null;
+let listInFlight: Promise<Color[]> | null = null;
+const LIST_TTL_MS = 5 * 60 * 1000;
+
+function clearListCache() { listCache = null; }
+
 /**
  * List all colors
  */
 async function list(): Promise<Color[]> {
-    const companyId = await getCompanyId();
+    if (listCache && Date.now() < listCache.expiresAt) return listCache.data;
+    if (listInFlight) return listInFlight;
 
-    const { data, error } = await supabase
-        .from('colors')
-        .select('*')
-        .eq('company_id', companyId)
-        .order('name');
+    listInFlight = (async () => {
+        try {
+            const companyId = await getCompanyId();
+            const { data, error } = await supabase
+                .from('colors')
+                .select('*')
+                .eq('company_id', companyId)
+                .order('name');
+            if (error) throw new Error(`Failed to fetch colors: ${error.message}`);
 
-    if (error) throw new Error(`Failed to fetch colors: ${error.message}`);
+            const result = (data || []).map(row => ({
+                id: row.id,
+                name: row.name,
+                slug: row.slug,
+                hex_code: row.hex_code,
+                active: row.active ?? true,
+                created: row.created_at,
+                updated: row.updated_at,
+            }));
+            listCache = { data: result, expiresAt: Date.now() + LIST_TTL_MS };
+            return result;
+        } finally {
+            listInFlight = null;
+        }
+    })();
 
-    return (data || []).map(row => ({
-        id: row.id,
-        name: row.name,
-        slug: row.slug,
-        hex_code: row.hex_code,
-        active: row.active ?? true,
-        created: row.created_at,
-        updated: row.updated_at
-    }));
+    return listInFlight;
 }
 
 /**
@@ -212,6 +231,7 @@ async function create(input: ColorInput): Promise<Color> {
 
     if (error) throw new Error(`Failed to create color: ${error.message}`);
 
+    clearListCache();
     return {
         id: data.id,
         name: data.name,
@@ -245,6 +265,7 @@ async function update(id: string, input: ColorInput): Promise<Color> {
 
     if (error) throw new Error(`Failed to update color: ${error.message}`);
 
+    clearListCache();
     return {
         id: data.id,
         name: data.name,
@@ -269,6 +290,7 @@ async function deleteColor(id: string): Promise<void> {
         .eq('company_id', companyId);
 
     if (error) throw new Error(`Failed to delete color: ${error.message}`);
+    clearListCache();
 }
 
 /**
