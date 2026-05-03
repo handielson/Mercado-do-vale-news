@@ -4,6 +4,7 @@ import { modelService } from './models';
 import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { vpsApiService } from './vpsApiService';
+import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 
 const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -1001,6 +1002,128 @@ function normalizeExternalImageUrls(images: unknown[]): string[] {
         .slice(0, 5);
 }
 
+function isVpsImageUrl(value: string): boolean {
+    try {
+        const parsed = new URL(value);
+        const vpsBase = new URL(VPS_DIRECT_BASE_URL);
+        return parsed.hostname === vpsBase.hostname && parsed.pathname.startsWith('/images/');
+    } catch {
+        return false;
+    }
+}
+
+function safeBlingImageSku(sku: unknown, blingId: unknown): string {
+    const source = String(sku || blingId || 'bling')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9_.-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    return source || `BLING-${String(blingId || Date.now())}`;
+}
+
+function extensionFromImage(sourceUrl: string, contentType: string | null): string {
+    const type = String(contentType || '').toLowerCase();
+    if (type.includes('avif')) return 'avif';
+    if (type.includes('webp')) return 'webp';
+    if (type.includes('png')) return 'png';
+    if (type.includes('gif')) return 'gif';
+    if (type.includes('jpeg') || type.includes('jpg')) return 'jpg';
+
+    try {
+        const ext = new URL(sourceUrl).pathname.split('.').pop()?.toLowerCase();
+        if (ext && ['avif', 'webp', 'png', 'gif', 'jpg', 'jpeg'].includes(ext)) {
+            return ext === 'jpeg' ? 'jpg' : ext;
+        }
+    } catch {
+        // fallback below
+    }
+    return 'jpg';
+}
+
+async function blingImageUploadHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...getVpsSyncHeaders(),
+        ...extra,
+    };
+}
+
+async function fetchBlingImageBlob(sourceUrl: string): Promise<Blob> {
+    const parsed = new URL(sourceUrl);
+    const url = parsed.hostname === 'orgbling.s3.amazonaws.com'
+        ? `/api/bling?resource=image-proxy&url=${encodeURIComponent(sourceUrl)}`
+        : sourceUrl;
+
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) {
+        throw new Error(`Falha ao baixar imagem (${response.status})`);
+    }
+
+    return response.blob();
+}
+
+async function uploadBlingImageToVps(
+    sourceUrl: string,
+    context: { sku?: unknown; blingId?: unknown; index: number }
+): Promise<string> {
+    if (isVpsImageUrl(sourceUrl)) return sourceUrl;
+
+    const blob = await fetchBlingImageBlob(sourceUrl);
+    const sku = safeBlingImageSku(context.sku, context.blingId);
+    const ext = extensionFromImage(sourceUrl, blob.type);
+    const filename = `bling-${String(context.blingId || sku)}-${String(context.index + 1).padStart(2, '0')}.${ext}`;
+    const storagePath = `products/${sku}/${filename}`;
+    const file = new File([blob], filename, { type: blob.type || `image/${ext}` });
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('path', storagePath);
+
+    const response = await fetch(buildVpsUrl('/images/upload', { method: 'POST' }), {
+        method: 'POST',
+        headers: await blingImageUploadHeaders(),
+        body: formData,
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.url) {
+        throw new Error(data?.error || data?.message || `Falha ao subir imagem para VPS (${response.status})`);
+    }
+
+    return data.url;
+}
+
+async function materializeBlingImagesToVps(
+    images: unknown[],
+    context: { sku?: unknown; blingId?: unknown }
+): Promise<string[]> {
+    const normalized = normalizeExternalImageUrls(images);
+    const uploaded: string[] = [];
+
+    for (let index = 0; index < normalized.length; index++) {
+        const sourceUrl = normalized[index];
+        try {
+            uploaded.push(await uploadBlingImageToVps(sourceUrl, { ...context, index }));
+        } catch (error: any) {
+            console.warn('[bling:images-to-vps] mantendo-url-original', {
+                blingId: context.blingId,
+                sku: context.sku,
+                index,
+                sourceUrl,
+                reason: error?.message || String(error),
+            });
+            uploaded.push(sourceUrl);
+        }
+    }
+
+    return uploaded;
+}
+
 export async function importBlingProducts(
     selectedProducts: BlingProduct[],
     enabledFields: Set<string>,
@@ -1422,8 +1545,11 @@ export async function importBlingProducts(
             if (!row.brand && modelBrandName && finalModelId === modelId) row.brand = modelBrandName;
 
             row.model_id = finalModelId || null;
-            // Mantem apenas URLs HTTP vindas do Bling; nao persiste mais base64 no banco.
-            row.images = normalizeExternalImageUrls(Array.isArray(row.images) ? row.images : []);
+            // Materializa as imagens do Bling na VPS; se uma falhar, preserva a URL original para nao quebrar o produto.
+            row.images = await materializeBlingImagesToVps(Array.isArray(row.images) ? row.images : [], {
+                sku: row.sku || item.codigo,
+                blingId: item.id,
+            });
             row.image_url = row.images[0] || row.image_url || null;
 
             // Extrai _color_id auxiliar antes de enviar para o banco
@@ -1651,7 +1777,7 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
 export async function reimportModelProductsFromBling(modelId: string): Promise<number> {
     const { data: products, error } = await supabase
         .from('products')
-        .select('id, bling_id, specs')
+        .select('id, sku, bling_id, specs')
         .eq('model_id', modelId)
         .not('bling_id', 'is', null);
         
@@ -1681,7 +1807,10 @@ export async function reimportModelProductsFromBling(modelId: string): Promise<n
         const extractedUrls = imagens.slice(0, 5).map((img: any) => img?.link || img?.url || (typeof img === 'string' ? img : null)).filter(Boolean);
 
         if (extractedUrls.length > 0) {
-            const processedImages = normalizeExternalImageUrls(extractedUrls);
+            const processedImages = await materializeBlingImagesToVps(extractedUrls, {
+                sku: p.sku || detail.codigo,
+                blingId: p.bling_id,
+            });
             if (processedImages.length > 0) {
                 updateData.images = processedImages;
                 updateData.image_url = processedImages[0];
