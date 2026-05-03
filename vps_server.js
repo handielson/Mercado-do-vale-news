@@ -10,7 +10,67 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 function isImmutableImageDerivative(filePath = '') {
-  return /-\d+\.(webp|avif)$/i.test(filePath);
+  return /-(320|480|768|800|1280)\.(webp|avif)$/i.test(filePath);
+}
+
+function isDerivativeCandidate(filePath = '') {
+  return /\.(jpe?g|png|webp|avif)$/i.test(filePath) && !isImmutableImageDerivative(filePath);
+}
+
+function buildImageDerivativeTargets(filePath, kind = 'product') {
+  if (!isDerivativeCandidate(filePath)) return [];
+
+  const widths = kind === 'banner' ? [768, 1280] : [320, 480, 800];
+  const dir = path.dirname(filePath);
+  const ext = path.extname(filePath);
+  const base = path.basename(filePath, ext);
+  const formats = ['webp', 'avif'];
+
+  return widths.flatMap((width) =>
+    formats.map((format) => ({
+      width,
+      format,
+      outputPath: path.join(dir, `${base}-${width}.${format}`),
+    }))
+  );
+}
+
+async function generateImageDerivatives(filePath, kind = 'product') {
+  const targets = buildImageDerivativeTargets(filePath, kind);
+  if (targets.length === 0) return { created: 0, skipped: 0, errors: [] };
+
+  let sharp;
+  try {
+    sharp = require('sharp');
+  } catch (err) {
+    return { created: 0, skipped: 0, errors: [`sharp unavailable: ${err.message}`] };
+  }
+
+  const results = { created: 0, skipped: 0, errors: [] };
+
+  for (const target of targets) {
+    try {
+      if (fs.existsSync(target.outputPath)) {
+        results.skipped++;
+        continue;
+      }
+
+      let pipeline = sharp(filePath)
+        .rotate()
+        .resize({ width: target.width, withoutEnlargement: true });
+
+      pipeline = target.format === 'avif'
+        ? pipeline.avif({ quality: 50, effort: 4 })
+        : pipeline.webp({ quality: 78, effort: 4 });
+
+      await pipeline.toFile(target.outputPath);
+      results.created++;
+    } catch (err) {
+      results.errors.push(`${path.basename(target.outputPath)}: ${err.message}`);
+    }
+  }
+
+  return results;
 }
 
 
@@ -289,8 +349,13 @@ fastify.post('/products/:id/upload-image', { preHandler: requireSyncKey }, async
   const buffer = Buffer.concat(chunks);
   fs.writeFileSync(dest, buffer);
 
+  const derivatives = await generateImageDerivatives(dest, 'product');
+  if (derivatives.errors.length > 0) {
+    req.log.warn({ file: fname, errors: derivatives.errors }, 'image derivative generation failed');
+  }
+
   const url = `https://api.xiaomipetrolina.com.br/images/products/${id}/${fname}`;
-  return reply.send({ url, filename: fname });
+  return reply.send({ url, filename: fname, derivatives });
 });
 
 fastify.post('/admin/migrate/production-days', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -1470,8 +1535,13 @@ fastify.post('/images/upload', { preHandler: requireSyncKey }, async (req, reply
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, fileBuf);
 
+  const derivatives = await generateImageDerivatives(dest, 'product');
+  if (derivatives.errors.length > 0) {
+    req.log.warn({ path: safe, errors: derivatives.errors }, 'image derivative generation failed');
+  }
+
   const url = `${process.env.API_BASE_URL || 'https://api.xiaomipetrolina.com.br'}/images/${safe}`;
-  return { ok: true, url, path: safe };
+  return { ok: true, url, path: safe, derivatives };
 });
 
 // GET /images/list?prefix=products/SKU — lista arquivos (recursivo) num prefixo
@@ -2206,9 +2276,14 @@ fastify.post('/banners/upload', { preHandler: requireSyncKey }, async (req, repl
   const fname = `${Date.now()}${ext}`;
   const bannerDir = path.join(UPLOADS_DIR, 'banners');
   fs.mkdirSync(bannerDir, { recursive: true });
-  fs.writeFileSync(path.join(bannerDir, fname), fileBuf);
+  const dest = path.join(bannerDir, fname);
+  fs.writeFileSync(dest, fileBuf);
+  const derivatives = await generateImageDerivatives(dest, 'banner');
+  if (derivatives.errors.length > 0) {
+    req.log.warn({ file: fname, errors: derivatives.errors }, 'banner derivative generation failed');
+  }
   const baseUrl = process.env.API_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-  return { ok: true, url: `${baseUrl}/images/banners/${fname}`, path: `banners/${fname}` };
+  return { ok: true, url: `${baseUrl}/images/banners/${fname}`, path: `banners/${fname}`, derivatives };
 });
 
 // ─── Warranty Templates ─────────────────────────────────────────────────────
