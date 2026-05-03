@@ -2,33 +2,60 @@ import { supabase } from './supabase';
 import { ProductReview, ReviewInput } from '../types/review';
 import { earnCoinsForReview } from './cashbackService';
 
+// DataLoader-style batching: vários cards chamam getProductReviews(id) ao mesmo
+// tempo. Acumulamos os IDs por 50ms e fazemos UMA query com .in(), depois
+// distribuímos os resultados pra cada caller. Reduz N requests pra 1.
+let pendingResolvers = new Map<string, ((data: ProductReview[]) => void)[]>();
+let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function flushReviewsBatch() {
+    const resolvers = pendingResolvers;
+    pendingResolvers = new Map();
+    batchTimer = null;
+    const ids = Array.from(resolvers.keys());
+    if (ids.length === 0) return;
+
+    const { data, error } = await supabase
+        .from('product_reviews')
+        .select(`*, customer:customers(name, avatar_url)`)
+        .in('product_id', ids)
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Erro ao buscar avaliações em lote:', error);
+        resolvers.forEach(rs => rs.forEach(r => r([])));
+        return;
+    }
+
+    const byProduct = new Map<string, ProductReview[]>();
+    (data || []).forEach((review: any) => {
+        const formatted = {
+            ...review,
+            customer: Array.isArray(review.customer) ? review.customer[0] : review.customer,
+        } as ProductReview;
+        const list = byProduct.get(review.product_id) || [];
+        list.push(formatted);
+        byProduct.set(review.product_id, list);
+    });
+
+    resolvers.forEach((rs, productId) => {
+        const list = byProduct.get(productId) || [];
+        rs.forEach(r => r(list));
+    });
+}
+
 export const reviewService = {
     /**
-     * Busca todas as avaliações aprovadas de um produto
+     * Busca todas as avaliações aprovadas de um produto.
+     * Batches multiple concurrent calls em 1 query Supabase (50ms window).
      */
     getProductReviews: async (productId: string): Promise<ProductReview[]> => {
-        const { data, error } = await supabase
-            .from('product_reviews')
-            .select(`
-                *,
-                customer:customers(name, avatar_url)
-            `)
-            .eq('product_id', productId)
-            .eq('status', 'approved')
-            .order('created_at', { ascending: false });
-
-            // 'customer' is returned as an array or object depending on relation, usually object
-            // Let's format it to ensure it matches the interface
-            
-        if (error) {
-            console.error('Erro ao buscar avaliações:', error);
-            return [];
-        }
-
-        return data.map(review => ({
-            ...review,
-            customer: Array.isArray(review.customer) ? review.customer[0] : review.customer
-        })) as ProductReview[];
+        return new Promise(resolve => {
+            if (!pendingResolvers.has(productId)) pendingResolvers.set(productId, []);
+            pendingResolvers.get(productId)!.push(resolve);
+            if (!batchTimer) batchTimer = setTimeout(flushReviewsBatch, 50);
+        });
     },
 
     /**

@@ -19,7 +19,9 @@ const FEES_SUCCESS_TTL_MS = 5 * 60 * 1000;
 const FEES_FAILURE_TTL_MS = 60 * 1000;
 let feesCache: { data: PaymentFee[]; expiresAt: number } | null = null;
 let failureCooldownUntil = 0;
-let feesRequest: Promise<PaymentFee[]> | null = null;
+// Dedup de chamadas concorrentes: quando N product cards montam ao mesmo tempo
+// e nenhum tem cache populado, antes era N fetches paralelos. Agora 1 só.
+let inFlightPromise: Promise<PaymentFee[]> | null = null;
 
 /** Normaliza campos da VPS para o padrão do frontend (types/payment-fees.ts) */
 function normalize(raw: RawPaymentFee): PaymentFee {
@@ -42,29 +44,29 @@ export const paymentFeesService = {
             return feesCache.data;
         }
 
-        if (feesRequest) {
-            return feesRequest;
-        }
-
         if (Date.now() < failureCooldownUntil) {
             return feesCache?.data || [];
         }
 
-        feesRequest = (async () => {
-            const raw = await vpsClient.get<RawPaymentFee[]>('/payment-fees');
-            const normalized = raw.map(normalize);
-            feesCache = { data: normalized, expiresAt: Date.now() + FEES_SUCCESS_TTL_MS };
-            return normalized;
+        // Reaproveita fetch em curso pra evitar tempestade de requests quando
+        // múltiplos componentes montam simultaneamente (ex.: catálogo com 25 cards).
+        if (inFlightPromise) return inFlightPromise;
+
+        inFlightPromise = (async () => {
+            try {
+                const raw = await vpsClient.get<RawPaymentFee[]>('/payment-fees');
+                const normalized = raw.map(normalize);
+                feesCache = { data: normalized, expiresAt: Date.now() + FEES_SUCCESS_TTL_MS };
+                return normalized;
+            } catch (error) {
+                failureCooldownUntil = Date.now() + FEES_FAILURE_TTL_MS;
+                return feesCache?.data || [];
+            } finally {
+                inFlightPromise = null;
+            }
         })();
 
-        try {
-            return await feesRequest;
-        } catch (error) {
-            failureCooldownUntil = Date.now() + FEES_FAILURE_TTL_MS;
-            return feesCache?.data || [];
-        } finally {
-            feesRequest = null;
-        }
+        return inFlightPromise;
     },
 
     /** Replace ALL fees atomically (PUT replaces entire list) */
