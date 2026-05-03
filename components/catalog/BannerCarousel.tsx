@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+<<<<<<< Updated upstream
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+=======
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+>>>>>>> Stashed changes
 import type { Banner } from '@/types/catalog';
 import { bannerService, type CustomerType } from '@/services/bannerService';
 import { buildResponsiveImageSources } from '@/utils/responsive-image-sources.js';

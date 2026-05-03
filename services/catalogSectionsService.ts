@@ -13,7 +13,7 @@ class CatalogSectionsService {
 
     // Prefix for persistent LocalStorage caching of section products
     // ⚠️ Bump a versão aqui sempre que a lógica de fetch mudar (invalida cache antigo automaticamente)
-    private CACHE_KEY_PREFIX = '@mv:section_products:v3:';
+    private CACHE_KEY_PREFIX = '@mv:section_products:v4:';
 
     // Helper to safely access localStorage (prevents SSR errors)
     private getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
@@ -220,8 +220,10 @@ class CatalogSectionsService {
             // Build query params for the VPS
             const params = new URLSearchParams();
             
-            // Limit mapping
-            const fetchLimit = Math.min((section.max_products || 12) * 10, 200);
+            // Busca mais fundo porque as regras globais de visibilidade
+            // (estoque/preco/status) sao aplicadas client-side apos a VPS.
+            // O componente da secao ainda limita a exibicao em max_products.
+            const fetchLimit = Math.min((section.max_products || 12) * 50, 500);
             params.append('limit', fetchLimit.toString());
 
             // App settings filters

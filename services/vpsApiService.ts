@@ -100,10 +100,6 @@ class VpsApiService {
       const separator = path.includes('?') ? '&' : '?';
       const fullPath = noCache ? `${path}${separator}_t=${Date.now()}` : path;
       const headers: Record<string, string> = { Accept: 'application/json' };
-      if (noCache) {
-        headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-        headers.Pragma = 'no-cache';
-      }
       
       const res = await fetch(proxyUrl(fullPath, 'GET'), {
         signal: controller.signal,

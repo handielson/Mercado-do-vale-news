@@ -12,7 +12,7 @@ async function fetchNcmResults(searchTerm: string): Promise<NcmResult[]> {
   const term = searchTerm.trim();
   if (!term) return [];
 
-  const res = await fetch(`/api/brasilapi-ncm?search=${encodeURIComponent(term)}`);
+  const res = await fetch(`/api/vps-proxy?path=/brasilapi-ncm&search=${encodeURIComponent(term)}`);
   if (!res.ok) throw new Error(`BrasilAPI HTTP ${res.status}`);
   return res.json();
 }

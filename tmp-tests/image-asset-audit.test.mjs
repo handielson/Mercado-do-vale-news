@@ -36,17 +36,25 @@ assert.deepEqual(
 );
 
 const alreadyWebp = classifyImageAsset('uploads/products/SKU/img-1.webp', 42000);
-assert.equal(alreadyWebp.shouldOptimize, false);
-assert.deepEqual(buildDerivativePlan(alreadyWebp), []);
+assert.equal(alreadyWebp.shouldOptimize, true);
+assert.match(buildDerivativePlan(alreadyWebp)[0].outputPath, /img-1-320\.webp$/);
 
 const alreadyAvif = classifyImageAsset('uploads/products/SKU/img-1.avif', 32000);
-assert.equal(alreadyAvif.shouldOptimize, false);
-assert.deepEqual(buildDerivativePlan(alreadyAvif), []);
+assert.equal(alreadyAvif.shouldOptimize, true);
+assert.match(buildDerivativePlan(alreadyAvif)[0].outputPath, /img-1-320\.webp$/);
 
-const summary = summarizeAssets([product, banner, alreadyWebp, alreadyAvif]);
-assert.equal(summary.totalImages, 4);
-assert.equal(summary.optimizableImages, 2);
-assert.equal(summary.byKind.product.count, 3);
+const generatedDerivative = classifyImageAsset('uploads/products/SKU/img-1-320.webp', 22000);
+assert.equal(generatedDerivative.shouldOptimize, false);
+assert.deepEqual(buildDerivativePlan(generatedDerivative), []);
+
+const legacyExternal = classifyImageAsset('uploads/legacy/external/external/e3771d34b703c814.png', 447796);
+assert.equal(legacyExternal.kind, 'product');
+assert.equal(legacyExternal.shouldOptimize, true);
+
+const summary = summarizeAssets([product, banner, alreadyWebp, alreadyAvif, generatedDerivative, legacyExternal]);
+assert.equal(summary.totalImages, 6);
+assert.equal(summary.optimizableImages, 5);
+assert.equal(summary.byKind.product.count, 5);
 assert.equal(summary.byKind.banner.count, 1);
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-image-audit-'));

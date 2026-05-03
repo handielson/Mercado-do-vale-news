@@ -10,8 +10,11 @@ const CONFIGURED_VPS_BASE_URL = normalizeVpsProxyBaseUrl(
 const VPS_SYNC_KEY = process.env.VPS_SYNC_KEY || '';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+<<<<<<< Updated upstream
 const READ_TIMEOUT_MS = Number(process.env.VPS_PROXY_READ_TIMEOUT_MS || 7000);
 const WRITE_TIMEOUT_MS = Number(process.env.VPS_PROXY_WRITE_TIMEOUT_MS || 15000);
+=======
+>>>>>>> Stashed changes
 const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
 
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
@@ -31,18 +34,30 @@ function normalizePath(input: unknown): string {
     return path;
 }
 
+<<<<<<< Updated upstream
 function getFirstQueryParam(value: unknown): string {
+=======
+function getSearchParam(value: unknown): string {
+>>>>>>> Stashed changes
     if (Array.isArray(value)) return String(value[0] || '').trim();
     return String(value || '').trim();
 }
 
+<<<<<<< Updated upstream
 async function handleBrasilapiNcm(req: any, res: any) {
+=======
+async function handleBrasilApiNcm(req: any, res: any) {
+>>>>>>> Stashed changes
     if (req.method !== 'GET') {
         res.setHeader('Allow', 'GET');
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+<<<<<<< Updated upstream
     const search = getFirstQueryParam(req.query?.search);
+=======
+    const search = getSearchParam(req.query?.search);
+>>>>>>> Stashed changes
     if (!search || search.length < 2) {
         return res.status(400).json({ error: 'Missing or invalid search parameter' });
     }
@@ -62,11 +77,14 @@ async function handleBrasilapiNcm(req: any, res: any) {
     }
 }
 
+<<<<<<< Updated upstream
 export function normalizeVpsProxyBaseUrl(input: unknown): string {
     const baseUrl = String(input || DEFAULT_VPS_BASE_URL).trim().replace(/\/+$/, '');
     return baseUrl || DEFAULT_VPS_BASE_URL;
 }
 
+=======
+>>>>>>> Stashed changes
 function getBearerToken(req: any): string | null {
     const auth = String(req.headers['authorization'] || '');
     if (!auth.toLowerCase().startsWith('bearer ')) return null;
@@ -188,6 +206,17 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Missing or invalid query param: path' });
     }
 
+<<<<<<< Updated upstream
+=======
+    if (path === '/brasilapi-ncm') {
+        return handleBrasilApiNcm(req, res);
+    }
+
+    if (!VPS_SYNC_KEY) {
+        return res.status(500).json({ error: 'VPS_SYNC_KEY not configured on server' });
+    }
+
+>>>>>>> Stashed changes
     const auth = await getAuthContext(req);
     const isWrite = method !== 'GET' && method !== 'HEAD';
     const isPublicPath = isPublicProxyPath(path, method);
@@ -229,10 +258,15 @@ export default async function handler(req: any, res: any) {
         let body: BodyInit | undefined;
         if (method !== 'GET' && method !== 'HEAD') {
             if (req.body != null) {
+<<<<<<< Updated upstream
                 if (typeof req.body === 'string') {
                     body = req.body;
                 } else if (Buffer.isBuffer(req.body)) {
                     body = new Uint8Array(req.body);
+=======
+                if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
+                    body = req.body as unknown as BodyInit;
+>>>>>>> Stashed changes
                 } else {
                     body = JSON.stringify(req.body);
                     if (!headers.has('content-type')) {
@@ -241,7 +275,11 @@ export default async function handler(req: any, res: any) {
                 }
             } else {
                 const raw = await readRawBody(req);
+<<<<<<< Updated upstream
                 if (raw.length > 0) body = new Uint8Array(raw);
+=======
+                if (raw.length > 0) body = raw as unknown as BodyInit;
+>>>>>>> Stashed changes
             }
         }
 

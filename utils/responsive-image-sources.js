@@ -1,6 +1,6 @@
 const PRODUCT_WIDTHS = [320, 480, 800];
 const BANNER_WIDTHS = [768, 1280];
-const SOURCE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png']);
+const SOURCE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
 const DERIVATIVE_FORMATS = ['avif', 'webp'];
 
 const PRODUCT_SIZES = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 242px';
@@ -43,7 +43,7 @@ function canBuildSources(rawUrl, kind) {
 
   const lowerPath = pathname.toLowerCase();
   if (kind === 'banner') return lowerPath.includes('/banners/');
-  return lowerPath.includes('/products/');
+  return lowerPath.includes('/products/') || lowerPath.includes('/legacy/external/');
 }
 
 export function buildResponsiveImageSources(rawUrl, options = {}) {

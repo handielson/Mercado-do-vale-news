@@ -3,13 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
-const OPTIMIZABLE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png']);
+const OPTIMIZABLE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
 const PRODUCT_WIDTHS = [320, 480, 800];
 const BANNER_WIDTHS = [768, 1280];
 const DERIVATIVE_FORMATS = ['webp', 'avif'];
-const MIN_OPTIMIZABLE_BYTES = 100 * 1024;
+const MIN_OPTIMIZABLE_BYTES = 10 * 1024;
 
 const normalizePath = (value) => value.replace(/\\/g, '/');
+const isImmutableImageDerivative = (value) => /-(320|480|768|800|1280)\.(webp|avif)$/i.test(value);
 
 export function classifyImageAsset(filePath, sizeBytes = 0) {
   const normalizedPath = normalizePath(filePath);
@@ -17,7 +18,7 @@ export function classifyImageAsset(filePath, sizeBytes = 0) {
   const lowerPath = normalizedPath.toLowerCase();
   const kind = lowerPath.includes('/banners/')
     ? 'banner'
-    : lowerPath.includes('/products/')
+    : lowerPath.includes('/products/') || lowerPath.includes('/legacy/external/')
       ? 'product'
       : 'other';
 
@@ -29,6 +30,7 @@ export function classifyImageAsset(filePath, sizeBytes = 0) {
     shouldOptimize:
       kind !== 'other'
       && OPTIMIZABLE_EXTENSIONS.has(extension)
+      && !isImmutableImageDerivative(normalizedPath)
       && sizeBytes >= MIN_OPTIMIZABLE_BYTES,
   };
 }

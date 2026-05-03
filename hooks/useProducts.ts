@@ -191,6 +191,7 @@ export const useProducts = () => {
             filtered = filtered.filter(product => product.images && product.images.length > 0);
         } else if (filters.imageStatus === 'without_image') {
             filtered = filtered.filter(product => !product.images || product.images.length === 0);
+        }
 
         // Parent visibility filter (produtos pai sao agregadores, nao vendaveis)
         if (filters.parentVisibility === 'hide_parents') {
@@ -199,7 +200,6 @@ export const useProducts = () => {
             filtered = filtered.filter(product => product.is_parent);
         }
         // 'show_all' -> sem filtro
-        }
 
         // Sorting
         filtered.sort((a, b) => {
