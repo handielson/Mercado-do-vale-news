@@ -506,15 +506,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
+    const isParentProduct = Number(product.is_parent) === 1;
+
     return (
         <div
             className={cn(
-                "bg-white rounded-xl border overflow-hidden transition-all duration-200",
+                "rounded-xl border overflow-hidden transition-all duration-200",
+                isParentProduct ? "bg-blue-50/60" : "bg-white",
                 selectionMode
                     ? isSelected
                         ? "border-blue-400 ring-2 ring-blue-300 shadow-md cursor-pointer"
                         : "border-slate-200 hover:border-blue-300 cursor-pointer"
-                    : "border-slate-200 hover:shadow-lg"
+                    : isParentProduct
+                        ? "border-blue-300 border-2 shadow-sm hover:shadow-md hover:border-blue-400"
+                        : "border-slate-200 hover:shadow-lg"
             )}
             onClick={selectionMode ? () => onToggleSelect?.(product) : undefined}
         >
@@ -548,8 +553,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     <Package className="w-16 h-16 text-slate-300" />
                 )}
 
-                {/* Stock Badge */}
-                {product.track_inventory && (
+                {/* Stock Badge - Esconde quando eh produto pai (pais nao vendem, nao tem estoque proprio) */}
+                {product.track_inventory && !isParentProduct && (
                     <div className={cn(
                         'absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-semibold shadow-md',
                         currentStock === 0
@@ -561,6 +566,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         {currentStock === 0
                             ? 'Sem Estoque'
                             : `${currentStock} un.`}
+                    </div>
+                )}
+
+                {/* Badge "Produto Pai" - substitui o badge de estoque pra agregadores */}
+                {isParentProduct && (
+                    <div className="absolute top-2 right-2 px-2.5 py-1 rounded-full text-xs font-bold shadow-md bg-blue-600 text-white border border-blue-700 flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                        Produto Pai
                     </div>
                 )}
             </div>
