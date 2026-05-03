@@ -9,6 +9,10 @@ const crypto = require('crypto');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+function isImmutableImageDerivative(filePath = '') {
+  return /-\d+\.(webp|avif)$/i.test(filePath);
+}
+
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -47,9 +51,14 @@ fastify.register(require('@fastify/static'), {
   root: UPLOADS_DIR,
   prefix: '/images/',
   decorateReply: false,
-  setHeaders: (res) => {
+  setHeaders: (res, filePath) => {
     // Allow images cross-origin; CDN-Cache-Control impede Cloudflare de cachear
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    if (isImmutableImageDerivative(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
+      return;
+    }
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('CDN-Cache-Control', 'no-store'); // Cloudflare não cacheia imagens
   },
