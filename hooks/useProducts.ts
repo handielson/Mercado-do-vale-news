@@ -42,6 +42,7 @@ function mapVpsProduct(row: any): Product {
         warranty_type: row.warranty_type || 'brand',
         warranty_template_id: row.warranty_template_id || undefined,
         parent_id: row.parent_id || undefined,
+        is_parent: Number(row.is_parent) === 1,
         bling_id: row.bling_id || undefined,
         bling_parent_id: row.bling_parent_id || undefined,
         video_url: row.video_url || undefined,
@@ -111,7 +112,8 @@ export const useProducts = () => {
         search: '',
         status: 'all',
         sortBy: 'newest',
-        imageStatus: 'all'
+        imageStatus: 'all',
+        parentVisibility: 'hide_parents'
     });
 
     // Pagination
@@ -189,6 +191,14 @@ export const useProducts = () => {
             filtered = filtered.filter(product => product.images && product.images.length > 0);
         } else if (filters.imageStatus === 'without_image') {
             filtered = filtered.filter(product => !product.images || product.images.length === 0);
+
+        // Parent visibility filter (produtos pai sao agregadores, nao vendaveis)
+        if (filters.parentVisibility === 'hide_parents') {
+            filtered = filtered.filter(product => !product.is_parent);
+        } else if (filters.parentVisibility === 'only_parents') {
+            filtered = filtered.filter(product => product.is_parent);
+        }
+        // 'show_all' -> sem filtro
         }
 
         // Sorting
