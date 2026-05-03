@@ -26,7 +26,7 @@ interface BlingCredentials {
     bling_callback_url: string;
 }
 
-type Tab = 'config' | 'products' | 'mappings' | 'webhook';
+type Tab = 'config' | 'products' | 'mappings' | 'webhook' | 'parents-backfill';
 
 const CACHE_KEY = 'bling_products_cache';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
@@ -193,6 +193,17 @@ export default function BlingPage() {
     const [autoCreateModel, setAutoCreateModel] = useState(false);
     const [systemColors, setSystemColors] = useState<Color[]>([]);
     const [colorMappings, setColorMappings] = useState<ColorMapping[]>(loadColorMappings);
+
+    // Pais Faltantes (backfill de pais do Bling que filhos referenciam mas nao foram importados)
+    const [missingParents, setMissingParents] = useState<Array<{ bling_id: number; child_count: number }> | null>(null);
+    const [loadingMissingParents, setLoadingMissingParents] = useState(false);
+    const [importingParents, setImportingParents] = useState(false);
+    const [parentImportProgress, setParentImportProgress] = useState({ current: 0, total: 0 });
+    const [parentImportResult, setParentImportResult] = useState<ImportResult | null>(null);
+    const [lastImportedIds, setLastImportedIds] = useState<number[]>([]);
+    const [previousMissingCount, setPreviousMissingCount] = useState<number | null>(null);
+    const [auditSnapshot, setAuditSnapshot] = useState<any | null>(null);
+    const [loadingAudit, setLoadingAudit] = useState(false);
 
     // ── Mappings ──
     const [blingCategories, setBlingCategories] = useState<BlingCategory[]>([]);
@@ -629,6 +640,126 @@ export default function BlingPage() {
         }
     }
 
+    // === Pais Faltantes: backfill helpers ===
+
+    async function loadMissingParentsList(silent = false) {
+        setLoadingMissingParents(true);
+        try {
+            const res = await fetch(buildVpsUrl('/admin/migrate/missing-parents-list', { method: 'GET' }), {
+                method: 'GET',
+                headers: getVpsSyncHeaders(),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const list = data.missing_parent_ids || [];
+            setMissingParents(list);
+            if (!silent) {
+                toast.success(`${data.total_missing || 0} pais faltantes encontrados (de ${data.total_referenced || 0} referenciados).`);
+            }
+            return list.length;
+        } catch (err: any) {
+            if (!silent) toast.error(`Erro ao carregar pais faltantes: ${err.message}`);
+            setMissingParents([]);
+            return null;
+        } finally {
+            setLoadingMissingParents(false);
+        }
+    }
+
+    async function loadAuditSnapshot() {
+        setLoadingAudit(true);
+        try {
+            const res = await fetch(buildVpsUrl('/admin/migrate/parent-linkage-audit', { method: 'GET' }), {
+                method: 'GET',
+                headers: getVpsSyncHeaders(),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            setAuditSnapshot(data.audit);
+            toast.success('Auditoria atualizada.');
+        } catch (err: any) {
+            toast.error(`Erro na auditoria: ${err.message}`);
+        } finally {
+            setLoadingAudit(false);
+        }
+    }
+
+    async function importMissingParents(limit?: number) {
+        if (!missingParents || missingParents.length === 0) {
+            toast.error('Nenhum pai para importar. Carregue a lista primeiro.');
+            return;
+        }
+        if (!importCategoryId) {
+            toast.error('Selecione uma categoria padrão antes de iniciar o backfill.');
+            return;
+        }
+
+        const toImport = (typeof limit === 'number' && limit > 0)
+            ? missingParents.slice(0, limit)
+            : missingParents;
+        const isTestMode = typeof limit === 'number' && limit > 0 && limit < missingParents.length;
+        const confirmMsg = isTestMode
+            ? `MODO TESTE: importar apenas os primeiros ${toImport.length} pais? Boa pra validar o fluxo antes do backfill completo.`
+            : `Importar ${toImport.length} produtos pai do Bling? Isso pode levar alguns minutos (≈700ms por produto).`;
+        if (!confirm(confirmMsg)) return;
+
+        setImportingParents(true);
+        setParentImportResult(null);
+        setLastImportedIds([]);
+        setPreviousMissingCount(missingParents.length);
+        setParentImportProgress({ current: 0, total: toImport.length });
+
+        const stubs: BlingProduct[] = toImport.map(p => ({
+            id: p.bling_id,
+            nome: `[Pai ${p.bling_id}] (carregando...)`,
+            codigo: '',
+        } as BlingProduct));
+
+        try {
+            const result = await importBlingProducts(
+                stubs,
+                enabledFields,
+                importCategoryId,
+                (current, total) => {
+                    setParentImportProgress({ current, total });
+                }
+            );
+            setParentImportResult(result);
+
+            const importedBlingIds = toImport.map(p => p.bling_id);
+            setLastImportedIds(importedBlingIds);
+            try {
+                const markRes = await fetch(buildVpsUrl('/admin/migrate/mark-as-parents', { method: 'POST' }), {
+                    method: 'POST',
+                    headers: { ...getVpsSyncHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bling_ids: importedBlingIds }),
+                });
+                if (markRes.ok) {
+                    const markData = await markRes.json();
+                    toast.success(`Pais marcados como is_parent: ${markData.affected || 0} produtos atualizados.`);
+                } else {
+                    toast.warning('Importação ok, mas falhou marcar como is_parent.');
+                }
+            } catch (markErr: any) {
+                toast.warning(`Importação ok, mas erro ao marcar como is_parent: ${markErr.message}`);
+            }
+
+            const errCount = result.errors.length;
+            if (errCount === 0) {
+                toast.success(`Backfill concluido: ${result.created} criados, ${result.updated} atualizados.`);
+            } else {
+                toast.warning(`Backfill com erros: ${result.created} criados, ${result.updated} atualizados, ${errCount} falhas.`);
+            }
+
+            await loadMissingParentsList(true);
+            await loadAuditSnapshot();
+        } catch (err: any) {
+            toast.error(`Erro no backfill: ${err.message || 'Tente novamente.'}`);
+        } finally {
+            setImportingParents(false);
+        }
+    }
+
     function toggleSelect(id: number) {
         setSelectedIds(prev => {
             const next = new Set(prev);
@@ -782,6 +913,19 @@ export default function BlingPage() {
                                 Webhook
                             </div>
                             {activeTab === 'webhook' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('parents-backfill')}
+                            className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'parents-backfill'
+                                ? 'bg-blue-50 text-blue-800 shadow-sm border border-blue-200/60'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                                }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <Link2 className={`w-5 h-5 ${activeTab === 'parents-backfill' ? 'text-blue-600' : 'text-slate-400'}`} />
+                                Pais Faltantes
+                            </div>
+                            {activeTab === 'parents-backfill' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                         </button>
                     </nav>
 
@@ -2596,6 +2740,241 @@ export default function BlingPage() {
                             </div>
                         );
                     })()}
+
+{/* ════════════════════════════════════════════════════ */}
+{/* TAB: PARENTS-BACKFILL                              */}
+{/* Cole este bloco DENTRO do mesmo container das outras*/}
+{/* abas, APOS o }) ()  } que fecha a aba 'webhook'    */}
+{/* ════════════════════════════════════════════════════ */}
+{activeTab === 'parents-backfill' && (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 space-y-6">
+        <div className="border-b border-slate-100 pb-4">
+            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <Link2 className="w-5 h-5 text-blue-600" />
+                Importar Pais Faltantes (Backfill)
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+                Pais (Estrutura no Bling) referenciados pelos filhos via <code className="text-xs bg-slate-100 px-1 rounded">bling_parent_id</code> mas que ainda não foram importados pro MySQL.
+                Necessário pra combos/kits referenciarem produtos pai (agregados de variantes).
+            </p>
+        </div>
+
+        {/* Seletor de categoria padrao */}
+        <div className={`p-3 rounded-xl border ${!importCategoryId ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'} space-y-2`}>
+            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Categoria padrão (fallback)
+            </label>
+            <select
+                value={importCategoryId}
+                onChange={(e) => setImportCategoryId(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+                disabled={importingParents}
+            >
+                <option value="">— Selecione uma categoria —</option>
+                {categoryTreeOptions.map(c => (
+                    <option key={c.id} value={c.id}>{c.path}</option>
+                ))}
+            </select>
+            <p className="text-xs text-slate-500">
+                Pais sem mapeamento de categoria do Bling caem aqui.
+                {!importCategoryId && <strong className="text-amber-700"> Obrigatório.</strong>}
+            </p>
+        </div>
+
+        {/* Botao buscar lista */}
+        <div className="flex items-center gap-3">
+            <button
+                onClick={() => loadMissingParentsList(false)}
+                disabled={loadingMissingParents || importingParents}
+                className="px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2"
+            >
+                {loadingMissingParents ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                {missingParents === null ? 'Buscar pais faltantes' : 'Recarregar lista'}
+            </button>
+            {missingParents !== null && (
+                <span className="text-sm text-slate-600">
+                    <strong>{missingParents.length}</strong> pais a importar
+                </span>
+            )}
+        </div>
+
+        {/* Botoes importar */}
+        {missingParents !== null && missingParents.length > 0 && (
+            <div className="space-y-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                        onClick={() => importMissingParents(5)}
+                        disabled={importingParents || !importCategoryId}
+                        className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        {importingParents ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Testar com 5
+                    </button>
+                    <button
+                        onClick={() => importMissingParents()}
+                        disabled={importingParents || !importCategoryId}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        {importingParents ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Importar Todos ({missingParents.length})
+                    </button>
+                    {importingParents && (
+                        <span className="text-sm text-slate-600">
+                            Progresso: <strong>{parentImportProgress.current}</strong> / {parentImportProgress.total}
+                        </span>
+                    )}
+                </div>
+
+                {importingParents && parentImportProgress.total > 0 && (
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div className="bg-blue-600 h-2 transition-all duration-300"
+                             style={{ width: `${(parentImportProgress.current / parentImportProgress.total) * 100}%` }} />
+                    </div>
+                )}
+
+                {parentImportResult && (
+                    <>
+                        <div className="grid grid-cols-3 gap-3 text-center">
+                            <div className="p-3 rounded-xl border border-green-200 bg-green-50">
+                                <div className="text-2xl font-bold text-green-700">{parentImportResult.created}</div>
+                                <div className="text-xs text-green-600 mt-1">Criados</div>
+                            </div>
+                            <div className="p-3 rounded-xl border border-blue-200 bg-blue-50">
+                                <div className="text-2xl font-bold text-blue-700">{parentImportResult.updated}</div>
+                                <div className="text-xs text-blue-600 mt-1">Atualizados</div>
+                            </div>
+                            <div className={`p-3 rounded-xl border ${parentImportResult.errors.length > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
+                                <div className={`text-2xl font-bold ${parentImportResult.errors.length > 0 ? 'text-red-700' : 'text-slate-500'}`}>
+                                    {parentImportResult.errors.length}
+                                </div>
+                                <div className={`text-xs ${parentImportResult.errors.length > 0 ? 'text-red-600' : 'text-slate-500'} mt-1`}>Erros</div>
+                            </div>
+                        </div>
+
+                        {previousMissingCount !== null && missingParents !== null && (
+                            <div className="p-3 rounded-xl border border-blue-200 bg-blue-50 flex items-center justify-center gap-3 text-sm">
+                                <span className="text-slate-600">Pais faltantes:</span>
+                                <span className="font-bold text-slate-700">{previousMissingCount}</span>
+                                <ArrowRight className="w-4 h-4 text-slate-400" />
+                                <span className="font-bold text-green-700">{missingParents.length}</span>
+                                <span className="text-green-700 font-medium">
+                                    ({previousMissingCount - missingParents.length} importados)
+                                </span>
+                            </div>
+                        )}
+
+                        {lastImportedIds.length > 0 && (
+                            <details className="text-sm" open>
+                                <summary className="cursor-pointer font-medium text-slate-700">
+                                    Ver IDs importados ({lastImportedIds.length})
+                                </summary>
+                                <div className="mt-2 max-h-60 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                                    {lastImportedIds.map(blingId => (
+                                        <div key={blingId} className="p-2 flex items-center justify-between text-xs hover:bg-slate-50">
+                                            <span className="font-mono text-slate-700">{blingId}</span>
+                                            <a href={`https://www.bling.com.br/produtos.php#edit/${blingId}`}
+                                               target="_blank" rel="noopener noreferrer"
+                                               className="text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                                                Ver no Bling <ExternalLink className="w-3 h-3" />
+                                            </a>
+                                        </div>
+                                    ))}
+                                </div>
+                            </details>
+                        )}
+                    </>
+                )}
+
+                {parentImportResult && parentImportResult.errors.length > 0 && (
+                    <details className="text-sm">
+                        <summary className="cursor-pointer font-medium text-red-700">
+                            Ver {parentImportResult.errors.length} erros
+                        </summary>
+                        <div className="mt-2 max-h-60 overflow-y-auto border border-red-200 rounded-lg divide-y divide-red-100">
+                            {parentImportResult.errors.map((err, i) => (
+                                <div key={i} className="p-2 text-xs">
+                                    <div className="font-medium text-red-900">{err.name || err.sku || '(sem nome)'}</div>
+                                    <div className="text-red-700 mt-0.5">{err.reason}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </details>
+                )}
+
+                <details className="text-sm" open={missingParents.length <= 20}>
+                    <summary className="cursor-pointer font-medium text-slate-700">
+                        Ver lista completa ({missingParents.length} pais)
+                    </summary>
+                    <div className="mt-2 max-h-96 overflow-y-auto border border-slate-200 rounded-lg">
+                        <table className="w-full text-xs">
+                            <thead className="bg-slate-50 sticky top-0">
+                                <tr>
+                                    <th className="text-left px-3 py-2 font-medium text-slate-600">Bling ID</th>
+                                    <th className="text-right px-3 py-2 font-medium text-slate-600">Filhos</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {missingParents.map(p => (
+                                    <tr key={p.bling_id} className="hover:bg-slate-50">
+                                        <td className="px-3 py-1.5 font-mono text-slate-700">{p.bling_id}</td>
+                                        <td className="px-3 py-1.5 text-right text-slate-600">{p.child_count}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            </div>
+        )}
+
+        {missingParents !== null && missingParents.length === 0 && (
+            <div className="p-6 rounded-xl border border-green-200 bg-green-50 text-center">
+                <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-3" />
+                <div className="text-sm font-medium text-green-800">Nenhum pai faltante!</div>
+                <div className="text-xs text-green-600 mt-1">Todos os pais ja estao no MySQL.</div>
+            </div>
+        )}
+
+        {/* Auditoria do MySQL - sempre visivel */}
+        <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+            <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Auditoria do MySQL (verificacao independente)
+                </h3>
+                <button
+                    onClick={loadAuditSnapshot}
+                    disabled={loadingAudit}
+                    className="px-3 py-1 bg-slate-700 text-white rounded-lg text-xs font-medium hover:bg-slate-800 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                    {loadingAudit ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    Verificar
+                </button>
+            </div>
+            {auditSnapshot ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="bg-white rounded p-2">
+                        <div className="text-slate-500">Total produtos</div>
+                        <div className="font-bold text-slate-800">{auditSnapshot.total_products}</div>
+                    </div>
+                    <div className="bg-white rounded p-2">
+                        <div className="text-slate-500">Marcados is_parent</div>
+                        <div className="font-bold text-green-700">{auditSnapshot.marked_as_parent}</div>
+                    </div>
+                    <div className="bg-white rounded p-2">
+                        <div className="text-slate-500">Filhos orfaos</div>
+                        <div className="font-bold text-amber-700">{auditSnapshot.orphan_children}</div>
+                    </div>
+                    <div className="bg-white rounded p-2">
+                        <div className="text-slate-500">Prontos p/ fechamento</div>
+                        <div className="font-bold text-blue-700">{auditSnapshot.pending_closure}</div>
+                    </div>
+                </div>
+            ) : (
+                <p className="text-xs text-slate-500">Clique em "Verificar" pra ver os numeros do banco.</p>
+            )}
+        </div>
+    </div>
+)}
                 </div>
             </div>
         </div>
