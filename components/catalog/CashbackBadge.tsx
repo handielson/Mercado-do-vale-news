@@ -3,30 +3,39 @@ import { Coins } from 'lucide-react';
 import { getCashbackSettings } from '@/services/cashbackService';
 import type { CashbackSettings } from '@/types/cashback';
 
-// Global cache for settings to prevent multiple fetches across cards
+// Cache global pra evitar fetch por card.
 let cachedSettings: CashbackSettings | null = null;
 let fetchPromise: Promise<CashbackSettings> | null = null;
-const STARTUP_CASHBACK_DELAY_MS = 7000;
 
-const scheduleIdle = (callback: () => void) => {
-    let idleId: number | null = null;
-
-    const timeoutId = window.setTimeout(() => {
-        if ('requestIdleCallback' in window) {
-            idleId = window.requestIdleCallback(callback, { timeout: 3000 });
-            return;
-        }
-
-        callback();
-    }, STARTUP_CASHBACK_DELAY_MS);
-
-    return () => {
-        window.clearTimeout(timeoutId);
-        if (idleId !== null) {
-            window.cancelIdleCallback(idleId);
-        }
-    };
-};
+/**
+ * Pré-carrega cashback settings antes dos product cards renderizarem.
+ * Chamado uma vez no boot do app — quando os cards montarem, cachedSettings
+ * já estará populado e a decisão "render badge ou não" é síncrona, eliminando
+ * o layout shift causado por badge aparecendo async em N cards simultâneos.
+ */
+export function prefetchCashbackSettings(): Promise<CashbackSettings> {
+    if (cachedSettings) return Promise.resolve(cachedSettings);
+    if (!fetchPromise) {
+        fetchPromise = getCashbackSettings().then(s => {
+            cachedSettings = s;
+            return s;
+        }).catch(() => {
+            const fallback = {
+                active: false,
+                coins_per_real: 0,
+                coins_to_brl_rate: 0,
+                min_purchase_for_coins: 0,
+                min_coins_to_redeem: 0,
+                max_redeem_percent: 0,
+                created_at: '',
+                updated_at: '',
+            } as unknown as CashbackSettings;
+            cachedSettings = fallback;
+            return fallback;
+        });
+    }
+    return fetchPromise;
+}
 
 interface CashbackBadgeProps {
     paidAmountBrl: number;
@@ -42,40 +51,7 @@ export function CashbackBadge({ paidAmountBrl, className = '', variant = 'minima
             setSettings(cachedSettings);
             return;
         }
-
-        let mounted = true;
-
-        const loadSettings = () => {
-            if (!fetchPromise) {
-                fetchPromise = getCashbackSettings().then(s => {
-                    cachedSettings = s;
-                    return s;
-                }).catch(() => {
-                    // Return fallback disabled state on error
-                    return {
-                        active: false,
-                        coins_per_real: 0,
-                        coins_to_brl_rate: 0,
-                        min_purchase_for_coins: 0,
-                        min_coins_to_redeem: 0,
-                        max_redeem_percent: 0,
-                        created_at: '',
-                        updated_at: ''
-                    } as unknown as CashbackSettings;
-                });
-            }
-
-            fetchPromise.then((value) => {
-                if (mounted) setSettings(value);
-            });
-        };
-
-        const cancelIdle = scheduleIdle(loadSettings);
-
-        return () => {
-            mounted = false;
-            cancelIdle();
-        };
+        prefetchCashbackSettings().then(setSettings);
     }, []);
 
     if (!settings || !settings.active) return null;

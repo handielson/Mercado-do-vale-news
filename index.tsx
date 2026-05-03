@@ -3,6 +3,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
+import { prefetchCashbackSettings } from './components/catalog/CashbackBadge';
+
+// Pré-carrega cashback settings em paralelo ao bundle JS pra que o cache esteja
+// populado antes dos product cards renderizarem. Sem isso, cada card decide
+// "render badge ou não" depois do fetch resolver, causando layout shift em N
+// cards simultâneos (CLS ~0.4 medido no PageSpeed).
+prefetchCashbackSettings().catch(() => { /* ignora — cards seguem sem badge */ });
 
 // Build Version: 2026-02-07-18:00 - Force clean build
 

@@ -953,11 +953,12 @@ export function ModernProductCard({
                                         <div className={`text-xs sm:text-sm font-semibold tracking-tight ${getActivePromoPrice(product) !== null || selectedKit ? 'text-red-500' : 'text-slate-900'}`}>
                                             {formatPrice(discountedPriceCents)}
                                         </div>
-                                        {installment12x && effectiveCustomerType !== 'wholesale' && (
-                                            <div className="text-[9px] sm:text-[10px] text-slate-500">
-                                                12x de {installment12x}
-                                            </div>
-                                        )}
+                                        {/* Reserva altura da linha de parcelamento (14px) pra evitar CLS quando o texto chega async via paymentFeesService */}
+                                        <div className="text-[9px] sm:text-[10px] text-slate-500 min-h-[14px]">
+                                            {installment12x && effectiveCustomerType !== 'wholesale'
+                                                ? `12x de ${installment12x}`
+                                                : ''}
+                                        </div>
                                     </div>
                                 </div>
                                 {/* Color indicator — only show if we already showed RAM/Storage above */}
