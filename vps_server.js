@@ -10,67 +10,7 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 function isImmutableImageDerivative(filePath = '') {
-  return /-(320|480|768|800|1280)\.(webp|avif)$/i.test(filePath);
-}
-
-function isDerivativeCandidate(filePath = '') {
-  return /\.(jpe?g|png|webp|avif)$/i.test(filePath) && !isImmutableImageDerivative(filePath);
-}
-
-function buildImageDerivativeTargets(filePath, kind = 'product') {
-  if (!isDerivativeCandidate(filePath)) return [];
-
-  const widths = kind === 'banner' ? [768, 1280] : [320, 480, 800];
-  const dir = path.dirname(filePath);
-  const ext = path.extname(filePath);
-  const base = path.basename(filePath, ext);
-  const formats = ['webp', 'avif'];
-
-  return widths.flatMap((width) =>
-    formats.map((format) => ({
-      width,
-      format,
-      outputPath: path.join(dir, `${base}-${width}.${format}`),
-    }))
-  );
-}
-
-async function generateImageDerivatives(filePath, kind = 'product') {
-  const targets = buildImageDerivativeTargets(filePath, kind);
-  if (targets.length === 0) return { created: 0, skipped: 0, errors: [] };
-
-  let sharp;
-  try {
-    sharp = require('sharp');
-  } catch (err) {
-    return { created: 0, skipped: 0, errors: [`sharp unavailable: ${err.message}`] };
-  }
-
-  const results = { created: 0, skipped: 0, errors: [] };
-
-  for (const target of targets) {
-    try {
-      if (fs.existsSync(target.outputPath)) {
-        results.skipped++;
-        continue;
-      }
-
-      let pipeline = sharp(filePath)
-        .rotate()
-        .resize({ width: target.width, withoutEnlargement: true });
-
-      pipeline = target.format === 'avif'
-        ? pipeline.avif({ quality: 50, effort: 4 })
-        : pipeline.webp({ quality: 78, effort: 4 });
-
-      await pipeline.toFile(target.outputPath);
-      results.created++;
-    } catch (err) {
-      results.errors.push(`${path.basename(target.outputPath)}: ${err.message}`);
-    }
-  }
-
-  return results;
+  return /-\d+\.(webp|avif)$/i.test(filePath);
 }
 
 
@@ -259,19 +199,6 @@ function sha256Hex(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
 }
 
-// Branding inline (data:image/...;base64,...) é caro de transferir/cachear.
-// Substitui por URL pra endpoint dedicado /public/branding/:field que serve
-// o binário decodificado com cache forte (browser + CDN).
-const PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-
-function publicBrandingValue(value, fieldName) {
-  if (!value) return null;
-  if (typeof value === 'string' && value.startsWith('data:')) {
-    return `${PUBLIC_API_BASE_URL}/public/branding/${fieldName}`;
-  }
-  return value;
-}
-
 function sanitizePublicCompanySettings(row) {
   if (!row) return null;
 
@@ -286,9 +213,9 @@ function sanitizePublicCompanySettings(row) {
     data_abertura: row.data_abertura || null,
     phone: row.phone || null,
     email: row.email || null,
-    logo: publicBrandingValue(row.logo, 'logo'),
-    receipt_logo_url: publicBrandingValue(row.receipt_logo_url, 'receipt_logo_url'),
-    favicon: publicBrandingValue(row.favicon, 'favicon'),
+    logo: row.logo || null,
+    receipt_logo_url: row.receipt_logo_url || null,
+    favicon: row.favicon || null,
     address: buildPublicCompanyAddress(row),
     address_zip_code: row.address_zip_code || null,
     address_street: row.address_street || null,
@@ -362,13 +289,8 @@ fastify.post('/products/:id/upload-image', { preHandler: requireSyncKey }, async
   const buffer = Buffer.concat(chunks);
   fs.writeFileSync(dest, buffer);
 
-  const derivatives = await generateImageDerivatives(dest, 'product');
-  if (derivatives.errors.length > 0) {
-    req.log.warn({ file: fname, errors: derivatives.errors }, 'image derivative generation failed');
-  }
-
   const url = `https://api.xiaomipetrolina.com.br/images/products/${id}/${fname}`;
-  return reply.send({ url, filename: fname, derivatives });
+  return reply.send({ url, filename: fname });
 });
 
 fastify.post('/admin/migrate/production-days', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -393,6 +315,224 @@ fastify.post('/admin/migrate/production-days', { preHandler: requireSyncKey }, a
       results.push({ table, column, ok: true });
     } catch (e) {
       results.push({ table, column, ok: false, error: e.message });
+    }
+  }
+  return { migrated: true, results };
+});
+
+// Auditoria do estado de linkage pai/filho. Apenas leitura, nao modifica nada.
+// Versao otimizada: evita EXISTS com CAST (que nao usa indice) usando JOIN em pre-set.
+fastify.get('/admin/migrate/parent-linkage-audit', { preHandler: requireSyncKey }, async (req, reply) => {
+  // 1. Totais simples (sem JOIN, rapido)
+  const [[totals]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_products,
+      SUM(CASE WHEN bling_id IS NOT NULL THEN 1 ELSE 0 END) AS with_bling_id,
+      SUM(CASE WHEN bling_parent_id IS NOT NULL AND bling_parent_id != '' THEN 1 ELSE 0 END) AS with_bling_parent_id,
+      SUM(CASE WHEN parent_id IS NOT NULL AND parent_id != '' THEN 1 ELSE 0 END) AS with_parent_id,
+      SUM(CASE WHEN is_parent = 1 THEN 1 ELSE 0 END) AS marked_as_parent
+    FROM products
+  `);
+
+  const [[uniqueParents]] = await pool.query(`
+    SELECT COUNT(DISTINCT bling_parent_id) AS unique_bling_parents_referenced
+    FROM products
+    WHERE bling_parent_id IS NOT NULL AND bling_parent_id != ''
+  `);
+
+  // 2. Pre-set de bling_ids como string (para JOIN com bling_parent_id que eh TEXT).
+  //    Buscar so os bling_ids que sao referenciados como pai - reduz o conjunto.
+  const [referencedParentIds] = await pool.query(`
+    SELECT DISTINCT bling_parent_id AS bling_parent_id_str
+    FROM products
+    WHERE bling_parent_id IS NOT NULL AND bling_parent_id != ''
+  `);
+
+  let pending_closure = 0;
+  let orphan_children = 0;
+
+  if (referencedParentIds.length > 0) {
+    // Quais desses bling_parent_ids tem produto local com bling_id correspondente?
+    const parentIdsList = referencedParentIds.map(r => r.bling_parent_id_str);
+    const placeholders = parentIdsList.map(() => '?').join(',');
+
+    const [matchedParents] = await pool.query(
+      `SELECT CAST(bling_id AS CHAR) AS bling_id_str
+       FROM products
+       WHERE bling_id IS NOT NULL AND CAST(bling_id AS CHAR) IN (${placeholders})`,
+      parentIdsList
+    );
+
+    const matchedSet = new Set(matchedParents.map(r => r.bling_id_str));
+    const matchedParentIdsList = parentIdsList.filter(id => matchedSet.has(id));
+    const orphanParentIdsList = parentIdsList.filter(id => !matchedSet.has(id));
+
+    // Quantos filhos sao candidatos ao fechamento (bling_parent_id matched, sem parent_id ainda)
+    if (matchedParentIdsList.length > 0) {
+      const ph2 = matchedParentIdsList.map(() => '?').join(',');
+      const [[c1]] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM products
+         WHERE bling_parent_id IN (${ph2})
+           AND (parent_id IS NULL OR parent_id = '')`,
+        matchedParentIdsList
+      );
+      pending_closure = c1.cnt;
+    }
+
+    // Quantos filhos sao orfaos (bling_parent_id existe mas pai nao foi importado)
+    if (orphanParentIdsList.length > 0) {
+      const ph3 = orphanParentIdsList.map(() => '?').join(',');
+      const [[c2]] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM products WHERE bling_parent_id IN (${ph3})`,
+        orphanParentIdsList
+      );
+      orphan_children = c2.cnt;
+    }
+  }
+
+  return {
+    audit: {
+      ...totals,
+      ...uniqueParents,
+      pending_closure,
+      orphan_children,
+    }
+  };
+});
+
+// Lista os bling_ids dos pais que sao referenciados pelos filhos mas nao existem localmente.
+// Usado pelo backfill na UI admin para puxar esses produtos do Bling.
+fastify.get('/admin/migrate/missing-parents-list', { preHandler: requireSyncKey }, async (req, reply) => {
+  // 1. Pega todos os bling_parent_id distintos referenciados por filhos
+  const [refs] = await pool.query(`
+    SELECT DISTINCT bling_parent_id
+    FROM products
+    WHERE bling_parent_id IS NOT NULL AND bling_parent_id != ''
+  `);
+  const referencedIds = refs.map(r => r.bling_parent_id);
+
+  if (referencedIds.length === 0) {
+    return { missing_parent_ids: [], total_referenced: 0 };
+  }
+
+  // 2. Pega os bling_ids dos produtos que ja existem localmente (como string para comparar)
+  const placeholders = referencedIds.map(() => '?').join(',');
+  const [existing] = await pool.query(
+    `SELECT CAST(bling_id AS CHAR) AS bling_id_str
+     FROM products
+     WHERE bling_id IS NOT NULL AND CAST(bling_id AS CHAR) IN (${placeholders})`,
+    referencedIds
+  );
+  const existingSet = new Set(existing.map(r => r.bling_id_str));
+
+  // 3. Filtra: faltantes = referenciados que nao existem localmente
+  const missing = referencedIds.filter(id => !existingSet.has(String(id)));
+
+  // Conta filhos por pai (informacao util para UI mostrar "X variantes deste pai")
+  let childCounts = {};
+  if (missing.length > 0) {
+    const ph = missing.map(() => '?').join(',');
+    const [counts] = await pool.query(
+      `SELECT bling_parent_id, COUNT(*) AS cnt
+       FROM products
+       WHERE bling_parent_id IN (${ph})
+       GROUP BY bling_parent_id`,
+      missing
+    );
+    childCounts = Object.fromEntries(counts.map(r => [r.bling_parent_id, r.cnt]));
+  }
+
+  return {
+    missing_parent_ids: missing.map(id => ({
+      bling_id: Number(id),
+      child_count: childCounts[id] || 0,
+    })),
+    total_referenced: referencedIds.length,
+    total_missing: missing.length,
+  };
+});
+
+// Fechamento de circuito: popula parent_id (UUID local) dos filhos baseado em bling_parent_id.
+// Para cada filho com bling_parent_id, encontra o produto local cujo bling_id corresponde
+// e seta o parent_id apontando pra ele. Idempotente.
+fastify.post('/admin/migrate/close-parent-linkage', { preHandler: requireSyncKey }, async (req, reply) => {
+  // CAST necessario porque bling_parent_id eh TEXT mas bling_id eh BIGINT (drift de tipo).
+  // O JOIN restringe a pais marcados (is_parent=1) por seguranca.
+  const [result] = await pool.query(`
+    UPDATE products child
+    JOIN products parent
+      ON parent.bling_id IS NOT NULL
+     AND CAST(parent.bling_id AS CHAR) = child.bling_parent_id
+     AND parent.is_parent = 1
+    SET child.parent_id = parent.id
+    WHERE child.bling_parent_id IS NOT NULL
+      AND child.bling_parent_id != ''
+      AND (child.parent_id IS NULL OR child.parent_id = '')
+  `);
+
+  return {
+    closed: true,
+    affected: result.affectedRows,
+    changed: result.changedRows,
+  };
+});
+
+// Marca produtos como is_parent=true. Recebe lista de bling_ids.
+// Chamado pela UI apos o backfill terminar de importar os pais.
+fastify.post('/admin/migrate/mark-as-parents', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { bling_ids } = req.body || {};
+  if (!Array.isArray(bling_ids) || bling_ids.length === 0) {
+    return reply.code(400).send({ error: 'bling_ids array required' });
+  }
+
+  // Sanitiza para apenas numeros
+  const ids = bling_ids.map(Number).filter(n => Number.isFinite(n) && n > 0);
+  if (ids.length === 0) {
+    return reply.code(400).send({ error: 'no valid bling_ids' });
+  }
+
+  const placeholders = ids.map(() => '?').join(',');
+  const [result] = await pool.query(
+    `UPDATE products SET is_parent = 1 WHERE bling_id IN (${placeholders})`,
+    ids
+  );
+
+  return {
+    requested: ids.length,
+    affected: result.affectedRows,
+    changed: result.changedRows,
+  };
+});
+
+// Adiciona indices para o linkage pai/filho (Bling). Idempotente.
+// Disparar manualmente uma vez apos as colunas existirem (runMigrations cuida disso no boot).
+fastify.post('/admin/migrate/parent-linkage-indexes', { preHandler: requireSyncKey }, async (req, reply) => {
+  const results = [];
+  // Nota sobre key length: parent_id e bling_parent_id foram criados como TEXT
+  // pelo cadastro manual anterior (drift do schema vs tipos no codigo).
+  // MySQL exige key length para indexar TEXT/BLOB. 36 cobre UUID, 20 cobre BIGINT em texto.
+  // bling_id e is_parent usam tipos numericos corretos (sem prefixo necessario).
+  const indexes = [
+    { name: 'idx_products_parent_id',        table: 'products', cols: '(parent_id(36))' },
+    { name: 'idx_products_bling_id',         table: 'products', cols: '(bling_id)' },
+    { name: 'idx_products_bling_parent_id',  table: 'products', cols: '(bling_parent_id(20))' },
+    { name: 'idx_products_is_parent',        table: 'products', cols: '(is_parent)' },
+  ];
+  for (const { name, table, cols } of indexes) {
+    try {
+      const [[row]] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.STATISTICS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+        [table, name]
+      );
+      if (Number(row.cnt) > 0) {
+        results.push({ index: name, skipped: true, reason: 'already exists' });
+        continue;
+      }
+      await pool.query(`CREATE INDEX \`${name}\` ON \`${table}\` ${cols}`);
+      results.push({ index: name, ok: true });
+    } catch (e) {
+      results.push({ index: name, ok: false, error: e.message });
     }
   }
   return { migrated: true, results };
@@ -569,8 +709,10 @@ fastify.get('/products/by-category/:categoryId', async (req, reply) => {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20')));
   const offset = (page - 1) * limit;
 
+  // Exclui produtos pai (agregadores) - eles nao sao vendaveis na vitrine
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM products WHERE category_id = ?`,
+    `SELECT COUNT(*) AS total FROM products
+     WHERE category_id = ? AND (is_parent = 0 OR is_parent IS NULL)`,
     [categoryId]
   );
 
@@ -581,7 +723,7 @@ fastify.get('/products/by-category/:categoryId', async (req, reply) => {
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS thumbnail,
        1 AS is_primary_category
      FROM products
-     WHERE category_id = ?
+     WHERE category_id = ? AND (is_parent = 0 OR is_parent IS NULL)
      ORDER BY name ASC
      LIMIT ? OFFSET ?`,
     [categoryId, limit, offset]
@@ -610,6 +752,7 @@ fastify.get('/products/category-counts', { config: { rateLimit: { max: 240, time
          SUM(CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 1 ELSE 0 END) AS in_stock_count
        FROM products
        WHERE status = 'active' AND category_id IS NOT NULL
+         AND (is_parent = 0 OR is_parent IS NULL)
        GROUP BY category_id`
     ),
   ]);
@@ -662,21 +805,24 @@ fastify.get('/catalog/metadata', { config: { rateLimit: { max: 240, timeWindow: 
          SUM(CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 1 ELSE 0 END) AS in_stock_count
        FROM products
        WHERE status = 'active' AND category_id IS NOT NULL
+         AND (is_parent = 0 OR is_parent IS NULL)
        GROUP BY category_id`
     ),
-    // 3. Marcas únicas com contagem
+    // 3. Marcas únicas com contagem (exclui produtos pai)
     pool.query(
       `SELECT brand AS name, COUNT(*) AS count
        FROM products
        WHERE status = 'active' AND brand IS NOT NULL AND brand != ''
+         AND (is_parent = 0 OR is_parent IS NULL)
        GROUP BY brand
        ORDER BY count DESC`
     ),
-    // 4. Faixa de preços (min/max)
+    // 4. Faixa de preços (min/max) (exclui produtos pai)
     pool.query(
       `SELECT MIN(price_retail) AS min_price, MAX(price_retail) AS max_price
        FROM products
-       WHERE status = 'active' AND price_retail > 0`
+       WHERE status = 'active' AND price_retail > 0
+         AND (is_parent = 0 OR is_parent IS NULL)`
     ),
   ]);
 
@@ -764,22 +910,6 @@ fastify.delete('/brands/:id', { preHandler: requireSyncKey }, async (req, reply)
 });
 
 // ─── Products (read) ───────────────────────────────────────────────────────
-// Batch fetch: GET /products/by-ids?ids=id1,id2,id3 — usado pelo catalogService
-// pra hidratar imagens em 1 round-trip em vez de N fetches individuais.
-fastify.get('/products/by-ids', { config: { rateLimit: { max: 600, timeWindow: '1 minute' } } }, async (req, reply) => {
-  const idsParam = String(req.query.ids || '').trim();
-  if (!idsParam) return [];
-  const ids = idsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, 100);
-  if (ids.length === 0) return [];
-  const placeholders = ids.map(() => '?').join(',');
-  const [rows] = await pool.query(
-    `SELECT * FROM products WHERE id IN (${placeholders})`,
-    ids
-  );
-  reply.header('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=600');
-  return rows;
-});
-
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;
@@ -810,7 +940,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
-       status, parent_id, bling_id, bling_parent_id, video_url,
+       status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
@@ -819,7 +949,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
-       images, status, parent_id, bling_id, bling_parent_id, video_url,
+       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
 
 
@@ -830,6 +960,13 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
   else if (!status && !search)    { sql += ' AND status = ?'; params.push('active'); }
   // When search is provided without explicit status → no status filter (allows finding by SKU/EAN regardless of status)
   // status=all: retorna todos os status (admin)
+
+  // Filtro de produtos pai (agregadores). Por padrao escondemos da vitrine publica.
+  // Admin (status=all) ou consumidores que precisem ver pais devem passar include_parents=true.
+  const includeParents = req.query.include_parents === 'true' || status === 'all';
+  if (!includeParents) {
+    sql += ' AND (is_parent = 0 OR is_parent IS NULL)';
+  }
 
   if (category) {
     const categoryIds = String(category).split(',').map(id => id.trim()).filter(Boolean);
@@ -937,6 +1074,32 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
+
+  // Se eh produto pai (agregador), retorna apenas redirect_to_slug pro primeiro filho ativo.
+  // O pai eh transparente pro cliente - URL eh redirecionada pelo frontend pra um filho real.
+  // Ordena por estoque (preferindo com estoque) e nome.
+  if (Number(r.is_parent) === 1) {
+    const [variantRows] = await pool.query(
+      `SELECT slug FROM products
+       WHERE parent_id = ?
+         AND status = 'active'
+         AND id != ?
+         AND slug IS NOT NULL AND slug != ''
+       ORDER BY (CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 0 ELSE 1 END), name ASC
+       LIMIT 1`,
+      [r.id, r.id]
+    );
+    if (variantRows.length > 0 && variantRows[0].slug) {
+      return {
+        is_parent_redirect: true,
+        redirect_to_slug: variantRows[0].slug,
+      };
+    }
+    // Pai sem filhos disponiveis - retorna 404
+    reply.code(404);
+    return { error: 'No available variants for this parent' };
+  }
+
   return {
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
@@ -1564,13 +1727,8 @@ fastify.post('/images/upload', { preHandler: requireSyncKey }, async (req, reply
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, fileBuf);
 
-  const derivatives = await generateImageDerivatives(dest, 'product');
-  if (derivatives.errors.length > 0) {
-    req.log.warn({ path: safe, errors: derivatives.errors }, 'image derivative generation failed');
-  }
-
   const url = `${process.env.API_BASE_URL || 'https://api.xiaomipetrolina.com.br'}/images/${safe}`;
-  return { ok: true, url, path: safe, derivatives };
+  return { ok: true, url, path: safe };
 });
 
 // GET /images/list?prefix=products/SKU — lista arquivos (recursivo) num prefixo
@@ -1624,50 +1782,6 @@ fastify.get('/public/company-settings', { config: { rateLimit: { max: 240, timeW
   const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
   reply.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=1800');
   return sanitizePublicCompanySettings(rows[0] || null);
-});
-
-// Serve branding binário (logo, favicon, receipt_logo_url) decodificado de
-// data URI base64. Cache forte: 1d browser, 7d CDN. Reduz o payload do
-// /public/company-settings de ~340KB pra ~3KB e permite cache imutável das imagens.
-const ALLOWED_BRANDING_FIELDS = new Set(['logo', 'favicon', 'receipt_logo_url']);
-const brandingCache = new Map();
-const BRANDING_CACHE_TTL_MS = 5 * 60 * 1000;
-
-fastify.get('/public/branding/:field', { config: { rateLimit: { max: 600, timeWindow: '1 minute' } } }, async (req, reply) => {
-  const field = req.params.field;
-  if (!ALLOWED_BRANDING_FIELDS.has(field)) return reply.code(404).send({ error: 'unknown branding field' });
-
-  const cached = brandingCache.get(field);
-  let payload = cached && Date.now() < cached.expiresAt ? cached : null;
-
-  if (!payload) {
-    const [rows] = await pool.query(`SELECT \`${field}\` AS val FROM company_settings LIMIT 1`);
-    const dataUri = rows[0]?.val;
-    if (!dataUri || typeof dataUri !== 'string' || !dataUri.startsWith('data:')) {
-      return reply.code(404).send({ error: 'no inline branding stored' });
-    }
-    const match = dataUri.match(/^data:([^;]+);base64,(.+)$/);
-    if (!match) return reply.code(500).send({ error: 'malformed data URI' });
-    payload = {
-      mime: match[1],
-      buffer: Buffer.from(match[2], 'base64'),
-      etag: '"' + require('crypto').createHash('md5').update(match[2]).digest('hex') + '"',
-      expiresAt: Date.now() + BRANDING_CACHE_TTL_MS,
-    };
-    brandingCache.set(field, payload);
-  }
-
-  // ETag conditional GET — 304 Not Modified evita reenviar o binário quando o cliente já tem.
-  if (req.headers['if-none-match'] === payload.etag) {
-    reply.code(304);
-    return;
-  }
-
-  reply
-    .header('Content-Type', payload.mime)
-    .header('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000')
-    .header('ETag', payload.etag);
-  return payload.buffer;
 });
 
 // ─── Company Settings (PATCH) ─────────────────────────────────────────────
@@ -2349,14 +2463,9 @@ fastify.post('/banners/upload', { preHandler: requireSyncKey }, async (req, repl
   const fname = `${Date.now()}${ext}`;
   const bannerDir = path.join(UPLOADS_DIR, 'banners');
   fs.mkdirSync(bannerDir, { recursive: true });
-  const dest = path.join(bannerDir, fname);
-  fs.writeFileSync(dest, fileBuf);
-  const derivatives = await generateImageDerivatives(dest, 'banner');
-  if (derivatives.errors.length > 0) {
-    req.log.warn({ file: fname, errors: derivatives.errors }, 'banner derivative generation failed');
-  }
+  fs.writeFileSync(path.join(bannerDir, fname), fileBuf);
   const baseUrl = process.env.API_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-  return { ok: true, url: `${baseUrl}/images/banners/${fname}`, path: `banners/${fname}`, derivatives };
+  return { ok: true, url: `${baseUrl}/images/banners/${fname}`, path: `banners/${fname}` };
 });
 
 // ─── Warranty Templates ─────────────────────────────────────────────────────
@@ -3279,6 +3388,13 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");
   await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
+
+  // Linkage pai/filho (Bling) - permite combos/kits referenciarem produtos pai (agregados)
+  await addColumnIfMissing('products', 'parent_id',       'CHAR(36) DEFAULT NULL');
+  await addColumnIfMissing('products', 'bling_id',        'BIGINT DEFAULT NULL');
+  await addColumnIfMissing('products', 'bling_parent_id', 'BIGINT DEFAULT NULL');
+  await addColumnIfMissing('products', 'is_parent',       'TINYINT(1) NOT NULL DEFAULT 0');
+
   await addColumnIfMissing('shipping_settings', 'extra_config', 'JSON NULL');
   console.log('[migration] company_settings synology columns: OK');
 

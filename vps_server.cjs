@@ -320,6 +320,224 @@ fastify.post('/admin/migrate/production-days', { preHandler: requireSyncKey }, a
   return { migrated: true, results };
 });
 
+// Auditoria do estado de linkage pai/filho. Apenas leitura, nao modifica nada.
+// Versao otimizada: evita EXISTS com CAST (que nao usa indice) usando JOIN em pre-set.
+fastify.get('/admin/migrate/parent-linkage-audit', { preHandler: requireSyncKey }, async (req, reply) => {
+  // 1. Totais simples (sem JOIN, rapido)
+  const [[totals]] = await pool.query(`
+    SELECT
+      COUNT(*) AS total_products,
+      SUM(CASE WHEN bling_id IS NOT NULL THEN 1 ELSE 0 END) AS with_bling_id,
+      SUM(CASE WHEN bling_parent_id IS NOT NULL AND bling_parent_id != '' THEN 1 ELSE 0 END) AS with_bling_parent_id,
+      SUM(CASE WHEN parent_id IS NOT NULL AND parent_id != '' THEN 1 ELSE 0 END) AS with_parent_id,
+      SUM(CASE WHEN is_parent = 1 THEN 1 ELSE 0 END) AS marked_as_parent
+    FROM products
+  `);
+
+  const [[uniqueParents]] = await pool.query(`
+    SELECT COUNT(DISTINCT bling_parent_id) AS unique_bling_parents_referenced
+    FROM products
+    WHERE bling_parent_id IS NOT NULL AND bling_parent_id != ''
+  `);
+
+  // 2. Pre-set de bling_ids como string (para JOIN com bling_parent_id que eh TEXT).
+  //    Buscar so os bling_ids que sao referenciados como pai - reduz o conjunto.
+  const [referencedParentIds] = await pool.query(`
+    SELECT DISTINCT bling_parent_id AS bling_parent_id_str
+    FROM products
+    WHERE bling_parent_id IS NOT NULL AND bling_parent_id != ''
+  `);
+
+  let pending_closure = 0;
+  let orphan_children = 0;
+
+  if (referencedParentIds.length > 0) {
+    // Quais desses bling_parent_ids tem produto local com bling_id correspondente?
+    const parentIdsList = referencedParentIds.map(r => r.bling_parent_id_str);
+    const placeholders = parentIdsList.map(() => '?').join(',');
+
+    const [matchedParents] = await pool.query(
+      `SELECT CAST(bling_id AS CHAR) AS bling_id_str
+       FROM products
+       WHERE bling_id IS NOT NULL AND CAST(bling_id AS CHAR) IN (${placeholders})`,
+      parentIdsList
+    );
+
+    const matchedSet = new Set(matchedParents.map(r => r.bling_id_str));
+    const matchedParentIdsList = parentIdsList.filter(id => matchedSet.has(id));
+    const orphanParentIdsList = parentIdsList.filter(id => !matchedSet.has(id));
+
+    // Quantos filhos sao candidatos ao fechamento (bling_parent_id matched, sem parent_id ainda)
+    if (matchedParentIdsList.length > 0) {
+      const ph2 = matchedParentIdsList.map(() => '?').join(',');
+      const [[c1]] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM products
+         WHERE bling_parent_id IN (${ph2})
+           AND (parent_id IS NULL OR parent_id = '')`,
+        matchedParentIdsList
+      );
+      pending_closure = c1.cnt;
+    }
+
+    // Quantos filhos sao orfaos (bling_parent_id existe mas pai nao foi importado)
+    if (orphanParentIdsList.length > 0) {
+      const ph3 = orphanParentIdsList.map(() => '?').join(',');
+      const [[c2]] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM products WHERE bling_parent_id IN (${ph3})`,
+        orphanParentIdsList
+      );
+      orphan_children = c2.cnt;
+    }
+  }
+
+  return {
+    audit: {
+      ...totals,
+      ...uniqueParents,
+      pending_closure,
+      orphan_children,
+    }
+  };
+});
+
+// Lista os bling_ids dos pais que sao referenciados pelos filhos mas nao existem localmente.
+// Usado pelo backfill na UI admin para puxar esses produtos do Bling.
+fastify.get('/admin/migrate/missing-parents-list', { preHandler: requireSyncKey }, async (req, reply) => {
+  // 1. Pega todos os bling_parent_id distintos referenciados por filhos
+  const [refs] = await pool.query(`
+    SELECT DISTINCT bling_parent_id
+    FROM products
+    WHERE bling_parent_id IS NOT NULL AND bling_parent_id != ''
+  `);
+  const referencedIds = refs.map(r => r.bling_parent_id);
+
+  if (referencedIds.length === 0) {
+    return { missing_parent_ids: [], total_referenced: 0 };
+  }
+
+  // 2. Pega os bling_ids dos produtos que ja existem localmente (como string para comparar)
+  const placeholders = referencedIds.map(() => '?').join(',');
+  const [existing] = await pool.query(
+    `SELECT CAST(bling_id AS CHAR) AS bling_id_str
+     FROM products
+     WHERE bling_id IS NOT NULL AND CAST(bling_id AS CHAR) IN (${placeholders})`,
+    referencedIds
+  );
+  const existingSet = new Set(existing.map(r => r.bling_id_str));
+
+  // 3. Filtra: faltantes = referenciados que nao existem localmente
+  const missing = referencedIds.filter(id => !existingSet.has(String(id)));
+
+  // Conta filhos por pai (informacao util para UI mostrar "X variantes deste pai")
+  let childCounts = {};
+  if (missing.length > 0) {
+    const ph = missing.map(() => '?').join(',');
+    const [counts] = await pool.query(
+      `SELECT bling_parent_id, COUNT(*) AS cnt
+       FROM products
+       WHERE bling_parent_id IN (${ph})
+       GROUP BY bling_parent_id`,
+      missing
+    );
+    childCounts = Object.fromEntries(counts.map(r => [r.bling_parent_id, r.cnt]));
+  }
+
+  return {
+    missing_parent_ids: missing.map(id => ({
+      bling_id: Number(id),
+      child_count: childCounts[id] || 0,
+    })),
+    total_referenced: referencedIds.length,
+    total_missing: missing.length,
+  };
+});
+
+// Fechamento de circuito: popula parent_id (UUID local) dos filhos baseado em bling_parent_id.
+// Para cada filho com bling_parent_id, encontra o produto local cujo bling_id corresponde
+// e seta o parent_id apontando pra ele. Idempotente.
+fastify.post('/admin/migrate/close-parent-linkage', { preHandler: requireSyncKey }, async (req, reply) => {
+  // CAST necessario porque bling_parent_id eh TEXT mas bling_id eh BIGINT (drift de tipo).
+  // O JOIN restringe a pais marcados (is_parent=1) por seguranca.
+  const [result] = await pool.query(`
+    UPDATE products child
+    JOIN products parent
+      ON parent.bling_id IS NOT NULL
+     AND CAST(parent.bling_id AS CHAR) = child.bling_parent_id
+     AND parent.is_parent = 1
+    SET child.parent_id = parent.id
+    WHERE child.bling_parent_id IS NOT NULL
+      AND child.bling_parent_id != ''
+      AND (child.parent_id IS NULL OR child.parent_id = '')
+  `);
+
+  return {
+    closed: true,
+    affected: result.affectedRows,
+    changed: result.changedRows,
+  };
+});
+
+// Marca produtos como is_parent=true. Recebe lista de bling_ids.
+// Chamado pela UI apos o backfill terminar de importar os pais.
+fastify.post('/admin/migrate/mark-as-parents', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { bling_ids } = req.body || {};
+  if (!Array.isArray(bling_ids) || bling_ids.length === 0) {
+    return reply.code(400).send({ error: 'bling_ids array required' });
+  }
+
+  // Sanitiza para apenas numeros
+  const ids = bling_ids.map(Number).filter(n => Number.isFinite(n) && n > 0);
+  if (ids.length === 0) {
+    return reply.code(400).send({ error: 'no valid bling_ids' });
+  }
+
+  const placeholders = ids.map(() => '?').join(',');
+  const [result] = await pool.query(
+    `UPDATE products SET is_parent = 1 WHERE bling_id IN (${placeholders})`,
+    ids
+  );
+
+  return {
+    requested: ids.length,
+    affected: result.affectedRows,
+    changed: result.changedRows,
+  };
+});
+
+// Adiciona indices para o linkage pai/filho (Bling). Idempotente.
+// Disparar manualmente uma vez apos as colunas existirem (runMigrations cuida disso no boot).
+fastify.post('/admin/migrate/parent-linkage-indexes', { preHandler: requireSyncKey }, async (req, reply) => {
+  const results = [];
+  // Nota sobre key length: parent_id e bling_parent_id foram criados como TEXT
+  // pelo cadastro manual anterior (drift do schema vs tipos no codigo).
+  // MySQL exige key length para indexar TEXT/BLOB. 36 cobre UUID, 20 cobre BIGINT em texto.
+  // bling_id e is_parent usam tipos numericos corretos (sem prefixo necessario).
+  const indexes = [
+    { name: 'idx_products_parent_id',        table: 'products', cols: '(parent_id(36))' },
+    { name: 'idx_products_bling_id',         table: 'products', cols: '(bling_id)' },
+    { name: 'idx_products_bling_parent_id',  table: 'products', cols: '(bling_parent_id(20))' },
+    { name: 'idx_products_is_parent',        table: 'products', cols: '(is_parent)' },
+  ];
+  for (const { name, table, cols } of indexes) {
+    try {
+      const [[row]] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.STATISTICS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+        [table, name]
+      );
+      if (Number(row.cnt) > 0) {
+        results.push({ index: name, skipped: true, reason: 'already exists' });
+        continue;
+      }
+      await pool.query(`CREATE INDEX \`${name}\` ON \`${table}\` ${cols}`);
+      results.push({ index: name, ok: true });
+    } catch (e) {
+      results.push({ index: name, ok: false, error: e.message });
+    }
+  }
+  return { migrated: true, results };
+});
+
 
 // Presets de campos de categoria: grupos pré-configurados de visibilidade
 
@@ -491,8 +709,10 @@ fastify.get('/products/by-category/:categoryId', async (req, reply) => {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20')));
   const offset = (page - 1) * limit;
 
+  // Exclui produtos pai (agregadores) - eles nao sao vendaveis na vitrine
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM products WHERE category_id = ?`,
+    `SELECT COUNT(*) AS total FROM products
+     WHERE category_id = ? AND (is_parent = 0 OR is_parent IS NULL)`,
     [categoryId]
   );
 
@@ -503,7 +723,7 @@ fastify.get('/products/by-category/:categoryId', async (req, reply) => {
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS thumbnail,
        1 AS is_primary_category
      FROM products
-     WHERE category_id = ?
+     WHERE category_id = ? AND (is_parent = 0 OR is_parent IS NULL)
      ORDER BY name ASC
      LIMIT ? OFFSET ?`,
     [categoryId, limit, offset]
@@ -532,6 +752,7 @@ fastify.get('/products/category-counts', { config: { rateLimit: { max: 240, time
          SUM(CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 1 ELSE 0 END) AS in_stock_count
        FROM products
        WHERE status = 'active' AND category_id IS NOT NULL
+         AND (is_parent = 0 OR is_parent IS NULL)
        GROUP BY category_id`
     ),
   ]);
@@ -584,21 +805,24 @@ fastify.get('/catalog/metadata', { config: { rateLimit: { max: 240, timeWindow: 
          SUM(CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 1 ELSE 0 END) AS in_stock_count
        FROM products
        WHERE status = 'active' AND category_id IS NOT NULL
+         AND (is_parent = 0 OR is_parent IS NULL)
        GROUP BY category_id`
     ),
-    // 3. Marcas únicas com contagem
+    // 3. Marcas únicas com contagem (exclui produtos pai)
     pool.query(
       `SELECT brand AS name, COUNT(*) AS count
        FROM products
        WHERE status = 'active' AND brand IS NOT NULL AND brand != ''
+         AND (is_parent = 0 OR is_parent IS NULL)
        GROUP BY brand
        ORDER BY count DESC`
     ),
-    // 4. Faixa de preços (min/max)
+    // 4. Faixa de preços (min/max) (exclui produtos pai)
     pool.query(
       `SELECT MIN(price_retail) AS min_price, MAX(price_retail) AS max_price
        FROM products
-       WHERE status = 'active' AND price_retail > 0`
+       WHERE status = 'active' AND price_retail > 0
+         AND (is_parent = 0 OR is_parent IS NULL)`
     ),
   ]);
 
@@ -716,7 +940,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
-       status, parent_id, bling_id, bling_parent_id, video_url,
+       status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
        price_cost, price_retail, price_reseller, price_wholesale,
@@ -725,7 +949,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
-       images, status, parent_id, bling_id, bling_parent_id, video_url,
+       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
 
 
@@ -736,6 +960,13 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
   else if (!status && !search)    { sql += ' AND status = ?'; params.push('active'); }
   // When search is provided without explicit status → no status filter (allows finding by SKU/EAN regardless of status)
   // status=all: retorna todos os status (admin)
+
+  // Filtro de produtos pai (agregadores). Por padrao escondemos da vitrine publica.
+  // Admin (status=all) ou consumidores que precisem ver pais devem passar include_parents=true.
+  const includeParents = req.query.include_parents === 'true' || status === 'all';
+  if (!includeParents) {
+    sql += ' AND (is_parent = 0 OR is_parent IS NULL)';
+  }
 
   if (category) {
     const categoryIds = String(category).split(',').map(id => id.trim()).filter(Boolean);
@@ -843,6 +1074,32 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
+
+  // Se eh produto pai (agregador), retorna apenas redirect_to_slug pro primeiro filho ativo.
+  // O pai eh transparente pro cliente - URL eh redirecionada pelo frontend pra um filho real.
+  // Ordena por estoque (preferindo com estoque) e nome.
+  if (Number(r.is_parent) === 1) {
+    const [variantRows] = await pool.query(
+      `SELECT slug FROM products
+       WHERE parent_id = ?
+         AND status = 'active'
+         AND id != ?
+         AND slug IS NOT NULL AND slug != ''
+       ORDER BY (CASE WHEN (track_inventory = 0 OR stock_quantity > 0) THEN 0 ELSE 1 END), name ASC
+       LIMIT 1`,
+      [r.id, r.id]
+    );
+    if (variantRows.length > 0 && variantRows[0].slug) {
+      return {
+        is_parent_redirect: true,
+        redirect_to_slug: variantRows[0].slug,
+      };
+    }
+    // Pai sem filhos disponiveis - retorna 404
+    reply.code(404);
+    return { error: 'No available variants for this parent' };
+  }
+
   return {
     ...r,
     images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
@@ -1217,6 +1474,136 @@ fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (r
     `DELETE FROM product_categories WHERE product_id = ? AND category_id = ?`,
     [req.params.id, category_id]
   );
+  return { ok: true };
+});
+
+// ─── Units (inventory de unidades serializadas: 1 linha por aparelho) ──────
+
+// Lista unidades — filtra por product_id, order_id ou sale_id (FIFO por created_at)
+fastify.get('/units', async (req, reply) => {
+  const { product_id, order_id, sale_id, status } = req.query;
+  const conds = [];
+  const params = [];
+  if (product_id) { conds.push('product_id = ?'); params.push(product_id); }
+  if (order_id)   { conds.push('order_id = ?');   params.push(order_id); }
+  if (sale_id)    { conds.push('sale_id = ?');    params.push(sale_id); }
+  if (status && status !== 'all') { conds.push('status = ?'); params.push(status); }
+  if (conds.length === 0) return reply.code(400).send({ error: 'product_id, order_id or sale_id required' });
+  const [rows] = await pool.query(
+    `SELECT * FROM units WHERE ${conds.join(' AND ')} ORDER BY created_at ASC`,
+    params
+  );
+  return rows;
+});
+
+// Busca por IMEI 1, IMEI 2 ou serial (usado no PDV)
+fastify.get('/units/by-identifier/:q', async (req, reply) => {
+  const q = req.params.q;
+  if (!q) return reply.code(400).send({ error: 'identifier required' });
+  const [rows] = await pool.query(
+    `SELECT u.*, p.name AS product_name, p.sku AS product_sku
+       FROM units u
+       LEFT JOIN products p ON p.id = u.product_id
+      WHERE u.imei_1 = ? OR u.imei_2 = ? OR u.serial = ?`,
+    [q, q, q]
+  );
+  return rows;
+});
+
+// Cria 1 unidade
+fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
+  const u = req.body || {};
+  if (!u.product_id) return reply.code(400).send({ error: 'product_id required' });
+  const id = u.id || require('crypto').randomUUID();
+  await pool.query(
+    `INSERT INTO units (
+       id, product_id, imei_1, imei_2, serial, status, \`condition\`,
+       internal_notes, cost_price, order_id, sale_id, reserved_at, sold_at
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      id, u.product_id,
+      u.imei_1 || null, u.imei_2 || null, u.serial || null,
+      u.status || 'available',
+      u.condition || 'new',
+      u.internal_notes || null,
+      u.cost_price ?? null,
+      u.order_id || null, u.sale_id || null,
+      u.reserved_at || null, u.sold_at || null,
+    ]
+  );
+  await syncProductStock(u.product_id);
+  const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [id]);
+  reply.code(201);
+  return rows[0];
+});
+
+// Cria N unidades em batch (usado pelo cadastro em massa)
+fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) => {
+  const items = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return reply.code(400).send({ error: 'Expected non-empty array' });
+  }
+  const results = { inserted: 0, errors: [] };
+  const productIds = new Set();
+  for (const u of items) {
+    try {
+      if (!u.product_id) throw new Error('product_id required');
+      const id = u.id || require('crypto').randomUUID();
+      await pool.query(
+        `INSERT INTO units (
+           id, product_id, imei_1, imei_2, serial, status, \`condition\`,
+           internal_notes, cost_price
+         ) VALUES (?,?,?,?,?,?,?,?,?)`,
+        [
+          id, u.product_id,
+          u.imei_1 || null, u.imei_2 || null, u.serial || null,
+          u.status || 'available',
+          u.condition || 'new',
+          u.internal_notes || null,
+          u.cost_price ?? null,
+        ]
+      );
+      productIds.add(u.product_id);
+      results.inserted++;
+    } catch (err) {
+      results.errors.push({ serial: u.serial, imei_1: u.imei_1, error: err.message });
+    }
+  }
+  for (const pid of productIds) await syncProductStock(pid);
+  return results;
+});
+
+// Atualiza unidade (status, IMEIs, notes, vínculos com order/sale)
+fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const u = req.body || {};
+  const allowed = [
+    'imei_1', 'imei_2', 'serial', 'status', 'condition',
+    'internal_notes', 'cost_price', 'order_id', 'sale_id',
+    'reserved_at', 'sold_at',
+  ];
+  const sets = [];
+  const vals = [];
+  for (const k of allowed) {
+    if (k in u) {
+      sets.push(k === 'condition' ? '`condition` = ?' : `${k} = ?`);
+      vals.push(u[k] ?? null);
+    }
+  }
+  if (!sets.length) return reply.code(400).send({ error: 'No fields to update' });
+  vals.push(req.params.id);
+  await pool.query(`UPDATE units SET ${sets.join(', ')} WHERE id = ?`, vals);
+  const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [req.params.id]);
+  if (!rows[0]) return reply.code(404).send({ error: 'Not found' });
+  await syncProductStock(rows[0].product_id);
+  return rows[0];
+});
+
+// Deleta unidade
+fastify.delete('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [target] = await pool.query('SELECT product_id FROM units WHERE id = ?', [req.params.id]);
+  const [result] = await pool.query('DELETE FROM units WHERE id = ?', [req.params.id]);
+  if (result.affectedRows === 0) return reply.code(404).send({ error: 'Not found' });
+  if (target[0]) await syncProductStock(target[0].product_id);
   return { ok: true };
 });
 
@@ -2296,7 +2683,7 @@ function normalizeSynologyUrl(rawUrl) {
   }
 }
 
-const SYNO_URL  = normalizeSynologyUrl(process.env.SYNOLOGY_URL || 'https://192-168-1-25.handielson.direct.quickconnect.to:5001');
+const SYNO_URL  = normalizeSynologyUrl(process.env.SYNOLOGY_URL || 'https://dsm-api.xiaomipetrolina.com.br');
 const SYNO_USER = process.env.SYNOLOGY_USER || '';
 const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
 
@@ -2336,8 +2723,7 @@ function listLocalSynologyFiles(folder, limit = 10000, offset = 0) {
   
   try {
     if (!fs.existsSync(folderPath)) {
-      console.warn(`[listLocalSynologyFiles] Pasta local não encontrada para ${folder}: ${folderPath}`);
-      return { ok: true, data: { files: [], total: 0 } };
+      return { ok: false, error: `Folder not found: ${folder}` };
     }
 
     let files = fs.readdirSync(folderPath, { withFileTypes: true })
@@ -2517,8 +2903,12 @@ fastify.get('/synology/files', { preHandler: requireSyncKey }, async (req, reply
   // 2) Fallback to local SynologyDrive mirror
   const result = listLocalSynologyFiles(folder, limit, offset);
   if (!result.ok) {
-    console.error(`[synology/files] Error for ${folder}:`, result.error);
-    return reply.code(500).send({ error: result.error });
+    // Synology inacessível e path local não existe — retorna lista vazia (sem erro 500)
+    console.warn(`[synology/files] Unreachable for ${folder}: ${result.error}`);
+    reply.header('Cache-Control', 'no-store');
+    reply.header('X-Total-Count', '0');
+    reply.header('X-Synology-Unreachable', 'true');
+    return [];
   }
 
   const files = result.data.files.map(f => ({
@@ -2704,6 +3094,134 @@ fastify.delete('/synology/file', { preHandler: requireSyncKey }, async (req, rep
   return { ok: true };
 });
 
+// ─── Synology Command Queue ───────────────────────────────────────────────────
+// Admin enfileira comandos (ex: restart do cloudflared). Um poller rodando no
+// Synology via DSM Task Scheduler consome a fila e executa localmente. Contorna
+// o caso em que o tunnel CF está caído e a VPS não alcança o Synology direto.
+
+const SYNO_COMMAND_TTL_MS = 5 * 60 * 1000;
+const synologyProcessStartedAt = new Date();
+let synologyLastStatusSnapshot = null;
+let synologyServicesPromise = null;
+let synologyCommandQueue = null;
+
+async function getSynologyServices() {
+  if (!synologyServicesPromise) {
+    synologyServicesPromise = Promise.all([
+      import('./services/synologyNasStatusService.js'),
+      import('./services/synologyCommandQueueService.js'),
+    ]).then(([statusService, queueService]) => {
+      if (!synologyCommandQueue) {
+        synologyCommandQueue = queueService.createSynologyCommandQueue({ ttlMs: SYNO_COMMAND_TTL_MS });
+      }
+
+      return {
+        buildSynologyStatusResponse: statusService.buildSynologyStatusResponse,
+        normalizeSynologyStatusPayload: statusService.normalizeSynologyStatusPayload,
+        createSynologyCommandQueue: queueService.createSynologyCommandQueue,
+      };
+    });
+  }
+
+  return synologyServicesPromise;
+}
+
+async function getSynologyCommandQueue() {
+  await getSynologyServices();
+  if (!synologyCommandQueue) {
+    const { createSynologyCommandQueue } = await getSynologyServices();
+    synologyCommandQueue = createSynologyCommandQueue({ ttlMs: SYNO_COMMAND_TTL_MS });
+  }
+  return synologyCommandQueue;
+}
+
+function requireSynoPollKey(request, reply, done) {
+  const expected = process.env.SYNOLOGY_POLL_KEY;
+  if (!expected) {
+    reply.code(500).send({ error: 'SYNOLOGY_POLL_KEY not configured on VPS' });
+    return;
+  }
+  const key = request.headers['x-poll-key'];
+  if (!key || key !== expected) {
+    reply.code(401).send({ error: 'Unauthorized' });
+    return;
+  }
+  done();
+}
+
+// Admin enfileira um restart
+fastify.post('/synology/enqueue-restart', { preHandler: requireSyncKey }, async (req, reply) => {
+  if (!process.env.SYNOLOGY_POLL_KEY) {
+    return reply.code(500).send({ error: 'SYNOLOGY_POLL_KEY not configured on VPS' });
+  }
+  const queue = await getSynologyCommandQueue();
+  const result = queue.enqueue('restart-cloudflared', new Date());
+  if (!result.ok) {
+    return reply.code(409).send({
+      error: 'Command already pending',
+      command: result.command,
+      reason: result.reason,
+    });
+  }
+  return { ok: true, command: result.command };
+});
+
+fastify.post('/synology/enqueue-reboot', { preHandler: requireSyncKey }, async (req, reply) => {
+  if (!process.env.SYNOLOGY_POLL_KEY) {
+    return reply.code(500).send({ error: 'SYNOLOGY_POLL_KEY not configured on VPS' });
+  }
+  const queue = await getSynologyCommandQueue();
+  const result = queue.enqueue('reboot-nas', new Date());
+  if (!result.ok) {
+    return reply.code(409).send({
+      error: 'Command already pending',
+      command: result.command,
+      reason: result.reason,
+    });
+  }
+  return { ok: true, command: result.command };
+});
+
+// Admin consulta status (pra UI mostrar "executado", "pendente", etc)
+fastify.get('/synology/command-status', { preHandler: requireSyncKey }, async () => {
+  const queue = await getSynologyCommandQueue();
+  const command = queue.getStatus(new Date());
+  return command || null;
+});
+
+fastify.get('/synology/status', { preHandler: requireSyncKey }, async () => {
+  const { buildSynologyStatusResponse } = await getSynologyServices();
+  const queue = await getSynologyCommandQueue();
+  const now = new Date();
+  return buildSynologyStatusResponse({
+    snapshot: synologyLastStatusSnapshot,
+    command: queue.getStatus(now),
+    now,
+    processStartedAt: synologyProcessStartedAt,
+  });
+});
+
+fastify.post('/synology/report-status', { preHandler: requireSynoPollKey }, async (req) => {
+  const { normalizeSynologyStatusPayload } = await getSynologyServices();
+  synologyLastStatusSnapshot = normalizeSynologyStatusPayload(req.body || {}, new Date());
+  return {
+    ok: true,
+    snapshot: synologyLastStatusSnapshot,
+  };
+});
+
+// Synology consome a fila (polling periódico via DSM Task Scheduler)
+fastify.get('/synology/poll-command', { preHandler: requireSynoPollKey }, async () => {
+  const queue = await getSynologyCommandQueue();
+  return queue.poll(new Date());
+});
+
+// Synology confirma execução
+fastify.post('/synology/ack-command', { preHandler: requireSynoPollKey }, async (req) => {
+  const queue = await getSynologyCommandQueue();
+  return queue.ack(req.body || {}, new Date());
+});
+
 // ─── Customer Favorites ────────────────────────────────────────────────────────
 
 fastify.get('/customers/:id/favorites', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -2870,6 +3388,13 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");
   await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
+
+  // Linkage pai/filho (Bling) - permite combos/kits referenciarem produtos pai (agregados)
+  await addColumnIfMissing('products', 'parent_id',       'CHAR(36) DEFAULT NULL');
+  await addColumnIfMissing('products', 'bling_id',        'BIGINT DEFAULT NULL');
+  await addColumnIfMissing('products', 'bling_parent_id', 'BIGINT DEFAULT NULL');
+  await addColumnIfMissing('products', 'is_parent',       'TINYINT(1) NOT NULL DEFAULT 0');
+
   await addColumnIfMissing('shipping_settings', 'extra_config', 'JSON NULL');
   console.log('[migration] company_settings synology columns: OK');
 
@@ -2897,23 +3422,55 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] field_presets table: OK');
+
+  // Tabela de unidades físicas serializadas (1 linha por aparelho com IMEI/serial)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS units (
+      id              CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      product_id      CHAR(36) NOT NULL,
+      imei_1          VARCHAR(20)  NULL,
+      imei_2          VARCHAR(20)  NULL,
+      serial          VARCHAR(100) NULL,
+      status          VARCHAR(20)  NOT NULL DEFAULT 'available',
+      \`condition\`     VARCHAR(20)  NOT NULL DEFAULT 'new',
+      internal_notes  TEXT NULL,
+      cost_price      INT NULL,
+      order_id        CHAR(36) NULL,
+      sale_id         CHAR(36) NULL,
+      reserved_at     TIMESTAMP NULL,
+      sold_at         TIMESTAMP NULL,
+      created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_units_product_id (product_id),
+      INDEX idx_units_imei_1     (imei_1),
+      INDEX idx_units_imei_2     (imei_2),
+      INDEX idx_units_serial     (serial),
+      INDEX idx_units_status     (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] units table: OK');
+
+  // Stock sync de units é feito em app-level (helper syncProductStock chamado pelos
+  // endpoints /units). Trigger MySQL exige privilégio SUPER que o usuário não tem
+  // (ER_BINLOG_CREATE_ROUTINE_NEED_SUPER quando binlog está ativo).
+}
+
+// Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.
+async function syncProductStock(productId) {
+  if (!productId) return;
+  await pool.query(
+    `UPDATE products SET stock_quantity = (
+       SELECT COUNT(*) FROM units WHERE product_id = ? AND status = 'available'
+     ), updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [productId, productId]
+  );
 }
 
 // ─── Start ─────────────────────────────────────────────────────────────────
-async function startServer() {
-  if (process.env.SKIP_DB_MIGRATIONS !== '1') {
-    await runMigrations();
-  } else {
-    console.log('[startup] SKIP_DB_MIGRATIONS=1, iniciando sem migrations');
-  }
-
+runMigrations().then(() => {
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);
   });
-}
-
-startServer().catch((err) => {
-  console.error('[startup] fatal:', err.message);
-  process.exit(1);
 });
