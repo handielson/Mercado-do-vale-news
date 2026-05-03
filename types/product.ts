@@ -127,6 +127,7 @@ export interface Product {
 
     // Variações Pai-Filho (sistema nativo)
     parent_id?: string;        // UUID do produto pai (null = produto pai ou independente)
+    is_parent?: boolean | number;  // Se true/1, eh produto pai (agregador de variantes, nao vendavel)
 
     // Product Combos (Bundles)
     is_combo?: boolean;        // Se true, é um pacote agrupador de SKUs filhos
@@ -174,6 +175,7 @@ export interface ProductInput {
     category_id?: string;      // Optional: override from model
     brand?: string;            // Optional: override from model
     parent_id?: string;        // Optional: UUID do produto pai
+    is_parent?: boolean | number;  // Se true/1, eh produto pai (agregador de variantes, nao vendavel)
     name: string;
     sku: string;
     price_cost: number;
