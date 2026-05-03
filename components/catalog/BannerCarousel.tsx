@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Banner } from '@/types/catalog';
 import { bannerService, type CustomerType } from '@/services/bannerService';
+import { buildResponsiveImageSources } from '@/utils/responsive-image-sources.js';
 import { ImageZoomModal } from './ImageZoomModal';
 
 interface BannerCarouselProps {
@@ -137,16 +138,30 @@ export function BannerCarousel({
                             className="w-full h-full cursor-pointer"
                             onClick={(e) => handleBannerClick(banner, e)}
                         >
-                            <img
-                                src={banner.image_url}
-                                alt={banner.title}
-                                loading={index === 0 ? 'eager' : 'lazy'}
-                                decoding={index === 0 ? 'sync' : 'async'}
-                                fetchPriority={index === 0 ? 'high' : 'auto'}
-                                width={1280}
-                                height={549}
-                                className="w-full h-full object-cover"
-                            />
+                            {(() => {
+                                const responsiveImageSources = buildResponsiveImageSources(banner.image_url, { kind: 'banner' });
+
+                                return (
+                                    <picture>
+                                        {responsiveImageSources && (
+                                            <>
+                                                <source type="image/avif" srcSet={responsiveImageSources.avifSrcSet} sizes={responsiveImageSources.sizes} />
+                                                <source type="image/webp" srcSet={responsiveImageSources.webpSrcSet} sizes={responsiveImageSources.sizes} />
+                                            </>
+                                        )}
+                                        <img
+                                            src={banner.image_url}
+                                            alt={banner.title}
+                                            loading={index === 0 ? 'eager' : 'lazy'}
+                                            decoding={index === 0 ? 'sync' : 'async'}
+                                            fetchPriority={index === 0 ? 'high' : 'auto'}
+                                            width={1280}
+                                            height={549}
+                                            className="w-full h-full object-cover"
+                                        />
+                                    </picture>
+                                );
+                            })()}
 
                             {/* Overlay com título */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
