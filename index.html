@@ -7,8 +7,9 @@
   <link rel="icon" type="image/svg+xml" id="dynamic-favicon" href="/favicon.svg" />
 
   <!-- Pre-conexão com origens críticas (economia ~300ms na LCP por origem) -->
-  <link rel="preconnect" href="https://api.xiaomipetrolina.com.br" crossorigin />
-  <link rel="preconnect" href="https://cqbdyxxzmkgeghwkozts.supabase.co" crossorigin />
+  <!-- Sem crossorigin pq são fetches same-policy (não exigem credenciais) -->
+  <link rel="preconnect" href="https://api.xiaomipetrolina.com.br" />
+  <link rel="preconnect" href="https://cqbdyxxzmkgeghwkozts.supabase.co" />
   <link rel="dns-prefetch" href="https://brasilapi.com.br" />
   <link rel="dns-prefetch" href="https://api.open-meteo.com" />
   <link rel="dns-prefetch" href="https://geocoding-api.open-meteo.com" />

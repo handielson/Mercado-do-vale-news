@@ -1,28 +1,11 @@
 import { Model, ModelInput } from '../types/model';
 import { supabase } from './supabase';
-import { fetchAllModelRows } from './modelPagination';
+import { getCompanyId } from './companyContext';
 
 /**
  * MODEL SERVICE - Supabase Implementation
  * Multi-tenant service with Row Level Security
  */
-
-// TEMPORARY: Hardcoded company_id until we implement auth
-const TEMP_COMPANY_ID = 'mercado-do-vale';
-
-/**
- * Get company_id from companies table by slug
- */
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
-}
 
 /**
  * Generate URL-friendly slug from model name
@@ -42,14 +25,15 @@ function generateSlug(name: string): string {
 async function list(): Promise<Model[]> {
     const companyId = await getCompanyId();
 
-    let data: any[];
-    try {
-        data = await fetchAllModelRows(supabase, { companyId });
-    } catch (error: any) {
-        throw new Error(`Failed to fetch models: ${error.message || error}`);
-    }
+    const { data, error } = await supabase
+        .from('models')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('name');
 
-    return data.map(row => ({
+    if (error) throw new Error(`Failed to fetch models: ${error.message}`);
+
+    return (data || []).map(row => ({
         id: row.id,
         name: row.name,
         slug: row.slug,
@@ -107,14 +91,16 @@ async function getById(id: string): Promise<Model | null> {
 async function listByBrand(brandId: string): Promise<Model[]> {
     const companyId = await getCompanyId();
 
-    let data: any[];
-    try {
-        data = await fetchAllModelRows(supabase, { companyId, brandId });
-    } catch (error: any) {
-        throw new Error(`Failed to fetch models by brand: ${error.message || error}`);
-    }
+    const { data, error } = await supabase
+        .from('models')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('brand_id', brandId)
+        .order('name');
 
-    return data.map(row => ({
+    if (error) throw new Error(`Failed to fetch models by brand: ${error.message}`);
+
+    return (data || []).map(row => ({
         id: row.id,
         name: row.name,
         slug: row.slug,

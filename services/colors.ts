@@ -1,6 +1,7 @@
 
 import { Color, ColorInput } from '../types/color';
 import { supabase } from './supabase';
+import { getCompanyId } from './companyContext';
 
 /**
  * COLOR SERVICE - Supabase Implementation
@@ -12,9 +13,6 @@ import { supabase } from './supabase';
  * - Follows same pattern as brandService
  * - Includes hex_code mapping for visual preview
  */
-
-// TEMPORARY: Hardcoded company_id until we implement auth
-const TEMP_COMPANY_ID = 'mercado-do-vale';
 
 // Color mapping for visual preview (fallback if hex_code not in DB)
 export const COLOR_MAP: Record<string, string> = {
@@ -123,20 +121,6 @@ export const COLOR_MAP: Record<string, string> = {
     'Cacau': '#5C3D2E',
 };
 
-
-/**
- * Get company_id from companies table by slug
- */
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
-}
 
 /**
  * Generate URL-friendly slug from color name

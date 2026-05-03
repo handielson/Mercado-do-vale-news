@@ -12,26 +12,15 @@ import { telegramBotService } from './telegramBot';
  * - RLS policies enforce security
  */
 
-// Temporary company ID for development
-const TEMP_COMPANY_ID = 'mercado-do-vale';
+import { getCompanyId as resolveCompanyId } from './companyContext';
 
 class CustomerService {
     private cache: Customer[] | null = null;
     private cacheTimestamp: number = 0;
     private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-    /**
-     * Get company ID from authenticated user or fallback to temp company
-     */
     private async getCompanyId(): Promise<string> {
-        const { data, error } = await supabase
-            .from('companies')
-            .select('id')
-            .eq('slug', TEMP_COMPANY_ID)
-            .single();
-
-        if (error) throw new Error(`Failed to get company: ${error.message}`);
-        return data.id;
+        return resolveCompanyId();
     }
 
     /**

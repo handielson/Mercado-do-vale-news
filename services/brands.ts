@@ -1,28 +1,12 @@
 import { Brand, BrandInput } from '../types/brand';
 import { supabase } from './supabase';
 import { vpsApiService } from './vpsApiService';
+import { getCompanyId } from './companyContext';
 
 /**
  * BRAND SERVICE - Supabase Implementation
  * Multi-tenant service with Row Level Security
  */
-
-// TEMPORARY: Hardcoded company_id until we implement auth
-const TEMP_COMPANY_ID = 'mercado-do-vale';
-
-/**
- * Get company_id from companies table by slug
- */
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
-}
 
 /**
  * Generate URL-friendly slug from brand name

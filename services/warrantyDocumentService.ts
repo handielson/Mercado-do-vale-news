@@ -5,23 +5,7 @@
 
 import { supabase } from './supabase';
 import { WarrantyDocument, WarrantyDocumentInput } from '../types/warrantyDocument';
-
-// TEMPORARY: Hardcoded company_id until we implement auth
-const TEMP_COMPANY_ID = 'mercado-do-vale';
-
-/**
- * Get company_id from companies table by slug
- */
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
-}
+import { getCompanyId } from './companyContext';
 
 
 export const warrantyDocumentService = {

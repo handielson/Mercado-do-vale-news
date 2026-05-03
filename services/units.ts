@@ -2,6 +2,7 @@ import { Unit, UnitInput } from '../types/unit';
 import { UnitStatus } from '../utils/field-standards';
 import { supabase } from './supabase';
 import { vpsApiService } from './vpsApiService';
+import { getCompanyId } from './companyContext';
 
 /**
  * UNIT SERVICE — VPS MySQL (fonte de verdade para o inventário serializado).
@@ -165,9 +166,9 @@ export const unitService = {
         }
 
         // Audit log no Supabase (tabela ainda não migrada)
-        const { data: company } = await supabase.from('companies').select('id').eq('slug', 'mercado-do-vale').single();
+        const companyId = await getCompanyId();
         await supabase.from('unit_swap_logs').insert({
-            company_id: company?.id,
+            company_id: companyId,
             order_id: orderId || null,
             sale_id: saleId || null,
             old_unit_id: currentUnitId,
@@ -208,11 +209,11 @@ export const unitService = {
     },
 
     async getSwapLogs(opts: { unitId?: string; orderId?: string }): Promise<any[]> {
-        const { data: company } = await supabase.from('companies').select('id').eq('slug', 'mercado-do-vale').single();
+        const companyId = await getCompanyId();
         let query = supabase
             .from('unit_swap_logs')
             .select('*')
-            .eq('company_id', company?.id)
+            .eq('company_id', companyId)
             .order('created_at', { ascending: true });
         if (opts.orderId) query = query.eq('order_id', opts.orderId);
         if (opts.unitId) query = query.or(`old_unit_id.eq.${opts.unitId},new_unit_id.eq.${opts.unitId}`);

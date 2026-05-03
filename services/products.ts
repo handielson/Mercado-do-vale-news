@@ -4,28 +4,12 @@ import { supabase } from './supabase';
 import { logPriceChange } from './priceHistoryService';
 import { vpsApiService } from './vpsApiService';
 import { buildProductVideoUrl } from '../utils/video-url';
+import { getCompanyId } from './companyContext';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
  * Supabase ainda é usado para: models, companies, price_history (dados relacionais que não estão na VPS)
  */
-
-// ─── Company context (Supabase apenas para companies lookup) ──────────────────
-
-const TEMP_COMPANY_ID = 'mercado-do-vale';
-let _cachedCompanyId: string | null = null;
-
-async function getCompanyId(): Promise<string> {
-    if (_cachedCompanyId) return _cachedCompanyId;
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', TEMP_COMPANY_ID)
-        .single();
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    _cachedCompanyId = data.id;
-    return data.id;
-}
 
 // ─── Transform ─────────────────────────────────────────────────────────────
 
