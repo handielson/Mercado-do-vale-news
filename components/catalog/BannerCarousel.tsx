@@ -1,9 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-<<<<<<< Updated upstream
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-=======
-import { ChevronLeft, ChevronRight } from 'lucide-react';
->>>>>>> Stashed changes
 import type { Banner } from '@/types/catalog';
 import { bannerService, type CustomerType } from '@/services/bannerService';
 import { buildResponsiveImageSources } from '@/utils/responsive-image-sources.js';
@@ -206,35 +201,4 @@ export function BannerCarousel({
             )}
 
             {/* Dots de navegação */}
-            {showDots && banners.length > 1 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                    {banners.map((_, index) => (
-                        <button
-                            key={index}
-                            onClick={() => goToSlide(index)}
-                            className={`transition-all ${index === currentIndex
-                                ? 'w-8 h-2 bg-white'
-                                : 'w-2 h-2 bg-white/50 hover:bg-white/75'
-                                } rounded-full`}
-                            aria-label={`Ir para banner ${index + 1}`}
-                        />
-                    ))}
-                </div>
-            )}
-
-            {/* Contador */}
-            <div className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-md text-white text-sm font-semibold">
-                {currentIndex + 1} / {banners.length}
-            </div>
-
-            {/* Modal de Zoom */}
-            {zoomedBanner && (
-                <ImageZoomModal
-                    imageUrl={zoomedBanner.image_url}
-                    title={zoomedBanner.title}
-                    onClose={() => setZoomedBanner(null)}
-                />
-            )}
-        </div>
-    );
-}
+            {showDots && banners.length > 1 
