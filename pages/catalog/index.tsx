@@ -103,6 +103,41 @@ function CatalogContent() {
     // Usuários ADMIN que precisam bypassar cache devem recarregar a página manualmente
     const bypassCache = false;
 
+    useEffect(() => {
+        const syncCatalogHeadTags = () => {
+            const descriptionTags = Array.from(document.querySelectorAll('meta[name="description"]'));
+            const [descriptionTag, ...duplicateDescriptions] = descriptionTags;
+            if (descriptionTag instanceof HTMLMetaElement) {
+                descriptionTag.content = catalogSeo.description;
+            }
+            duplicateDescriptions.forEach(tag => {
+                if (tag.parentNode) {
+                    tag.parentNode.removeChild(tag);
+                }
+            });
+
+            const canonicalTags = Array.from(document.querySelectorAll('link[rel="canonical"]'));
+            const [canonicalTag, ...duplicateCanonicals] = canonicalTags;
+            if (canonicalTag instanceof HTMLLinkElement) {
+                canonicalTag.href = catalogSeo.canonical;
+            }
+            duplicateCanonicals.forEach(tag => {
+                if (tag.parentNode) {
+                    tag.parentNode.removeChild(tag);
+                }
+            });
+        };
+
+        syncCatalogHeadTags();
+        const frameId = window.requestAnimationFrame(syncCatalogHeadTags);
+        const timeoutId = window.setTimeout(syncCatalogHeadTags, 100);
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+            window.clearTimeout(timeoutId);
+        };
+    }, [catalogSeo.canonical, catalogSeo.description]);
+
     const {
         products,
         loading,
