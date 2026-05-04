@@ -249,15 +249,30 @@ export const catalogService = {
                 result = result.filter(p => p.custom_fields && typeof p.custom_fields === 'object' && 'featured' in p.custom_fields && p.custom_fields.featured === true);
             }
 
+            const isFeaturedProduct = (product: any) => (
+                product.custom_fields &&
+                typeof product.custom_fields === 'object' &&
+                'featured' in product.custom_fields &&
+                product.custom_fields.featured === true
+            );
+
+            const sortByRecent = (left: any, right: any) => {
+                const dateLeft = new Date(left.created_at || 0).getTime();
+                const dateRight = new Date(right.created_at || 0).getTime();
+                return dateRight - dateLeft;
+            };
+
             switch (filters?.sortBy) {
                 case 'price_asc':  result.sort((a, b) => (a.price_retail || 0) - (b.price_retail || 0)); break;
                 case 'price_desc': result.sort((a, b) => (b.price_retail || 0) - (a.price_retail || 0)); break;
-                default:
+                case 'featured':
                     result.sort((a, b) => {
-                        const dateA = new Date((a as any).created_at || 0).getTime();
-                        const dateB = new Date((b as any).created_at || 0).getTime();
-                        return dateB - dateA;
+                        const featuredDelta = Number(isFeaturedProduct(b)) - Number(isFeaturedProduct(a));
+                        return featuredDelta || sortByRecent(a, b);
                     });
+                    break;
+                default:
+                    result.sort(sortByRecent);
             }
 
             const from = (page - 1) * pageSize;

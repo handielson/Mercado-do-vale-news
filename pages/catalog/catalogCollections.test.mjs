@@ -13,9 +13,9 @@ const featured = getCatalogCollectionByPathname('/produtos/destaques');
 assert.equal(featured?.key, 'featured');
 assert.equal(featured?.path, '/produtos/destaques');
 assert.deepEqual(getCatalogCollectionFilters(featured), {
-  featuredOnly: true,
   sortBy: 'featured',
 });
+assert.equal(featured?.source, 'featured-first');
 
 const recent = getCatalogCollectionByPathname('/produtos/mais-recentes');
 assert.equal(recent?.key, 'recent');
@@ -25,9 +25,8 @@ assert.deepEqual(getCatalogCollectionFilters(recent), {
 
 const bestSellers = getCatalogCollectionByPathname('/produtos/mais-vendidos');
 assert.equal(bestSellers?.key, 'best-sellers');
-assert.equal(bestSellers?.source, 'curated-featured-fallback');
+assert.equal(bestSellers?.source, 'curated-featured-first-fallback');
 assert.deepEqual(getCatalogCollectionFilters(bestSellers), {
-  featuredOnly: true,
   sortBy: 'featured',
 });
 

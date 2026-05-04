@@ -20,10 +20,9 @@ export const CATALOG_COLLECTIONS = [
     title: 'Produtos em destaque | Mercado do Vale em Petrolina-PE',
     description: 'Veja smartphones, tablets e eletronicos em destaque no Mercado do Vale, com selecao especial, entrega rapida e garantia em Petrolina-PE.',
     filters: {
-      featuredOnly: true,
       sortBy: 'featured',
     },
-    source: 'featured',
+    source: 'featured-first',
   },
   {
     key: 'recent',
@@ -47,10 +46,9 @@ export const CATALOG_COLLECTIONS = [
     title: 'Mais vendidos | Mercado do Vale em Petrolina-PE',
     description: 'Conheca os produtos populares do Mercado do Vale em Petrolina-PE, com smartphones e eletronicos selecionados pela loja.',
     filters: {
-      featuredOnly: true,
       sortBy: 'featured',
     },
-    source: 'curated-featured-fallback',
+    source: 'curated-featured-first-fallback',
   },
 ];
 
