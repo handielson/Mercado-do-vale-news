@@ -49,8 +49,14 @@ export const CATALOG_COLLECTIONS = [
       sortBy: 'featured',
     },
     source: 'curated-featured-first-fallback',
+    // Para reativar: trocar para true e descomentar a rota em routes/index.tsx
+    enabled: false,
   },
 ];
+
+export function getEnabledCatalogCollections() {
+  return CATALOG_COLLECTIONS.filter((collection) => collection.enabled !== false);
+}
 
 export function getCatalogCollectionByPathname(pathname = '') {
   return CATALOG_COLLECTIONS.find((collection) => collection.path === pathname) || null;

@@ -42,10 +42,10 @@ import {
 } from './catalogPagination.js';
 import { mergeCategoryDisplayCounts } from './catalogCategoryCounts.js';
 import {
-    CATALOG_COLLECTIONS,
     getCatalogCollectionByPathname,
     getCatalogCollectionFilters,
     getCatalogSeoConfig,
+    getEnabledCatalogCollections,
 } from './catalogCollections.js';
 
 
@@ -843,7 +843,7 @@ function CatalogContent() {
                         >
                             Todos os Produtos
                         </Link>
-                        {CATALOG_COLLECTIONS.map((collection) => (
+                        {getEnabledCatalogCollections().map((collection) => (
                             <Link
                                 key={collection.key}
                                 to={collection.path}

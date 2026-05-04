@@ -4,10 +4,13 @@ import {
   getCatalogCollectionByPathname,
   getCatalogCollectionFilters,
   getCatalogSeoConfig,
+  getEnabledCatalogCollections,
   isCatalogCollectionPath,
 } from './catalogCollections.js';
 
 assert.equal(CATALOG_COLLECTIONS.length, 3);
+assert.equal(getEnabledCatalogCollections().length, 2);
+assert.ok(!getEnabledCatalogCollections().some((c) => c.key === 'best-sellers'));
 
 const featured = getCatalogCollectionByPathname('/produtos/destaques');
 assert.equal(featured?.key, 'featured');
@@ -26,6 +29,7 @@ assert.deepEqual(getCatalogCollectionFilters(recent), {
 const bestSellers = getCatalogCollectionByPathname('/produtos/mais-vendidos');
 assert.equal(bestSellers?.key, 'best-sellers');
 assert.equal(bestSellers?.source, 'curated-featured-first-fallback');
+assert.equal(bestSellers?.enabled, false);
 assert.deepEqual(getCatalogCollectionFilters(bestSellers), {
   sortBy: 'featured',
 });

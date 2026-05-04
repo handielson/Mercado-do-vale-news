@@ -840,16 +840,19 @@ export const router = createBrowserRouter([
       </MaintenanceGuard>
     )
   },
-  {
-    path: "/produtos/mais-vendidos",
-    element: (
-      <MaintenanceGuard>
-        <CartProvider>
-          <CatalogPage />
-        </CartProvider>
-      </MaintenanceGuard>
-    )
-  },
+  // Pagina /produtos/mais-vendidos desabilitada — duplica conteudo de /produtos/destaques
+  // ate termos ranking real de vendas. Para reativar: descomentar abaixo e trocar
+  // `enabled: false` para `true` em pages/catalog/catalogCollections.js.
+  // {
+  //   path: "/produtos/mais-vendidos",
+  //   element: (
+  //     <MaintenanceGuard>
+  //       <CartProvider>
+  //         <CatalogPage />
+  //       </CartProvider>
+  //     </MaintenanceGuard>
+  //   )
+  // },
   {
     path: "/quem-somos",
     element: (
