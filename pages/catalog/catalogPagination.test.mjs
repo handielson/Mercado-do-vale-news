@@ -38,6 +38,15 @@ assert.equal(
 );
 
 assert.equal(
+  buildCatalogPageHref({
+    pathname: '/produtos/destaques',
+    searchParams: new URLSearchParams('page=1'),
+    page: 2,
+  }),
+  '/produtos/destaques?page=2',
+);
+
+assert.equal(
   getCatalogPaginationPathname({
     pathname: '/',
     isAllProducts: true,

@@ -821,6 +821,36 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/produtos/destaques",
+    element: (
+      <MaintenanceGuard>
+        <CartProvider>
+          <CatalogPage />
+        </CartProvider>
+      </MaintenanceGuard>
+    )
+  },
+  {
+    path: "/produtos/mais-recentes",
+    element: (
+      <MaintenanceGuard>
+        <CartProvider>
+          <CatalogPage />
+        </CartProvider>
+      </MaintenanceGuard>
+    )
+  },
+  {
+    path: "/produtos/mais-vendidos",
+    element: (
+      <MaintenanceGuard>
+        <CartProvider>
+          <CatalogPage />
+        </CartProvider>
+      </MaintenanceGuard>
+    )
+  },
+  {
     path: "/quem-somos",
     element: (
       <MaintenanceGuard>

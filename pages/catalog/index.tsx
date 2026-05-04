@@ -41,6 +41,12 @@ import {
     shouldRestoreCatalogState,
 } from './catalogPagination.js';
 import { mergeCategoryDisplayCounts } from './catalogCategoryCounts.js';
+import {
+    CATALOG_COLLECTIONS,
+    getCatalogCollectionByPathname,
+    getCatalogCollectionFilters,
+    getCatalogSeoConfig,
+} from './catalogCollections.js';
 
 
 function CatalogContent() {
@@ -87,11 +93,50 @@ function CatalogContent() {
     const initialCategory = searchParams.get('categoria') ?? undefined;
     const currentPage = normalizeCatalogPage(searchParams.get('page'));
     const isAllProductsPage = location.pathname === '/produtos';
+    const activeCollection = getCatalogCollectionByPathname(location.pathname);
+    const catalogSeo = getCatalogSeoConfig(activeCollection);
+    const isCollectionPage = !!activeCollection;
+    const isHomeCatalogPage = location.pathname === '/';
     const restoreScrollRef = useRef(false);
 
     // bypassCache fixo: nunca muda após a primeira renderização, evitando reload quando auth carrega
     // Usuários ADMIN que precisam bypassar cache devem recarregar a página manualmente
     const bypassCache = false;
+
+    useEffect(() => {
+        const syncCatalogHeadTags = () => {
+            const descriptionTags = Array.from(document.querySelectorAll('meta[name="description"]'));
+            const [descriptionTag, ...duplicateDescriptions] = descriptionTags;
+            if (descriptionTag instanceof HTMLMetaElement) {
+                descriptionTag.content = catalogSeo.description;
+            }
+            duplicateDescriptions.forEach(tag => {
+                if (tag.parentNode) {
+                    tag.parentNode.removeChild(tag);
+                }
+            });
+
+            const canonicalTags = Array.from(document.querySelectorAll('link[rel="canonical"]'));
+            const [canonicalTag, ...duplicateCanonicals] = canonicalTags;
+            if (canonicalTag instanceof HTMLLinkElement) {
+                canonicalTag.href = catalogSeo.canonical;
+            }
+            duplicateCanonicals.forEach(tag => {
+                if (tag.parentNode) {
+                    tag.parentNode.removeChild(tag);
+                }
+            });
+        };
+
+        syncCatalogHeadTags();
+        const frameId = window.requestAnimationFrame(syncCatalogHeadTags);
+        const timeoutId = window.setTimeout(syncCatalogHeadTags, 100);
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+            window.clearTimeout(timeoutId);
+        };
+    }, [catalogSeo.canonical, catalogSeo.description]);
 
     const {
         products,
@@ -110,6 +155,7 @@ function CatalogContent() {
         catalogSettings
     } = useCatalog({
         pageSize: 150, // Alto, pois ao agrupar os cards, 150 produtos brutos podem virar apenas 10 ou 15 cards únicos
+        initialFilters: getCatalogCollectionFilters(activeCollection),
         initialSearchQuery,
         initialCategory,
         bypassCache
@@ -366,7 +412,7 @@ function CatalogContent() {
     const isAllProductsListing = !filters.categories.length && !searchQuery;
     const paginationPathname = getCatalogPaginationPathname({
         pathname: location.pathname,
-        isAllProducts: isAllProductsListing,
+        isAllProducts: isAllProductsListing && !isCollectionPage,
     });
 
     useEffect(() => {
@@ -469,17 +515,17 @@ function CatalogContent() {
         <div className="min-h-screen bg-slate-50">
             {/* SEO — Helmet injeta title/meta na <head> para crawlers */}
             <Helmet>
-                <title>Mercado do Vale | Smartphones e Eletrônicos em Petrolina-PE</title>
-                <meta name="description" content="Compre smartphones Xiaomi, Samsung, iPhones, tablets e eletrônicos com os melhores preços em Petrolina-PE. Entrega rápida e garantia." />
-                <link rel="canonical" href="https://mercadodovale.com.br/" />
-                <meta property="og:title" content="Mercado do Vale | Smartphones e Eletrônicos em Petrolina-PE" />
-                <meta property="og:description" content="Smartphones, tablets e eletrônicos com os melhores preços em Petrolina-PE." />
+                <title>{catalogSeo.title}</title>
+                <meta name="description" content={catalogSeo.description} />
+                <link rel="canonical" href={catalogSeo.canonical} />
+                <meta property="og:title" content={catalogSeo.ogTitle} />
+                <meta property="og:description" content={catalogSeo.ogDescription} />
                 <meta property="og:type" content="website" />
-                <meta property="og:url" content="https://mercadodovale.com.br/" />
+                <meta property="og:url" content={catalogSeo.canonical} />
             </Helmet>
 
             {/* h1 invisível ao usuário mas visível para crawlers (SEO) */}
-            <h1 className="sr-only">Mercado do Vale — Smartphones e Eletrônicos em Petrolina-PE</h1>
+            <h1 className="sr-only">{catalogSeo.heading}</h1>
 
             {/* Public Header */}
             <PublicHeader />
@@ -610,7 +656,7 @@ function CatalogContent() {
                 )}
             </div>
 
-            {!isAllProductsPage && (
+            {isHomeCatalogPage && (
                 <>
                     {/* Banner Carousel */}
                     <div className="bg-white border-b border-slate-200">
@@ -783,6 +829,35 @@ function CatalogContent() {
                         />
                     </div>
 
+                    <nav
+                        aria-label="Colecoes de produtos"
+                        className="mt-4 flex flex-wrap gap-2"
+                    >
+                        <Link
+                            to="/produtos"
+                            className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
+                                !isCollectionPage && isAllProductsPage
+                                    ? 'border-slate-900 bg-slate-900 text-white'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                        >
+                            Todos os Produtos
+                        </Link>
+                        {CATALOG_COLLECTIONS.map((collection) => (
+                            <Link
+                                key={collection.key}
+                                to={collection.path}
+                                className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
+                                    activeCollection?.key === collection.key
+                                        ? 'border-slate-900 bg-slate-900 text-white'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                                }`}
+                            >
+                                {collection.label}
+                            </Link>
+                        ))}
+                    </nav>
+
                     {/* Chips de Filtros Ativos Renderizados na Raiz */}
                     {(filters.brands.length > 0 || (filters.sortBy && filters.sortBy !== 'recent') || filters.priceRange || filters.favoritesOnly || autoDetectedBrand) && (
                         <div className="flex flex-wrap gap-2 mt-4 items-center animate-in fade-in slide-in-from-top-2 duration-300">
@@ -852,7 +927,7 @@ function CatalogContent() {
                 </div>
 
                 {/* Seções do Catálogo - ocultar quando há filtro de categoria ativo ou busca */}
-                {!isAllProductsPage && !sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !searchQuery && (
+                {isHomeCatalogPage && !sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !searchQuery && (
                     <div className="mb-12 space-y-12">
                         {sections.map((section) => (
                             <CatalogSectionComponent
@@ -869,7 +944,10 @@ function CatalogContent() {
 
                 {!filters.categories.length && !searchQuery && (
                     <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900">Todos os Produtos</h2>
+                        <h2 className="text-2xl font-bold text-gray-900">{catalogSeo.heading}</h2>
+                        {isCollectionPage && catalogSeo.intro && (
+                            <p className="mt-2 max-w-3xl text-sm text-slate-600">{catalogSeo.intro}</p>
+                        )}
                     </div>
                 )}
 
@@ -1090,9 +1168,11 @@ function CatalogContent() {
 }
 
 export default function CatalogPage() {
+    const location = useLocation();
+
     return (
         <QuoteCartProvider>
-            <CatalogContent />
+            <CatalogContent key={location.pathname} />
         </QuoteCartProvider>
     );
 }
