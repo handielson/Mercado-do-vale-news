@@ -1,11 +1,12 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Product } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
 import { productService } from '../services/products';
 import { vpsApiService } from '../services/vpsApiService';
 import { ProductFiltersState } from '../components/products/ProductFilters';
 import { prefetchModelImages } from '../services/modelImageCache';
+import { filterAdminProducts, mergeProductsById } from './adminProductFilters';
 
 /** Converte resposta do VPS MySQL para o tipo Product */
 function mapVpsProduct(row: any): Product {
@@ -101,6 +102,7 @@ function getCacheAge(): string | null {
  * Loads instantly from localStorage cache, then refreshes in background.
  */
 export const useProducts = () => {
+    const searchRequestSeq = useRef(0);
     const cached = loadFromCache();
     const [products, setProducts] = useState<Product[]>(cached || []);
     const [filteredProducts, setFilteredProducts] = useState<Product[]>(cached || []);
@@ -166,58 +168,7 @@ export const useProducts = () => {
      * Apply client-side filters
      */
     const applyFilters = useCallback(() => {
-        let filtered = [...products];
-
-        // Search filter (name, SKU, EAN, Bling ID)
-        if (filters.search.trim() !== '') {
-            const searchLower = filters.search.toLowerCase();
-            filtered = filtered.filter(product => {
-                const nameMatch = (product.name || '').toLowerCase().includes(searchLower);
-                const skuMatch = (product.sku || '').toLowerCase().includes(searchLower);
-                const eanMatch = (product.eans || []).some(ean => ean?.toLowerCase().includes(searchLower));
-                const blingMatch = product.bling_id?.toString().includes(searchLower);
-                
-                return nameMatch || skuMatch || eanMatch || blingMatch;
-            });
-        }
-
-        // Status filter
-        if (filters.status !== 'all') {
-            filtered = filtered.filter(product => product.status === filters.status);
-        }
-
-        // Image status filter
-        if (filters.imageStatus === 'with_image') {
-            filtered = filtered.filter(product => product.images && product.images.length > 0);
-        } else if (filters.imageStatus === 'without_image') {
-            filtered = filtered.filter(product => !product.images || product.images.length === 0);
-        }
-
-        // Parent visibility filter (produtos pai sao agregadores, nao vendaveis)
-        if (filters.parentVisibility === 'hide_parents') {
-            filtered = filtered.filter(product => !product.is_parent);
-        } else if (filters.parentVisibility === 'only_parents') {
-            filtered = filtered.filter(product => product.is_parent);
-        }
-        // 'show_all' -> sem filtro
-
-        // Sorting
-        filtered.sort((a, b) => {
-            switch (filters.sortBy) {
-                case 'newest':
-                    return new Date(b.created || 0).getTime() - new Date(a.created || 0).getTime();
-                case 'oldest':
-                    return new Date(a.created || 0).getTime() - new Date(b.created || 0).getTime();
-                case 'name_asc':
-                    return a.name.localeCompare(b.name);
-                case 'name_desc':
-                    return b.name.localeCompare(a.name);
-                default:
-                    return 0;
-            }
-        });
-
-        setFilteredProducts(filtered);
+        setFilteredProducts(filterAdminProducts(products, filters));
         setCurrentPage(1); // Reset to first page when filters change
     }, [products, filters]);
 
@@ -263,6 +214,40 @@ export const useProducts = () => {
         fetchProducts(hasCachedData ? 'background' : 'spinner');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // The admin list initially loads a capped page for speed; enrich it from the
+    // VPS when searching so SKUs beyond that first page are still discoverable.
+    useEffect(() => {
+        const term = filters.search.trim();
+        if (term.length < 2) return;
+
+        const requestId = ++searchRequestSeq.current;
+        const looksLikeSku = /^[a-z0-9._-]+$/i.test(term);
+
+        Promise.all([
+            vpsApiService.getProducts({ search: term, status: 'all', limit: 500, noCache: true }),
+            looksLikeSku
+                ? vpsApiService.getProducts({ sku: term, status: 'all', limit: 5, noCache: true })
+                : Promise.resolve(null),
+        ])
+            .then(([searchRows, skuRows]) => {
+                if (requestId !== searchRequestSeq.current) return;
+                const remoteProducts = [...(searchRows || []), ...(skuRows || [])].map(mapVpsProduct);
+                if (remoteProducts.length === 0) return;
+
+                setProducts(current => {
+                    const merged = mergeProductsById(current, remoteProducts);
+                    saveToCache(merged);
+                    return merged;
+                });
+                setCacheAge('agora');
+            })
+            .catch(error => {
+                if (requestId === searchRequestSeq.current) {
+                    console.warn('[useProducts] Falha ao enriquecer busca na VPS:', error);
+                }
+            });
+    }, [filters.search]);
 
     // Apply filters whenever they change
     useEffect(() => {
