@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Edit, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Video, VideoOff, Loader2 } from 'lucide-react';
+import { Barcode, Edit, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { Company } from '../../types/company';
@@ -449,6 +449,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
+    const handleCopyProductField = async (e: React.MouseEvent, value: string | undefined | null, label: string) => {
+        e.stopPropagation();
+        if (!value) {
+            toast.warning(`${label} indisponivel para copiar`);
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(value);
+            toast.success(`${label} copiado`);
+        } catch {
+            toast.error(`Nao foi possivel copiar ${label}`);
+        }
+    };
+
     // Resolve cover image: VPS now returns images directly (no compact mode).
     // Only lazy-load model image as fallback when product has no custom images.
     useEffect(() => {
@@ -581,9 +596,165 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             {/* Content */}
             <div className="p-4 space-y-3">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-slate-900 text-sm leading-tight break-words">
+                <div className="space-y-2">
+                    <div className="flex items-center justify-end gap-1 overflow-x-auto pb-0.5">
+                        {/* Hidden Input for Video Upload */}
+                        <input
+                            type="file"
+                            accept="video/mp4,video/quicktime,video/*"
+                            ref={videoInputRef}
+                            className="hidden"
+                            onChange={handleVideoUpload}
+                        />
+
+                        {/* Video Status Action */}
+                        {product.sku && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (videoInfo.checking) return;
+                                    if (videoInfo.exists && videoInfo.url) {
+                                        window.open(videoInfo.url, '_blank');
+                                    } else {
+                                        videoInputRef.current?.click();
+                                    }
+                                }}
+                                disabled={videoInfo.checking || isUploadingVideo}
+                                className={cn(
+                                    "shrink-0 p-1.5 rounded-lg transition-colors group",
+                                    (videoInfo.checking || isUploadingVideo) ? "opacity-50 cursor-wait" :
+                                    videoInfo.exists ? "bg-blue-100 hover:bg-blue-200" : "hover:bg-amber-50"
+                                )}
+                                title={
+                                    videoInfo.checking ? "Verificando status de video..." :
+                                    isUploadingVideo ? "Sincronizando envio de video..." :
+                                    videoInfo.exists ? "Produto possui video. Ver clipe." :
+                                    "Produto sem video. Clique para anexar."
+                                }
+                            >
+                                {isUploadingVideo || videoInfo.checking ? (
+                                    <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                                ) : videoInfo.exists ? (
+                                    <Video className="w-4 h-4 text-blue-600 group-hover:text-blue-800" />
+                                ) : (
+                                    <VideoOff className="w-4 h-4 text-slate-400 group-hover:text-amber-500" />
+                                )}
+                            </button>
+                        )}
+
+                        <button
+                            onClick={(e) => handleCopyProductField(e, product.name, 'nome')}
+                            className="shrink-0 p-1.5 bg-sky-50 hover:bg-sky-100 rounded-lg transition-colors group"
+                            title="Copiar nome"
+                        >
+                            <Type className="w-4 h-4 text-sky-600 group-hover:text-sky-700" />
+                        </button>
+                        <button
+                            onClick={(e) => handleCopyProductField(e, product.sku, 'SKU')}
+                            className="shrink-0 p-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors group"
+                            title="Copiar SKU"
+                        >
+                            <Barcode className="w-4 h-4 text-indigo-600 group-hover:text-indigo-700" />
+                        </button>
+
+                        <button
+                            onClick={handleOpenShopeeModal}
+                            disabled={isPreparingShopeeModal}
+                            className={cn(
+                                "relative shrink-0 p-1.5 rounded-lg transition-all duration-200 group border",
+                                isPreparingShopeeModal
+                                    ? "opacity-50 cursor-wait border-slate-200 bg-slate-50"
+                                    : shopeeVisualState.isSynced
+                                        ? "border-[#ffd3c7] bg-[#fff3ef] shadow-[0_0_0_3px_rgba(238,77,45,0.12),0_0_18px_rgba(238,77,45,0.18)] animate-pulse"
+                                        : "border-transparent hover:bg-orange-50 hover:border-orange-100"
+                            )}
+                            title={isPreparingShopeeModal ? 'Preparando sincronizacao da Shopee...' : shopeeVisualState.title}
+                        >
+                            {shopeeVisualState.isSynced && (
+                                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
+                            )}
+                            {isPreparingShopeeModal ? (
+                                <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                            ) : (
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    className={cn(
+                                        "w-4 h-4",
+                                        shopeeVisualState.isSynced
+                                            ? "text-[#ee4d2d]"
+                                            : "text-slate-400 group-hover:text-[#ee4d2d]"
+                                    )}
+                                    aria-hidden="true"
+                                >
+                                    <path d="M8 8.2V7a4 4 0 1 1 8 0v1.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                                    <path d="M6.6 8.2h10.8c.8 0 1.5.56 1.67 1.35l1.07 4.92A4.8 4.8 0 0 1 15.51 20H8.49a4.8 4.8 0 0 1-4.69-5.51l1.07-4.92c.17-.79.86-1.35 1.73-1.35Z" fill="currentColor" />
+                                    {shopeeVisualState.isSynced ? (
+                                        <path d="m9.2 12.3 2.1 2.1 3.6-3.8" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                    ) : (
+                                        <path d="M9.1 12.2h5.8M12 9.9v4.6" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                                    )}
+                                </svg>
+                            )}
+                        </button>
+
+                        {product.bling_id && (
+                            <button
+                                onClick={handleSyncStock}
+                                disabled={isSyncing}
+                                className={cn(
+                                    "shrink-0 p-1.5 rounded-lg transition-colors group",
+                                    isSyncing ? "opacity-50 cursor-not-allowed" : "hover:bg-green-50"
+                                )}
+                                title="Sincronizar Estoque (Bling)"
+                            >
+                                <RefreshCw className={cn("w-4 h-4 text-slate-400 group-hover:text-green-600", isSyncing && "animate-spin text-green-600")} />
+                            </button>
+                        )}
+                        <button
+                            onClick={() => onEdit?.(product)}
+                            className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Editar produto"
+                        >
+                            <Edit className="w-4 h-4 text-slate-600" />
+                        </button>
+                        <button
+                            onClick={() => setIsPrintModalOpen(true)}
+                            className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors group"
+                            title="Imprimir Etiqueta"
+                        >
+                            <Printer className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
+                        </button>
+                        <button
+                            onClick={handleToggleStatus}
+                            disabled={isTogglingStatus}
+                            className={cn(
+                                'shrink-0 p-1.5 rounded-lg transition-colors group',
+                                currentStatus === ProductStatus.ACTIVE
+                                    ? 'hover:bg-red-50'
+                                    : 'hover:bg-green-50'
+                            )}
+                            title={currentStatus === ProductStatus.ACTIVE ? 'Inativar produto' : 'Ativar produto'}
+                        >
+                            {currentStatus === ProductStatus.ACTIVE
+                                ? <PowerOff className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
+                                : <Power className="w-4 h-4 text-slate-400 group-hover:text-green-600" />
+                            }
+                        </button>
+                        <button
+                            onClick={() => onDelete?.(product)}
+                            className="shrink-0 p-1.5 hover:bg-red-50 rounded-lg transition-colors group"
+                            title="Excluir produto"
+                        >
+                            <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-red-600" />
+                        </button>
+                    </div>
+
+                    <div className="min-w-0">
+                        <h3
+                            className="min-h-[3.75rem] font-semibold text-slate-900 text-sm leading-tight break-words overflow-hidden"
+                            style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3 }}
+                        >
                             <a
                                 href={`/produto/${product.slug || product.id}`}
                                 target="_blank"
@@ -614,7 +785,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             </span>
                         ) : null}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="hidden">
                         {/* Hidden Input for Video Upload */}
                         <input 
                             type="file" 

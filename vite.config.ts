@@ -76,11 +76,8 @@ export default defineConfig(({ mode }) => {
             proxy.on('proxyReq', (proxyReq, req, res) => {
               // Get the sync key (from .env.local or fallback)
               const key = syncKey || env.VITE_VPS_SYNC_KEY || '';
-              
               if (!key) {
-                console.warn('[Vite Proxy] ⚠️ x-sync-key is empty! Check .env.local');
-              } else {
-                console.log('[Vite Proxy] ✅ Adding x-sync-key header for', req.method, req.url);
+                console.warn('[Vite Proxy] x-sync-key is empty. Check .env.local');
               }
               
               proxyReq.setHeader('x-sync-key', key);
