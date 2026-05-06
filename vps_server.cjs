@@ -17,6 +17,9 @@ const AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS = 'Certo, vou chamar um especiali
 const AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE = 'Nao consegui localizar exatamente isso agora. Me diga o modelo do aparelho ou o tipo de produto que voce procura.';
 const AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE = 'Vou chamar um atendente para te ajudar melhor. Assim conseguimos conferir certinho pra voce.';
 const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
+const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
+const AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS = 3;
+const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
 
 function isImmutableImageDerivative(filePath = '') {
   return /-\d+\.(webp|avif)$/i.test(filePath);
@@ -599,7 +602,7 @@ async function getAutoresponderOptionsContext(sender, validityMinutes) {
 }
 
 async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
-  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), 10);
+  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), AUTORESPONDER_PRODUCT_RESPONSE_LIMIT);
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const numericTagId = Number(tagId);
   const [rows] = await pool.query(
@@ -874,6 +877,57 @@ function formatAutoresponderProductReplyInstructions(hasMore) {
   return lines.join('\n');
 }
 
+function chunkAutoresponderArray(items, size) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const safeSize = Math.max(Number(size) || 1, 1);
+  const chunks = [];
+  for (let index = 0; index < safeItems.length; index += safeSize) {
+    chunks.push(safeItems.slice(index, index + safeSize));
+  }
+  return chunks;
+}
+
+function formatAutoresponderProReplies(messages) {
+  return (Array.isArray(messages) ? messages : [messages])
+    .map((message) => String(message || '').trim())
+    .filter(Boolean)
+    .slice(0, AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES)
+    .map((message, index) => ({
+      message,
+      delaySeconds: index * AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS,
+    }));
+}
+
+function formatAutoresponderReplies(replyMessages, settings, shouldPrefixGreeting) {
+  const messages = (Array.isArray(replyMessages) ? replyMessages : [replyMessages])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+  if (messages.length === 0) return [];
+  return [
+    formatAutoresponderReply(messages[0], settings, shouldPrefixGreeting),
+    ...messages.slice(1),
+  ];
+}
+
+function appendAutoresponderReplyFooter(replyMessages, footerText) {
+  const messages = (Array.isArray(replyMessages) ? replyMessages : [replyMessages])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+  const footer = String(footerText || '').trim();
+  if (messages.length === 0 || !footer) return messages;
+  messages[messages.length - 1] = `${messages[messages.length - 1]}\n\n${footer}`;
+  return messages;
+}
+
+function appendAutoresponderRuleAttachmentToReplies(replyMessages, rule) {
+  const messages = (Array.isArray(replyMessages) ? replyMessages : [replyMessages])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+  if (messages.length === 0) return messages;
+  messages[messages.length - 1] = appendAutoresponderRuleAttachment(messages[messages.length - 1], rule);
+  return messages;
+}
+
 async function formatAutoresponderProductCaption(product, group = null) {
   const priceText = group?.priceRange || formatAutoresponderCurrency(getAutoresponderProductPrice(product));
   const priceCents = getAutoresponderProductPriceCents(product);
@@ -894,48 +948,55 @@ async function formatAutoresponderProductCaption(product, group = null) {
 }
 
 async function formatAutoresponderProductSearchReply(products, keyword, settings = null, pagination = null) {
+  return (await formatAutoresponderProductSearchReplies(products, keyword, settings, pagination)).join('\n\n');
+}
+
+async function formatAutoresponderProductSearchReplies(products, keyword, settings = null, pagination = null) {
   const safeProducts = Array.isArray(products) ? products : [];
   const availableProducts = filterAutoresponderAvailableProducts(safeProducts);
   if (safeProducts.length > 0 && availableProducts.length === 0) {
-    return formatAutoresponderUnavailableProductReply(keyword);
+    return [formatAutoresponderUnavailableProductReply(keyword)];
   }
   if (safeProducts.length === 0) {
-    return formatAutoresponderProductListReply(safeProducts, keyword);
+    return [formatAutoresponderProductListReply(safeProducts, keyword)];
   }
 
   const groupedProducts = groupAutoresponderProductsByModel(availableProducts);
-  const topGroup = groupedProducts[0];
-  const topProduct = topGroup.representative;
-  const title = keyword
-    ? `Encontrei estas opcoes para ${keyword}:`
-    : 'Encontrei estas opcoes:';
-  const topLines = [title, '', await formatAutoresponderProductCaption(topProduct, topGroup)];
-  if (shouldAutoresponderSendProductImages(settings)) {
-    const imageUrl = getAutoresponderProductMainImage(topProduct);
-    if (imageUrl) topLines.push(`Imagem: ${imageUrl}`);
-  }
-
-  const otherGroups = groupedProducts.slice(1);
-  if (otherGroups.length > 0) {
-    topLines.push('', 'Outras opcoes:');
-    topLines.push(...otherGroups.map((group, index) => {
+  const total = pagination?.total || groupedProducts.length;
+  const offset = Number(pagination?.offset || 0);
+  const chunks = chunkAutoresponderArray(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE)
+    .slice(0, AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES);
+  const replies = chunks.map((chunk, chunkIndex) => {
+    const firstNumber = offset + (chunkIndex * AUTORESPONDER_PRODUCT_PAGE_SIZE) + 1;
+    const lastNumber = firstNumber + chunk.length - 1;
+    const title = chunkIndex === 0
+      ? (keyword
+        ? `Encontrei ${total} produtos relacionados para ${keyword}. Vou enviar de ${AUTORESPONDER_PRODUCT_PAGE_SIZE} em ${AUTORESPONDER_PRODUCT_PAGE_SIZE}:`
+        : `Encontrei ${total} produtos relacionados. Vou enviar de ${AUTORESPONDER_PRODUCT_PAGE_SIZE} em ${AUTORESPONDER_PRODUCT_PAGE_SIZE}:`)
+      : `Mais opcoes (${firstNumber}-${lastNumber} de ${total}):`;
+    const lines = [title];
+    lines.push(...chunk.map((group, index) => {
       const colorText = Array.isArray(group.colors) && group.colors.length > 0
-        ? ` (${group.colors.join(', ')})`
+        ? `\nCores disponiveis: ${group.colors.join(', ')}`
         : '';
-      return `${index + 2}. ${group.name} - ${group.priceRange}${colorText}`;
+      return `${firstNumber + index}. ${group.name}\nPreco: ${group.priceRange}${colorText}`;
     }));
-  }
+    return lines.join('\n\n');
+  });
+
   if (groupedProducts.length > 1 || safeProducts.length > groupedProducts.length) {
-    topLines.push('', `Ver busca no site: ${getAutoresponderCatalogSearchUrl(keyword)}`);
+    replies[replies.length - 1] = `${replies[replies.length - 1]}\n\nVer busca no site: ${getAutoresponderCatalogSearchUrl(keyword)}`;
   }
   const paginationSummary = formatAutoresponderPaginationSummary({
-    offset: pagination?.offset || 0,
-    limit: pagination?.limit || AUTORESPONDER_PRODUCT_PAGE_SIZE,
-    total: pagination?.total || groupedProducts.length,
+    offset,
+    limit: pagination?.limit || AUTORESPONDER_PRODUCT_RESPONSE_LIMIT,
+    total,
   });
-  if (paginationSummary) topLines.push('', paginationSummary);
+  if (paginationSummary) {
+    replies[replies.length - 1] = `${replies[replies.length - 1]}\n\n${paginationSummary}`;
+  }
 
-  return topLines.join('\n');
+  return replies;
 }
 
 function formatAutoresponderProductListReply(products, keyword) {
@@ -1073,7 +1134,7 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
   const safeTokens = Array.isArray(tokens) ? tokens.slice(0, 6) : [];
   if (safeTokens.length === 0) return [];
 
-  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), 10);
+  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), AUTORESPONDER_PRODUCT_RESPONSE_LIMIT);
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const clauses = safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
     OR LOWER(COALESCE(sku, '')) LIKE ?
@@ -2251,7 +2312,7 @@ fastify.route({
         const context = await getAutoresponderOptionsContext(senderKey, settings.numbered_list_validity_minutes);
         const pagination = context.pagination;
         if (pagination?.source && pagination.hasMore) {
-          const pageSize = Number(pagination.limit) > 0 ? Number(pagination.limit) : AUTORESPONDER_PRODUCT_PAGE_SIZE;
+          const pageSize = Number(pagination.limit) > 0 ? Number(pagination.limit) : AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
           const nextOffset = Number(pagination.offset || 0) + pageSize;
           const rows = pagination.source === 'tag'
             ? await findAutoresponderProductsByTag(pagination.tagId, pageSize + 1, nextOffset)
@@ -2268,8 +2329,12 @@ fastify.route({
               : (pagination.source === 'tag'
                 ? await countAutoresponderProductsByTag(pagination.tagId)
                 : await countAutoresponderProductsByTokens(pagination.tokens || []));
-            const productReplyText = `${await formatAutoresponderProductSearchReply(products, keyword, settings, { offset: nextOffset, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`;
-            const replyText = formatAutoresponderReply(productReplyText, settings, false);
+            const productReplyMessages = appendAutoresponderReplyFooter(
+              await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: nextOffset, limit: pageSize, total }),
+              formatAutoresponderProductReplyInstructions(hasMore)
+            );
+            const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, false);
+            const replyText = replyMessages.join('\n\n');
 
             await logAutoresponderReply({
               sender: senderKey,
@@ -2287,7 +2352,7 @@ fastify.route({
               hasMore,
             });
 
-            return { replies: [{ message: replyText }] };
+            return { replies: formatAutoresponderProReplies(replyMessages) };
           }
         }
       }
@@ -2331,17 +2396,21 @@ fastify.route({
         );
 
         if (String(matchedRule.reply_type || 'text') === 'product_by_tag') {
-          const pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE;
+          const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
           const rows = await findAutoresponderProductsByTag(matchedRule.reply_tag_id, pageSize + 1);
           const products = rows.slice(0, pageSize);
           const hasMore = rows.length > pageSize;
           const total = await countAutoresponderProductsByTag(matchedRule.reply_tag_id);
           const productOptions = buildAutoresponderProductOptions(products);
-          const productReplyText = appendAutoresponderRuleAttachment(
-            `${await formatAutoresponderProductSearchReply(products, matchedRule.reply_text || matchedRule.name || 'produtos', settings, { offset: 0, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`,
+          const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
+            appendAutoresponderReplyFooter(
+              await formatAutoresponderProductSearchReplies(products, matchedRule.reply_text || matchedRule.name || 'produtos', settings, { offset: 0, limit: pageSize, total }),
+              formatAutoresponderProductReplyInstructions(hasMore)
+            ),
             matchedRule
           );
-          const replyText = formatAutoresponderReply(productReplyText, settings, shouldPrefixGreeting);
+          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+          const replyText = replyMessages.join('\n\n');
 
           await logAutoresponderReply({
             sender: senderKey,
@@ -2363,22 +2432,26 @@ fastify.route({
           });
           await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
 
-          return { replies: [{ message: replyText }] };
+          return { replies: formatAutoresponderProReplies(replyMessages) };
         }
 
         if (String(matchedRule.reply_type || 'text') === 'product_search') {
-          const pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE;
+          const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
           const ruleSearchTokens = extractAutoresponderProductSearchTokens(matchedRule.reply_search_query);
           const rows = await findAutoresponderProductsByTokens(ruleSearchTokens, pageSize + 1);
           const products = rows.slice(0, pageSize);
           const hasMore = rows.length > pageSize;
           const total = await countAutoresponderProductsByTokens(ruleSearchTokens);
           const productOptions = buildAutoresponderProductOptions(products);
-          const productReplyText = appendAutoresponderRuleAttachment(
-            `${await formatAutoresponderProductSearchReply(products, matchedRule.reply_search_query, settings, { offset: 0, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`,
+          const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
+            appendAutoresponderReplyFooter(
+              await formatAutoresponderProductSearchReplies(products, matchedRule.reply_search_query, settings, { offset: 0, limit: pageSize, total }),
+              formatAutoresponderProductReplyInstructions(hasMore)
+            ),
             matchedRule
           );
-          const replyText = formatAutoresponderReply(productReplyText, settings, shouldPrefixGreeting);
+          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+          const replyText = replyMessages.join('\n\n');
 
           await logAutoresponderReply({
             sender: senderKey,
@@ -2399,7 +2472,7 @@ fastify.route({
           });
           await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
 
-          return { replies: [{ message: replyText }] };
+          return { replies: formatAutoresponderProReplies(replyMessages) };
         }
 
         const replyText = formatAutoresponderReply(
@@ -2424,14 +2497,18 @@ fastify.route({
 
       const productTagMatch = findAutoresponderProductTagKeyword(message, settings);
       if (productTagMatch) {
-        const pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE;
+        const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
         const rows = await findAutoresponderProductsByTag(productTagMatch.tagId, pageSize + 1);
         const products = rows.slice(0, pageSize);
         const hasMore = rows.length > pageSize;
         const total = await countAutoresponderProductsByTag(productTagMatch.tagId);
         const productOptions = buildAutoresponderProductOptions(products);
-        const productReplyText = `${await formatAutoresponderProductSearchReply(products, productTagMatch.keyword, settings, { offset: 0, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`;
-        const replyText = formatAutoresponderReply(productReplyText, settings, shouldPrefixGreeting);
+        const productReplyMessages = appendAutoresponderReplyFooter(
+          await formatAutoresponderProductSearchReplies(products, productTagMatch.keyword, settings, { offset: 0, limit: pageSize, total }),
+          formatAutoresponderProductReplyInstructions(hasMore)
+        );
+        const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+        const replyText = replyMessages.join('\n\n');
 
         await logAutoresponderReply({
           sender: senderKey,
@@ -2451,20 +2528,24 @@ fastify.route({
           hasMore,
         });
 
-        return { replies: [{ message: replyText }] };
+        return { replies: formatAutoresponderProReplies(replyMessages) };
       }
 
       const productSearchTokens = extractAutoresponderProductSearchTokens(message);
       if (productSearchTokens.length > 0) {
-        const pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE;
+        const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
         const rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
         const products = rows.slice(0, pageSize);
         const hasMore = rows.length > pageSize;
         if (products.length > 0) {
           const total = await countAutoresponderProductsByTokens(productSearchTokens);
           const productOptions = buildAutoresponderProductOptions(products);
-          const productReplyText = `${await formatAutoresponderProductSearchReply(products, productSearchTokens.join(' '), settings, { offset: 0, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`;
-          const replyText = formatAutoresponderReply(productReplyText, settings, shouldPrefixGreeting);
+          const productReplyMessages = appendAutoresponderReplyFooter(
+            await formatAutoresponderProductSearchReplies(products, productSearchTokens.join(' '), settings, { offset: 0, limit: pageSize, total }),
+            formatAutoresponderProductReplyInstructions(hasMore)
+          );
+          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+          const replyText = replyMessages.join('\n\n');
 
           await logAutoresponderReply({
             sender: senderKey,
@@ -2483,7 +2564,7 @@ fastify.route({
             hasMore,
           });
 
-          return { replies: [{ message: replyText }] };
+          return { replies: formatAutoresponderProReplies(replyMessages) };
         }
       }
 
