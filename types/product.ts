@@ -113,6 +113,7 @@ export interface Product {
     meta_title?: string;           // SEO meta title (max 60 characters)
     meta_description?: string;     // SEO meta description (max 160 characters)
     keywords?: string[];           // Keywords/tags for search and SEO
+    tag_ids?: number[] | string | null; // Tags operacionais do AutoResponder
 
     // Shipping Fields
     shipping_weight?: number;      // Peso em gramas

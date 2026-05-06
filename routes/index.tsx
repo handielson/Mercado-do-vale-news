@@ -73,6 +73,7 @@ const CashbackPage = lazy(() => import('../pages/admin/CashbackPage'));
 const TelegramPage = lazy(() => import('../pages/admin/settings/TelegramPage'));
 const SystemTagsPage = lazy(() => import('../pages/admin/settings/SystemTagsPage'));
 const WhatsAppPage = lazy(() => import('../pages/admin/settings/WhatsAppPage'));
+const AutoResponderPage = lazy(() => import('../pages/admin/AutoResponderPage'));
 const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
 const CatalogPage = lazy(() => import('../pages/catalog/index'));
@@ -539,6 +540,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><WhatsAppPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/atendimento-automatico",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><AutoResponderPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

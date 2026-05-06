@@ -1,0 +1,2905 @@
+import React from 'react';
+import {
+    AlertCircle,
+    BarChart3,
+    Ban,
+    Bot,
+    CheckCircle2,
+    Clock,
+    Edit3,
+    MessageCircle,
+    MessageSquareText,
+    Plus,
+    RefreshCw,
+    Save,
+    Search,
+    Settings,
+    Tags,
+    Trash2,
+    Users,
+    Wand2,
+    X,
+} from 'lucide-react';
+import { Tabs, TabList, TabPanels } from '../../components/ui/Tabs';
+import { Tab, TabPanel } from '../../components/ui/Tab';
+import { autoResponderService } from '../../services/autoResponderService';
+import type {
+    AutoResponderSettings,
+    AutoResponderStats,
+    AutoResponderStoreStatus,
+    AutoResponderConversation,
+    AutoResponderBlocklistEntry,
+    AutoResponderBlocklistInput,
+    AutoResponderRule,
+    AutoResponderRuleInput,
+    AutoResponderTag,
+    AutoResponderTagInput,
+    AutoResponderUnansweredQuestion,
+} from '../../types/autoResponder';
+
+type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+type RuleStatusFilter = 'all' | 'active' | 'inactive';
+type ConversationStatusFilter = 'all' | 'active' | 'paused';
+
+interface RuleFormState {
+    name: string;
+    pattern: string;
+    match_type: string;
+    reply_type: string;
+    reply_text: string;
+    reply_tag_id: string;
+    reply_search_query: string;
+    attachment_url: string;
+    attachment_caption: string;
+    priority: string;
+    active: boolean;
+    tag_ids: number[];
+}
+
+interface BlockFormState {
+    pattern: string;
+    pattern_type: string;
+    contact_name: string;
+    reason: string;
+    active: boolean;
+}
+
+interface TagFormState {
+    name: string;
+    color: string;
+    description: string;
+    scopes: string[];
+    show_on_bot: boolean;
+}
+
+interface SettingsFormState {
+    enabled: boolean;
+    human_message_in_hours: string;
+    human_message_out_of_hours: string;
+    human_pause_minutes: string;
+    greeting_prefix: string;
+    fallback_message: string;
+    auto_pause_fallback_threshold: string;
+    auto_pause_fallback_minutes: string;
+    auto_pause_fallback_message: string;
+    max_replies_per_conversation: string;
+    max_replies_window_hours: string;
+    send_product_images: boolean;
+    max_images_per_response: string;
+    use_numbered_lists: boolean;
+    numbered_list_threshold: string;
+    numbered_list_validity_minutes: string;
+    archive_to_synology: boolean;
+    archive_after_days: string;
+}
+
+interface TagKeywordRow {
+    id: string;
+    tagId: string;
+    keywords: string;
+}
+
+const isEnabled = (value: unknown): boolean => value === true || value === 1 || value === '1';
+
+const statusLabels: Record<string, string> = {
+    open: 'Aberta',
+    closing_soon: 'Fechando',
+    closed: 'Fechada',
+    holiday: 'Feriado',
+};
+
+const tabs = [
+    { id: 'respostas', label: 'Respostas', icon: <MessageSquareText size={16} /> },
+    { id: 'conversas', label: 'Conversas', icon: <Users size={16} /> },
+    { id: 'bloqueados', label: 'Bloqueados', icon: <Ban size={16} /> },
+    { id: 'curadoria', label: 'Curadoria', icon: <Wand2 size={16} /> },
+    { id: 'tags', label: 'Tags', icon: <Tags size={16} /> },
+    { id: 'estatisticas', label: 'Estatísticas', icon: <BarChart3 size={16} /> },
+    { id: 'configuracoes', label: 'Configurações', icon: <Settings size={16} /> },
+];
+
+const emptyRuleForm: RuleFormState = {
+    name: '',
+    pattern: '',
+    match_type: 'any_keyword',
+    reply_type: 'text',
+    reply_text: '',
+    reply_tag_id: '',
+    reply_search_query: '',
+    attachment_url: '',
+    attachment_caption: '',
+    priority: '0',
+    active: true,
+    tag_ids: [],
+};
+
+const emptyBlockForm: BlockFormState = {
+    pattern: '',
+    pattern_type: 'exact',
+    contact_name: '',
+    reason: '',
+    active: true,
+};
+
+const emptyTagForm: TagFormState = {
+    name: '',
+    color: '#2563eb',
+    description: '',
+    scopes: ['conversation'],
+    show_on_bot: true,
+};
+
+const emptySettingsForm: SettingsFormState = {
+    enabled: true,
+    human_message_in_hours: '',
+    human_message_out_of_hours: '',
+    human_pause_minutes: '60',
+    greeting_prefix: '',
+    fallback_message: '',
+    auto_pause_fallback_threshold: '3',
+    auto_pause_fallback_minutes: '30',
+    auto_pause_fallback_message: '',
+    max_replies_per_conversation: '20',
+    max_replies_window_hours: '24',
+    send_product_images: true,
+    max_images_per_response: '1',
+    use_numbered_lists: true,
+    numbered_list_threshold: '2',
+    numbered_list_validity_minutes: '30',
+    archive_to_synology: false,
+    archive_after_days: '7',
+};
+
+const tagScopeOptions = [
+    { id: 'conversation', label: 'Conversas' },
+    { id: 'product', label: 'Produtos' },
+    { id: 'rule', label: 'Regras' },
+];
+
+const ruleTemplates: Array<{ label: string; patch: Partial<RuleFormState> }> = [
+    {
+        label: 'Saudação',
+        patch: {
+            name: 'Saudação inicial',
+            pattern: 'oi, ola, olá, bom dia, boa tarde, boa noite',
+            match_type: 'any_keyword',
+            reply_type: 'text',
+            reply_text: 'Olá! Como posso ajudar?',
+            priority: '10',
+        },
+    },
+    {
+        label: 'Produto por tag',
+        patch: {
+            name: 'Busca por tag',
+            pattern: 'carregador, capa, pelicula',
+            match_type: 'any_keyword',
+            reply_type: 'product_by_tag',
+            reply_text: '',
+            priority: '5',
+        },
+    },
+    {
+        label: 'Busca livre',
+        patch: {
+            name: 'Busca por texto',
+            pattern: 'tem, quero, procura',
+            match_type: 'any_keyword',
+            reply_type: 'product_search',
+            reply_search_query: '',
+            priority: '3',
+        },
+    },
+];
+
+function formatNumber(value: unknown): string {
+    const number = Number(value || 0);
+    return Number.isFinite(number) ? number.toLocaleString('pt-BR') : '0';
+}
+
+function getStoreStatusLabel(storeStatus: AutoResponderStoreStatus | null): string {
+    const status = String(storeStatus?.status || '');
+    return statusLabels[status] || status || 'Sem dados';
+}
+
+function parseTagIds(value: AutoResponderRule['tag_ids']): number[] {
+    if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+    if (!value) return [];
+    try {
+        const parsed = JSON.parse(String(value));
+        return Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
+    } catch {
+        return [];
+    }
+}
+
+function ruleToForm(rule: AutoResponderRule): RuleFormState {
+    return {
+        name: rule.name || '',
+        pattern: rule.pattern || '',
+        match_type: rule.match_type || 'any_keyword',
+        reply_type: rule.reply_type || 'text',
+        reply_text: rule.reply_text || '',
+        reply_tag_id: rule.reply_tag_id == null ? '' : String(rule.reply_tag_id),
+        reply_search_query: rule.reply_search_query || '',
+        attachment_url: rule.attachment_url || '',
+        attachment_caption: rule.attachment_caption || '',
+        priority: String(rule.priority || 0),
+        active: isEnabled(rule.active),
+        tag_ids: parseTagIds(rule.tag_ids),
+    };
+}
+
+function ruleFormToInput(form: RuleFormState): AutoResponderRuleInput {
+    return {
+        name: form.name.trim(),
+        pattern: form.pattern.trim(),
+        match_type: form.match_type,
+        reply_type: form.reply_type,
+        reply_text: form.reply_text,
+        reply_tag_id: form.reply_tag_id ? Number(form.reply_tag_id) : null,
+        reply_search_query: form.reply_search_query.trim() || null,
+        attachment_url: form.attachment_url.trim() || null,
+        attachment_caption: form.attachment_caption.trim() || null,
+        auto_apply_tag_id: null,
+        tag_ids: form.tag_ids,
+        priority: Number(form.priority || 0),
+        active: form.active,
+    };
+}
+
+function getTagName(tags: AutoResponderTag[], id: number): string {
+    return tags.find((tag) => Number(tag.id) === Number(id))?.name || `Tag ${id}`;
+}
+
+function isConversationPaused(conversation: AutoResponderConversation): boolean {
+    if (!conversation.paused_until) return false;
+    return new Date(conversation.paused_until).getTime() > Date.now();
+}
+
+function formatDateTime(value?: string | null): string {
+    if (!value) return 'Sem data';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function tagScopesIncludes(tag: AutoResponderTag, scope: string): boolean {
+    if (Array.isArray(tag.scopes)) return tag.scopes.includes(scope);
+    return String(tag.scopes || '').split(',').map((item) => item.trim()).includes(scope);
+}
+
+function tagToForm(tag: AutoResponderTag): TagFormState {
+    const scopes = Array.isArray(tag.scopes)
+        ? tag.scopes.map(String)
+        : String(tag.scopes || '').split(',').map((item) => item.trim()).filter(Boolean);
+    return {
+        name: tag.name || '',
+        color: tag.color || '#2563eb',
+        description: tag.description || '',
+        scopes: scopes.length ? scopes : ['conversation'],
+        show_on_bot: isEnabled(tag.show_on_bot),
+    };
+}
+
+function tagFormToInput(form: TagFormState): AutoResponderTagInput {
+    return {
+        name: form.name.trim(),
+        color: form.color || '#2563eb',
+        description: form.description.trim() || null,
+        scopes: form.scopes,
+        show_on_bot: form.show_on_bot,
+    };
+}
+
+function settingsToForm(settings: AutoResponderSettings | null): SettingsFormState {
+    if (!settings) return emptySettingsForm;
+    return {
+        enabled: isEnabled(settings.enabled),
+        human_message_in_hours: settings.human_message_in_hours || '',
+        human_message_out_of_hours: settings.human_message_out_of_hours || '',
+        human_pause_minutes: String(settings.human_pause_minutes ?? 60),
+        greeting_prefix: settings.greeting_prefix || '',
+        fallback_message: settings.fallback_message || '',
+        auto_pause_fallback_threshold: String(settings.auto_pause_fallback_threshold ?? 3),
+        auto_pause_fallback_minutes: String(settings.auto_pause_fallback_minutes ?? 30),
+        auto_pause_fallback_message: settings.auto_pause_fallback_message || '',
+        max_replies_per_conversation: String(settings.max_replies_per_conversation ?? 20),
+        max_replies_window_hours: String(settings.max_replies_window_hours ?? 24),
+        send_product_images: isEnabled(settings.send_product_images),
+        max_images_per_response: String(settings.max_images_per_response ?? 1),
+        use_numbered_lists: isEnabled(settings.use_numbered_lists),
+        numbered_list_threshold: String(settings.numbered_list_threshold ?? 2),
+        numbered_list_validity_minutes: String(settings.numbered_list_validity_minutes ?? 30),
+        archive_to_synology: isEnabled(settings.archive_to_synology),
+        archive_after_days: String(settings.archive_after_days ?? 7),
+    };
+}
+
+function settingsFormToInput(
+    form: SettingsFormState,
+    settingsKeywordRows: TagKeywordRow[]
+): Partial<AutoResponderSettings> {
+    return {
+        enabled: form.enabled,
+        human_message_in_hours: form.human_message_in_hours,
+        human_message_out_of_hours: form.human_message_out_of_hours,
+        human_pause_minutes: Number(form.human_pause_minutes || 0),
+        greeting_prefix: form.greeting_prefix,
+        fallback_message: form.fallback_message,
+        auto_pause_fallback_threshold: Number(form.auto_pause_fallback_threshold || 0),
+        auto_pause_fallback_minutes: Number(form.auto_pause_fallback_minutes || 0),
+        auto_pause_fallback_message: form.auto_pause_fallback_message,
+        max_replies_per_conversation: Number(form.max_replies_per_conversation || 0),
+        max_replies_window_hours: Number(form.max_replies_window_hours || 0),
+        send_product_images: form.send_product_images,
+        max_images_per_response: Number(form.max_images_per_response || 0),
+        use_numbered_lists: form.use_numbered_lists,
+        numbered_list_threshold: Number(form.numbered_list_threshold || 0),
+        numbered_list_validity_minutes: Number(form.numbered_list_validity_minutes || 0),
+        product_tag_keywords: keywordRowsToMap(settingsKeywordRows),
+        archive_to_synology: form.archive_to_synology,
+        archive_after_days: Number(form.archive_after_days || 0),
+    };
+}
+
+function createTagKeywordRow(patch: Partial<TagKeywordRow> = {}): TagKeywordRow {
+    return {
+        id: `keyword-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        tagId: '',
+        keywords: '',
+        ...patch,
+    };
+}
+
+function parseSettingsKeywordRows(value: AutoResponderSettings['product_tag_keywords']): TagKeywordRow[] {
+    if (!value) return [];
+    let parsed: unknown = value;
+    if (typeof value === 'string') {
+        try {
+            parsed = JSON.parse(value);
+        } catch {
+            return [];
+        }
+    }
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return [];
+
+    return Object.entries(parsed as Record<string, unknown>)
+        .map(([key, rawValue], index) => {
+            const rawValues = Array.isArray(rawValue) ? rawValue : [rawValue];
+            const values = rawValues
+                .map((item) => String(item ?? '').trim())
+                .filter(Boolean);
+
+            if (/^\d+$/.test(key)) {
+                return createTagKeywordRow({
+                    id: `keyword-${key}-${index}`,
+                    tagId: key,
+                    keywords: values.join(', '),
+                });
+            }
+
+            return createTagKeywordRow({
+                id: `keyword-${key}-${index}`,
+                tagId: values[0] || '',
+                keywords: key,
+            });
+        })
+        .filter((row) => row.tagId || row.keywords);
+}
+
+function keywordRowsToMap(rows: TagKeywordRow[]): Record<string, string[]> {
+    const map: Record<string, string[]> = {};
+    rows.forEach((row) => {
+        const tagId = row.tagId.trim();
+        const keywords = row.keywords
+            .split(',')
+            .map((keyword) => keyword.trim())
+            .filter(Boolean);
+        if (!tagId || keywords.length === 0) return;
+        map[tagId] = Array.from(new Set([...(map[tagId] || []), ...keywords]));
+    });
+    return map;
+}
+
+function blockFormToInput(form: BlockFormState): AutoResponderBlocklistInput {
+    return {
+        pattern: form.pattern.trim(),
+        pattern_type: form.pattern_type,
+        contact_name: form.contact_name.trim() || null,
+        reason: form.reason.trim() || null,
+        active: form.active,
+    };
+}
+
+function blockEntryToForm(entry: AutoResponderBlocklistEntry): BlockFormState {
+    return {
+        pattern: entry.pattern || '',
+        pattern_type: entry.pattern_type || 'exact',
+        contact_name: entry.contact_name || '',
+        reason: entry.reason || '',
+        active: isEnabled(entry.active),
+    };
+}
+
+const MetricTile: React.FC<{
+    label: string;
+    value: string;
+    tone?: 'blue' | 'emerald' | 'amber' | 'slate';
+    icon: React.ReactNode;
+}> = ({ label, value, tone = 'slate', icon }) => {
+    const tones = {
+        blue: 'border-blue-100 bg-blue-50 text-blue-700',
+        emerald: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+        amber: 'border-amber-100 bg-amber-50 text-amber-700',
+        slate: 'border-slate-200 bg-white text-slate-700',
+    };
+
+    return (
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
+                </div>
+                <div className={`rounded-lg border p-2 ${tones[tone]}`}>{icon}</div>
+            </div>
+        </div>
+    );
+};
+
+const EmptyPanel: React.FC<{ title: string; marker: string }> = ({ title, marker }) => (
+    <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6">
+        <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
+                <MessageCircle size={18} />
+            </div>
+            <div>
+                <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+                <p className="text-sm text-slate-500">{marker}</p>
+            </div>
+        </div>
+    </div>
+);
+
+const RuleEditorModal: React.FC<{
+    editingRule: AutoResponderRule | null;
+    ruleForm: RuleFormState;
+    tags: AutoResponderTag[];
+    isSaving: boolean;
+    isUploadingAttachment: boolean;
+    onChange: (patch: Partial<RuleFormState>) => void;
+    onToggleTag: (tagId: number) => void;
+    onUploadAttachment: (file: File | null) => void;
+    onRemoveAttachment: () => void;
+    onClose: () => void;
+    onSave: () => void;
+}> = ({
+    editingRule,
+    ruleForm,
+    tags,
+    isSaving,
+    isUploadingAttachment,
+    onChange,
+    onToggleTag,
+    onUploadAttachment,
+    onRemoveAttachment,
+    onClose,
+    onSave,
+}) => (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                        {editingRule ? 'Editar resposta' : 'Nova resposta'}
+                    </h2>
+                    <p className="text-sm text-slate-500">Configure o gatilho e a resposta enviada pelo bot.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                    aria-label="Fechar"
+                >
+                    <X size={18} />
+                </button>
+            </div>
+
+            <div className="space-y-5 px-5 py-5">
+                <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">Aplicar template</label>
+                    <div className="flex flex-wrap gap-2">
+                        {ruleTemplates.map((template) => (
+                            <button
+                                key={template.label}
+                                type="button"
+                                onClick={() => onChange(template.patch)}
+                                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            >
+                                {template.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Nome</span>
+                        <input
+                            value={ruleForm.name}
+                            onChange={(event) => onChange({ name: event.target.value })}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        />
+                    </label>
+
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Prioridade</span>
+                        <input
+                            type="number"
+                            value={ruleForm.priority}
+                            onChange={(event) => onChange({ priority: event.target.value })}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        />
+                    </label>
+
+                    <label className="block md:col-span-2">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Palavras-chave</span>
+                        <textarea
+                            value={ruleForm.pattern}
+                            onChange={(event) => onChange({ pattern: event.target.value })}
+                            rows={3}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        />
+                    </label>
+
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Tipo de match</span>
+                        <select
+                            value={ruleForm.match_type}
+                            onChange={(event) => onChange({ match_type: event.target.value })}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        >
+                            <option value="any_keyword">Qualquer palavra</option>
+                            <option value="all_keywords">Todas as palavras</option>
+                            <option value="contains">Contém texto</option>
+                            <option value="exact">Exata</option>
+                        </select>
+                    </label>
+
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Tipo de resposta</span>
+                        <select
+                            value={ruleForm.reply_type}
+                            onChange={(event) => onChange({ reply_type: event.target.value })}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        >
+                            <option value="text">Texto</option>
+                            <option value="product_by_tag">Produtos por tag</option>
+                            <option value="product_search">Busca de produto</option>
+                        </select>
+                    </label>
+
+                    {ruleForm.reply_type === 'product_by_tag' && (
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">Tag de produto</span>
+                            <select
+                                value={ruleForm.reply_tag_id}
+                                onChange={(event) => onChange({ reply_tag_id: event.target.value })}
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            >
+                                <option value="">Selecione</option>
+                                {tags.map((tag) => (
+                                    <option key={tag.id} value={tag.id}>{tag.name}</option>
+                                ))}
+                            </select>
+                        </label>
+                    )}
+
+                    {ruleForm.reply_type === 'product_search' && (
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">Busca fixa</span>
+                            <input
+                                value={ruleForm.reply_search_query}
+                                onChange={(event) => onChange({ reply_search_query: event.target.value })}
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            />
+                        </label>
+                    )}
+
+                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                        <input
+                            type="checkbox"
+                            checked={ruleForm.active}
+                            onChange={(event) => onChange({ active: event.target.checked })}
+                            className="h-4 w-4 rounded border-slate-300"
+                        />
+                        <span className="text-sm font-semibold text-slate-700">Resposta ativa</span>
+                    </label>
+                </div>
+
+                <div>
+                    <span className="mb-2 block text-sm font-semibold text-slate-700">Tags da regra</span>
+                    <div className="flex flex-wrap gap-2">
+                        {tags.map((tag) => {
+                            const selected = ruleForm.tag_ids.includes(Number(tag.id));
+                            return (
+                                <button
+                                    key={tag.id}
+                                    type="button"
+                                    onClick={() => onToggleTag(Number(tag.id))}
+                                    className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                                        selected
+                                            ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {selected && <CheckCircle2 size={14} className="mr-1 inline" />}
+                                    {tag.name}
+                                </button>
+                            );
+                        })}
+                        {tags.length === 0 && <span className="text-sm text-slate-500">Nenhuma tag cadastrada.</span>}
+                    </div>
+                </div>
+
+                <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-slate-700">Texto da resposta</span>
+                    <textarea
+                        value={ruleForm.reply_text}
+                        onChange={(event) => onChange({ reply_text: event.target.value })}
+                        rows={5}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                </label>
+
+                <div className="rounded-lg border border-slate-200 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <span className="block text-sm font-semibold text-slate-700">Imagem da resposta</span>
+                            {ruleForm.attachment_url && (
+                                <span className="mt-1 block text-xs font-semibold text-emerald-700">Anexo enviado</span>
+                            )}
+                        </div>
+                        <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100">
+                            {isUploadingAttachment ? 'Enviando...' : 'Enviar imagem'}
+                            <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={isUploadingAttachment}
+                                onChange={(event) => {
+                                    onUploadAttachment(event.target.files?.[0] || null);
+                                    event.currentTarget.value = '';
+                                }}
+                            />
+                        </label>
+                    </div>
+                    {ruleForm.attachment_url && (
+                        <div className="mt-4 space-y-3">
+                            <input
+                                value={ruleForm.attachment_url}
+                                readOnly
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 outline-none"
+                            />
+                            <label className="block">
+                                <span className="mb-1 block text-sm font-semibold text-slate-700">Legenda do anexo</span>
+                                <input
+                                    value={ruleForm.attachment_caption}
+                                    onChange={(event) => onChange({ attachment_caption: event.target.value })}
+                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                onClick={onRemoveAttachment}
+                                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                            >
+                                Remover anexo
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Preview ao vivo</p>
+                    <div className="max-w-lg rounded-lg bg-white px-4 py-3 text-sm text-slate-800 shadow-sm">
+                        {ruleForm.reply_text || (ruleForm.reply_type === 'text' ? 'Digite o texto da resposta.' : 'O bot montará a lista de produtos automaticamente.')}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                    Cancelar
+                </button>
+                <button
+                    type="button"
+                    onClick={onSave}
+                    disabled={isSaving || !ruleForm.name.trim() || !ruleForm.pattern.trim()}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    <Save size={16} />
+                    Salvar resposta
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
+const BlocklistModal: React.FC<{
+    editingBlocklistEntry: AutoResponderBlocklistEntry | null;
+    blockForm: BlockFormState;
+    isSaving: boolean;
+    onChange: (patch: Partial<BlockFormState>) => void;
+    onClose: () => void;
+    onSave: () => void;
+}> = ({ editingBlocklistEntry, blockForm, isSaving, onChange, onClose, onSave }) => (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="w-full max-w-xl rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                        {editingBlocklistEntry ? 'Editar bloqueio' : 'Adicionar bloqueio'}
+                    </h2>
+                    <p className="text-sm text-slate-500">Bloqueie um número, prefixo ou padrão.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                    aria-label="Fechar"
+                >
+                    <X size={18} />
+                </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+                <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-slate-700">Padrão</span>
+                    <input
+                        value={blockForm.pattern}
+                        onChange={(event) => onChange({ pattern: event.target.value })}
+                        placeholder="Ex: 5587999999999"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                </label>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Tipo</span>
+                        <select
+                            value={blockForm.pattern_type}
+                            onChange={(event) => onChange({ pattern_type: event.target.value })}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        >
+                            <option value="exact">Exato</option>
+                            <option value="prefix">Prefixo</option>
+                            <option value="regex">Regex</option>
+                        </select>
+                    </label>
+
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Nome</span>
+                        <input
+                            value={blockForm.contact_name}
+                            onChange={(event) => onChange({ contact_name: event.target.value })}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        />
+                    </label>
+                </div>
+
+                <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-slate-700">Motivo</span>
+                    <textarea
+                        value={blockForm.reason}
+                        onChange={(event) => onChange({ reason: event.target.value })}
+                        rows={3}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                </label>
+
+                <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                    <input
+                        type="checkbox"
+                        checked={blockForm.active}
+                        onChange={(event) => onChange({ active: event.target.checked })}
+                        className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Bloqueio ativo</span>
+                </label>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                    Cancelar
+                </button>
+                <button
+                    type="button"
+                    onClick={onSave}
+                    disabled={isSaving || !blockForm.pattern.trim()}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    <Save size={16} />
+                    Salvar bloqueio
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
+const BulkBlocklistModal: React.FC<{
+    bulkBlocklistText: string;
+    isSaving: boolean;
+    onChange: (value: string) => void;
+    onClose: () => void;
+    onSave: () => void;
+}> = ({ bulkBlocklistText, isSaving, onChange, onClose, onSave }) => (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="w-full max-w-xl rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Importar em massa</h2>
+                    <p className="text-sm text-slate-500">Cole um número ou padrão por linha.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                    aria-label="Fechar"
+                >
+                    <X size={18} />
+                </button>
+            </div>
+
+            <div className="px-5 py-5">
+                <textarea
+                    value={bulkBlocklistText}
+                    onChange={(event) => onChange(event.target.value)}
+                    rows={10}
+                    placeholder={'5587999999999\n5587888\ncliente@example.com'}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                    Cancelar
+                </button>
+                <button
+                    type="button"
+                    onClick={onSave}
+                    disabled={isSaving || !bulkBlocklistText.trim()}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    <Save size={16} />
+                    Importar bloqueados
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
+const TagEditorModal: React.FC<{
+    editingTag: AutoResponderTag | null;
+    tagForm: TagFormState;
+    isSaving: boolean;
+    onChange: (patch: Partial<TagFormState>) => void;
+    onToggleScope: (scope: string) => void;
+    onClose: () => void;
+    onSave: () => void;
+}> = ({ editingTag, tagForm, isSaving, onChange, onToggleScope, onClose, onSave }) => (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                    <h2 className="text-lg font-semibold text-slate-900">{editingTag ? 'Editar tag' : 'Nova tag'}</h2>
+                    <p className="text-sm text-slate-500">Organize conversas, produtos e regras do bot.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                    aria-label="Fechar"
+                >
+                    <X size={18} />
+                </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_150px]">
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Nome</span>
+                        <input
+                            value={tagForm.name}
+                            onChange={(event) => onChange({ name: event.target.value })}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        />
+                    </label>
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Cor</span>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="color"
+                                value={tagForm.color}
+                                onChange={(event) => onChange({ color: event.target.value })}
+                                className="h-10 w-12 rounded-lg border border-slate-300 bg-white p-1"
+                            />
+                            <input
+                                value={tagForm.color}
+                                onChange={(event) => onChange({ color: event.target.value })}
+                                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                            />
+                        </div>
+                    </label>
+                </div>
+
+                <label className="block">
+                    <span className="mb-1 block text-sm font-semibold text-slate-700">Descrição</span>
+                    <textarea
+                        value={tagForm.description}
+                        onChange={(event) => onChange({ description: event.target.value })}
+                        rows={3}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                </label>
+
+                <div>
+                    <span className="mb-2 block text-sm font-semibold text-slate-700">Escopo</span>
+                    <div className="flex flex-wrap gap-2">
+                        {tagScopeOptions.map((scope) => (
+                            <label
+                                key={scope.id}
+                                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={tagForm.scopes.includes(scope.id)}
+                                    onChange={() => onToggleScope(scope.id)}
+                                    className="h-4 w-4 rounded border-slate-300"
+                                />
+                                {scope.label}
+                            </label>
+                        ))}
+                    </div>
+                </div>
+
+                <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                    <input
+                        type="checkbox"
+                        checked={tagForm.show_on_bot}
+                        onChange={(event) => onChange({ show_on_bot: event.target.checked })}
+                        className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Mostrar no bot</span>
+                </label>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                    Cancelar
+                </button>
+                <button
+                    type="button"
+                    onClick={onSave}
+                    disabled={isSaving || !tagForm.name.trim() || tagForm.scopes.length === 0}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    <Save size={16} />
+                    Salvar tag
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
+const AutoResponderPage: React.FC = () => {
+    const [activeAutoResponderTab, setActiveAutoResponderTab] = React.useState(() => {
+        if (typeof window === 'undefined') return 'respostas';
+        return new URLSearchParams(window.location.search).get('aba') || 'respostas';
+    });
+    const [state, setState] = React.useState<LoadState>('idle');
+    const [settings, setSettings] = React.useState<AutoResponderSettings | null>(null);
+    const [stats, setStats] = React.useState<AutoResponderStats | null>(null);
+    const [statsSource, setStatsSource] = React.useState<'mysql' | 'synology'>('mysql');
+    const [statsFrom, setStatsFrom] = React.useState(() => {
+        const date = new Date();
+        date.setDate(date.getDate() - 1);
+        return date.toISOString().slice(0, 10);
+    });
+    const [storeStatus, setStoreStatus] = React.useState<AutoResponderStoreStatus | null>(null);
+    const [rules, setRules] = React.useState<AutoResponderRule[]>([]);
+    const [tags, setTags] = React.useState<AutoResponderTag[]>([]);
+    const [conversations, setConversations] = React.useState<AutoResponderConversation[]>([]);
+    const [blocklist, setBlocklist] = React.useState<AutoResponderBlocklistEntry[]>([]);
+    const [unansweredQuestions, setUnansweredQuestions] = React.useState<AutoResponderUnansweredQuestion[]>([]);
+    const [ruleStatusFilter, setRuleStatusFilter] = React.useState<RuleStatusFilter>('all');
+    const [ruleTagFilter, setRuleTagFilter] = React.useState('');
+    const [ruleSearch, setRuleSearch] = React.useState('');
+    const [conversationStatusFilter, setConversationStatusFilter] = React.useState<ConversationStatusFilter>('all');
+    const [conversationTagFilter, setConversationTagFilter] = React.useState('');
+    const [conversationSearch, setConversationSearch] = React.useState('');
+    const [conversationTagDrafts, setConversationTagDrafts] = React.useState<Record<string, number[]>>({});
+    const [conversationActionSender, setConversationActionSender] = React.useState<string | null>(null);
+    const [blocklistSearch, setBlocklistSearch] = React.useState('');
+    const [blockForm, setBlockForm] = React.useState<BlockFormState>(emptyBlockForm);
+    const [editingBlocklistEntry, setEditingBlocklistEntry] = React.useState<AutoResponderBlocklistEntry | null>(null);
+    const [bulkBlocklistText, setBulkBlocklistText] = React.useState('');
+    const [isBlockModalOpen, setIsBlockModalOpen] = React.useState(false);
+    const [isBulkBlockModalOpen, setIsBulkBlockModalOpen] = React.useState(false);
+    const [isSavingBlocklist, setIsSavingBlocklist] = React.useState(false);
+    const [blocklistActionId, setBlocklistActionId] = React.useState<number | null>(null);
+    const [curationSearch, setCurationSearch] = React.useState('');
+    const [curationNotice, setCurationNotice] = React.useState<string | null>(null);
+    const [curationActionQuestion, setCurationActionQuestion] = React.useState<string | null>(null);
+    const [tagSearch, setTagSearch] = React.useState('');
+    const [tagForm, setTagForm] = React.useState<TagFormState>(emptyTagForm);
+    const [editingTag, setEditingTag] = React.useState<AutoResponderTag | null>(null);
+    const [isTagModalOpen, setIsTagModalOpen] = React.useState(false);
+    const [isSavingTag, setIsSavingTag] = React.useState(false);
+    const [tagActionId, setTagActionId] = React.useState<number | null>(null);
+    const [editingRule, setEditingRule] = React.useState<AutoResponderRule | null>(null);
+    const [isRuleModalOpen, setIsRuleModalOpen] = React.useState(false);
+    const [isSavingRule, setIsSavingRule] = React.useState(false);
+    const [deletingRuleId, setDeletingRuleId] = React.useState<number | null>(null);
+    const [isUploadingAttachment, setIsUploadingAttachment] = React.useState(false);
+    const [ruleForm, setRuleForm] = React.useState<RuleFormState>(emptyRuleForm);
+    const [settingsForm, setSettingsForm] = React.useState<SettingsFormState>(emptySettingsForm);
+    const [settingsKeywordRows, setSettingsKeywordRows] = React.useState<TagKeywordRow[]>([]);
+    const [isSavingSettings, setIsSavingSettings] = React.useState(false);
+    const [settingsNotice, setSettingsNotice] = React.useState<string | null>(null);
+    const [error, setError] = React.useState<string | null>(null);
+
+    const loadDashboard = React.useCallback(async () => {
+        setState('loading');
+        setError(null);
+        try {
+            const [
+                settingsData,
+                statsData,
+                storeStatusData,
+                rulesData,
+                tagsData,
+                conversationsData,
+                blocklistData,
+                unansweredData,
+            ] = await Promise.all([
+                autoResponderService.getSettings(),
+                autoResponderService.getStats({
+                    source: statsSource,
+                    from: statsSource === 'synology' ? statsFrom : undefined,
+                }),
+                autoResponderService.getStoreStatus(),
+                autoResponderService.listRules(),
+                autoResponderService.listTags(),
+                autoResponderService.listConversations({ limit: 100 }),
+                autoResponderService.listBlocklist(),
+                autoResponderService.listUnanswered({ limit: 100 }),
+            ]);
+            setSettings(settingsData);
+            setSettingsForm(settingsToForm(settingsData));
+            setSettingsKeywordRows(parseSettingsKeywordRows(settingsData?.product_tag_keywords));
+            setStats(statsData);
+            setStoreStatus(storeStatusData);
+            setRules(rulesData);
+            setTags(tagsData);
+            setConversations(conversationsData);
+            setBlocklist(blocklistData);
+            setUnansweredQuestions(unansweredData);
+            setConversationTagDrafts((current) => {
+                const next = { ...current };
+                conversationsData.forEach((conversation) => {
+                    if (!next[conversation.sender]) {
+                        next[conversation.sender] = parseTagIds(conversation.tag_ids);
+                    }
+                });
+                return next;
+            });
+            setState('ready');
+        } catch (err) {
+            console.error('[AutoResponderPage] load error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao carregar atendimento automático');
+            setState('error');
+        }
+    }, [statsFrom, statsSource]);
+
+    React.useEffect(() => {
+        loadDashboard();
+    }, [loadDashboard]);
+
+    const summary = stats?.summary || {};
+    const enabled = isEnabled(settings?.enabled);
+    const loading = state === 'loading' || state === 'idle';
+    const conversationTags = React.useMemo(
+        () => tags.filter((tag) => tagScopesIncludes(tag, 'conversation')),
+        [tags]
+    );
+    const productTags = React.useMemo(
+        () => tags.filter((tag) => tagScopesIncludes(tag, 'product')),
+        [tags]
+    );
+    const filteredRules = React.useMemo(() => {
+        const search = ruleSearch.trim().toLowerCase();
+        return rules.filter((rule) => {
+            if (ruleStatusFilter === 'active' && !isEnabled(rule.active)) return false;
+            if (ruleStatusFilter === 'inactive' && isEnabled(rule.active)) return false;
+            if (ruleTagFilter && !parseTagIds(rule.tag_ids).includes(Number(ruleTagFilter))) return false;
+            if (!search) return true;
+            return [rule.name, rule.pattern, rule.reply_text, rule.reply_search_query]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(search));
+        });
+    }, [rules, ruleSearch, ruleStatusFilter, ruleTagFilter]);
+    const filteredConversations = React.useMemo(() => {
+        const search = conversationSearch.trim().toLowerCase();
+        return conversations.filter((conversation) => {
+            const paused = isConversationPaused(conversation);
+            if (conversationStatusFilter === 'active' && paused) return false;
+            if (conversationStatusFilter === 'paused' && !paused) return false;
+            if (conversationTagFilter && !parseTagIds(conversation.tag_ids).includes(Number(conversationTagFilter))) return false;
+            if (!search) return true;
+            return [conversation.sender, conversation.contact_name, conversation.last_message, conversation.pause_reason]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(search));
+        });
+    }, [conversations, conversationSearch, conversationStatusFilter, conversationTagFilter]);
+    const filteredBlocklist = React.useMemo(() => {
+        const search = blocklistSearch.trim().toLowerCase();
+        if (!search) return blocklist;
+        return blocklist.filter((entry) =>
+            [entry.pattern, entry.pattern_type, entry.contact_name, entry.reason]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(search))
+        );
+    }, [blocklist, blocklistSearch]);
+    const filteredUnansweredQuestions = React.useMemo(() => {
+        const search = curationSearch.trim().toLowerCase();
+        if (!search) return unansweredQuestions;
+        return unansweredQuestions.filter((item) => item.question.toLowerCase().includes(search));
+    }, [unansweredQuestions, curationSearch]);
+    const filteredTags = React.useMemo(() => {
+        const search = tagSearch.trim().toLowerCase();
+        if (!search) return tags;
+        return tags.filter((tag) =>
+            [tag.name, tag.description, tag.color, tag.scopes]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(search))
+        );
+    }, [tags, tagSearch]);
+    const totalMessages = Number(summary.total_messages || 0);
+    const fallbackMessages = Number(summary.fallback_messages || 0);
+    const productMessages = Number(summary.product_messages || 0);
+    const humanRequests = Number(summary.human_requests || 0);
+    const responseRate = totalMessages > 0
+        ? Math.max(0, Math.round(((totalMessages - fallbackMessages) / totalMessages) * 100))
+        : 0;
+    const maxIntentTotal = Math.max(...(stats?.byIntent || []).map((item) => Number(item.total || 0)), 1);
+
+    const reloadConversations = React.useCallback(async () => {
+        const data = await autoResponderService.listConversations({ limit: 100 });
+        setConversations(data);
+        setConversationTagDrafts((current) => {
+            const next = { ...current };
+            data.forEach((conversation) => {
+                next[conversation.sender] = parseTagIds(conversation.tag_ids);
+            });
+            return next;
+        });
+    }, []);
+
+    React.useEffect(() => {
+        if (activeAutoResponderTab !== 'conversas' || state !== 'ready') return;
+        const conversationPollingInterval = window.setInterval(() => {
+            void reloadConversations();
+        }, 5000);
+        return () => window.clearInterval(conversationPollingInterval);
+    }, [activeAutoResponderTab, state, reloadConversations]);
+
+    const reloadBlocklist = async () => {
+        const data = await autoResponderService.listBlocklist();
+        setBlocklist(data);
+    };
+
+    const reloadUnansweredQuestions = async () => {
+        const data = await autoResponderService.listUnanswered({ limit: 100 });
+        setUnansweredQuestions(data);
+    };
+
+    const reloadTags = async () => {
+        const data = await autoResponderService.listTags();
+        setTags(data);
+    };
+
+    const openNewRule = () => {
+        setEditingRule(null);
+        setRuleForm(emptyRuleForm);
+        setIsRuleModalOpen(true);
+    };
+
+    const openEditRule = (rule: AutoResponderRule) => {
+        setEditingRule(rule);
+        setRuleForm(ruleToForm(rule));
+        setIsRuleModalOpen(true);
+    };
+
+    const updateRuleForm = (patch: Partial<RuleFormState>) => {
+        setRuleForm((current) => ({ ...current, ...patch }));
+    };
+
+    const toggleRuleTag = (tagId: number) => {
+        setRuleForm((current) => ({
+            ...current,
+            tag_ids: current.tag_ids.includes(tagId)
+                ? current.tag_ids.filter((id) => id !== tagId)
+                : [...current.tag_ids, tagId],
+        }));
+    };
+
+    const uploadRuleAttachment = async (file: File | null) => {
+        if (!file) return;
+        setIsUploadingAttachment(true);
+        setError(null);
+        try {
+            const uploaded = await autoResponderService.uploadAttachment(file);
+            updateRuleForm({
+                attachment_url: uploaded.url,
+                attachment_caption: ruleForm.attachment_caption,
+            });
+        } catch (err) {
+            console.error('[AutoResponderPage] upload attachment error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao enviar anexo');
+        } finally {
+            setIsUploadingAttachment(false);
+        }
+    };
+
+    const saveRule = async () => {
+        setIsSavingRule(true);
+        setError(null);
+        try {
+            const payload = ruleFormToInput(ruleForm);
+            if (editingRule) {
+                await autoResponderService.updateRule(editingRule.id, payload);
+            } else {
+                await autoResponderService.createRule(payload);
+            }
+            const [rulesData, statsData] = await Promise.all([
+                autoResponderService.listRules(),
+                autoResponderService.getStats(),
+            ]);
+            setRules(rulesData);
+            setStats(statsData);
+            if (!editingRule) {
+                setUnansweredQuestions((current) => current.filter((item) => item.question !== ruleForm.pattern));
+            }
+            setIsRuleModalOpen(false);
+            setEditingRule(null);
+            setRuleForm(emptyRuleForm);
+        } catch (err) {
+            console.error('[AutoResponderPage] save rule error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao salvar resposta automática');
+        } finally {
+            setIsSavingRule(false);
+        }
+    };
+
+    const deleteRule = async (rule: AutoResponderRule) => {
+        if (!window.confirm(`Excluir a resposta "${rule.name}"?`)) return;
+        setDeletingRuleId(rule.id);
+        setError(null);
+        try {
+            await autoResponderService.deleteRule(rule.id);
+            const [rulesData, statsData] = await Promise.all([
+                autoResponderService.listRules(),
+                autoResponderService.getStats(),
+            ]);
+            setRules(rulesData);
+            setStats(statsData);
+        } catch (err) {
+            console.error('[AutoResponderPage] delete rule error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao excluir resposta automática');
+        } finally {
+            setDeletingRuleId(null);
+        }
+    };
+
+    const pauseConversation = async (sender: string, minutes: number) => {
+        setConversationActionSender(sender);
+        setError(null);
+        try {
+            await autoResponderService.pauseConversation(sender, minutes, 'admin');
+            await reloadConversations();
+        } catch (err) {
+            console.error('[AutoResponderPage] pause conversation error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao pausar conversa');
+        } finally {
+            setConversationActionSender(null);
+        }
+    };
+
+    const resumeConversation = async (sender: string) => {
+        setConversationActionSender(sender);
+        setError(null);
+        try {
+            await autoResponderService.resumeConversation(sender);
+            await reloadConversations();
+        } catch (err) {
+            console.error('[AutoResponderPage] resume conversation error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao liberar conversa');
+        } finally {
+            setConversationActionSender(null);
+        }
+    };
+
+    const toggleConversationTagDraft = (sender: string, tagId: number) => {
+        setConversationTagDrafts((current) => {
+            const existing = current[sender] || [];
+            return {
+                ...current,
+                [sender]: existing.includes(tagId)
+                    ? existing.filter((id) => id !== tagId)
+                    : [...existing, tagId],
+            };
+        });
+    };
+
+    const saveConversationTags = async (sender: string) => {
+        setConversationActionSender(sender);
+        setError(null);
+        try {
+            await autoResponderService.setConversationTags(sender, conversationTagDrafts[sender] || []);
+            await reloadConversations();
+        } catch (err) {
+            console.error('[AutoResponderPage] save conversation tags error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao salvar tags da conversa');
+        } finally {
+            setConversationActionSender(null);
+        }
+    };
+
+    const openBlockModal = () => {
+        setEditingBlocklistEntry(null);
+        setBlockForm(emptyBlockForm);
+        setIsBlockModalOpen(true);
+    };
+
+    const openEditBlockModal = (entry: AutoResponderBlocklistEntry) => {
+        setEditingBlocklistEntry(entry);
+        setBlockForm(blockEntryToForm(entry));
+        setIsBlockModalOpen(true);
+    };
+
+    const updateBlockForm = (patch: Partial<BlockFormState>) => {
+        setBlockForm((current) => ({ ...current, ...patch }));
+    };
+
+    const saveBlocklistEntry = async () => {
+        setIsSavingBlocklist(true);
+        setError(null);
+        try {
+            const payload = blockFormToInput(blockForm);
+            if (editingBlocklistEntry) {
+                await autoResponderService.updateBlocklistEntry(editingBlocklistEntry.id, payload);
+            } else {
+                await autoResponderService.createBlocklistEntry(payload);
+            }
+            await reloadBlocklist();
+            setBlockForm(emptyBlockForm);
+            setEditingBlocklistEntry(null);
+            setIsBlockModalOpen(false);
+        } catch (err) {
+            console.error('[AutoResponderPage] save blocklist error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao salvar bloqueio');
+        } finally {
+            setIsSavingBlocklist(false);
+        }
+    };
+
+    const saveBulkBlocklist = async () => {
+        setIsSavingBlocklist(true);
+        setError(null);
+        try {
+            const items = bulkBlocklistText
+                .split('\n')
+                .map((line) => line.trim())
+                .filter(Boolean);
+            await autoResponderService.bulkCreateBlocklist(items);
+            await reloadBlocklist();
+            setBulkBlocklistText('');
+            setIsBulkBlockModalOpen(false);
+        } catch (err) {
+            console.error('[AutoResponderPage] bulk blocklist error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao importar bloqueados');
+        } finally {
+            setIsSavingBlocklist(false);
+        }
+    };
+
+    const deleteBlocklistEntry = async (entry: AutoResponderBlocklistEntry) => {
+        if (!window.confirm('Excluir este bloqueio?')) return;
+        setBlocklistActionId(entry.id);
+        setError(null);
+        try {
+            await autoResponderService.deleteBlocklistEntry(entry.id);
+            await reloadBlocklist();
+        } catch (err) {
+            console.error('[AutoResponderPage] delete blocklist error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao excluir bloqueio');
+        } finally {
+            setBlocklistActionId(null);
+        }
+    };
+
+    const openRuleModalFromUnansweredQuestion = (question: AutoResponderUnansweredQuestion) => {
+        setCurationActionQuestion(question.question);
+        setCurationNotice(null);
+        setError(null);
+        setEditingRule(null);
+        setRuleForm({
+            ...emptyRuleForm,
+            name: `Curadoria: ${question.question.slice(0, 60)}`,
+            pattern: question.question,
+            match_type: 'exact',
+            reply_type: 'text',
+            active: false,
+        });
+        setIsRuleModalOpen(true);
+        setCurationNotice('Revise e salve a resposta sugerida');
+    };
+
+    const ignoreUnansweredQuestion = (question: AutoResponderUnansweredQuestion) => {
+        setUnansweredQuestions((current) => current.filter((item) => item.question !== question.question));
+        setCurationNotice('Pergunta ignorada nesta sessão');
+    };
+
+    const openNewTag = () => {
+        setEditingTag(null);
+        setTagForm(emptyTagForm);
+        setIsTagModalOpen(true);
+    };
+
+    const openEditTag = (tag: AutoResponderTag) => {
+        setEditingTag(tag);
+        setTagForm(tagToForm(tag));
+        setIsTagModalOpen(true);
+    };
+
+    const updateTagForm = (patch: Partial<TagFormState>) => {
+        setTagForm((current) => ({ ...current, ...patch }));
+    };
+
+    const toggleTagScope = (scope: string) => {
+        setTagForm((current) => {
+            const scopes = current.scopes.includes(scope)
+                ? current.scopes.filter((item) => item !== scope)
+                : [...current.scopes, scope];
+            return { ...current, scopes };
+        });
+    };
+
+    const saveTag = async () => {
+        setIsSavingTag(true);
+        setError(null);
+        try {
+            const payload = tagFormToInput(tagForm);
+            if (editingTag) {
+                await autoResponderService.updateTag(editingTag.id, payload);
+            } else {
+                await autoResponderService.createTag(payload);
+            }
+            await reloadTags();
+            setIsTagModalOpen(false);
+            setEditingTag(null);
+            setTagForm(emptyTagForm);
+        } catch (err) {
+            console.error('[AutoResponderPage] save tag error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao salvar tag');
+        } finally {
+            setIsSavingTag(false);
+        }
+    };
+
+    const deleteTag = async (tag: AutoResponderTag) => {
+        if (!window.confirm('Excluir esta tag?')) return;
+        setTagActionId(tag.id);
+        setError(null);
+        try {
+            await autoResponderService.deleteTag(tag.id);
+            await reloadTags();
+        } catch (err) {
+            console.error('[AutoResponderPage] delete tag error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao excluir tag');
+        } finally {
+            setTagActionId(null);
+        }
+    };
+
+    const updateSettingsForm = (patch: Partial<SettingsFormState>) => {
+        setSettingsForm((current) => ({ ...current, ...patch }));
+    };
+
+    const addKeywordRow = () => {
+        setSettingsKeywordRows((current) => [...current, createTagKeywordRow()]);
+    };
+
+    const updateKeywordRow = (rowId: string, patch: Partial<TagKeywordRow>) => {
+        setSettingsKeywordRows((current) =>
+            current.map((row) => (row.id === rowId ? { ...row, ...patch } : row))
+        );
+    };
+
+    const removeKeywordRow = (rowId: string) => {
+        setSettingsKeywordRows((current) => current.filter((row) => row.id !== rowId));
+    };
+
+    const saveSettings = async () => {
+        setIsSavingSettings(true);
+        setSettingsNotice(null);
+        setError(null);
+        try {
+            const saved = await autoResponderService.updateSettings(settingsFormToInput(settingsForm, settingsKeywordRows));
+            setSettings(saved);
+            setSettingsForm(settingsToForm(saved));
+            setSettingsKeywordRows(parseSettingsKeywordRows(saved.product_tag_keywords));
+            setSettingsNotice('Configurações salvas');
+        } catch (err) {
+            console.error('[AutoResponderPage] save settings error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao salvar configurações');
+        } finally {
+            setIsSavingSettings(false);
+        }
+    };
+
+    const blockConversation = async (conversation: AutoResponderConversation) => {
+        setConversationActionSender(conversation.sender);
+        setError(null);
+        try {
+            await autoResponderService.createBlocklistEntry({
+                pattern: conversation.sender,
+                pattern_type: 'exact',
+                contact_name: conversation.contact_name || null,
+                reason: 'Bloqueado pela aba Conversas',
+                active: true,
+            });
+            await pauseConversation(conversation.sender, 60 * 24 * 365);
+            await reloadConversations();
+        } catch (err) {
+            console.error('[AutoResponderPage] block conversation error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao bloquear conversa');
+        } finally {
+            setConversationActionSender(null);
+        }
+    };
+
+    return (
+        <div className="mx-auto max-w-7xl space-y-6 pb-16">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                        <Bot size={24} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight text-slate-900">AutoResponder</h1>
+                        <p className="text-sm text-slate-500">WhatsApp AutoResponder</p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <span
+                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold ${
+                            enabled
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 bg-white text-slate-600'
+                        }`}
+                    >
+                        <span className={`h-2 w-2 rounded-full ${enabled ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                        {enabled ? 'Ativo' : 'Desativado'}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={loadDashboard}
+                        disabled={loading}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60"
+                    >
+                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                        Atualizar
+                    </button>
+                </div>
+            </div>
+
+            {error && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+                    <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                    <p className="text-sm font-medium">{error}</p>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <MetricTile label="Mensagens 7d" value={formatNumber(summary.total_messages)} tone="blue" icon={<MessageCircle size={18} />} />
+                <MetricTile label="Contatos únicos" value={formatNumber(summary.unique_senders)} tone="emerald" icon={<Users size={18} />} />
+                <MetricTile label="Fallbacks" value={formatNumber(summary.fallback_messages)} tone="amber" icon={<AlertCircle size={18} />} />
+                <MetricTile label="Loja" value={getStoreStatusLabel(storeStatus)} icon={<Clock size={18} />} />
+            </div>
+
+            <Tabs defaultTab="respostas" urlParam="aba" onChange={setActiveAutoResponderTab} className="space-y-5">
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                    <TabList className="min-w-max border-b-0">
+                        {tabs.map((tab) => (
+                            <Tab key={tab.id} id={tab.id} label={tab.label} icon={tab.icon} className="whitespace-nowrap px-4" />
+                        ))}
+                    </TabList>
+                </div>
+
+                <TabPanels className="space-y-4">
+                    <TabPanel id="respostas">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white">
+                                <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-slate-900">Respostas automáticas</h2>
+                                        <p className="text-sm text-slate-500">
+                                            {filteredRules.length} de {rules.length} regras exibidas
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={openNewRule}
+                                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                                    >
+                                        <Plus size={16} />
+                                        Nova resposta
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3 border-b border-slate-200 px-5 py-4 md:grid-cols-[1fr_180px_220px]">
+                                    <label className="relative block">
+                                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            value={ruleSearch}
+                                            onChange={(event) => setRuleSearch(event.target.value)}
+                                            placeholder="Buscar por nome, palavras-chave ou resposta"
+                                            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+
+                                    <select
+                                        value={ruleStatusFilter}
+                                        onChange={(event) => setRuleStatusFilter(event.target.value as RuleStatusFilter)}
+                                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    >
+                                        <option value="all">Todos os status</option>
+                                        <option value="active">Ativas</option>
+                                        <option value="inactive">Inativas</option>
+                                    </select>
+
+                                    <select
+                                        value={ruleTagFilter}
+                                        onChange={(event) => setRuleTagFilter(event.target.value)}
+                                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    >
+                                        <option value="">Todas as tags</option>
+                                        {tags.map((tag) => (
+                                            <option key={tag.id} value={tag.id}>{tag.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                                        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                                            <tr>
+                                                <th className="px-5 py-3">Nome</th>
+                                                <th className="px-5 py-3">Palavras-chave</th>
+                                                <th className="px-5 py-3">Tipo de resposta</th>
+                                                <th className="px-5 py-3 text-right">Acertos</th>
+                                                <th className="px-5 py-3">Status</th>
+                                                <th className="px-5 py-3 text-right">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 bg-white">
+                                            {filteredRules.map((rule) => {
+                                                const ruleTagIds = parseTagIds(rule.tag_ids);
+                                                return (
+                                                    <tr key={rule.id} className="align-top hover:bg-slate-50">
+                                                        <td className="px-5 py-4">
+                                                            <div className="font-semibold text-slate-900">{rule.name}</div>
+                                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                                {ruleTagIds.map((tagId) => (
+                                                                    <span key={tagId} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                                                                        {getTagName(tags, tagId)}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                        <td className="max-w-sm px-5 py-4 text-slate-600">{rule.pattern}</td>
+                                                        <td className="px-5 py-4 text-slate-600">{rule.reply_type}</td>
+                                                        <td className="px-5 py-4 text-right font-semibold text-slate-900">{formatNumber(rule.hits)}</td>
+                                                        <td className="px-5 py-4">
+                                                            <span
+                                                                className={`rounded-lg px-2 py-1 text-xs font-semibold ${
+                                                                    isEnabled(rule.active)
+                                                                        ? 'bg-emerald-50 text-emerald-700'
+                                                                        : 'bg-slate-100 text-slate-500'
+                                                                }`}
+                                                            >
+                                                                {isEnabled(rule.active) ? 'Ativa' : 'Inativa'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-5 py-4 text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEditRule(rule)}
+                                                                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                                            >
+                                                                <Edit3 size={15} />
+                                                                Editar
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => deleteRule(rule)}
+                                                                disabled={deletingRuleId === rule.id}
+                                                                className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                                                            >
+                                                                <Trash2 size={15} />
+                                                                {deletingRuleId === rule.id ? 'Excluindo...' : 'Excluir'}
+                                                            </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                    {filteredRules.length === 0 && (
+                                        <div className="px-5 py-10 text-center text-sm text-slate-500">
+                                            Nenhuma resposta encontrada.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </TabPanel>
+                    <TabPanel id="conversas">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white">
+                                <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-slate-900">Conversas</h2>
+                                        <p className="text-sm text-slate-500">
+                                            {filteredConversations.length} de {conversations.length} conversas exibidas
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={reloadConversations}
+                                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                    >
+                                        <RefreshCw size={16} />
+                                        Atualizar conversas
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3 border-b border-slate-200 px-5 py-4 md:grid-cols-[1fr_180px_220px]">
+                                    <label className="relative block">
+                                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            value={conversationSearch}
+                                            onChange={(event) => setConversationSearch(event.target.value)}
+                                            placeholder="Buscar por número, nome ou última mensagem"
+                                            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+
+                                    <select
+                                        value={conversationStatusFilter}
+                                        onChange={(event) => setConversationStatusFilter(event.target.value as ConversationStatusFilter)}
+                                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    >
+                                        <option value="all">Todos os status</option>
+                                        <option value="active">Ativas</option>
+                                        <option value="paused">Pausadas</option>
+                                    </select>
+
+                                    <select
+                                        value={conversationTagFilter}
+                                        onChange={(event) => setConversationTagFilter(event.target.value)}
+                                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    >
+                                        <option value="">Todas as tags</option>
+                                        {conversationTags.map((tag) => (
+                                            <option key={tag.id} value={tag.id}>{tag.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                                {filteredConversations.map((conversation) => {
+                                    const paused = isConversationPaused(conversation);
+                                    const draftTags = conversationTagDrafts[conversation.sender] || parseTagIds(conversation.tag_ids);
+                                    const busy = conversationActionSender === conversation.sender;
+                                    return (
+                                        <div key={conversation.sender} className="rounded-lg border border-slate-200 bg-white p-5">
+                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                <div>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <h3 className="font-semibold text-slate-900">{conversation.contact_name || conversation.sender}</h3>
+                                                        <span
+                                                            className={`rounded-lg px-2 py-1 text-xs font-semibold ${
+                                                                paused
+                                                                    ? 'bg-amber-50 text-amber-700'
+                                                                    : 'bg-emerald-50 text-emerald-700'
+                                                            }`}
+                                                        >
+                                                            {paused ? 'Pausada' : 'Ativa'}
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-1 font-mono text-xs text-slate-500">{conversation.sender}</p>
+                                                </div>
+                                                <div className="text-left text-xs text-slate-500 sm:text-right">
+                                                    <p>Última mensagem</p>
+                                                    <p className="font-semibold text-slate-700">{formatDateTime(conversation.last_message_at)}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4 rounded-lg bg-slate-50 p-3">
+                                                <p className="text-xs font-semibold uppercase text-slate-500">Última mensagem</p>
+                                                <p className="mt-1 text-sm text-slate-700">{conversation.last_message || 'Sem mensagem registrada.'}</p>
+                                            </div>
+
+                                            <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                                                <div>
+                                                    <p className="text-xs font-semibold uppercase text-slate-500">Mensagens</p>
+                                                    <p className="font-bold text-slate-900">{formatNumber(conversation.total_messages)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-semibold uppercase text-slate-500">Respostas</p>
+                                                    <p className="font-bold text-slate-900">{formatNumber(conversation.reply_count)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-semibold uppercase text-slate-500">Fallbacks</p>
+                                                    <p className="font-bold text-slate-900">{formatNumber(conversation.consecutive_fallbacks)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-semibold uppercase text-slate-500">Pausa até</p>
+                                                    <p className="font-bold text-slate-900">{paused ? formatDateTime(conversation.paused_until) : '-'}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4">
+                                                <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Tags</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {conversationTags.map((tag) => {
+                                                        const selected = draftTags.includes(Number(tag.id));
+                                                        return (
+                                                            <button
+                                                                key={tag.id}
+                                                                type="button"
+                                                                onClick={() => toggleConversationTagDraft(conversation.sender, Number(tag.id))}
+                                                                className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                                                                    selected
+                                                                        ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                                                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                                                }`}
+                                                            >
+                                                                {tag.name}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                    {conversationTags.length === 0 && (
+                                                        <span className="text-sm text-slate-500">Nenhuma tag de conversa cadastrada.</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4 flex flex-wrap gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => pauseConversation(conversation.sender, 60)}
+                                                    disabled={busy}
+                                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                                                >
+                                                    Pausar 1h
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => pauseConversation(conversation.sender, 240)}
+                                                    disabled={busy}
+                                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                                                >
+                                                    Pausar 4h
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => pauseConversation(conversation.sender, 1440)}
+                                                    disabled={busy}
+                                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                                                >
+                                                    Pausar 24h
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => resumeConversation(conversation.sender)}
+                                                    disabled={busy}
+                                                    className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                                                >
+                                                    Liberar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => saveConversationTags(conversation.sender)}
+                                                    disabled={busy}
+                                                    className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                                                >
+                                                    Salvar tags
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => blockConversation(conversation)}
+                                                    disabled={busy}
+                                                    className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                                                >
+                                                    Bloquear
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {filteredConversations.length === 0 && (
+                                <div className="rounded-lg border border-dashed border-slate-300 bg-white px-5 py-10 text-center text-sm text-slate-500">
+                                    Nenhuma conversa encontrada.
+                                </div>
+                            )}
+                        </div>
+                    </TabPanel>
+                    <TabPanel id="bloqueados">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-slate-900">Bloqueados</h2>
+                                        <p className="text-sm text-slate-500">
+                                            {filteredBlocklist.length} de {blocklist.length} bloqueios exibidos
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={openBlockModal}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                                        >
+                                            <Plus size={16} />
+                                            Adicionar bloqueio
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsBulkBlockModalOpen(true)}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                        >
+                                            <Ban size={16} />
+                                            Importar em massa
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                    <Search size={16} className="text-slate-400" />
+                                    <input
+                                        value={blocklistSearch}
+                                        onChange={(event) => setBlocklistSearch(event.target.value)}
+                                        placeholder="Buscar por número, nome, tipo ou motivo"
+                                        className="w-full border-0 text-sm outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Padrão
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Tipo
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Nome
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Motivo
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Status
+                                            </th>
+                                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                                                Ações
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                        {filteredBlocklist.map((entry) => {
+                                            const active = isEnabled(entry.active);
+                                            const busy = blocklistActionId === entry.id;
+                                            return (
+                                                <tr key={entry.id} className="align-top hover:bg-slate-50">
+                                                    <td className="px-5 py-4">
+                                                        <div className="font-semibold text-slate-900">{entry.pattern}</div>
+                                                        <div className="mt-1 text-xs text-slate-500">
+                                                            Criado em {formatDateTime(entry.created_at)}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm text-slate-600">{entry.pattern_type}</td>
+                                                    <td className="px-5 py-4 text-sm text-slate-600">
+                                                        {entry.contact_name || 'Sem nome'}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm text-slate-600">
+                                                        {entry.reason || 'Sem motivo'}
+                                                    </td>
+                                                    <td className="px-5 py-4">
+                                                        <span
+                                                            className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                                                                active
+                                                                    ? 'bg-emerald-50 text-emerald-700'
+                                                                    : 'bg-slate-100 text-slate-600'
+                                                            }`}
+                                                        >
+                                                            {active ? 'Ativo' : 'Inativo'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-5 py-4 text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEditBlockModal(entry)}
+                                                                disabled={busy}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                            >
+                                                                <Edit3 size={16} />
+                                                                Editar
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => deleteBlocklistEntry(entry)}
+                                                                disabled={busy}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                            >
+                                                                <X size={16} />
+                                                                Excluir
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {filteredBlocklist.length === 0 && (
+                                    <div className="px-5 py-10 text-center text-sm text-slate-500">
+                                        Nenhum bloqueio encontrado.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </TabPanel>
+                    <TabPanel id="curadoria">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-slate-900">Curadoria</h2>
+                                        <p className="text-sm text-slate-500">
+                                            {filteredUnansweredQuestions.length} de {unansweredQuestions.length} perguntas sem resposta
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={reloadUnansweredQuestions}
+                                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                    >
+                                        <RefreshCw size={16} />
+                                        Atualizar
+                                    </button>
+                                </div>
+
+                                <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                    <Search size={16} className="text-slate-400" />
+                                    <input
+                                        value={curationSearch}
+                                        onChange={(event) => setCurationSearch(event.target.value)}
+                                        placeholder="Buscar pergunta"
+                                        className="w-full border-0 text-sm outline-none"
+                                    />
+                                </div>
+
+                                {curationNotice && (
+                                    <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                                        <CheckCircle2 size={16} />
+                                        {curationNotice}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Pergunta
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Frequência
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Última vez
+                                            </th>
+                                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                                                Ações
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                        {filteredUnansweredQuestions.map((question) => {
+                                            const busy = curationActionQuestion === question.question;
+                                            return (
+                                                <tr key={question.question} className="align-top hover:bg-slate-50">
+                                                    <td className="px-5 py-4">
+                                                        <div className="font-semibold text-slate-900">{question.question}</div>
+                                                        <div className="mt-1 text-xs text-slate-500">
+                                                            Perguntas sem resposta
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm font-semibold text-slate-700">
+                                                        {formatNumber(question.occurrences)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm text-slate-600">
+                                                        {formatDateTime(question.last_seen_at)}
+                                                    </td>
+                                                    <td className="px-5 py-4">
+                                                        <div className="flex flex-wrap justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openRuleModalFromUnansweredQuestion(question)}
+                                                                disabled={busy}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                            >
+                                                                <Plus size={16} />
+                                                                Criar resposta
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => ignoreUnansweredQuestion(question)}
+                                                                disabled={busy}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                            >
+                                                                <X size={16} />
+                                                                Ignorar
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {filteredUnansweredQuestions.length === 0 && (
+                                    <div className="px-5 py-10 text-center text-sm text-slate-500">
+                                        Nenhuma pergunta sem resposta encontrada.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </TabPanel>
+                    <TabPanel id="tags">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-slate-900">Tags</h2>
+                                        <p className="text-sm text-slate-500">
+                                            {filteredTags.length} de {tags.length} tags exibidas
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={openNewTag}
+                                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                                    >
+                                        <Plus size={16} />
+                                        Nova tag
+                                    </button>
+                                </div>
+
+                                <div className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                    <Search size={16} className="text-slate-400" />
+                                    <input
+                                        value={tagSearch}
+                                        onChange={(event) => setTagSearch(event.target.value)}
+                                        placeholder="Buscar por nome, cor, escopo ou descrição"
+                                        className="w-full border-0 text-sm outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Nome
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Cor
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Escopo
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Descrição
+                                            </th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                                Bot
+                                            </th>
+                                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                                                Ações
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                        {filteredTags.map((tag) => {
+                                            const busy = tagActionId === tag.id;
+                                            const scopeLabels = [
+                                                tagScopesIncludes(tag, 'conversation') ? 'Conversas' : '',
+                                                tagScopesIncludes(tag, 'product') ? 'Produtos' : '',
+                                                tagScopesIncludes(tag, 'rule') ? 'Regras' : '',
+                                            ].filter(Boolean);
+                                            return (
+                                                <tr key={tag.id} className="align-top hover:bg-slate-50">
+                                                    <td className="px-5 py-4">
+                                                        <div className="font-semibold text-slate-900">{tag.name}</div>
+                                                        <div className="mt-1 text-xs text-slate-500">
+                                                            Criada em {formatDateTime(tag.created_at)}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-4">
+                                                        <div className="flex items-center gap-2 text-sm text-slate-700">
+                                                            <span
+                                                                className="h-5 w-5 rounded-full border border-slate-200"
+                                                                style={{ backgroundColor: tag.color || '#6b7280' }}
+                                                            />
+                                                            {tag.color || '#6b7280'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-4">
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {(scopeLabels.length ? scopeLabels : ['Sem escopo']).map((scope) => (
+                                                                <span
+                                                                    key={scope}
+                                                                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700"
+                                                                >
+                                                                    {scope}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm text-slate-600">
+                                                        {tag.description || 'Sem descrição'}
+                                                    </td>
+                                                    <td className="px-5 py-4">
+                                                        <span
+                                                            className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                                                                isEnabled(tag.show_on_bot)
+                                                                    ? 'bg-emerald-50 text-emerald-700'
+                                                                    : 'bg-slate-100 text-slate-600'
+                                                            }`}
+                                                        >
+                                                            {isEnabled(tag.show_on_bot) ? 'Visível' : 'Oculta'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-5 py-4">
+                                                        <div className="flex flex-wrap justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEditTag(tag)}
+                                                                disabled={busy}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                            >
+                                                                <Edit3 size={16} />
+                                                                Editar
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => deleteTag(tag)}
+                                                                disabled={busy}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                            >
+                                                                <X size={16} />
+                                                                Excluir
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {filteredTags.length === 0 && (
+                                    <div className="px-5 py-10 text-center text-sm text-slate-500">
+                                        Nenhuma tag encontrada.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </TabPanel>
+                    <TabPanel id="estatisticas">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white px-5 py-4">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-slate-900">Histórico Synology</h2>
+                                        <p className="text-sm text-slate-500">Alterne entre estatísticas recentes do MySQL e histórico arquivado.</p>
+                                    </div>
+                                    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setStatsSource('mysql')}
+                                            className={`rounded-md px-3 py-2 text-sm font-semibold ${
+                                                statsSource === 'mysql'
+                                                    ? 'bg-white text-blue-700 shadow-sm'
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            MySQL 7 dias
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setStatsSource('synology')}
+                                            className={`rounded-md px-3 py-2 text-sm font-semibold ${
+                                                statsSource === 'synology'
+                                                    ? 'bg-white text-blue-700 shadow-sm'
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            Synology
+                                        </button>
+                                    </div>
+                                </div>
+                                {statsSource === 'synology' && (
+                                    <label className="mt-3 flex flex-col gap-1 text-sm font-semibold text-slate-700 sm:max-w-xs">
+                                        Data do archive
+                                        <input
+                                            type="date"
+                                            value={statsFrom}
+                                            onChange={(event) => setStatsFrom(event.target.value)}
+                                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                )}
+                                {stats?.warning && (
+                                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                                        {stats.warning}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                                <MetricTile label="Mensagens 7 dias" value={formatNumber(totalMessages)} tone="blue" icon={<MessageCircle size={18} />} />
+                                <MetricTile label="Contatos únicos" value={formatNumber(summary.unique_senders)} tone="emerald" icon={<Users size={18} />} />
+                                <MetricTile label="Taxa de resposta" value={`${responseRate}%`} tone="slate" icon={<CheckCircle2 size={18} />} />
+                                <MetricTile label="Fora de cobertura" value={formatNumber(fallbackMessages)} tone="amber" icon={<AlertCircle size={18} />} />
+                                <MetricTile label="Tempo médio" value={`${formatNumber(summary.avg_response_time_ms)} ms`} tone="slate" icon={<Clock size={18} />} />
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                                <div className="rounded-lg border border-slate-200 bg-white xl:col-span-2">
+                                    <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                                        <div>
+                                            <h3 className="text-base font-semibold text-slate-900">Gráfico por intent</h3>
+                                            <p className="text-sm text-slate-500">Distribuição dos últimos 7 dias</p>
+                                        </div>
+                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                            Histórico Synology em fase futura
+                                        </span>
+                                    </div>
+                                    <div className="space-y-3 px-5 py-5">
+                                        {(stats?.byIntent || []).slice(0, 8).map((item) => (
+                                            <div key={item.intent} className="space-y-1">
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <span className="font-medium text-slate-700">{item.intent}</span>
+                                                    <span className="font-semibold text-slate-900">{formatNumber(item.total)}</span>
+                                                </div>
+                                                <div className="h-2 rounded-full bg-slate-100">
+                                                    <div
+                                                        className="h-2 rounded-full bg-blue-600"
+                                                        style={{ width: `${Math.max(6, (Number(item.total || 0) / maxIntentTotal) * 100)}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(!stats?.byIntent || stats.byIntent.length === 0) && (
+                                            <div className="py-6 text-center text-sm text-slate-500">Sem estatísticas carregadas.</div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white">
+                                    <div className="border-b border-slate-200 px-5 py-4">
+                                        <h3 className="text-base font-semibold text-slate-900">Resumo</h3>
+                                        <p className="text-sm text-slate-500">Respostas classificadas</p>
+                                    </div>
+                                    <div className="divide-y divide-slate-100">
+                                        <div className="flex items-center justify-between px-5 py-3 text-sm">
+                                            <span className="text-slate-600">Produtos respondidos</span>
+                                            <span className="font-semibold text-slate-900">{formatNumber(productMessages)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between px-5 py-3 text-sm">
+                                            <span className="text-slate-600">Chamadas humanas</span>
+                                            <span className="font-semibold text-slate-900">{formatNumber(humanRequests)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between px-5 py-3 text-sm">
+                                            <span className="text-slate-600">Fallbacks</span>
+                                            <span className="font-semibold text-slate-900">{formatNumber(fallbackMessages)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                                <div className="rounded-lg border border-slate-200 bg-white">
+                                    <div className="border-b border-slate-200 px-5 py-4">
+                                        <h3 className="text-base font-semibold text-slate-900">Top produtos perguntados</h3>
+                                    </div>
+                                    <div className="divide-y divide-slate-100">
+                                        {(stats?.topProducts || []).slice(0, 10).map((product) => (
+                                            <div key={product.id} className="flex items-start justify-between gap-4 px-5 py-3 text-sm">
+                                                <div>
+                                                    <div className="font-semibold text-slate-900">{product.name}</div>
+                                                    <div className="mt-1 text-xs text-slate-500">SKU: {product.sku || 'N/D'}</div>
+                                                </div>
+                                                <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                                                    {formatNumber(product.total)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {(!stats?.topProducts || stats.topProducts.length === 0) && (
+                                            <div className="px-5 py-6 text-sm text-slate-500">Sem produtos ranqueados.</div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white">
+                                    <div className="border-b border-slate-200 px-5 py-4">
+                                        <h3 className="text-base font-semibold text-slate-900">Top regras</h3>
+                                    </div>
+                                    <div className="divide-y divide-slate-100">
+                                        {(stats?.topRules || []).slice(0, 10).map((rule) => (
+                                            <div key={rule.id} className="flex items-start justify-between gap-4 px-5 py-3 text-sm">
+                                                <div className="font-semibold text-slate-900">{rule.name}</div>
+                                                <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                                                    {formatNumber(rule.hits)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {(!stats?.topRules || stats.topRules.length === 0) && (
+                                            <div className="px-5 py-6 text-sm text-slate-500">Sem regras ranqueadas.</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </TabPanel>
+                    <TabPanel id="configuracoes">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-slate-900">Configurações</h2>
+                                        <p className="text-sm text-slate-500">Ajustes principais do atendimento automático.</p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {settingsNotice && (
+                                            <span className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                                                <CheckCircle2 size={16} />
+                                                {settingsNotice}
+                                            </span>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={saveSettings}
+                                            disabled={isSavingSettings}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            <Save size={16} />
+                                            Salvar configurações
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <label className="mt-4 flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={settingsForm.enabled}
+                                        onChange={(event) => updateSettingsForm({ enabled: event.target.checked })}
+                                        className="h-4 w-4 rounded border-slate-300"
+                                    />
+                                    <span className="text-sm font-semibold text-slate-700">Bot ativo</span>
+                                </label>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                    <h3 className="text-base font-semibold text-slate-900">Atendimento humano</h3>
+                                    <div className="mt-4 space-y-4">
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Mensagem no horário</span>
+                                            <textarea
+                                                value={settingsForm.human_message_in_hours}
+                                                onChange={(event) => updateSettingsForm({ human_message_in_hours: event.target.value })}
+                                                rows={4}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Mensagem fora do horário</span>
+                                            <textarea
+                                                value={settingsForm.human_message_out_of_hours}
+                                                onChange={(event) => updateSettingsForm({ human_message_out_of_hours: event.target.value })}
+                                                rows={4}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Pausa humana</span>
+                                            <input
+                                                type="number"
+                                                value={settingsForm.human_pause_minutes}
+                                                onChange={(event) => updateSettingsForm({ human_pause_minutes: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                    <h3 className="text-base font-semibold text-slate-900">Saudação</h3>
+                                    <div className="mt-4 space-y-4">
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Prefixo de saudação</span>
+                                            <textarea
+                                                value={settingsForm.greeting_prefix}
+                                                onChange={(event) => updateSettingsForm({ greeting_prefix: event.target.value })}
+                                                rows={3}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Mensagem de fallback</span>
+                                            <textarea
+                                                value={settingsForm.fallback_message}
+                                                onChange={(event) => updateSettingsForm({ fallback_message: event.target.value })}
+                                                rows={5}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                    <h3 className="text-base font-semibold text-slate-900">Auto-pausa</h3>
+                                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Fallbacks até pausar</span>
+                                            <input
+                                                type="number"
+                                                value={settingsForm.auto_pause_fallback_threshold}
+                                                onChange={(event) => updateSettingsForm({ auto_pause_fallback_threshold: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Minutos pausado</span>
+                                            <input
+                                                type="number"
+                                                value={settingsForm.auto_pause_fallback_minutes}
+                                                onChange={(event) => updateSettingsForm({ auto_pause_fallback_minutes: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                    <label className="mt-4 block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">Mensagem da auto-pausa</span>
+                                        <textarea
+                                            value={settingsForm.auto_pause_fallback_message}
+                                            onChange={(event) => updateSettingsForm({ auto_pause_fallback_message: event.target.value })}
+                                            rows={3}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                    <h3 className="text-base font-semibold text-slate-900">Limites</h3>
+                                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Máx. respostas por conversa</span>
+                                            <input
+                                                type="number"
+                                                value={settingsForm.max_replies_per_conversation}
+                                                onChange={(event) => updateSettingsForm({ max_replies_per_conversation: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Janela em horas</span>
+                                            <input
+                                                type="number"
+                                                value={settingsForm.max_replies_window_hours}
+                                                onChange={(event) => updateSettingsForm({ max_replies_window_hours: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                    <h3 className="text-base font-semibold text-slate-900">Imagens</h3>
+                                    <div className="mt-4 space-y-4">
+                                        <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={settingsForm.send_product_images}
+                                                onChange={(event) => updateSettingsForm({ send_product_images: event.target.checked })}
+                                                className="h-4 w-4 rounded border-slate-300"
+                                            />
+                                            <span className="text-sm font-semibold text-slate-700">Enviar imagens de produtos</span>
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Máx. imagens por resposta</span>
+                                            <input
+                                                type="number"
+                                                value={settingsForm.max_images_per_response}
+                                                onChange={(event) => updateSettingsForm({ max_images_per_response: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                    <h3 className="text-base font-semibold text-slate-900">Listas numeradas</h3>
+                                    <div className="mt-4 space-y-4">
+                                        <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={settingsForm.use_numbered_lists}
+                                                onChange={(event) => updateSettingsForm({ use_numbered_lists: event.target.checked })}
+                                                className="h-4 w-4 rounded border-slate-300"
+                                            />
+                                            <span className="text-sm font-semibold text-slate-700">Usar listas numeradas</span>
+                                        </label>
+                                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                            <label className="block">
+                                                <span className="mb-1 block text-sm font-semibold text-slate-700">Limite para listar</span>
+                                                <input
+                                                    type="number"
+                                                    value={settingsForm.numbered_list_threshold}
+                                                    onChange={(event) => updateSettingsForm({ numbered_list_threshold: event.target.value })}
+                                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-sm font-semibold text-slate-700">Validade em minutos</span>
+                                                <input
+                                                    type="number"
+                                                    value={settingsForm.numbered_list_validity_minutes}
+                                                    onChange={(event) => updateSettingsForm({ numbered_list_validity_minutes: event.target.value })}
+                                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                />
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5 xl:col-span-2">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <h3 className="text-base font-semibold text-slate-900">Mapeamento palavra → tag</h3>
+                                        <button
+                                            type="button"
+                                            onClick={addKeywordRow}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                                        >
+                                            <Plus size={16} />
+                                            Adicionar mapeamento
+                                        </button>
+                                    </div>
+                                    <div className="mt-4 space-y-3">
+                                        {settingsKeywordRows.map((row) => (
+                                            <div
+                                                key={row.id}
+                                                className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 lg:grid-cols-[220px_1fr_auto]"
+                                            >
+                                                <label className="block">
+                                                    <span className="mb-1 block text-sm font-semibold text-slate-700">Tag de produto</span>
+                                                    <select
+                                                        value={row.tagId}
+                                                        onChange={(event) => updateKeywordRow(row.id, { tagId: event.target.value })}
+                                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                    >
+                                                        <option value="">Selecione</option>
+                                                        {productTags.map((tag) => (
+                                                            <option key={tag.id} value={String(tag.id)}>
+                                                                {tag.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </label>
+                                                <label className="block">
+                                                    <span className="mb-1 block text-sm font-semibold text-slate-700">Palavras-chave</span>
+                                                    <input
+                                                        type="text"
+                                                        value={row.keywords}
+                                                        onChange={(event) => updateKeywordRow(row.id, { keywords: event.target.value })}
+                                                        placeholder="promoção, carregador, capinha"
+                                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                    />
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeKeywordRow(row.id)}
+                                                    className="inline-flex items-center justify-center gap-2 self-end rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                                                >
+                                                    <X size={16} />
+                                                    Remover
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {settingsKeywordRows.length === 0 && (
+                                            <div className="rounded-lg border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-500">
+                                                Nenhum mapeamento cadastrado.
+                                            </div>
+                                        )}
+                                        {productTags.length === 0 && (
+                                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                                Nenhuma tag de produto cadastrada.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                    <h3 className="text-base font-semibold text-slate-900">Horário de funcionamento</h3>
+                                    <a
+                                        href="/admin/settings/empresa"
+                                        className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                                    >
+                                        <Clock size={16} />
+                                        Abrir horários da empresa
+                                    </a>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5 xl:col-span-2">
+                                    <h3 className="text-base font-semibold text-slate-900">Arquivamento Synology</h3>
+                                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-[1fr_180px]">
+                                        <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={settingsForm.archive_to_synology}
+                                                onChange={(event) => updateSettingsForm({ archive_to_synology: event.target.checked })}
+                                                className="h-4 w-4 rounded border-slate-300"
+                                            />
+                                            <span className="text-sm font-semibold text-slate-700">Arquivar logs no Synology</span>
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Após dias</span>
+                                            <input
+                                                type="number"
+                                                value={settingsForm.archive_after_days}
+                                                onChange={(event) => updateSettingsForm({ archive_after_days: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </TabPanel>
+                </TabPanels>
+            </Tabs>
+
+            {isRuleModalOpen && (
+                <RuleEditorModal
+                    editingRule={editingRule}
+                    ruleForm={ruleForm}
+                    tags={tags}
+                    isSaving={isSavingRule}
+                    isUploadingAttachment={isUploadingAttachment}
+                    onChange={updateRuleForm}
+                    onToggleTag={toggleRuleTag}
+                    onUploadAttachment={uploadRuleAttachment}
+                    onRemoveAttachment={() => updateRuleForm({ attachment_url: '', attachment_caption: '' })}
+                    onClose={() => setIsRuleModalOpen(false)}
+                    onSave={saveRule}
+                />
+            )}
+            {isBlockModalOpen && (
+                <BlocklistModal
+                    editingBlocklistEntry={editingBlocklistEntry}
+                    blockForm={blockForm}
+                    isSaving={isSavingBlocklist}
+                    onChange={updateBlockForm}
+                    onClose={() => {
+                        setIsBlockModalOpen(false);
+                        setEditingBlocklistEntry(null);
+                    }}
+                    onSave={saveBlocklistEntry}
+                />
+            )}
+            {isBulkBlockModalOpen && (
+                <BulkBlocklistModal
+                    bulkBlocklistText={bulkBlocklistText}
+                    isSaving={isSavingBlocklist}
+                    onChange={setBulkBlocklistText}
+                    onClose={() => setIsBulkBlockModalOpen(false)}
+                    onSave={saveBulkBlocklist}
+                />
+            )}
+            {isTagModalOpen && (
+                <TagEditorModal
+                    editingTag={editingTag}
+                    tagForm={tagForm}
+                    isSaving={isSavingTag}
+                    onChange={updateTagForm}
+                    onToggleScope={toggleTagScope}
+                    onClose={() => setIsTagModalOpen(false)}
+                    onSave={saveTag}
+                />
+            )}
+        </div>
+    );
+};
+
+export default AutoResponderPage;

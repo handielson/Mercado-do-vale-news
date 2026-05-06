@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Package, Plus } from 'lucide-react';
+import { ArrowLeft, Package, Plus, Tags } from 'lucide-react';
 import { Product, ProductInput } from '../../../types/product';
 import { Unit, UnitInput } from '../../../types/unit';
 import { productService } from '../../../services/products';
 import { unitService } from '../../../services/units';
+import { autoResponderService } from '../../../services/autoResponderService';
+import type { AutoResponderTag } from '../../../types/autoResponder';
 import { ProductForm } from '../../../components/products/ProductForm';
 import { UnitList } from '../../../components/units/UnitList';
 import { UnitForm } from '../../../components/units/UnitForm';
@@ -14,6 +16,84 @@ import { NcmSearchWidget } from '../../../components/admin/NcmSearchWidget';
 import { InmetroWidget } from '../../../components/admin/InmetroWidget';
 
 type TabType = 'product' | 'inventory';
+
+function parseProductTagIds(value: Product['tag_ids']): number[] {
+    if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+    if (!value) return [];
+    try {
+        const parsed = JSON.parse(String(value));
+        return Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
+    } catch {
+        return [];
+    }
+}
+
+function tagScopesIncludes(tag: AutoResponderTag, scope: string): boolean {
+    if (Array.isArray(tag.scopes)) return tag.scopes.includes(scope);
+    return String(tag.scopes || '').split(',').map((item) => item.trim()).includes(scope);
+}
+
+interface ProductTagPickerProps {
+    tags: AutoResponderTag[];
+    selectedTagIds: number[];
+    isLoading: boolean;
+    isSaving: boolean;
+    onToggle: (tagId: number) => void;
+    onSave: () => void;
+}
+
+const ProductTagPicker: React.FC<ProductTagPickerProps> = ({
+    tags,
+    selectedTagIds,
+    isLoading,
+    isSaving,
+    onToggle,
+    onSave,
+}) => (
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                <Tags size={18} className="text-blue-600" />
+                Tags do AutoResponder
+            </h3>
+            <button
+                type="button"
+                onClick={onSave}
+                disabled={isSaving || isLoading}
+                className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+                {isSaving ? 'Salvando...' : 'Salvar tags'}
+            </button>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+            {tags.map((tag) => {
+                const selected = selectedTagIds.includes(Number(tag.id));
+                return (
+                    <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => onToggle(Number(tag.id))}
+                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                            selected
+                                ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
+                        }`}
+                    >
+                        <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: tag.color || '#2563eb' }}
+                        />
+                        {tag.name}
+                    </button>
+                );
+            })}
+            {!isLoading && tags.length === 0 && (
+                <span className="text-sm text-slate-500">Nenhuma tag de produto cadastrada.</span>
+            )}
+            {isLoading && <span className="text-sm text-slate-500">Carregando tags...</span>}
+        </div>
+    </div>
+);
 
 /**
  * ProductDetailPage
@@ -32,14 +112,36 @@ export const ProductDetailPage: React.FC = () => {
     const [isLoadingUnits, setIsLoadingUnits] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [showUnitForm, setShowUnitForm] = useState(false);
+    const [autoResponderTags, setAutoResponderTags] = useState<AutoResponderTag[]>([]);
+    const [productTagIds, setProductTagIds] = useState<number[]>([]);
+    const [isLoadingTags, setIsLoadingTags] = useState(false);
+    const [isSavingTags, setIsSavingTags] = useState(false);
 
     // Fetch product data
     useEffect(() => {
         if (id) {
             fetchProduct();
             fetchUnits();
+            loadProductTags();
         }
     }, [id]);
+
+    useEffect(() => {
+        setProductTagIds(parseProductTagIds(product?.tag_ids));
+    }, [product?.id, product?.tag_ids]);
+
+    const loadProductTags = async () => {
+        try {
+            setIsLoadingTags(true);
+            const tags = await autoResponderService.listTags({ scope: 'product' });
+            setAutoResponderTags(tags.filter((tag) => tagScopesIncludes(tag, 'product')));
+        } catch (error) {
+            console.error('Error loading product tags:', error);
+            toast.error('Erro ao carregar tags de produto');
+        } finally {
+            setIsLoadingTags(false);
+        }
+    };
 
     const fetchProduct = async () => {
         if (!id) return;
@@ -89,6 +191,29 @@ export const ProductDetailPage: React.FC = () => {
             toast.error('Erro ao atualizar produto');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const toggleProductTag = (tagId: number) => {
+        setProductTagIds((current) =>
+            current.includes(tagId)
+                ? current.filter((id) => id !== tagId)
+                : [...current, tagId]
+        );
+    };
+
+    const saveProductTags = async () => {
+        if (!product) return;
+        try {
+            setIsSavingTags(true);
+            const result = await autoResponderService.updateProductTags(product.id, productTagIds);
+            setProduct((current) => current ? { ...current, tag_ids: result.tag_ids } : current);
+            toast.success('Tags do produto salvas');
+        } catch (error) {
+            console.error('Error saving product tags:', error);
+            toast.error('Erro ao salvar tags do produto');
+        } finally {
+            setIsSavingTags(false);
         }
     };
 
@@ -228,6 +353,15 @@ export const ProductDetailPage: React.FC = () => {
                                 onSubmit={handleProductSubmit}
                                 onCancel={handleCancel}
                                 isLoading={isSaving}
+                            />
+
+                            <ProductTagPicker
+                                tags={autoResponderTags}
+                                selectedTagIds={productTagIds}
+                                isLoading={isLoadingTags}
+                                isSaving={isSavingTags}
+                                onToggle={toggleProductTag}
+                                onSave={saveProductTags}
                             />
 
                             {/* ─── Seção Fiscal (VPS-first) ─── */}

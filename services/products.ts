@@ -13,6 +13,17 @@ import { getCompanyId } from './companyContext';
 
 // ─── Transform ─────────────────────────────────────────────────────────────
 
+function parseProductTagIds(value: unknown): number[] {
+    if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+    if (!value) return [];
+    try {
+        const parsed = JSON.parse(String(value));
+        return Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
+    } catch {
+        return [];
+    }
+}
+
 function transformFromDB(row: any): Product {
     return {
         id: row.id,
@@ -55,6 +66,7 @@ function transformFromDB(row: any): Product {
         meta_title: row.meta_title || undefined,
         meta_description: row.meta_description || undefined,
         keywords: Array.isArray(row.keywords) ? row.keywords : (typeof row.keywords === 'string' ? row.keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : []),
+        tag_ids: parseProductTagIds(row.tag_ids),
         kits: row.kits || [],
         production_days: row.production_days ?? null,
         created: row.created_at,

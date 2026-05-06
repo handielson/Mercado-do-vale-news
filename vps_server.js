@@ -3,14 +3,29 @@ const fastify = require('fastify')({ logger: false, bodyLimit: 500 * 1024 * 1024
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const crypto = require('crypto');
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+const AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER = process.env.AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER || 'imagens';
+const AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR = process.env.AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR || '/volume1/backups/autoresponder';
+const AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS = 'Certo, vou chamar um especialista para te atender. Por favor aguarde um instante.';
+const AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS = 'Certo, vou chamar um especialista. Estamos fora do horario de atendimento humano agora, mas sua mensagem ficou registrada e vamos te responder assim que possivel.';
+const AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE = 'Nao consegui localizar exatamente isso agora. Me diga o modelo do aparelho ou o tipo de produto que voce procura.';
+const AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE = 'Vou chamar um atendente para te ajudar melhor. Assim conseguimos conferir certinho pra voce.';
+const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
+
 function isImmutableImageDerivative(filePath = '') {
   return /-\d+\.(webp|avif)$/i.test(filePath);
+}
+
+function safeAutoresponderAttachmentFilename(originalFilename = '') {
+  const originalExt = path.extname(originalFilename || '').toLowerCase() || '.bin';
+  const safeExt = originalExt.replace(/[^a-z0-9.]/g, '') || '.bin';
+  return `autoresponder-${Date.now()}-${crypto.randomBytes(3).toString('hex')}${safeExt}`;
 }
 
 
@@ -114,6 +129,21 @@ function requireSyncKey(request, reply, done) {
   done();
 }
 
+function requireAutoresponderToken(request, reply, done) {
+  const configuredToken = process.env.AUTORESPONDER_TOKEN || '';
+  const receivedToken =
+    request.headers['x-autoresponder-token'] ||
+    request.query?.token ||
+    request.query?.autoresponder_token ||
+    request.query?.x_autoresponder_token ||
+    '';
+  if (!configuredToken || receivedToken !== configuredToken) {
+    reply.code(401).send({ error: 'Unauthorized' });
+    return;
+  }
+  done();
+}
+
 function getBearerToken(request) {
   const auth = String(request.headers.authorization || '');
   if (!auth.toLowerCase().startsWith('bearer ')) return '';
@@ -169,6 +199,968 @@ async function requireSyncKeyOrAdmin(request, reply) {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const jsonStr = (v) => v == null ? null : (typeof v === 'string' ? v : JSON.stringify(v));
 const optionalBool = (v) => v == null ? null : (v ? 1 : 0);
+const boolInt = (v) => v ? 1 : 0;
+
+function normalizeAutoresponderSender(value) {
+  return String(value || '').replace(/\D+/g, '');
+}
+
+function normalizeAutoresponderText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function isAutoresponderHumanRequest(message) {
+  const text = normalizeAutoresponderText(message);
+  return /\b(humano|atendente|pessoa|vendedor|gerente|especialista)\b/.test(text)
+    || text.includes('falar com alguem')
+    || text.includes('pessoa real')
+    || text.includes('atendimento humano');
+}
+
+function isAutoresponderGreeting(message) {
+  const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return /(^|\s)(oi|ola|bom dia|boa tarde|boa noite|e ai|opa)(\s|$)/.test(text);
+}
+
+function formatAutoresponderReply(replyText, settings, shouldPrefixGreeting) {
+  const text = String(replyText || '').trim();
+  const prefix = String(settings?.greeting_prefix || '').trim();
+  if (!shouldPrefixGreeting || !prefix || text.startsWith(prefix)) return text;
+  return `${prefix}\n\n${text}`;
+}
+
+function appendAutoresponderRuleAttachment(replyText, rule) {
+  const attachmentUrl = String(rule?.attachment_url || '').trim();
+  const attachmentCaption = String(rule?.attachment_caption || '').trim();
+  if (!attachmentUrl) return replyText;
+
+  const lines = [String(replyText || '').trim(), ''];
+  if (attachmentCaption) lines.push(attachmentCaption);
+  lines.push(`Anexo: ${attachmentUrl}`);
+  return lines.filter((line, index) => line || index === 1).join('\n');
+}
+
+function splitAutoresponderRulePattern(pattern) {
+  return String(pattern || '')
+    .split(/[\n,;|]+/)
+    .map((part) => normalizeAutoresponderText(part).trim())
+    .filter(Boolean);
+}
+
+function doesAutoresponderRuleMatch(message, rule) {
+  const text = normalizeAutoresponderText(message);
+  const pattern = String(rule?.pattern || '').trim();
+  const normalizedPattern = normalizeAutoresponderText(pattern).trim();
+  const matchType = String(rule?.match_type || 'any_keyword').toLowerCase();
+  if (!text || !pattern) return false;
+
+  if (matchType === 'regex') {
+    try {
+      return new RegExp(pattern, 'i').test(String(message || ''));
+    } catch (err) {
+      console.warn('[autoresponder] invalid rule regex ignored:', err.message);
+      return false;
+    }
+  }
+
+  if (matchType === 'exact') {
+    return text.trim() === normalizedPattern;
+  }
+
+  const keywords = splitAutoresponderRulePattern(pattern);
+  if (keywords.length === 0) return false;
+
+  if (matchType === 'all_keywords') {
+    return keywords.every((keyword) => text.includes(keyword));
+  }
+
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+async function findAutoresponderRuleMatch(message) {
+  const [rows] = await pool.query(
+    `SELECT id, match_type, pattern, reply_type, reply_text, reply_tag_id, reply_search_query, attachment_url, attachment_caption, auto_apply_tag_id
+     FROM autoresponder_rules
+     WHERE active = 1
+     ORDER BY priority DESC, id ASC`
+  );
+
+  return rows.find((rule) => {
+    const replyType = String(rule.reply_type || 'text');
+    if (replyType === 'text' && !String(rule.reply_text || '').trim()) return false;
+    if (replyType === 'product_by_tag' && !rule.reply_tag_id) return false;
+    if (replyType === 'product_search' && !String(rule.reply_search_query || '').trim()) return false;
+    return doesAutoresponderRuleMatch(message, rule);
+  }) || null;
+}
+
+function normalizeAutoresponderTagKeywordMap(value) {
+  const parsed = parsePublicJson(value, {});
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+
+  const entries = [];
+  for (const [key, rawValue] of Object.entries(parsed)) {
+    const normalizedKey = normalizeAutoresponderText(key).trim();
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+
+    if (/^\d+$/.test(String(key))) {
+      for (const keyword of values) {
+        const normalizedKeyword = normalizeAutoresponderText(keyword).trim();
+        if (normalizedKeyword) entries.push({ keyword: normalizedKeyword, tagId: Number(key) });
+      }
+      continue;
+    }
+
+    for (const tagId of values) {
+      const numericTagId = Number(tagId);
+      if (normalizedKey && Number.isFinite(numericTagId)) {
+        entries.push({ keyword: normalizedKey, tagId: numericTagId });
+      }
+    }
+  }
+
+  return entries;
+}
+
+function findAutoresponderProductTagKeyword(message, settings) {
+  const text = normalizeAutoresponderText(message);
+  const entries = normalizeAutoresponderTagKeywordMap(settings?.product_tag_keywords);
+  return entries.find((entry) => text.includes(entry.keyword)) || null;
+}
+
+function isAutoresponderMoreRequest(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  return ['mais', 'ver mais', 'proximos', 'proximo', 'mais opcoes', 'mais opções'].includes(text);
+}
+
+function buildAutoresponderOptionsContext(items, pagination = null) {
+  return {
+    items: Array.isArray(items) ? items : [],
+    pagination,
+  };
+}
+
+function normalizeAutoresponderOptionsContext(value) {
+  const parsed = parsePublicJson(value, []);
+  if (Array.isArray(parsed)) return buildAutoresponderOptionsContext(parsed, null);
+  if (!parsed || typeof parsed !== 'object') return buildAutoresponderOptionsContext([], null);
+  return buildAutoresponderOptionsContext(parsed.items || [], parsed.pagination || null);
+}
+
+async function getAutoresponderOptionsContext(sender, validityMinutes) {
+  const minutes = Number(validityMinutes) > 0 ? Number(validityMinutes) : 30;
+  const [rows] = await pool.query(
+    `SELECT last_options_offered
+     FROM autoresponder_conversations
+     WHERE sender = ?
+       AND last_options_offered IS NOT NULL
+       AND last_options_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+     LIMIT 1`,
+    [sender, minutes]
+  );
+  return normalizeAutoresponderOptionsContext(rows[0]?.last_options_offered);
+}
+
+async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
+  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), 10);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+  const numericTagId = Number(tagId);
+  const [rows] = await pool.query(
+    `SELECT id, model_id, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND (
+         JSON_CONTAINS(tag_ids, JSON_ARRAY(?))
+         OR JSON_CONTAINS(tag_ids, JSON_ARRAY(CAST(? AS CHAR)))
+       )
+     ORDER BY stock_quantity > 0 DESC, updated_at DESC
+     LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+    [Number.isFinite(numericTagId) ? numericTagId : tagId, String(tagId)]
+  );
+  return rows;
+}
+
+async function countAutoresponderProductsByTag(tagId) {
+  const numericTagId = Number(tagId);
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND stock_quantity > 0
+       AND (
+         JSON_CONTAINS(tag_ids, JSON_ARRAY(?))
+         OR JSON_CONTAINS(tag_ids, JSON_ARRAY(CAST(? AS CHAR)))
+       )`,
+    [Number.isFinite(numericTagId) ? numericTagId : tagId, String(tagId)]
+  );
+  return Number(rows[0]?.total || 0);
+}
+
+function formatAutoresponderCurrency(value) {
+  const amount = Number(value || 0);
+  return amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function normalizeAutoresponderPriceValue(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return amount / 100;
+}
+
+function getAutoresponderProductPrice(product) {
+  const promoPrice = normalizeAutoresponderPriceValue(product?.price_promo);
+  const retailPrice = normalizeAutoresponderPriceValue(product?.price_retail);
+  return promoPrice > 0 ? promoPrice : retailPrice;
+}
+
+function getAutoresponderProductPriceCents(product) {
+  return Math.round(getAutoresponderProductPrice(product) * 100);
+}
+
+function getAutoresponderProductGroupKey(product) {
+  const groupId = product?.model_id || product?.id;
+  return String(groupId || '').trim();
+}
+
+function formatAutoresponderPriceRange(products) {
+  const prices = (Array.isArray(products) ? products : [])
+    .map((product) => getAutoresponderProductPrice(product))
+    .filter((price) => Number.isFinite(price) && price > 0);
+
+  if (prices.length === 0) return formatAutoresponderCurrency(0);
+
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  if (minPrice === maxPrice) return formatAutoresponderCurrency(minPrice);
+  return `de ${formatAutoresponderCurrency(minPrice)} a ${formatAutoresponderCurrency(maxPrice)}`;
+}
+
+async function calculateAutoresponderMaxInstallment(priceCents, maxInstallments = 12) {
+  const safePriceCents = Math.max(Math.round(Number(priceCents) || 0), 0);
+  const safeMaxInstallments = Math.min(Math.max(Number(maxInstallments) || 12, 2), 24);
+  if (safePriceCents <= 0) return null;
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT installments, applied_fee_pct
+       FROM payment_fees
+       WHERE channel = ?
+         AND installments BETWEEN 2 AND ?
+       ORDER BY installments DESC, applied_fee_pct ASC
+       LIMIT 1`,
+      ['presencial', safeMaxInstallments]
+    );
+
+    const fee = rows[0];
+    if (!fee) return null;
+
+    const installments = Number(fee.installments || 0);
+    const appliedFeePct = Number(fee.applied_fee_pct || 0);
+    if (!Number.isFinite(installments) || installments < 2) return null;
+
+    const total = Math.round(priceCents * (1 + appliedFeePct / 100));
+    return {
+      installments,
+      value: Math.round(total / installments),
+      total,
+      appliedFeePct,
+    };
+  } catch (err) {
+    console.warn('[autoresponder] installment calculation skipped:', err.message);
+    return null;
+  }
+}
+
+function formatAutoresponderInstallmentLine(plan) {
+  if (!plan?.installments || !plan?.value) return '';
+  return `Parcelamento: ate ${plan.installments}x de ${formatAutoresponderCurrency(plan.value / 100)}`;
+}
+
+function getAutoresponderProductColor(product) {
+  const specs = parsePublicJson(product?.specs, product?.specs || {}) || {};
+  const customFields = parsePublicJson(product?.custom_fields, product?.custom_fields || {}) || {};
+  const rawColor =
+    specs.color ||
+    specs.cor ||
+    specs.colour ||
+    customFields.color ||
+    customFields.cor ||
+    customFields.colour ||
+    '';
+  return String(rawColor || '').trim();
+}
+
+function getAutoresponderAvailableColors(products) {
+  const colors = [];
+  const seen = new Set();
+  for (const product of Array.isArray(products) ? products : []) {
+    if (!isAutoresponderProductAvailable(product)) continue;
+    const color = getAutoresponderProductColor(product);
+    if (!color) continue;
+    const key = normalizeAutoresponderText(color);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    colors.push(color);
+  }
+  return colors;
+}
+
+function isAutoresponderProductAvailable(product) {
+  return Number(product?.stock_quantity || 0) > 0;
+}
+
+function filterAutoresponderAvailableProducts(products) {
+  return (Array.isArray(products) ? products : []).filter(isAutoresponderProductAvailable);
+}
+
+function formatAutoresponderUnavailableProductReply(keyword) {
+  return 'No momento nao encontrei esse produto disponivel em estoque.\nPosso chamar um atendente para conferir uma alternativa parecida pra voce.';
+}
+
+function groupAutoresponderProductsByModel(products) {
+  const groupsByKey = new Map();
+  for (const product of filterAutoresponderAvailableProducts(products)) {
+    const key = getAutoresponderProductGroupKey(product);
+    if (!key) continue;
+    if (!groupsByKey.has(key)) groupsByKey.set(key, []);
+    groupsByKey.get(key).push(product);
+  }
+
+  return Array.from(groupsByKey.entries()).map(([key, items]) => {
+    const representative = items.find((product) => Number(product?.stock_quantity || 0) > 0) || items[0];
+    return {
+      key,
+      model_id: representative?.model_id || null,
+      name: representative?.name || 'Produto',
+      products: items,
+      representative,
+      count: items.length,
+      stockQuantity: items.reduce((total, product) => total + Number(product?.stock_quantity || 0), 0),
+      priceRange: formatAutoresponderPriceRange(items),
+      colors: getAutoresponderAvailableColors(items),
+    };
+  });
+}
+
+function buildAutoresponderProductOptions(products) {
+  return groupAutoresponderProductsByModel(filterAutoresponderAvailableProducts(products)).map((group) => {
+    const product = group.representative;
+    return {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      slug: product.slug,
+      imageUrl: getAutoresponderProductMainImage(product),
+    };
+  });
+}
+
+function parseAutoresponderProductImages(value) {
+  const parsed = parsePublicJson(value, []);
+  if (Array.isArray(parsed)) return parsed.filter(Boolean);
+  return value ? [String(value)] : [];
+}
+
+function pickFirstAutoresponderProductImage(...values) {
+  for (const value of values) {
+    const [image] = parseAutoresponderProductImages(value);
+    if (image) return String(image);
+  }
+  return null;
+}
+
+function isAutoresponderUsedProduct(product) {
+  const condition = normalizeAutoresponderText(
+    product?.condition || product?.product_condition || product?.status_condition || ''
+  );
+  return ['usado', 'used', 'seminovo', 'semi novo'].some((keyword) => condition.includes(keyword));
+}
+
+function getAutoresponderProductMainImage(product) {
+  if (product?.imageUrl) return String(product.imageUrl);
+  if (product?.image_url) return String(product.image_url);
+  if (product?.main_image_url) return String(product.main_image_url);
+
+  const isUsedProduct = isAutoresponderUsedProduct(product);
+  if (isUsedProduct) {
+    return pickFirstAutoresponderProductImage(
+      product?.images,
+      product?.custom_images,
+      product?.customImages,
+      product?.product_images,
+      product?.productImages,
+      product?.model_color_images,
+      product?.modelColorImages
+    );
+  }
+
+  return pickFirstAutoresponderProductImage(
+    product?.model_color_images,
+    product?.modelColorImages,
+    product?.images,
+    product?.custom_images,
+    product?.customImages,
+    product?.product_images,
+    product?.productImages
+  );
+}
+
+function shouldAutoresponderSendProductImages(settings) {
+  return Number(settings?.send_product_images) === 1 && Number(settings?.max_images_per_response || 0) > 0;
+}
+
+function getAutoresponderProductUrl(product) {
+  const slug = product?.slug || product?.id;
+  return slug ? `https://www.mercadodovale.com.br/produto/${slug}` : null;
+}
+
+function getAutoresponderCatalogSearchUrl(keyword) {
+  const query = String(keyword || '').trim();
+  if (!query) return 'https://www.mercadodovale.com.br/catalog';
+  return `https://www.mercadodovale.com.br/catalog?search=${encodeURIComponent(query)}`;
+}
+
+function formatAutoresponderPaginationSummary({ offset = 0, limit = AUTORESPONDER_PRODUCT_PAGE_SIZE, total = 0 } = {}) {
+  const safeTotal = Math.max(Number(total) || 0, 0);
+  if (safeTotal <= 0) return '';
+  const safeLimit = Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1);
+  const page = Math.floor(Math.max(Number(offset) || 0, 0) / safeLimit) + 1;
+  return `Pagina ${page} - encontramos ${safeTotal} produtos relacionados.`;
+}
+
+function formatAutoresponderProductReplyInstructions(hasMore) {
+  const lines = ['Responda com o numero da opcao ou com o nome/modelo do produto.'];
+  if (hasMore) lines.push('Se quiser ver mais opcoes, digite "mais".');
+  return lines.join('\n');
+}
+
+async function formatAutoresponderProductCaption(product, group = null) {
+  const priceText = group?.priceRange || formatAutoresponderCurrency(getAutoresponderProductPrice(product));
+  const priceCents = getAutoresponderProductPriceCents(product);
+  const installmentLine = formatAutoresponderInstallmentLine(
+    await calculateAutoresponderMaxInstallment(priceCents)
+  );
+  const lines = [
+    `*${product?.name || 'Produto'}*`,
+    `Preco: ${priceText}`,
+  ];
+  if (installmentLine) lines.push(installmentLine);
+  if (Array.isArray(group?.colors) && group.colors.length > 0) {
+    lines.push(`Cores disponiveis: ${group.colors.join(', ')}`);
+  }
+  const url = getAutoresponderProductUrl(product);
+  if (url) lines.push(`Link: ${url}`);
+  return lines.join('\n');
+}
+
+async function formatAutoresponderProductSearchReply(products, keyword, settings = null, pagination = null) {
+  const safeProducts = Array.isArray(products) ? products : [];
+  const availableProducts = filterAutoresponderAvailableProducts(safeProducts);
+  if (safeProducts.length > 0 && availableProducts.length === 0) {
+    return formatAutoresponderUnavailableProductReply(keyword);
+  }
+  if (safeProducts.length === 0) {
+    return formatAutoresponderProductListReply(safeProducts, keyword);
+  }
+
+  const groupedProducts = groupAutoresponderProductsByModel(availableProducts);
+  const topGroup = groupedProducts[0];
+  const topProduct = topGroup.representative;
+  const title = keyword
+    ? `Encontrei estas opcoes para ${keyword}:`
+    : 'Encontrei estas opcoes:';
+  const topLines = [title, '', await formatAutoresponderProductCaption(topProduct, topGroup)];
+  if (shouldAutoresponderSendProductImages(settings)) {
+    const imageUrl = getAutoresponderProductMainImage(topProduct);
+    if (imageUrl) topLines.push(`Imagem: ${imageUrl}`);
+  }
+
+  const otherGroups = groupedProducts.slice(1);
+  if (otherGroups.length > 0) {
+    topLines.push('', 'Outras opcoes:');
+    topLines.push(...otherGroups.map((group, index) => {
+      const colorText = Array.isArray(group.colors) && group.colors.length > 0
+        ? ` (${group.colors.join(', ')})`
+        : '';
+      return `${index + 2}. ${group.name} - ${group.priceRange}${colorText}`;
+    }));
+  }
+  if (groupedProducts.length > 1 || safeProducts.length > groupedProducts.length) {
+    topLines.push('', `Ver busca no site: ${getAutoresponderCatalogSearchUrl(keyword)}`);
+  }
+  const paginationSummary = formatAutoresponderPaginationSummary({
+    offset: pagination?.offset || 0,
+    limit: pagination?.limit || AUTORESPONDER_PRODUCT_PAGE_SIZE,
+    total: pagination?.total || groupedProducts.length,
+  });
+  if (paginationSummary) topLines.push('', paginationSummary);
+
+  return topLines.join('\n');
+}
+
+function formatAutoresponderProductListReply(products, keyword) {
+  const safeProducts = Array.isArray(products) ? products : [];
+  const availableProducts = filterAutoresponderAvailableProducts(safeProducts);
+  if (safeProducts.length > 0 && availableProducts.length === 0) {
+    return formatAutoresponderUnavailableProductReply(keyword);
+  }
+  if (safeProducts.length === 0) {
+    return `Nao encontrei produtos ativos para "${keyword}".`;
+  }
+
+  const title = keyword
+    ? `Encontrei estas opcoes para ${keyword}:`
+    : 'Encontrei estas opcoes:';
+  const lines = groupAutoresponderProductsByModel(availableProducts).map((group, index) => {
+    const colorText = Array.isArray(group.colors) && group.colors.length > 0
+      ? ` (${group.colors.join(', ')})`
+      : '';
+    return `${index + 1}. ${group.name} - ${group.priceRange}${colorText}`;
+  });
+
+  return `${title}\n${lines.join('\n')}`;
+}
+
+function getAutoresponderNumberedChoice(message) {
+  const match = String(message || '').trim().match(/^(\d{1,2})$/);
+  if (!match) return null;
+  const choice = Number(match[1]);
+  return Number.isInteger(choice) && choice > 0 ? choice : null;
+}
+
+async function getAutoresponderNumberedChoiceContext(sender, validityMinutes) {
+  const context = await getAutoresponderOptionsContext(sender, validityMinutes);
+  return context.items;
+}
+
+async function findAutoresponderProductById(productId) {
+  const [rows] = await pool.query(
+    `SELECT id, model_id, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
+     FROM products
+     WHERE id = ?
+     LIMIT 1`,
+    [productId]
+  );
+  return rows[0] || null;
+}
+
+async function formatAutoresponderProductDetailReply(product, settings = null) {
+  if (!product) {
+    return 'Nao encontrei os detalhes desse produto agora.';
+  }
+  if (!isAutoresponderProductAvailable(product)) {
+    return formatAutoresponderUnavailableProductReply(product.name);
+  }
+
+  const price = getAutoresponderProductPrice(product);
+  const lines = [
+    product.name,
+    `Preco: ${formatAutoresponderCurrency(price)}`,
+  ];
+
+  const installmentLine = formatAutoresponderInstallmentLine(
+    await calculateAutoresponderMaxInstallment(getAutoresponderProductPriceCents(product))
+  );
+  if (installmentLine) lines.push(installmentLine);
+
+  if (product.slug) {
+    lines.push(`Link: ${getAutoresponderProductUrl(product)}`);
+  }
+
+  if (shouldAutoresponderSendProductImages(settings)) {
+    const imageUrl = getAutoresponderProductMainImage(product);
+    if (imageUrl) lines.push(`Imagem: ${imageUrl}`);
+  }
+
+  return lines.join('\n');
+}
+
+const AUTORESPONDER_PRODUCT_SEARCH_STOPWORDS = new Set([
+  'a', 'as', 'o', 'os', 'um', 'uma', 'uns', 'umas',
+  'de', 'da', 'das', 'do', 'dos', 'e', 'ou', 'para', 'pra', 'pro',
+  'com', 'sem', 'por', 'no', 'na', 'nos', 'nas',
+  'tem', 'ter', 'tens', 'voces', 'voce', 'vc', 'quero', 'queria',
+  'preciso', 'procuro', 'ver', 'verificar', 'valor', 'preco', 'quanto',
+  'produto', 'produtos', 'catalogo', 'lista', 'vende', 'vendem',
+]);
+
+function extractAutoresponderProductSearchTokens(message) {
+  const text = normalizeAutoresponderText(message)
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return [...new Set(text.split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
+    .filter((token) => !AUTORESPONDER_PRODUCT_SEARCH_STOPWORDS.has(token))
+    .slice(0, 6))];
+}
+
+function buildAutoresponderProductSearchScoreSql(tokens) {
+  const parts = [];
+  const params = [];
+  for (const token of Array.isArray(tokens) ? tokens : []) {
+    const safeToken = normalizeAutoresponderText(token).trim();
+    if (!safeToken) continue;
+    parts.push(`CASE
+      WHEN LOWER(COALESCE(sku, '')) = ? THEN 100
+      WHEN LOWER(COALESCE(name, '')) LIKE ? THEN 60
+      WHEN LOWER(COALESCE(name, '')) LIKE ? THEN 45
+      WHEN LOWER(COALESCE(brand, '')) LIKE ? THEN 30
+      WHEN LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ? THEN 20
+      WHEN LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) LIKE ? THEN 15
+      ELSE 0
+    END`);
+    params.push(
+      safeToken,
+      `${safeToken}%`,
+      `%${safeToken}%`,
+      `%${safeToken}%`,
+      `%${safeToken}%`,
+      `%${safeToken}%`
+    );
+  }
+  return {
+    sql: parts.length > 0 ? parts.join(' + ') : '0',
+    params,
+  };
+}
+
+async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) {
+  const safeTokens = Array.isArray(tokens) ? tokens.slice(0, 6) : [];
+  if (safeTokens.length === 0) return [];
+
+  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), 10);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+  const clauses = safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
+    OR LOWER(COALESCE(sku, '')) LIKE ?
+    OR LOWER(COALESCE(brand, '')) LIKE ?
+    OR LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ?
+    OR LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) LIKE ?)`);
+  const whereParams = [];
+  for (const token of safeTokens) {
+    const like = `%${normalizeAutoresponderText(token).trim()}%`;
+    whereParams.push(like, like, like, like, like);
+  }
+  const score = buildAutoresponderProductSearchScoreSql(safeTokens);
+
+  const [rows] = await pool.query(
+    `SELECT id, model_id, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
+       (${score.sql}) AS search_score
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND ${clauses.join(' AND ')}
+     ORDER BY stock_quantity > 0 DESC, search_score DESC, updated_at DESC
+     LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+    [...score.params, ...whereParams]
+  );
+  return rows;
+}
+
+async function countAutoresponderProductsByTokens(tokens) {
+  const safeTokens = Array.isArray(tokens) ? tokens.slice(0, 6) : [];
+  if (safeTokens.length === 0) return 0;
+
+  const clauses = safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
+    OR LOWER(COALESCE(sku, '')) LIKE ?
+    OR LOWER(COALESCE(brand, '')) LIKE ?
+    OR LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ?
+    OR LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) LIKE ?)`);
+  const params = [];
+  for (const token of safeTokens) {
+    const like = `%${normalizeAutoresponderText(token).trim()}%`;
+    params.push(like, like, like, like, like);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND stock_quantity > 0
+       AND ${clauses.join(' AND ')}`,
+    params
+  );
+  return Number(rows[0]?.total || 0);
+}
+
+async function getAutoresponderFallbackState(sender) {
+  const [rows] = await pool.query(
+    'SELECT consecutive_fallbacks FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+    [sender]
+  );
+  return {
+    consecutiveFallbacks: Number(rows[0]?.consecutive_fallbacks || 0),
+  };
+}
+
+function getAutoresponderFallbackReply(settings, nextFallbackCount) {
+  const threshold = Number(settings?.auto_pause_fallback_threshold) > 0
+    ? Number(settings.auto_pause_fallback_threshold)
+    : 3;
+  const shouldAutoPause = nextFallbackCount >= threshold;
+  const replyText = shouldAutoPause
+    ? (settings?.auto_pause_fallback_message || settings?.fallback_message || AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE)
+    : (settings?.fallback_message || AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE);
+
+  return { replyText, shouldAutoPause };
+}
+
+async function logAutoresponderReply({
+  sender,
+  message,
+  intent,
+  replyText,
+  matchedCount = 0,
+  matchedRuleId = null,
+  matchedProducts = null,
+}) {
+  await pool.query(
+    `INSERT INTO autoresponder_logs
+      (sender, question, intent, matched_rule_id, matched_products, matched_count, reply_text, response_time_ms, is_group)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      sender,
+      message || null,
+      intent,
+      matchedRuleId,
+      matchedProducts == null ? null : jsonStr(matchedProducts),
+      matchedCount,
+      replyText,
+      0,
+      0,
+    ]
+  );
+}
+
+async function upsertAutoresponderSuccessConversation(sender) {
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks)
+     VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 0)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       last_bot_reply_at = CURRENT_TIMESTAMP,
+       total_messages = total_messages + 1,
+       consecutive_fallbacks = 0`,
+    [sender]
+  );
+}
+
+async function upsertAutoresponderOptionsConversation(sender, options, pagination = null) {
+  const optionsJson = jsonStr(buildAutoresponderOptionsContext(options, pagination));
+  await pool.query(
+    `INSERT INTO autoresponder_conversations
+      (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks, last_options_offered, last_options_at)
+     VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 0, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       last_bot_reply_at = CURRENT_TIMESTAMP,
+       total_messages = total_messages + 1,
+       consecutive_fallbacks = 0,
+       last_options_offered = ?,
+       last_options_at = CURRENT_TIMESTAMP`,
+    [sender, optionsJson, optionsJson]
+  );
+}
+
+async function applyAutoresponderRuleConversationTag(sender, tagId) {
+  const numericTagId = Number(tagId);
+  if (!Number.isFinite(numericTagId) || numericTagId <= 0) return;
+
+  const [rows] = await pool.query(
+    'SELECT tag_ids FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+    [sender]
+  );
+  const existingTags = parsePublicJson(rows[0]?.tag_ids, []);
+  const tags = Array.isArray(existingTags) ? existingTags.map(Number).filter(Number.isFinite) : [];
+  if (!tags.includes(numericTagId)) tags.push(numericTagId);
+
+  await pool.query(
+    'UPDATE autoresponder_conversations SET tag_ids = ? WHERE sender = ?',
+    [jsonStr(tags), sender]
+  );
+}
+
+const DEFAULT_AUTORESPONDER_HOURS = {
+  monday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+  tuesday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+  wednesday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+  thursday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+  friday: { isOpen: true, openTime: '08:00', closeTime: '18:00', hasLunchBreak: true, lunchStart: '12:00', lunchEnd: '13:30' },
+  saturday: { isOpen: true, openTime: '08:00', closeTime: '12:00', hasLunchBreak: false, lunchStart: '12:00', lunchEnd: '13:30' },
+  sunday: { isOpen: false, openTime: '08:00', closeTime: '12:00', hasLunchBreak: false, lunchStart: '12:00', lunchEnd: '13:30' },
+};
+
+const AUTORESPONDER_DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+function getSaoPauloDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    weekday: 'short',
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const dateString = `${map.year}-${map.month}-${map.day}`;
+  const weekdayIndex = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(map.weekday);
+
+  return {
+    dateString,
+    weekdayIndex: weekdayIndex >= 0 ? weekdayIndex : date.getDay(),
+    currentTimeMinutes: Number(map.hour) * 60 + Number(map.minute),
+  };
+}
+
+function parseAutoresponderTimeToMinutes(value, fallback) {
+  const [hour, minute] = String(value || fallback).split(':').map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return parseAutoresponderTimeToMinutes(fallback, '00:00');
+  }
+  return hour * 60 + minute;
+}
+
+function getAutoresponderStoreStatus(companySettingsRow, now = new Date()) {
+  const businessHours = parsePublicJson(companySettingsRow?.business_hours, DEFAULT_AUTORESPONDER_HOURS) || DEFAULT_AUTORESPONDER_HOURS;
+  const localHolidays = parsePublicJson(companySettingsRow?.local_holidays, []) || [];
+  const { dateString, weekdayIndex, currentTimeMinutes } = getSaoPauloDateParts(now);
+
+  if (localHolidays.some((holiday) => holiday?.date === dateString)) {
+    return { status: 'holiday' };
+  }
+
+  const dayName = AUTORESPONDER_DAYS_OF_WEEK[weekdayIndex] || 'sunday';
+  const todaySchedule = { ...DEFAULT_AUTORESPONDER_HOURS[dayName], ...(businessHours[dayName] || {}) };
+
+  if (!todaySchedule.isOpen) {
+    return { status: 'closed' };
+  }
+
+  const openTimeMinutes = parseAutoresponderTimeToMinutes(todaySchedule.openTime, '08:00');
+  const closeTimeMinutes = parseAutoresponderTimeToMinutes(todaySchedule.closeTime, '18:00');
+
+  if (todaySchedule.hasLunchBreak && todaySchedule.lunchStart && todaySchedule.lunchEnd) {
+    const lunchStartMinutes = parseAutoresponderTimeToMinutes(todaySchedule.lunchStart, '12:00');
+    const lunchEndMinutes = parseAutoresponderTimeToMinutes(todaySchedule.lunchEnd, '13:30');
+    if (currentTimeMinutes >= lunchStartMinutes && currentTimeMinutes < lunchEndMinutes) {
+      return { status: 'closed' };
+    }
+  }
+
+  if (currentTimeMinutes >= openTimeMinutes && currentTimeMinutes < closeTimeMinutes) {
+    return { status: closeTimeMinutes - currentTimeMinutes <= 30 ? 'closing_soon' : 'open' };
+  }
+
+  return { status: 'closed' };
+}
+
+function isAutoresponderStoreInHumanHours(storeStatus) {
+  return storeStatus?.status === 'open' || storeStatus?.status === 'closing_soon';
+}
+
+const AUTORESPONDER_STORE_STATUS_CACHE_TTL_MS = 60 * 1000;
+let autoresponderStoreStatusCache = null;
+
+function clearAutoresponderStoreStatusCache() {
+  autoresponderStoreStatusCache = null;
+}
+
+async function getCachedAutoresponderStoreStatus() {
+  const nowMs = Date.now();
+  if (
+    autoresponderStoreStatusCache
+    && autoresponderStoreStatusCache.expiresAt > nowMs
+  ) {
+    return autoresponderStoreStatusCache.value;
+  }
+
+  const [companyRows] = await pool.query(
+    'SELECT business_hours, holiday_overrides, local_holidays FROM company_settings LIMIT 1'
+  );
+  const value = getAutoresponderStoreStatus(companyRows[0] || null);
+  autoresponderStoreStatusCache = {
+    value,
+    expiresAt: nowMs + AUTORESPONDER_STORE_STATUS_CACHE_TTL_MS,
+  };
+  return value;
+}
+
+async function getAutoresponderReplyCount(sender, windowHours) {
+  const hours = Number(windowHours) > 0 ? Number(windowHours) : 24;
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM autoresponder_logs
+     WHERE sender = ?
+       AND reply_text IS NOT NULL
+       AND reply_text <> ''
+       AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`,
+    [sender, hours]
+  );
+  return Number(rows[0]?.total || 0);
+}
+
+async function touchAutoresponderConversation(sender) {
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at, total_messages)
+     VALUES (?, CURRENT_TIMESTAMP, 1)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       total_messages = total_messages + 1`,
+    [sender]
+  );
+}
+
+async function isAutoresponderBlocked(sender) {
+  const rawSender = String(sender || '').trim();
+  const normalizedSender = normalizeAutoresponderSender(rawSender);
+  if (!rawSender && !normalizedSender) return false;
+
+  const [rows] = await pool.query(
+    'SELECT pattern, pattern_type FROM autoresponder_blocklist WHERE active = 1'
+  );
+
+  for (const row of rows) {
+    const pattern = String(row.pattern || '').trim();
+    if (!pattern) continue;
+
+    const patternType = String(row.pattern_type || 'exact').toLowerCase();
+    const normalizedPattern = normalizeAutoresponderSender(pattern);
+
+    if (patternType === 'regex') {
+      try {
+        if (new RegExp(pattern).test(rawSender)) return true;
+      } catch (err) {
+        console.warn('[autoresponder] invalid blocklist regex ignored:', err.message);
+      }
+      continue;
+    }
+
+    if (patternType === 'prefix') {
+      if (normalizedPattern && normalizedSender.startsWith(normalizedPattern)) return true;
+      if (rawSender.startsWith(pattern)) return true;
+      continue;
+    }
+
+    if ((normalizedPattern && normalizedSender === normalizedPattern) || rawSender === pattern) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function parsePublicJson(v, fallback) {
   if (v == null || v === '') return fallback;
@@ -264,6 +1256,1012 @@ fastify.get('/health', { config: { rateLimit: { max: 60, timeWindow: '1 minute' 
 }));
 
 // ─── Upload de imagem de produto ───────────────────────────────────────────
+// ─── AutoResponder WhatsApp (Fase 1A/1B) ─────────────────────────────────────
+fastify.get('/autoresponder/settings', { preHandler: requireSyncKey }, async () => {
+  const [rows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+  return rows[0] || null;
+});
+
+fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const allowed = {
+    enabled: (v) => boolInt(v),
+    human_message_in_hours: (v) => String(v ?? ''),
+    human_message_out_of_hours: (v) => String(v ?? ''),
+    human_pause_minutes: (v) => Number(v),
+    auto_pause_fallback_threshold: (v) => Number(v),
+    auto_pause_fallback_minutes: (v) => Number(v),
+    auto_pause_fallback_message: (v) => String(v ?? ''),
+    max_replies_per_conversation: (v) => Number(v),
+    max_replies_window_hours: (v) => Number(v),
+    greeting_prefix: (v) => String(v ?? ''),
+    fallback_message: (v) => String(v ?? ''),
+    send_product_images: (v) => boolInt(v),
+    max_images_per_response: (v) => Number(v),
+    use_numbered_lists: (v) => boolInt(v),
+    numbered_list_threshold: (v) => Number(v),
+    numbered_list_validity_minutes: (v) => Number(v),
+    product_tag_keywords: (v) => jsonStr(v || {}),
+    archive_to_synology: (v) => boolInt(v),
+    archive_after_days: (v) => Number(v),
+  };
+
+  const sets = [];
+  const values = [];
+  for (const [key, normalize] of Object.entries(allowed)) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    const value = normalize(body[key]);
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+      return reply.code(400).send({ error: `Invalid numeric value for ${key}` });
+    }
+    sets.push(`${key} = ?`);
+    values.push(value);
+  }
+
+  if (sets.length === 0) {
+    return reply.code(400).send({ error: 'No valid settings fields provided' });
+  }
+
+  values.push(1);
+  await pool.query(`UPDATE autoresponder_settings SET ${sets.join(', ')} WHERE id = ?`, values);
+  const [rows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+  return rows[0] || null;
+});
+
+function buildAutoresponderUpdateSet(body, allowed) {
+  const sets = [];
+  const values = [];
+  for (const [key, normalize] of Object.entries(allowed)) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    const value = normalize(body[key]);
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+      return { error: `Invalid numeric value for ${key}` };
+    }
+    sets.push(`${key} = ?`);
+    values.push(value);
+  }
+  return { sets, values };
+}
+
+const autoresponderRuleFields = {
+  name: (v) => String(v ?? ''),
+  match_type: (v) => String(v ?? 'any_keyword'),
+  pattern: (v) => String(v ?? ''),
+  reply_type: (v) => String(v ?? 'text'),
+  reply_text: (v) => String(v ?? ''),
+  reply_tag_id: (v) => v == null || v === '' ? null : Number(v),
+  reply_search_query: (v) => v == null ? null : String(v),
+  attachment_url: (v) => v == null ? null : String(v),
+  attachment_caption: (v) => v == null ? null : String(v),
+  auto_apply_tag_id: (v) => v == null || v === '' ? null : Number(v),
+  tag_ids: (v) => jsonStr(v || []),
+  priority: (v) => Number(v || 0),
+  active: (v) => boolInt(v),
+};
+
+fastify.get('/autoresponder/rules', { preHandler: requireSyncKey }, async (req) => {
+  const active = req.query.active;
+  const tagId = req.query.tag_id;
+  let sql = 'SELECT * FROM autoresponder_rules WHERE 1=1';
+  const params = [];
+  if (active != null) {
+    sql += ' AND active = ?';
+    params.push(boolInt(active === 'true' || active === '1' || active === true));
+  }
+  if (tagId) {
+    sql += ' AND JSON_CONTAINS(tag_ids, JSON_ARRAY(?))';
+    params.push(Number(tagId));
+  }
+  sql += ' ORDER BY priority DESC, id ASC';
+  const [rows] = await pool.query(sql, params);
+  return rows;
+});
+
+fastify.post('/autoresponder/rules', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  if (!body.name || !body.pattern) {
+    return reply.code(400).send({ error: 'name and pattern are required' });
+  }
+  const columns = Object.keys(autoresponderRuleFields).filter((key) => Object.prototype.hasOwnProperty.call(body, key));
+  const values = columns.map((key) => autoresponderRuleFields[key](body[key]));
+  await pool.query(
+    `INSERT INTO autoresponder_rules (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+    values
+  );
+  const [rows] = await pool.query('SELECT * FROM autoresponder_rules WHERE id = LAST_INSERT_ID()');
+  return rows[0];
+});
+
+fastify.patch('/autoresponder/rules/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const built = buildAutoresponderUpdateSet(body, autoresponderRuleFields);
+  if (built.error) return reply.code(400).send({ error: built.error });
+  if (built.sets.length === 0) return reply.code(400).send({ error: 'No valid rule fields provided' });
+  built.values.push(req.params.id);
+  await pool.query(`UPDATE autoresponder_rules SET ${built.sets.join(', ')} WHERE id = ?`, built.values);
+  const [rows] = await pool.query('SELECT * FROM autoresponder_rules WHERE id = ?', [req.params.id]);
+  return rows[0] || null;
+});
+
+fastify.delete('/autoresponder/rules/:id', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query('DELETE FROM autoresponder_rules WHERE id = ?', [req.params.id]);
+  return { ok: true };
+});
+
+fastify.post('/autoresponder/rules/from-question', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const logId = body.log_id;
+  let question = String(body.question || '').trim();
+  if (logId && !question) {
+    const [rows] = await pool.query('SELECT question FROM autoresponder_logs WHERE id = ?', [logId]);
+    question = String(rows[0]?.question || '').trim();
+  }
+  if (!question) return reply.code(400).send({ error: 'question or log_id is required' });
+
+  const ruleBody = {
+    name: body.name || `Curadoria: ${question.slice(0, 60)}`,
+    match_type: body.match_type || 'exact',
+    pattern: body.pattern || question,
+    reply_type: 'text',
+    reply_text: body.reply_text || '',
+    priority: body.priority == null ? 0 : Number(body.priority),
+    active: body.active == null ? 0 : boolInt(body.active),
+    tag_ids: body.tag_ids || [],
+  };
+  const columns = Object.keys(autoresponderRuleFields).filter((key) => Object.prototype.hasOwnProperty.call(ruleBody, key));
+  const values = columns.map((key) => autoresponderRuleFields[key](ruleBody[key]));
+  await pool.query(
+    `INSERT INTO autoresponder_rules (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+    values
+  );
+  const [rows] = await pool.query('SELECT * FROM autoresponder_rules WHERE id = LAST_INSERT_ID()');
+  return rows[0];
+});
+
+fastify.post('/autoresponder/upload-attachment', { preHandler: requireSyncKey }, async (req, reply) => {
+  const data = await req.file();
+  if (!data) return reply.code(400).send({ error: 'file is required' });
+
+  const chunks = [];
+  for await (const chunk of data.file) chunks.push(chunk);
+  const fileBuf = Buffer.concat(chunks);
+  const filename = safeAutoresponderAttachmentFilename(data.filename);
+
+  if (SYNO_USER && SYNO_PASS) {
+    try {
+      const synologyResult = await uploadAutoresponderAttachmentToSynology({ fileName: filename, fileBuf });
+      return { ok: true, url: synologyResult.url, filename, storage: 'synology' };
+    } catch (err) {
+      console.warn('[autoresponder/upload-attachment] Synology unavailable for autoresponder attachment:', err.message);
+    }
+  }
+
+  const dir = path.join(UPLOADS_DIR, 'autoresponder', 'attachments');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, filename);
+  fs.writeFileSync(dest, fileBuf);
+
+  const baseUrl = process.env.API_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+  const url = `${baseUrl}/images/autoresponder/attachments/${filename}`;
+  return { ok: true, url, filename, storage: 'local' };
+});
+
+const autoresponderTagFields = {
+  name: (v) => String(v ?? ''),
+  color: (v) => String(v || '#6b7280'),
+  description: (v) => v == null ? null : String(v),
+  scopes: (v) => Array.isArray(v) ? v.join(',') : String(v ?? ''),
+  show_on_bot: (v) => boolInt(v),
+};
+
+fastify.get('/autoresponder/tags', { preHandler: requireSyncKey }, async (req) => {
+  const scope = req.query.scope;
+  let sql = 'SELECT * FROM autoresponder_tags';
+  const params = [];
+  if (scope) {
+    sql += ' WHERE FIND_IN_SET(?, scopes)';
+    params.push(scope);
+  }
+  sql += ' ORDER BY name ASC';
+  const [rows] = await pool.query(sql, params);
+  return rows;
+});
+
+fastify.post('/autoresponder/tags', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  if (!body.name || !body.scopes) return reply.code(400).send({ error: 'name and scopes are required' });
+  const columns = Object.keys(autoresponderTagFields).filter((key) => Object.prototype.hasOwnProperty.call(body, key));
+  const values = columns.map((key) => autoresponderTagFields[key](body[key]));
+  await pool.query(
+    `INSERT INTO autoresponder_tags (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+    values
+  );
+  const [rows] = await pool.query('SELECT * FROM autoresponder_tags WHERE id = LAST_INSERT_ID()');
+  return rows[0];
+});
+
+fastify.patch('/autoresponder/tags/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const built = buildAutoresponderUpdateSet(req.body || {}, autoresponderTagFields);
+  if (built.error) return reply.code(400).send({ error: built.error });
+  if (built.sets.length === 0) return reply.code(400).send({ error: 'No valid tag fields provided' });
+  built.values.push(req.params.id);
+  await pool.query(`UPDATE autoresponder_tags SET ${built.sets.join(', ')} WHERE id = ?`, built.values);
+  const [rows] = await pool.query('SELECT * FROM autoresponder_tags WHERE id = ?', [req.params.id]);
+  return rows[0] || null;
+});
+
+fastify.delete('/autoresponder/tags/:id', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query('DELETE FROM autoresponder_tags WHERE id = ?', [req.params.id]);
+  return { ok: true };
+});
+
+fastify.get('/autoresponder/blocklist', { preHandler: requireSyncKey }, async () => {
+  const [rows] = await pool.query('SELECT * FROM autoresponder_blocklist ORDER BY created_at DESC, id DESC');
+  return rows;
+});
+
+fastify.post('/autoresponder/blocklist', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  if (!body.pattern) return reply.code(400).send({ error: 'pattern is required' });
+  await pool.query(
+    `INSERT INTO autoresponder_blocklist (pattern, pattern_type, contact_name, reason, active)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      String(body.pattern),
+      String(body.pattern_type || 'exact'),
+      body.contact_name == null ? null : String(body.contact_name),
+      body.reason == null ? null : String(body.reason),
+      body.active == null ? 1 : boolInt(body.active),
+    ]
+  );
+  const [rows] = await pool.query('SELECT * FROM autoresponder_blocklist WHERE id = LAST_INSERT_ID()');
+  return rows[0];
+});
+
+fastify.post('/autoresponder/blocklist/bulk', { preHandler: requireSyncKey }, async (req, reply) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (items.length === 0) return reply.code(400).send({ error: 'items are required' });
+  for (const item of items) {
+    const pattern = typeof item === 'string' ? item : item.pattern;
+    if (!pattern) continue;
+    await pool.query(
+      `INSERT INTO autoresponder_blocklist (pattern, pattern_type, contact_name, reason, active)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        String(pattern),
+        typeof item === 'string' ? 'exact' : String(item.pattern_type || 'exact'),
+        typeof item === 'string' ? null : (item.contact_name == null ? null : String(item.contact_name)),
+        typeof item === 'string' ? null : (item.reason == null ? null : String(item.reason)),
+        typeof item === 'string' || item.active == null ? 1 : boolInt(item.active),
+      ]
+    );
+  }
+  return { ok: true };
+});
+
+fastify.patch('/autoresponder/blocklist/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const fields = {
+    pattern: (v) => String(v ?? ''),
+    pattern_type: (v) => String(v || 'exact'),
+    contact_name: (v) => v == null ? null : String(v),
+    reason: (v) => v == null ? null : String(v),
+    active: (v) => boolInt(v),
+  };
+  const columns = Object.keys(fields).filter((key) => Object.prototype.hasOwnProperty.call(body, key));
+  if (columns.length === 0) return reply.code(400).send({ error: 'no fields to update' });
+  if (Object.prototype.hasOwnProperty.call(body, 'pattern') && !String(body.pattern || '').trim()) {
+    return reply.code(400).send({ error: 'pattern is required' });
+  }
+  const values = columns.map((key) => fields[key](body[key]));
+  await pool.query(
+    `UPDATE autoresponder_blocklist SET ${columns.map((column) => `${column} = ?`).join(', ')} WHERE id = ?`,
+    [...values, req.params.id]
+  );
+  const [rows] = await pool.query('SELECT * FROM autoresponder_blocklist WHERE id = ?', [req.params.id]);
+  return rows[0] || null;
+});
+
+fastify.delete('/autoresponder/blocklist/:id', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query('DELETE FROM autoresponder_blocklist WHERE id = ?', [req.params.id]);
+  return { ok: true };
+});
+
+fastify.get('/autoresponder/conversations', { preHandler: requireSyncKey }, async (req) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+  const status = req.query.status;
+  const tagId = req.query.tag_id;
+  let sql = 'SELECT * FROM autoresponder_conversations WHERE 1=1';
+  const params = [];
+  if (status === 'paused') sql += ' AND paused_until > NOW()';
+  if (status === 'active') sql += ' AND (paused_until IS NULL OR paused_until <= NOW())';
+  if (tagId) {
+    sql += ' AND JSON_CONTAINS(tag_ids, JSON_ARRAY(?))';
+    params.push(Number(tagId));
+  }
+  sql += ` ORDER BY last_message_at DESC LIMIT ${limit} OFFSET ${offset}`;
+  const [rows] = await pool.query(sql, params);
+  return rows;
+});
+
+fastify.post('/autoresponder/conversations/:sender/pause', { preHandler: requireSyncKey }, async (req) => {
+  const body = req.body || {};
+  const minutes = Number(body.minutes || 60);
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at, paused_until, pause_reason)
+     VALUES (?, CURRENT_TIMESTAMP, DATE_ADD(NOW(), INTERVAL ? MINUTE), ?)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+       pause_reason = ?`,
+    [req.params.sender, minutes, body.reason || 'admin', minutes, body.reason || 'admin']
+  );
+  return { ok: true };
+});
+
+fastify.post('/autoresponder/conversations/:sender/resume', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query(
+    `UPDATE autoresponder_conversations
+     SET paused_until = NULL, pause_reason = NULL
+     WHERE sender = ?`,
+    [req.params.sender]
+  );
+  return { ok: true };
+});
+
+fastify.post('/autoresponder/conversations/:sender/tags', { preHandler: requireSyncKey }, async (req) => {
+  const tagIds = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids.map(Number).filter(Number.isFinite) : [];
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at, tag_ids)
+     VALUES (?, CURRENT_TIMESTAMP, ?)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       tag_ids = ?`,
+    [req.params.sender, jsonStr(tagIds), jsonStr(tagIds)]
+  );
+  return { ok: true, tag_ids: tagIds };
+});
+
+fastify.get('/autoresponder/unanswered', { preHandler: requireSyncKey }, async (req) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const [rows] = await pool.query(
+    `SELECT question, COUNT(*) AS occurrences, MAX(created_at) AS last_seen_at
+     FROM autoresponder_logs
+     WHERE intent = 'fallback'
+       AND question IS NOT NULL
+       AND question <> ''
+     GROUP BY question
+     ORDER BY occurrences DESC, last_seen_at DESC
+     LIMIT ${limit}`
+  );
+  return rows;
+});
+
+async function getAutoresponderTopProducts(limit = 10) {
+  const [rows] = await pool.query(
+    `SELECT matched_products
+     FROM autoresponder_logs
+     WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       AND matched_products IS NOT NULL
+     ORDER BY created_at DESC
+     LIMIT 500`
+  );
+  return aggregateAutoresponderProductsFromRows(rows, limit);
+}
+
+function normalizeAutoresponderMatchedProducts(raw) {
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(raw) ? raw : [];
+}
+
+function aggregateAutoresponderProductsFromRows(rows = [], limit = 10) {
+  const products = new Map();
+  for (const row of rows) {
+    const matchedProducts = normalizeAutoresponderMatchedProducts(row.matched_products);
+    if (!Array.isArray(matchedProducts)) continue;
+    for (const product of matchedProducts) {
+      if (!product || !product.id) continue;
+      const id = String(product.id);
+      const current = products.get(id) || {
+        id,
+        name: product.name || 'Produto sem nome',
+        sku: product.sku || null,
+        total: 0,
+      };
+      current.total += 1;
+      if (!current.name && product.name) current.name = product.name;
+      if (!current.sku && product.sku) current.sku = product.sku;
+      products.set(id, current);
+    }
+  }
+  return Array.from(products.values())
+    .sort((a, b) => b.total - a.total || String(a.name).localeCompare(String(b.name)))
+    .slice(0, limit);
+}
+
+function emptyAutoresponderStats(source = 'mysql', warning = null) {
+  return {
+    source,
+    warning,
+    summary: {
+      total_messages: 0,
+      unique_senders: 0,
+      fallback_messages: 0,
+      product_messages: 0,
+      human_requests: 0,
+      avg_response_time_ms: 0,
+    },
+    byIntent: [],
+    topRules: [],
+    topProducts: [],
+  };
+}
+
+function parseAutoresponderArchiveDate(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const parsed = new Date(`${year}-${month}-${day}T00:00:00Z`);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== Number(year) ||
+    parsed.getUTCMonth() + 1 !== Number(month) ||
+    parsed.getUTCDate() !== Number(day)
+  ) {
+    return null;
+  }
+  return { value: raw, year, month, day };
+}
+
+function buildAutoresponderSynologyArchivePath(dateParts) {
+  return path.join(AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR, dateParts.year, dateParts.month, `${dateParts.day}.json.gz`);
+}
+
+function extractAutoresponderArchiveRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.logs)) return payload.logs;
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  return [];
+}
+
+function aggregateAutoresponderArchiveStats(rows = []) {
+  const summary = {
+    total_messages: rows.length,
+    unique_senders: 0,
+    fallback_messages: 0,
+    product_messages: 0,
+    human_requests: 0,
+    avg_response_time_ms: 0,
+  };
+  const senders = new Set();
+  const byIntentMap = new Map();
+  const topRulesMap = new Map();
+  let responseTimeTotal = 0;
+  let responseTimeCount = 0;
+
+  for (const row of rows) {
+    const intent = row.intent || 'unknown';
+    if (row.sender) senders.add(String(row.sender));
+    if (intent === 'fallback') summary.fallback_messages += 1;
+    if (['product_tag', 'product_search', 'rule_product_tag', 'rule_product_search'].includes(intent)) {
+      summary.product_messages += 1;
+    }
+    if (intent === 'human_request') summary.human_requests += 1;
+    byIntentMap.set(intent, (byIntentMap.get(intent) || 0) + 1);
+
+    const responseTime = Number(row.response_time_ms);
+    if (Number.isFinite(responseTime)) {
+      responseTimeTotal += responseTime;
+      responseTimeCount += 1;
+    }
+
+    if (row.matched_rule_id) {
+      const id = String(row.matched_rule_id);
+      const current = topRulesMap.get(id) || {
+        id,
+        name: row.matched_rule_name || `Regra ${id}`,
+        hits: 0,
+      };
+      current.hits += 1;
+      if (!current.name && row.matched_rule_name) current.name = row.matched_rule_name;
+      topRulesMap.set(id, current);
+    }
+  }
+
+  summary.unique_senders = senders.size;
+  summary.avg_response_time_ms = responseTimeCount ? Math.round(responseTimeTotal / responseTimeCount) : 0;
+
+  return {
+    summary,
+    byIntent: Array.from(byIntentMap.entries())
+      .map(([intent, total]) => ({ intent, total }))
+      .sort((a, b) => b.total - a.total || String(a.intent).localeCompare(String(b.intent))),
+    topRules: Array.from(topRulesMap.values())
+      .sort((a, b) => b.hits - a.hits || String(a.name).localeCompare(String(b.name)))
+      .slice(0, 10),
+    topProducts: aggregateAutoresponderProductsFromRows(rows, 10),
+  };
+}
+
+async function loadAutoresponderSynologyStats(filters = {}) {
+  const dateParts = parseAutoresponderArchiveDate(filters.from);
+  if (!dateParts) {
+    return {
+      ...emptyAutoresponderStats('synology', 'Synology stats archive is not available yet; use from=YYYY-MM-DD'),
+      source: 'synology',
+    };
+  }
+
+  const archivePath = buildAutoresponderSynologyArchivePath(dateParts);
+  if (!fs.existsSync(archivePath)) {
+    return {
+      ...emptyAutoresponderStats('synology', `Synology stats archive not found for ${dateParts.value}`),
+      source: 'synology',
+      archive_date: dateParts.value,
+    };
+  }
+
+  try {
+    const compressed = await fs.promises.readFile(archivePath);
+    const payload = JSON.parse(zlib.gunzipSync(compressed).toString('utf8'));
+    const rows = extractAutoresponderArchiveRows(payload);
+    return {
+      source: 'synology',
+      warning: null,
+      archive_date: dateParts.value,
+      ...aggregateAutoresponderArchiveStats(rows),
+    };
+  } catch (err) {
+    console.warn('[autoresponder/stats] failed to read Synology stats archive:', err.message);
+    return {
+      ...emptyAutoresponderStats('synology', `Synology stats archive read failed for ${dateParts.value}`),
+      source: 'synology',
+      archive_date: dateParts.value,
+    };
+  }
+}
+
+fastify.get('/autoresponder/stats', { preHandler: requireSyncKey }, async (req) => {
+  const source = req.query?.source === 'synology' ? 'synology' : 'mysql';
+  if (source === 'synology') {
+    return loadAutoresponderSynologyStats(req.query || {});
+  }
+
+  const [[summary]] = await pool.query(
+    `SELECT COUNT(*) AS total_messages,
+            COUNT(DISTINCT sender) AS unique_senders,
+            SUM(intent = 'fallback') AS fallback_messages,
+            SUM(intent IN ('product_tag','product_search','rule_product_tag','rule_product_search')) AS product_messages,
+            SUM(intent = 'human_request') AS human_requests,
+            ROUND(AVG(response_time_ms), 0) AS avg_response_time_ms
+     FROM autoresponder_logs
+     WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`
+  );
+  const [byIntent] = await pool.query(
+    `SELECT intent, COUNT(*) AS total
+     FROM autoresponder_logs
+     WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+     GROUP BY intent
+     ORDER BY total DESC`
+  );
+  const [topRules] = await pool.query(
+    `SELECT id, name, hits
+     FROM autoresponder_rules
+     WHERE hits > 0
+     ORDER BY hits DESC
+     LIMIT 10`
+  );
+  const topProducts = await getAutoresponderTopProducts(10);
+  return { source: 'mysql', summary, byIntent, topRules, topProducts };
+});
+
+fastify.get('/autoresponder/store-status', { preHandler: requireSyncKey }, async () => {
+  return getCachedAutoresponderStoreStatus();
+});
+
+fastify.patch('/products/:id/tags', { preHandler: requireSyncKey }, async (req, reply) => {
+  const tagIds = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids.map(Number).filter(Number.isFinite) : null;
+  if (!tagIds) return reply.code(400).send({ error: 'tag_ids array is required' });
+  await pool.query('UPDATE products SET tag_ids = ? WHERE id = ?', [jsonStr(tagIds), req.params.id]);
+  return { ok: true, tag_ids: tagIds };
+});
+
+fastify.addHook('onSend', async (req, reply, payload) => {
+  if (!String(req.url || '').startsWith('/autoresponder-webhook')) return payload;
+  const responseFormat = String(req.query?.format || req.query?.response_format || '').toLowerCase();
+  if (!['text', 'plain', 'message'].includes(responseFormat)) return payload;
+  try {
+    const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    const message = Array.isArray(parsed?.replies) ? String(parsed.replies[0]?.message || '') : '';
+    reply.header('Content-Type', 'text/plain; charset=utf-8');
+    return message;
+  } catch {
+    return payload;
+  }
+});
+
+fastify.route({
+  method: ['GET', 'POST'],
+  url: '/autoresponder-webhook',
+  preHandler: requireAutoresponderToken,
+  config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  handler: async (req) => {
+    try {
+      const requestBody = req.body || {};
+      const nestedQuery = requestBody && typeof requestBody.query === 'object' ? requestBody.query : {};
+      const payload = { ...(req.query || {}), ...nestedQuery, ...requestBody };
+      const sender = String(payload.sender || payload.from || payload.phone || payload.number || payload.contact || '').trim();
+      const message = String(payload.message || payload.text || payload.query || payload.body || payload.received_message || '').trim();
+      const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
+      const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
+      const shouldPrefixGreeting = isAutoresponderGreeting(message);
+
+      const [settingsRows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+      const settings = settingsRows[0];
+      if (!settings || Number(settings.enabled) !== 1) {
+        return { replies: [] };
+      }
+
+      if (await isAutoresponderBlocked(sender)) {
+        return { replies: [] };
+      }
+
+      if (isGroup) {
+        return { replies: [] };
+      }
+
+      const [conversationRows] = await pool.query(
+        'SELECT paused_until FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+        [senderKey]
+      );
+      const pausedUntil = conversationRows[0]?.paused_until ? new Date(conversationRows[0].paused_until) : null;
+      if (pausedUntil && pausedUntil.getTime() > Date.now()) {
+        await touchAutoresponderConversation(senderKey);
+        return { replies: [] };
+      }
+
+      const replyLimit = Number(settings.max_replies_per_conversation) > 0
+        ? Number(settings.max_replies_per_conversation)
+        : 20;
+      const replyWindowHours = Number(settings.max_replies_window_hours) > 0
+        ? Number(settings.max_replies_window_hours)
+        : 24;
+      const recentReplyCount = await getAutoresponderReplyCount(senderKey, replyWindowHours);
+      if (recentReplyCount >= replyLimit) {
+        await touchAutoresponderConversation(senderKey);
+        return { replies: [] };
+      }
+
+      const numberedChoice = getAutoresponderNumberedChoice(message);
+      if (numberedChoice && Number(settings.use_numbered_lists) === 1) {
+        const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
+        const selectedOption = Array.isArray(options) ? options[numberedChoice - 1] : null;
+        if (selectedOption?.id) {
+          const product = await findAutoresponderProductById(selectedOption.id);
+          const productDetailText = await formatAutoresponderProductDetailReply(product, settings);
+          const replyText = formatAutoresponderReply(productDetailText, settings, false);
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'numbered_choice',
+            replyText,
+            matchedCount: product ? 1 : 0,
+            matchedProducts: [selectedOption],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      if (isAutoresponderMoreRequest(message) && Number(settings.use_numbered_lists) === 1) {
+        const context = await getAutoresponderOptionsContext(senderKey, settings.numbered_list_validity_minutes);
+        const pagination = context.pagination;
+        if (pagination?.source && pagination.hasMore) {
+          const pageSize = Number(pagination.limit) > 0 ? Number(pagination.limit) : AUTORESPONDER_PRODUCT_PAGE_SIZE;
+          const nextOffset = Number(pagination.offset || 0) + pageSize;
+          const rows = pagination.source === 'tag'
+            ? await findAutoresponderProductsByTag(pagination.tagId, pageSize + 1, nextOffset)
+            : await findAutoresponderProductsByTokens(pagination.tokens || [], pageSize + 1, nextOffset);
+          const products = rows.slice(0, pageSize);
+          const hasMore = rows.length > pageSize;
+          if (products.length > 0) {
+            const productOptions = buildAutoresponderProductOptions(products);
+            const keyword = pagination.source === 'tag'
+              ? (pagination.keyword || 'mais produtos')
+              : (pagination.tokens || []).join(' ');
+            const total = Number(pagination.total || 0) > 0
+              ? Number(pagination.total)
+              : (pagination.source === 'tag'
+                ? await countAutoresponderProductsByTag(pagination.tagId)
+                : await countAutoresponderProductsByTokens(pagination.tokens || []));
+            const productReplyText = `${await formatAutoresponderProductSearchReply(products, keyword, settings, { offset: nextOffset, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`;
+            const replyText = formatAutoresponderReply(productReplyText, settings, false);
+
+            await logAutoresponderReply({
+              sender: senderKey,
+              message,
+              intent: 'more_products',
+              replyText,
+              matchedCount: products.length,
+              matchedProducts: productOptions,
+            });
+            await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+              ...pagination,
+              offset: nextOffset,
+              limit: pageSize,
+              total,
+              hasMore,
+            });
+
+            return { replies: [{ message: replyText }] };
+          }
+        }
+      }
+
+      if (isAutoresponderHumanRequest(message)) {
+        const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
+        const storeStatus = await getCachedAutoresponderStoreStatus();
+        const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
+          ? (settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
+          : (settings.human_message_out_of_hours || settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS);
+        const replyText = formatAutoresponderReply(humanReplyText, settings, shouldPrefixGreeting);
+
+        await pool.query(
+          `INSERT INTO autoresponder_logs
+            (sender, question, intent, matched_count, reply_text, response_time_ms, is_group)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [senderKey, message || null, 'human_request', 0, replyText, 0, 0]
+        );
+
+        await pool.query(
+          `INSERT INTO autoresponder_conversations
+            (sender, last_message_at, last_bot_reply_at, total_messages, paused_until, pause_reason)
+           VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'human_request')
+           ON DUPLICATE KEY UPDATE
+             last_message_at = CURRENT_TIMESTAMP,
+             last_bot_reply_at = CURRENT_TIMESTAMP,
+             total_messages = total_messages + 1,
+             paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+             pause_reason = 'human_request'`,
+          [senderKey, pauseMinutes, pauseMinutes]
+        );
+
+        return { replies: [{ message: replyText }] };
+      }
+
+      const matchedRule = await findAutoresponderRuleMatch(message);
+      if (matchedRule) {
+        await pool.query(
+          'UPDATE autoresponder_rules SET hits = hits + 1 WHERE id = ?',
+          [matchedRule.id]
+        );
+
+        if (String(matchedRule.reply_type || 'text') === 'product_by_tag') {
+          const pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE;
+          const rows = await findAutoresponderProductsByTag(matchedRule.reply_tag_id, pageSize + 1);
+          const products = rows.slice(0, pageSize);
+          const hasMore = rows.length > pageSize;
+          const total = await countAutoresponderProductsByTag(matchedRule.reply_tag_id);
+          const productOptions = buildAutoresponderProductOptions(products);
+          const productReplyText = appendAutoresponderRuleAttachment(
+            `${await formatAutoresponderProductSearchReply(products, matchedRule.reply_text || matchedRule.name || 'produtos', settings, { offset: 0, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`,
+            matchedRule
+          );
+          const replyText = formatAutoresponderReply(productReplyText, settings, shouldPrefixGreeting);
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'rule_product_tag',
+            replyText,
+            matchedCount: products.length,
+            matchedRuleId: matchedRule.id,
+            matchedProducts: productOptions,
+          });
+          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+            source: 'tag',
+            tagId: matchedRule.reply_tag_id,
+            keyword: matchedRule.reply_text || 'produtos',
+            offset: 0,
+            limit: pageSize,
+            total,
+            hasMore,
+          });
+          await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
+
+          return { replies: [{ message: replyText }] };
+        }
+
+        if (String(matchedRule.reply_type || 'text') === 'product_search') {
+          const pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE;
+          const ruleSearchTokens = extractAutoresponderProductSearchTokens(matchedRule.reply_search_query);
+          const rows = await findAutoresponderProductsByTokens(ruleSearchTokens, pageSize + 1);
+          const products = rows.slice(0, pageSize);
+          const hasMore = rows.length > pageSize;
+          const total = await countAutoresponderProductsByTokens(ruleSearchTokens);
+          const productOptions = buildAutoresponderProductOptions(products);
+          const productReplyText = appendAutoresponderRuleAttachment(
+            `${await formatAutoresponderProductSearchReply(products, matchedRule.reply_search_query, settings, { offset: 0, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`,
+            matchedRule
+          );
+          const replyText = formatAutoresponderReply(productReplyText, settings, shouldPrefixGreeting);
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'rule_product_search',
+            replyText,
+            matchedCount: products.length,
+            matchedRuleId: matchedRule.id,
+            matchedProducts: productOptions,
+          });
+          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+            source: 'search',
+            tokens: ruleSearchTokens,
+            offset: 0,
+            limit: pageSize,
+            total,
+            hasMore,
+          });
+          await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
+
+          return { replies: [{ message: replyText }] };
+        }
+
+        const replyText = formatAutoresponderReply(
+          appendAutoresponderRuleAttachment(matchedRule.reply_text, matchedRule),
+          settings,
+          shouldPrefixGreeting
+        );
+
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'rule_text',
+          replyText,
+          matchedCount: 1,
+          matchedRuleId: matchedRule.id,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
+
+        return { replies: [{ message: replyText }] };
+      }
+
+      const productTagMatch = findAutoresponderProductTagKeyword(message, settings);
+      if (productTagMatch) {
+        const pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE;
+        const rows = await findAutoresponderProductsByTag(productTagMatch.tagId, pageSize + 1);
+        const products = rows.slice(0, pageSize);
+        const hasMore = rows.length > pageSize;
+        const total = await countAutoresponderProductsByTag(productTagMatch.tagId);
+        const productOptions = buildAutoresponderProductOptions(products);
+        const productReplyText = `${await formatAutoresponderProductSearchReply(products, productTagMatch.keyword, settings, { offset: 0, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`;
+        const replyText = formatAutoresponderReply(productReplyText, settings, shouldPrefixGreeting);
+
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'product_tag',
+          replyText,
+          matchedCount: products.length,
+          matchedProducts: productOptions,
+        });
+        await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+          source: 'tag',
+          tagId: productTagMatch.tagId,
+          keyword: productTagMatch.keyword,
+          offset: 0,
+          limit: pageSize,
+          total,
+          hasMore,
+        });
+
+        return { replies: [{ message: replyText }] };
+      }
+
+      const productSearchTokens = extractAutoresponderProductSearchTokens(message);
+      if (productSearchTokens.length > 0) {
+        const pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE;
+        const rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
+        const products = rows.slice(0, pageSize);
+        const hasMore = rows.length > pageSize;
+        if (products.length > 0) {
+          const total = await countAutoresponderProductsByTokens(productSearchTokens);
+          const productOptions = buildAutoresponderProductOptions(products);
+          const productReplyText = `${await formatAutoresponderProductSearchReply(products, productSearchTokens.join(' '), settings, { offset: 0, total })}\n\n${formatAutoresponderProductReplyInstructions(hasMore)}`;
+          const replyText = formatAutoresponderReply(productReplyText, settings, shouldPrefixGreeting);
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'product_search',
+            replyText,
+            matchedCount: products.length,
+            matchedProducts: productOptions,
+          });
+          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+            source: 'search',
+            tokens: productSearchTokens,
+            offset: 0,
+            limit: pageSize,
+            total,
+            hasMore,
+          });
+
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      const fallbackState = await getAutoresponderFallbackState(senderKey);
+      const nextFallbackCount = fallbackState.consecutiveFallbacks + 1;
+      const fallbackReply = getAutoresponderFallbackReply(settings, nextFallbackCount);
+      const replyText = formatAutoresponderReply(fallbackReply.replyText, settings, shouldPrefixGreeting);
+      const autoPauseMinutes = Number(settings.auto_pause_fallback_minutes) > 0
+        ? Number(settings.auto_pause_fallback_minutes)
+        : 30;
+
+      await pool.query(
+        `INSERT INTO autoresponder_logs
+          (sender, question, intent, matched_count, reply_text, response_time_ms, is_group)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [senderKey, message || null, 'fallback', 0, replyText, 0, 0]
+      );
+
+      if (fallbackReply.shouldAutoPause) {
+        await pool.query(
+          `INSERT INTO autoresponder_conversations
+            (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks, paused_until, pause_reason)
+           VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'auto_fallback')
+           ON DUPLICATE KEY UPDATE
+             last_message_at = CURRENT_TIMESTAMP,
+             last_bot_reply_at = CURRENT_TIMESTAMP,
+             total_messages = total_messages + 1,
+             consecutive_fallbacks = ?,
+             paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+             pause_reason = 'auto_fallback'`,
+          [senderKey, nextFallbackCount, autoPauseMinutes, nextFallbackCount, autoPauseMinutes]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO autoresponder_conversations
+            (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks)
+           VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?)
+           ON DUPLICATE KEY UPDATE
+             last_message_at = CURRENT_TIMESTAMP,
+             last_bot_reply_at = CURRENT_TIMESTAMP,
+             total_messages = total_messages + 1,
+             consecutive_fallbacks = ?`,
+          [senderKey, nextFallbackCount, nextFallbackCount]
+        );
+      }
+
+      return {
+        replies: [{ message: replyText }],
+      };
+    } catch (err) {
+      console.error('[autoresponder] webhook failed:', err);
+      return {
+        replies: [
+          {
+            message: 'Tivemos uma instabilidade no atendimento automatico. Um atendente vai te responder em breve.',
+          },
+        ],
+      };
+    }
+  },
+});
+
 // POST /products/:id/upload-image  (multipart/form-data, campo "file")
 // Retorna: { url: "https://api.xiaomipetrolina.com.br/images/products/:id/img-N.webp" }
 fastify.post('/products/:id/upload-image', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -1841,6 +3839,7 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
   if (existing.length === 0) return reply.code(404).send({ error: 'No company settings found' });
   params.push(existing[0].id);
   await pool.query(`UPDATE company_settings SET ${updates.join(', ')} WHERE id = ?`, params);
+  clearAutoresponderStoreStatusCache();
   const [rows] = await pool.query('SELECT * FROM company_settings WHERE id = ?', [existing[0].id]);
   return rows[0];
 });
@@ -2799,6 +4798,68 @@ async function synoApiGet(apiPath) {
   return synoHttpGet(urlObj, apiPath);
 }
 
+async function uploadAutoresponderAttachmentToSynology({ fileName, fileBuf }) {
+  const folder = AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER;
+  if (!SYNO_FOLDERS[folder]) {
+    throw new Error(`Invalid autoresponder Synology folder: ${folder}`);
+  }
+
+  const folderPath = SYNO_FOLDERS[folder];
+  const url = `${SYNO_CDN[folder]}/${fileName}`;
+  const sid = await synoLogin();
+  const boundary = `MDVAutoresponderBoundary${Date.now()}`;
+
+  const textFields = [
+    ['api', 'SYNO.FileStation.Upload'],
+    ['version', '2'],
+    ['method', 'upload'],
+    ['path', folderPath],
+    ['create_parents', 'true'],
+    ['overwrite', 'true'],
+    ['_sid', sid],
+  ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
+
+  const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+  const body = Buffer.concat([Buffer.from(textFields), Buffer.from(fileHeader), fileBuf, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+  const https = require('https');
+  const urlObj = new URL(SYNO_URL);
+
+  const result = await new Promise((resolve, reject) => {
+    const options = {
+      hostname: urlObj.hostname,
+      port: parseInt(urlObj.port) || 5001,
+      path: '/webapi/entry.cgi',
+      method: 'POST',
+      rejectUnauthorized: false,
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length,
+      },
+    };
+    const r = https.request(options, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(d));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    r.on('error', reject);
+    r.setTimeout(30000, () => r.destroy(new Error('Synology upload timeout for autoresponder attachment')));
+    r.write(body);
+    r.end();
+  });
+
+  if (!result.success) {
+    throw new Error(`Synology upload failed: ${JSON.stringify(result.error || result)}`);
+  }
+
+  return { ok: true, url, filename: fileName, storage: 'synology' };
+}
+
 
 
 
@@ -3411,6 +5472,143 @@ async function runMigrations() {
       UNIQUE KEY idx_fee_unique (method, installments, channel)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_settings (
+      id INT PRIMARY KEY,
+      enabled TINYINT(1) NOT NULL DEFAULT 0,
+      human_message_in_hours TEXT NULL,
+      human_message_out_of_hours TEXT NULL,
+      human_pause_minutes INT NOT NULL DEFAULT 60,
+      auto_pause_fallback_threshold INT NOT NULL DEFAULT 3,
+      auto_pause_fallback_minutes INT NOT NULL DEFAULT 30,
+      auto_pause_fallback_message TEXT NULL,
+      max_replies_per_conversation INT NOT NULL DEFAULT 20,
+      max_replies_window_hours INT NOT NULL DEFAULT 24,
+      greeting_prefix TEXT NULL,
+      fallback_message TEXT NULL,
+      send_product_images TINYINT(1) NOT NULL DEFAULT 1,
+      max_images_per_response INT NOT NULL DEFAULT 1,
+      use_numbered_lists TINYINT(1) NOT NULL DEFAULT 1,
+      numbered_list_threshold INT NOT NULL DEFAULT 2,
+      numbered_list_validity_minutes INT NOT NULL DEFAULT 30,
+      product_tag_keywords JSON NULL,
+      archive_to_synology TINYINT(1) NOT NULL DEFAULT 1,
+      archive_after_days INT NOT NULL DEFAULT 7,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    INSERT IGNORE INTO autoresponder_settings (
+      id,
+      enabled,
+      human_message_in_hours,
+      human_message_out_of_hours,
+      auto_pause_fallback_message,
+      greeting_prefix,
+      fallback_message,
+      product_tag_keywords
+    ) VALUES (
+      1,
+      0,
+      '${AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS}',
+      '${AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS}',
+      '${AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE}',
+      'Ola!',
+      '${AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE}',
+      JSON_OBJECT()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_rules (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      match_type ENUM('any_keyword','all_keywords','regex','exact') NOT NULL DEFAULT 'any_keyword',
+      pattern TEXT NOT NULL,
+      reply_type ENUM('text','product_by_tag','product_search') NOT NULL DEFAULT 'text',
+      reply_text TEXT NULL,
+      reply_tag_id INT NULL,
+      reply_search_query VARCHAR(255) NULL,
+      attachment_url VARCHAR(500) NULL,
+      attachment_caption TEXT NULL,
+      auto_apply_tag_id INT NULL,
+      tag_ids JSON NULL,
+      priority INT NOT NULL DEFAULT 0,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      hits INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_active_priority (active, priority)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_tags (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(50) NOT NULL UNIQUE,
+      color VARCHAR(7) NOT NULL DEFAULT '#6b7280',
+      description VARCHAR(200) NULL,
+      scopes SET('rule','conversation','product') NOT NULL,
+      show_on_bot TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_logs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      sender VARCHAR(30) NULL,
+      question TEXT NULL,
+      intent VARCHAR(30) NULL,
+      matched_rule_id BIGINT NULL,
+      matched_products JSON NULL,
+      matched_count INT NOT NULL DEFAULT 0,
+      reply_text TEXT NULL,
+      response_time_ms INT NULL,
+      is_group TINYINT(1) NOT NULL DEFAULT 0,
+      INDEX idx_created (created_at),
+      INDEX idx_unmatched (matched_count, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_conversations (
+      sender VARCHAR(30) PRIMARY KEY,
+      first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_bot_reply_at TIMESTAMP NULL,
+      paused_until TIMESTAMP NULL,
+      pause_reason VARCHAR(50) NULL,
+      paused_by_user_id INT NULL,
+      consecutive_fallbacks INT NOT NULL DEFAULT 0,
+      total_messages INT NOT NULL DEFAULT 0,
+      tag_ids JSON NULL,
+      last_options_offered JSON NULL,
+      last_options_at TIMESTAMP NULL,
+      INDEX idx_paused (paused_until)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_blocklist (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      pattern VARCHAR(100) NOT NULL,
+      pattern_type ENUM('exact','prefix','regex') NOT NULL DEFAULT 'exact',
+      contact_name VARCHAR(255) NULL,
+      reason TEXT NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_by_user_id INT NULL,
+      INDEX idx_active (active)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await addColumnIfMissing('products', 'tag_ids', 'JSON NULL');
+  console.log('[migration] autoresponder phase 1A tables: OK');
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS field_presets (
       id          CHAR(36)     PRIMARY KEY DEFAULT (UUID()),
@@ -3473,4 +5671,7 @@ runMigrations().then(() => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);
   });
+}).catch((err) => {
+  console.error('[startup] migration failed:', err);
+  process.exit(1);
 });

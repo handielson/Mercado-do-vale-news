@@ -46,6 +46,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/coupons', icon: <Ticket size={18} />, label: 'Cupons', keywords: 'codigo desconto' },
         { to: '/admin/cashback', icon: <Coins size={18} />, label: 'Moedas do Vale', keywords: 'cashback pontos fidelidade' },
         { to: '/admin/settings/whatsapp', icon: <MessageCircle size={18} />, label: 'WhatsApp', keywords: 'atendimento contato' },
+        { to: '/admin/atendimento-automatico', icon: <Bot size={18} />, label: 'AutoResponder', keywords: 'whatsapp autoresponder respostas automaticas bot atendimento' },
         { to: '/admin/settings/telegram', icon: <Bot size={18} />, label: 'Automações Bot', keywords: 'robo respostas' },
         { to: '/admin/settings/messages', icon: <MessageCircle size={18} />, label: 'Mensagens Auto', keywords: 'automaticas template' },
         { to: '/admin/feedbacks', icon: <MessageSquareDashed size={18} />, label: 'Fale Conosco', keywords: 'SAC contato reclamacoes' },
