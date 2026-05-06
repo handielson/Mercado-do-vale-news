@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { X, Printer, Settings } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { X, Printer, Settings, Package } from 'lucide-react';
 import Barcode from 'react-barcode';
 import { Product } from '../../types/product';
 import { useReactToPrint } from 'react-to-print';
@@ -10,6 +10,105 @@ interface LabelPrintModalProps {
     product: Product | null;
 }
 
+interface LabelSize {
+    id: string;
+    label: string;
+    width: number;  // mm
+    height: number; // mm
+    fontStore: number;
+    fontName: number;
+    fontPrice: number;
+    fontPriceCurrency: number;
+    barcodeWidth: number;
+    barcodeHeight: number;
+    barcodeFont: number;
+    padding: number; // mm
+}
+
+// Tamanhos comuns. As opções até 50mm de largura são compatíveis com a Marklife P50/P50S.
+const LABEL_SIZES: LabelSize[] = [
+    { id: '40x30',  label: '40 × 30 mm  (P50S padrão)', width: 40, height: 30, fontStore: 9,  fontName: 7,  fontPrice: 13, fontPriceCurrency: 6,  barcodeWidth: 0.9, barcodeHeight: 18, barcodeFont: 8,  padding: 1 },
+    { id: '50x30',  label: '50 × 30 mm  (P50S)',        width: 50, height: 30, fontStore: 10, fontName: 8,  fontPrice: 14, fontPriceCurrency: 7,  barcodeWidth: 1.0, barcodeHeight: 20, barcodeFont: 9,  padding: 1 },
+    { id: '30x40',  label: '30 × 40 mm  (P50S)',        width: 30, height: 40, fontStore: 8,  fontName: 7,  fontPrice: 12, fontPriceCurrency: 6,  barcodeWidth: 0.8, barcodeHeight: 24, barcodeFont: 7,  padding: 0.8 },
+    { id: '40x25',  label: '40 × 25 mm  (P50S)',        width: 40, height: 25, fontStore: 8,  fontName: 7,  fontPrice: 12, fontPriceCurrency: 6,  barcodeWidth: 0.9, barcodeHeight: 14, barcodeFont: 7,  padding: 0.8 },
+    { id: '30x20',  label: '30 × 20 mm  (P50S)',        width: 30, height: 20, fontStore: 7,  fontName: 6,  fontPrice: 10, fontPriceCurrency: 5,  barcodeWidth: 0.7, barcodeHeight: 12, barcodeFont: 6,  padding: 0.6 },
+    { id: '60x40',  label: '60 × 40 mm',                width: 60, height: 40, fontStore: 11, fontName: 9,  fontPrice: 18, fontPriceCurrency: 8,  barcodeWidth: 1.2, barcodeHeight: 26, barcodeFont: 10, padding: 1.5 },
+    { id: '80x40',  label: '80 × 40 mm',                width: 80, height: 40, fontStore: 13, fontName: 10, fontPrice: 22, fontPriceCurrency: 9,  barcodeWidth: 1.5, barcodeHeight: 30, barcodeFont: 11, padding: 1.5 },
+    { id: '80x50',  label: '80 × 50 mm',                width: 80, height: 50, fontStore: 14, fontName: 11, fontPrice: 24, fontPriceCurrency: 10, barcodeWidth: 1.6, barcodeHeight: 40, barcodeFont: 12, padding: 2 },
+];
+
+const MAX_COPIES = 500;
+
+interface LabelContentProps {
+    size: LabelSize;
+    storeName: string;
+    labelName: string;
+    showPrice: boolean;
+    labelPrice: string;
+    barcodeValue: string;
+}
+
+const LabelContent: React.FC<LabelContentProps> = ({ size, storeName, labelName, showPrice, labelPrice, barcodeValue }) => (
+    <div
+        style={{
+            width: `${size.width}mm`,
+            height: `${size.height}mm`,
+            padding: `${size.padding}mm`,
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            textAlign: 'center',
+            background: '#fff',
+            color: '#000',
+            overflow: 'hidden',
+        }}
+    >
+        <div style={{ width: '100%' }}>
+            <div style={{ fontSize: `${size.fontStore}px`, fontWeight: 700, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {storeName}
+            </div>
+            <div
+                style={{
+                    fontSize: `${size.fontName}px`,
+                    fontWeight: 500,
+                    textTransform: 'uppercase',
+                    lineHeight: 1.1,
+                    marginTop: '1px',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                }}
+            >
+                {labelName || 'Sem Nome'}
+            </div>
+        </div>
+
+        {showPrice && (
+            <div style={{ fontWeight: 700, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '2px', fontSize: `${size.fontPrice}px`, lineHeight: 1 }}>
+                <span style={{ fontSize: `${size.fontPriceCurrency}px`, marginTop: '3px' }}>R$</span>
+                {labelPrice ? Number(labelPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}
+            </div>
+        )}
+
+        {barcodeValue && (
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                <Barcode
+                    value={barcodeValue}
+                    format="CODE128"
+                    width={size.barcodeWidth}
+                    height={size.barcodeHeight}
+                    displayValue={true}
+                    fontSize={size.barcodeFont}
+                    margin={0}
+                />
+            </div>
+        )}
+    </div>
+);
+
 export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClose, product }) => {
     const [labelName, setLabelName] = useState(product?.name || '');
     const [labelPrice, setLabelPrice] = useState(product ? (product.price_retail / 100).toFixed(2) : '');
@@ -17,30 +116,75 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     const [barcodeValue, setBarcodeValue] = useState(
         product?.eans && product.eans.length > 0 ? product.eans[0] : product?.sku || ''
     );
+    const [copies, setCopies] = useState<number>(1);
+    const [sizeId, setSizeId] = useState<string>(LABEL_SIZES[0].id);
 
-    // Atualizar os estados internos quando o produto mudar
     React.useEffect(() => {
         if (product) {
             setLabelName(product.name);
             setLabelPrice((product.price_retail / 100).toFixed(2));
             setBarcodeValue(product.eans && product.eans.length > 0 ? product.eans[0] : product.sku);
+            setCopies(1);
         }
     }, [product]);
 
+    const size = useMemo(
+        () => LABEL_SIZES.find((s) => s.id === sizeId) || LABEL_SIZES[0],
+        [sizeId]
+    );
+
+    const stockQty = product?.stock_quantity ?? 0;
+
     const printRef = useRef<HTMLDivElement>(null);
+
+    const pageStyle = useMemo(
+        () => `
+            @page {
+                size: ${size.width}mm ${size.height}mm;
+                margin: 0;
+            }
+            @media print {
+                html, body {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    background: #fff !important;
+                }
+                .label-print-page {
+                    width: ${size.width}mm;
+                    height: ${size.height}mm;
+                    page-break-after: always;
+                    break-after: page;
+                    overflow: hidden;
+                }
+                .label-print-page:last-child {
+                    page-break-after: auto;
+                    break-after: auto;
+                }
+            }
+        `,
+        [size]
+    );
 
     const handlePrint = useReactToPrint({
         contentRef: printRef,
         documentTitle: `Etiqueta_${product?.sku || 'Produto'}`,
+        pageStyle,
     });
 
     if (!isOpen || !product) return null;
+
+    const safeCopies = Math.max(1, Math.min(MAX_COPIES, Math.floor(copies || 1)));
+
+    const handleUseStock = () => {
+        if (stockQty > 0) {
+            setCopies(Math.min(MAX_COPIES, stockQty));
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
 
-                {/* Header */}
                 <div className="flex justify-between items-center p-6 border-b border-slate-100">
                     <div>
                         <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -61,11 +205,28 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
 
                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
 
-                    {/* Settings Sidebar */}
                     <div className="w-full md:w-1/2 p-6 border-r border-slate-100 overflow-y-auto space-y-4 bg-slate-50/50">
-                        <div className="flex items-center gap-2 mb-4 text-slate-700 font-semibold">
+                        <div className="flex items-center gap-2 mb-2 text-slate-700 font-semibold">
                             <Settings className="w-4 h-4" />
                             <span>Configurações da Etiqueta</span>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Tamanho da Etiqueta
+                            </label>
+                            <select
+                                value={sizeId}
+                                onChange={(e) => setSizeId(e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                            >
+                                {LABEL_SIZES.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.label}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Defina o mesmo tamanho de papel na janela de impressão.
+                            </p>
                         </div>
 
                         <div>
@@ -90,6 +251,35 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                                 onChange={(e) => setBarcodeValue(e.target.value)}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
                             />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Quantidade de Cópias
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={MAX_COPIES}
+                                    value={copies}
+                                    onChange={(e) => setCopies(Number(e.target.value))}
+                                    className="w-24 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleUseStock}
+                                    disabled={stockQty <= 0}
+                                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 bg-white rounded-lg text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title={stockQty > 0 ? `Usar quantidade em estoque (${stockQty})` : 'Sem estoque disponível'}
+                                >
+                                    <Package className="w-4 h-4" />
+                                    Estoque ({stockQty})
+                                </button>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Será impressa 1 etiqueta para cada cópia. Máximo {MAX_COPIES}.
+                            </p>
                         </div>
 
                         <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg">
@@ -121,57 +311,31 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                         )}
                     </div>
 
-                    {/* Preview Area */}
                     <div className="w-full md:w-1/2 p-6 bg-slate-100 flex flex-col">
                         <div className="mb-4 text-sm font-medium text-slate-500 flex justify-between items-center">
                             <span>Visualização:</span>
-                            <span className="text-xs px-2 py-1 bg-slate-200 rounded-md">80mm x 40mm (Exemplo)</span>
+                            <span className="text-xs px-2 py-1 bg-slate-200 rounded-md">{size.label}</span>
                         </div>
 
-                        {/* O contêiner de impressão */}
-                        <div className="flex-1 flex items-center justify-center border-2 border-dashed border-slate-300 rounded-xl bg-white p-4 overflow-hidden">
-                            <div
-                                className="bg-white shadow-sm border border-slate-200 flex flex-col items-center justify-center p-4"
-                                style={{
-                                    width: '80mm',
-                                    height: '50mm',
-                                    pageBreakInside: 'avoid'
-                                }}
-                            >
-                                {/* Este bloco será impresso */}
-                                <div ref={printRef} className="w-full h-full flex flex-col items-center justify-between text-center print:w-[80mm] print:h-[50mm] print:p-2 bg-white text-black">
-                                    <div className="w-full text-center">
-                                        <h1 className="font-bold text-xs truncate w-full" style={{ fontSize: '14px', lineHeight: '1.2' }}>Mercado do Vale</h1>
-                                        <p className="font-medium text-[10px] uppercase leading-tight mt-1 line-clamp-2" style={{ fontSize: '11px', maxHeight: '24px', overflow: 'hidden' }}>{labelName || 'Sem Nome'}</p>
-                                    </div>
-
-                                    {showPrice && (
-                                        <div className="font-bold my-1 flex items-start justify-center gap-1" style={{ fontSize: '24px' }}>
-                                            <span style={{ fontSize: '10px', marginTop: '4px' }}>R$</span>
-                                            {labelPrice ? Number(labelPrice).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '0,00'}
-                                        </div>
-                                    )}
-
-                                    {barcodeValue && (
-                                        <div className="w-full flex justify-center transform scale-90 mb-1">
-                                            <Barcode
-                                                value={barcodeValue}
-                                                format="CODE128"
-                                                width={1.5}
-                                                height={40}
-                                                displayValue={true}
-                                                fontSize={12}
-                                                margin={0}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
+                        <div className="flex-1 flex items-center justify-center border-2 border-dashed border-slate-300 rounded-xl bg-white p-4 overflow-auto">
+                            <div className="shadow-sm border border-slate-200">
+                                <LabelContent
+                                    size={size}
+                                    storeName="Mercado do Vale"
+                                    labelName={labelName}
+                                    showPrice={showPrice}
+                                    labelPrice={labelPrice}
+                                    barcodeValue={barcodeValue}
+                                />
                             </div>
                         </div>
+
+                        <p className="text-xs text-slate-500 mt-3 text-center">
+                            {safeCopies === 1 ? '1 etiqueta será impressa' : `${safeCopies} etiquetas serão impressas`}
+                        </p>
                     </div>
                 </div>
 
-                {/* Footer Buttons */}
                 <div className="p-4 border-t border-slate-100 bg-gray-50 flex justify-end gap-3">
                     <button
                         onClick={onClose}
@@ -180,7 +344,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                         Cancelar
                     </button>
                     <button
-                        onClick={handlePrint}
+                        onClick={() => handlePrint()}
                         className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
                     >
                         <Printer size={18} />
@@ -189,33 +353,23 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                 </div>
             </div>
 
-            {/* CSS para Impressão */}
-            <style>
-                {`
-                @media print {
-                    @page {
-                        size: 80mm 50mm; /* Tamanho comum de etiqueta */
-                        margin: 0;
-                    }
-                    body * {
-                        visibility: hidden;
-                    }
-                    #print-root, #print-root * {
-                        visibility: visible;
-                    }
-                    #print-root {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                        height: 100%;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                    }
-                }
-                `}
-            </style>
+            {/* Hidden print container — rendered off-screen so react-to-print can clone it */}
+            <div style={{ position: 'fixed', left: '-10000px', top: 0, opacity: 0, pointerEvents: 'none' }} aria-hidden="true">
+                <div ref={printRef}>
+                    {Array.from({ length: safeCopies }).map((_, i) => (
+                        <div key={i} className="label-print-page">
+                            <LabelContent
+                                size={size}
+                                storeName="Mercado do Vale"
+                                labelName={labelName}
+                                showPrice={showPrice}
+                                labelPrice={labelPrice}
+                                barcodeValue={barcodeValue}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 };
