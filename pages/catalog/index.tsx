@@ -784,18 +784,7 @@ function CatalogContent() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Header com busca e controles */}
                 <div className="mb-6">
-                    <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-4">
-                        <div>
-                        </div>
-
-                        {/* Share and View Controls */}
-                        <div className="flex items-center gap-3">
-                            {/* Share Catalog Button */}
-                            <ShareCatalogButton categoryId={filters.categories[0] || undefined} />
-                        </div>
-                    </div>
-
-                    {/* Barra de busca + Filtros + Toggle de colunas */}
+                    {/* Barra de busca + Filtros + Toggle de colunas + Compartilhar */}
                     <div className="flex items-stretch gap-2">
                         {/* Busca — escondida no mobile (coberta pela sticky bar acima) */}
                         <div className="hidden sm:flex flex-1 relative">
@@ -827,15 +816,16 @@ function CatalogContent() {
                             onFiltersChange={setFilters}
                             filterStats={filterStats || { brands: [] }}
                         />
+                        <ShareCatalogButton categoryId={filters.categories[0] || undefined} />
                     </div>
 
                     <nav
                         aria-label="Colecoes de produtos"
-                        className="mt-4 flex flex-wrap gap-2"
+                        className="mt-4 flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible -mx-4 px-4 sm:mx-0 sm:px-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                     >
                         <Link
                             to="/produtos"
-                            className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
+                            className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
                                 !isCollectionPage && isAllProductsPage
                                     ? 'border-slate-900 bg-slate-900 text-white'
                                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
@@ -847,7 +837,7 @@ function CatalogContent() {
                             <Link
                                 key={collection.key}
                                 to={collection.path}
-                                className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
+                                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
                                     activeCollection?.key === collection.key
                                         ? 'border-slate-900 bg-slate-900 text-white'
                                         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
