@@ -11,7 +11,7 @@ import { getSupabaseClient } from '../services/lazySupabase'
 
 const SupabaseAuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const COMPANY_ID = import.meta.env.VITE_COMPANY_ID || 'default-company-id'
+const COMPANY_ID = import.meta.env.VITE_COMPANY_ID || '9717131e-7b14-4aec-84a4-4317c0489985'
 const AUTH_CALLBACK_PATH = '/auth/callback'
 const PRODUCTION_ORIGIN = 'https://www.mercadodovale.com.br'
 
@@ -31,6 +31,35 @@ const notify = {
     info: (message: string, options?: Record<string, unknown>) => {
         import('sonner').then(({ toast }) => toast.info(message, options))
     },
+}
+
+// Traduz mensagens comuns de erro do Supabase Auth para PT-BR
+const translateAuthError = (message: string): string => {
+    if (!message) return 'Erro desconhecido. Tente novamente.'
+    const msg = message.toLowerCase()
+
+    if (msg.includes('password is known to be weak') || msg.includes('pwned'))
+        return 'Esta senha é conhecida por ser fraca e fácil de adivinhar. Escolha uma senha diferente.'
+    if (msg.includes('password should be at least'))
+        return 'A senha deve ter pelo menos 6 caracteres.'
+    if (msg.includes('user already registered') || msg.includes('already been registered'))
+        return 'Este e-mail já está cadastrado. Faça login ou use outro e-mail.'
+    if (msg.includes('invalid login credentials'))
+        return 'E-mail ou senha incorretos.'
+    if (msg.includes('email not confirmed'))
+        return 'E-mail ainda não confirmado. Verifique sua caixa de entrada.'
+    if (msg.includes('invalid email') || msg.includes('email address') && msg.includes('invalid'))
+        return 'E-mail inválido. Verifique e tente novamente.'
+    if (msg.includes('rate limit') || msg.includes('too many requests'))
+        return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.'
+    if (msg.includes('signup is disabled') || msg.includes('signups not allowed'))
+        return 'Cadastro temporariamente desabilitado. Tente novamente mais tarde.'
+    if (msg.includes('network') || msg.includes('failed to fetch'))
+        return 'Falha de conexão. Verifique sua internet e tente novamente.'
+    if (msg.includes('invalid input syntax for type uuid'))
+        return 'Erro de configuração interna. Contate o suporte.'
+
+    return message
 }
 
 export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -319,7 +348,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             notify.success('Conta ativada com sucesso!')
         } catch (error: any) {
             console.error('Activate account error:', error)
-            notify.error(`Erro ao ativar conta: ${error.message}`)
+            notify.error(`Erro ao ativar conta: ${translateAuthError(error.message)}`)
             throw error
         }
     }
@@ -369,7 +398,7 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
             notify.success('Conta criada com sucesso!')
         } catch (error: any) {
             console.error('Create account error:', error)
-            notify.error(`Erro ao criar conta: ${error.message}`)
+            notify.error(`Erro ao criar conta: ${translateAuthError(error.message)}`)
             throw error
         }
     }
