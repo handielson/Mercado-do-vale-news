@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { User, Mail, Lock, CreditCard, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
@@ -17,6 +17,8 @@ export const ClienteRegisterPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const nextPath = searchParams.get('next') || '/';
     const { createAccount, signInWithGoogle } = useAuth();
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,9 +95,9 @@ export const ClienteRegisterPage: React.FC = () => {
                 customer_type: 'retail' // Always retail on self-registration
             });
             toast.success('Bem-vindo ao Mercado do Vale! 🎉', {
-                description: 'Sua conta foi criada. Faça login e comece a acumular Moedas do Vale!'
+                description: 'Sua conta foi criada e você já está logado. Comece a acumular Moedas do Vale!'
             });
-            navigate('/cliente/login');
+            navigate(nextPath);
         } catch {
             // Toast já é mostrado pelo contexto em PT-BR
         } finally {

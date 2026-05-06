@@ -20,13 +20,22 @@ export const ClienteLoginPage: React.FC = () => {
     const nextPath = searchParams.get('next') || '/';
     const { signInWithEmail, signInWithCpf, signInWithGoogle } = useAuth();
 
-    // Máscar CPF: 000.000.000-00
+    // Máscara dinâmica: CPF (000.000.000-00) ou CNPJ (00.000.000/0000-00)
     const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
-        const formatted = digits
-            .replace(/(\d{3})(\d)/, '$1.$2')
-            .replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-            .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
+        const digits = e.target.value.replace(/\D/g, '').slice(0, 14);
+        let formatted = digits;
+        if (digits.length <= 11) {
+            formatted = digits
+                .replace(/(\d{3})(\d)/, '$1.$2')
+                .replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+                .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
+        } else {
+            formatted = digits
+                .replace(/^(\d{2})(\d)/, '$1.$2')
+                .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+                .replace(/\.(\d{3})(\d)/, '.$1/$2')
+                .replace(/(\d{4})(\d)/, '$1-$2');
+        }
         setCpf(formatted);
     };
 
@@ -47,7 +56,7 @@ export const ClienteLoginPage: React.FC = () => {
     const handleCpfLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         const digits = cpf.replace(/\D/g, '');
-        if (digits.length !== 11) { toast.error('CPF inválido'); return; }
+        if (digits.length !== 11 && digits.length !== 14) { toast.error('CPF/CNPJ inválido'); return; }
         if (!password) { toast.error('Digite sua senha'); return; }
         setLoading(true);
         try {
@@ -99,7 +108,7 @@ export const ClienteLoginPage: React.FC = () => {
                         }`}
                     >
                         <CreditCard size={16} />
-                        CPF
+                        CPF / CNPJ
                     </button>
                     <button
                         type="button"
@@ -119,14 +128,14 @@ export const ClienteLoginPage: React.FC = () => {
                 {activeTab === 'cpf' && (
                     <form onSubmit={handleCpfLogin} className="space-y-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-slate-700">CPF</label>
+                            <label className="text-sm font-semibold text-slate-700">CPF / CNPJ</label>
                             <div className="relative">
                                 <CreditCard className="absolute left-3 top-3 text-slate-400" size={18} />
                                 <input
                                     type="text"
                                     value={cpf}
                                     onChange={handleCpfChange}
-                                    placeholder="000.000.000-00"
+                                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
                                     inputMode="numeric"
                                     className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                                     required
@@ -159,7 +168,7 @@ export const ClienteLoginPage: React.FC = () => {
                         >
                             {loading ? (
                                 <><Loader2 className="animate-spin" size={20} /><span>Entrando...</span></>
-                            ) : 'Entrar com CPF'}
+                            ) : 'Entrar com CPF/CNPJ'}
                         </button>
                     </form>
                 )}
