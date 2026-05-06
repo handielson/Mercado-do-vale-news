@@ -224,29 +224,31 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                     </button>
                 </div>
 
-                {/* Items List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {items.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                            <ShoppingCart className="w-16 h-16 mb-4" />
-                            <p className="text-center">Nenhum item adicionado</p>
-                            <p className="text-sm text-center mt-2">
-                                Adicione produtos para criar um orçamento
-                            </p>
-                        </div>
-                    ) : (
-                        items.map((item) => (
-                            <CartItemCard
-                                key={item.id}
-                                item={item}
-                                onRemove={() => removeItem(item.id)}
-                            />
-                        ))
-                    )}
-                </div>
+                {/* Scrollable area: items + form fields + secondary actions */}
+                <div className="flex-1 overflow-y-auto">
+                    {/* Items List */}
+                    <div className="p-4 space-y-3">
+                        {items.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center min-h-[40vh] text-slate-400">
+                                <ShoppingCart className="w-16 h-16 mb-4" />
+                                <p className="text-center">Nenhum item adicionado</p>
+                                <p className="text-sm text-center mt-2">
+                                    Adicione produtos para criar um orçamento
+                                </p>
+                            </div>
+                        ) : (
+                            items.map((item) => (
+                                <CartItemCard
+                                    key={item.id}
+                                    item={item}
+                                    onRemove={() => removeItem(item.id)}
+                                />
+                            ))
+                        )}
+                    </div>
 
-                {/* Footer */}
-                {items.length > 0 && (
+                    {/* Form fields and secondary actions (only if items > 0) */}
+                    {items.length > 0 && (
                     <div className="p-4 border-t border-slate-200 space-y-3 bg-slate-50">
 
                         {/* Referral Field */}
@@ -356,15 +358,6 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                             </div>
                         )}
 
-                        {/* Main button: Open WhatsApp (user chooses recipient) */}
-                        <button
-                            onClick={handleSendQuote}
-                            disabled={!!referralError || isVerifyingReferral}
-                            className="w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            📱 Abrir WhatsApp ({items.length} {items.length === 1 ? 'item' : 'itens'})
-                        </button>
-
                         {/* Send to specific number (user can type) */}
                         <div className="space-y-1">
                             <label className="text-xs text-slate-600 font-medium">
@@ -409,6 +402,20 @@ export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
                             className="w-full py-2 px-4 border-2 border-red-300 text-red-600 font-medium rounded-lg hover:bg-red-50 transition-all"
                         >
                             Limpar Carrinho
+                        </button>
+                    </div>
+                    )}
+                </div>
+
+                {/* Sticky bottom: primary CTA */}
+                {items.length > 0 && (
+                    <div className="p-4 border-t border-slate-200 bg-white shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.08)]">
+                        <button
+                            onClick={handleSendQuote}
+                            disabled={!!referralError || isVerifyingReferral}
+                            className="w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 text-white font-semibold rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            📱 Abrir WhatsApp ({items.length} {items.length === 1 ? 'item' : 'itens'})
                         </button>
                     </div>
                 )}
