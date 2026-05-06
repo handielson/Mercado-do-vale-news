@@ -386,13 +386,20 @@ function formatAutoresponderContactSavedReply(name, googleResult) {
   return `Perfeito, ${name}! Vou deixar seu contato salvo aqui. ✅`;
 }
 
+function formatAutoresponderContactFollowUpReply() {
+  return 'Em que posso ajudar voce hoje? ✨';
+}
+
 async function confirmAutoresponderContactName(sender, name) {
   const googleResult = await createOrUpdateGoogleContact({ sender, name }).catch((err) => {
     console.warn('[autoresponder] google contact save failed:', err.message);
     return { ok: false, skipped: true, reason: 'google_contact_error' };
   });
   await saveAutoresponderConfirmedContactName(sender, name, googleResult);
-  return formatAutoresponderContactSavedReply(name, googleResult);
+  return [
+    formatAutoresponderContactSavedReply(name, googleResult),
+    formatAutoresponderContactFollowUpReply(),
+  ];
 }
 
 async function handleAutoresponderContactNameFlow({ sender, message, contactFirstName }) {
@@ -2171,15 +2178,17 @@ fastify.route({
 
       const contactFlowReply = await handleAutoresponderContactNameFlow({ sender: senderKey, message, contactFirstName });
       if (contactFlowReply) {
+        const contactFlowReplies = Array.isArray(contactFlowReply) ? contactFlowReply : [contactFlowReply];
+        const contactFlowReplyText = contactFlowReplies.join('\n\n');
         await logAutoresponderReply({
           sender: senderKey,
           message,
           intent: 'contact_name',
-          replyText: contactFlowReply,
-          matchedCount: 1,
+          replyText: contactFlowReplyText,
+          matchedCount: contactFlowReplies.length,
         });
         await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: contactFlowReply }] };
+        return { replies: contactFlowReplies.map((replyMessage) => ({ message: replyMessage })) };
       }
 
       if (isAutoresponderGreetingOnly(message)) {

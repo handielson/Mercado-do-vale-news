@@ -78,4 +78,16 @@ assert.match(
   'greeting contact prompts must be returned as a second Pro reply',
 );
 
+assert.match(
+  source,
+  /const contactFlowReplies = Array\.isArray\(contactFlowReply\)/,
+  'contact name flow must support multiple Pro replies',
+);
+
+assert.match(
+  source,
+  /formatAutoresponderContactFollowUpReply\(\)/,
+  'saved contact flow must add the help question after saving the contact',
+);
+
 console.log('autoresponder google contact flow static checks passed');
