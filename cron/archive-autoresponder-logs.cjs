@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const mysql = require('mysql2/promise');
 const dotenv = require('dotenv');
 const os = require('os');
+const { once } = require('events');
 
 for (const envPath of ['/var/www/mdv-api/.env', path.join(process.cwd(), '.env'), path.join(process.cwd(), '.env.local')]) {
   if (fs.existsSync(envPath)) dotenv.config({ path: envPath, override: false });
@@ -15,6 +16,7 @@ for (const envPath of ['/var/www/mdv-api/.env', path.join(process.cwd(), '.env')
 const ARCHIVE_ROOT = process.env.AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR || '/volume1/backups/autoresponder';
 const DRY_RUN = process.env.AUTORESPONDER_ARCHIVE_DRY_RUN === '1';
 const DELETE_ENABLED = process.env.AUTORESPONDER_ARCHIVE_DELETE_ENABLED === '1';
+const ARCHIVE_BATCH_SIZE = Math.max(1, Number.parseInt(process.env.AUTORESPONDER_ARCHIVE_BATCH_SIZE || '500', 10) || 500);
 
 function getYesterdayBrtDate(now = new Date()) {
   const brt = new Date(now.getTime() - 3 * 60 * 60 * 1000);
@@ -54,30 +56,97 @@ function normalizeRows(rows) {
   });
 }
 
+function normalizeRow(row) {
+  return normalizeRows([row])[0];
+}
+
+async function writeGzipText(gzip, text) {
+  if (!gzip.write(text, 'utf8')) {
+    await once(gzip, 'drain');
+  }
+}
+
 async function writeArchive({ date, rows, archiveRoot = ARCHIVE_ROOT, dryRun = DRY_RUN, selfTest = false }) {
+  let sent = false;
+  return writeArchiveFromBatches({
+    date,
+    archiveRoot,
+    dryRun,
+    selfTest,
+    fetchBatch: async () => {
+      if (sent) return [];
+      sent = true;
+      return rows;
+    },
+  });
+}
+
+async function writeArchiveFromBatches({ date, fetchBatch, archiveRoot = ARCHIVE_ROOT, dryRun = DRY_RUN, selfTest = false }) {
   const [year, month, day] = date.split('-');
   const dir = path.join(archiveRoot, year, month);
   const archivePath = path.join(dir, `${day}.json.gz`);
   const checksumPath = path.join(dir, `${day}.json.gz.sha256`);
-  const payload = {
+
+  let outputDir = dir;
+  let outputArchivePath = archivePath;
+  let outputChecksumPath = checksumPath;
+  if (dryRun) {
+    outputDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'mdv-autoresponder-archive-dry-run-'));
+    outputArchivePath = path.join(outputDir, `${day}.json.gz`);
+    outputChecksumPath = path.join(outputDir, `${day}.json.gz.sha256`);
+  } else {
+    await fs.promises.mkdir(outputDir, { recursive: true });
+  }
+
+  const metadata = {
     generated_at: new Date().toISOString(),
     archive_date: date,
     source: selfTest ? 'self-test' : 'mysql',
-    rows: normalizeRows(rows),
   };
-  const json = JSON.stringify(payload);
-  const compressed = zlib.gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
-  const sha256 = crypto.createHash('sha256').update(compressed).digest('hex');
+  const hash = crypto.createHash('sha256');
+  let compressedBytes = 0;
+  const output = fs.createWriteStream(outputArchivePath);
+  const gzip = zlib.createGzip({ level: 9 });
 
-  if (dryRun) {
-    return { ok: true, dry_run: true, self_test: selfTest, date, rows: rows.length, bytes: compressed.length, sha256 };
+  gzip.on('data', (chunk) => {
+    compressedBytes += chunk.length;
+    hash.update(chunk);
+  });
+  gzip.pipe(output);
+
+  let rowsWritten = 0;
+  let firstRow = true;
+  await writeGzipText(
+    gzip,
+    `{"generated_at":${JSON.stringify(metadata.generated_at)},"archive_date":${JSON.stringify(metadata.archive_date)},"source":${JSON.stringify(metadata.source)},"rows":[`
+  );
+
+  while (true) {
+    const batch = await fetchBatch();
+    if (!batch.length) break;
+    for (const row of batch) {
+      const prefix = firstRow ? '' : ',';
+      firstRow = false;
+      rowsWritten += 1;
+      await writeGzipText(gzip, `${prefix}${JSON.stringify(normalizeRow(row))}`);
+    }
   }
 
-  await fs.promises.mkdir(dir, { recursive: true });
-  await fs.promises.writeFile(archivePath, compressed);
-  await fs.promises.writeFile(checksumPath, `${sha256}  ${path.basename(archivePath)}\n`);
+  await writeGzipText(gzip, ']}');
+  const finished = once(output, 'finish');
+  gzip.end();
+  await finished;
 
-  return { ok: true, dry_run: false, self_test: selfTest, date, rows: rows.length, archivePath, checksumPath, sha256 };
+  const sha256 = hash.digest('hex');
+
+  if (dryRun) {
+    await fs.promises.rm(outputDir, { recursive: true, force: true });
+    return { ok: true, dry_run: true, self_test: selfTest, date, rows: rowsWritten, rows_written: rowsWritten, bytes: compressedBytes, sha256 };
+  }
+
+  await fs.promises.writeFile(outputChecksumPath, `${sha256}  ${path.basename(outputArchivePath)}\n`);
+
+  return { ok: true, dry_run: false, self_test: selfTest, date, rows: rowsWritten, rows_written: rowsWritten, archivePath, checksumPath, bytes: compressedBytes, sha256 };
 }
 
 async function verifyArchiveChecksum(archivePath, expectedSha256) {
@@ -113,6 +182,17 @@ async function runSelfTest() {
   console.log(JSON.stringify({ ...result, self_test: true, archive_date: payload.archive_date, verified_rows: payload.rows.length }, null, 2));
 }
 
+async function fetchAutoresponderLogBatch(pool, { start, end, lastId = 0, batchSize = ARCHIVE_BATCH_SIZE }) {
+  const [rows] = await pool.query(
+    `SELECT * FROM autoresponder_logs
+     WHERE created_at >= ? AND created_at < ? AND id > ?
+     ORDER BY id ASC
+     LIMIT ?`,
+    [start, end, lastId, batchSize]
+  );
+  return rows;
+}
+
 async function main() {
   if (process.argv.includes('--self-test')) {
     await runSelfTest();
@@ -132,13 +212,15 @@ async function main() {
   });
 
   try {
-    const [rows] = await pool.query(
-      `SELECT * FROM autoresponder_logs
-       WHERE created_at >= ? AND created_at < ?
-       ORDER BY created_at ASC, id ASC`,
-      [start, end]
-    );
-    const result = await writeArchive({ date, rows });
+    let lastId = 0;
+    const result = await writeArchiveFromBatches({
+      date,
+      fetchBatch: async () => {
+        const rows = await fetchAutoresponderLogBatch(pool, { start, end, lastId });
+        if (rows.length) lastId = Number(rows[rows.length - 1].id) || lastId;
+        return rows;
+      },
+    });
     console.log(JSON.stringify(result, null, 2));
     if (!DELETE_ENABLED) {
       console.log('cleanup skipped: AUTORESPONDER_ARCHIVE_DELETE_ENABLED is not enabled');

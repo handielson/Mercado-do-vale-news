@@ -29,7 +29,7 @@ assert.match(
 
 assert.match(
   source,
-  /if \(isAutoresponderGreetingOnly\(message\)\) \{/,
+  /if \(detectedIntent\.greetingOnly\) \{/,
   'pure greeting messages must be answered before product search fallback',
 );
 

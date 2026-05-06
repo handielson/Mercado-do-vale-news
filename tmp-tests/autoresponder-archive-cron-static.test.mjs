@@ -28,8 +28,9 @@ const doc = fs.readFileSync(docPath, 'utf8');
   'getYesterdayBrtDate',
   'SELECT * FROM autoresponder_logs',
   'created_at >= ? AND created_at < ?',
-  'zlib.gzipSync',
-  'JSON.stringify(payload)',
+  'zlib.createGzip',
+  'JSON.stringify(normalizeRow(row))',
+  'writeArchiveFromBatches',
   'sha256',
   'cleanup skipped',
 ].forEach((token) => {

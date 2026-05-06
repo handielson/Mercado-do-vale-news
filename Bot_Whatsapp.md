@@ -602,7 +602,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 ### Pré-requisitos
 
 - [x] Confirmar estratégia do token secreto: gerar valor fora do código e configurar como `AUTORESPONDER_TOKEN` no `.env` da VPS.
-- [ ] Confirmar `company_id` do MDV (hardcoded ou via `company_settings`)
+- [x] Confirmar `company_id` do MDV: AutoResponder segue single-tenant/hardcoded para Mercado do Vale nesta fase; multi-tenant fica como evolução futura.
 - [x] Confirmar comportamento default da auto-pausa (3 fallbacks → 30 min)
 - [x] Confirmar pausa default por solicitação humana (60 min)
 - [x] Validar texto da mensagem `human_message_in_hours` e `human_message_out_of_hours`
@@ -620,7 +620,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 - [x] Criar tabela `autoresponder_conversations`
 - [x] Criar tabela `autoresponder_blocklist`
 - [x] ALTER `products` adicionando `tag_ids JSON DEFAULT '[]'` + índice
-- [ ] Seed: 22 templates de regras (21 inativas + 1 "Falar com humano" ativa)
+- [x] Seed: 22 templates de regras (21 inativas + 1 "Falar com humano" ativa)
 - [x] Seed: tags pré-cadastradas (compartilhadas + por escopo)
 - [x] Seed: mapeamento palavra→tag de produto em `autoresponder_settings.product_tag_keywords`
 
@@ -629,7 +629,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 - [x] Portar lógica de horário para o webhook da VPS usando [utils/storeStatus.ts](utils/storeStatus.ts) como referência
 - [x] Implementar `getCachedStoreStatus()` com cache em memória de 60s
 - [x] Ler `company_settings.business_hours` e `local_holidays` na VPS/MySQL para mensagem humana
-- [ ] Portar `holidayService` (feriados nacionais) ou consultar API externa
+- [x] Portar `holidayService` (feriados nacionais) sem API externa em tempo real, com cálculo local de feriados nacionais brasileiros e suporte a `holiday_overrides`
 
 #### Helpers de produto
 
@@ -638,7 +638,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 - [x] Implementar `formatPriceRange(products)` (de R$ X a R$ Y se variar)
 - [x] Implementar `calculateMaxInstallment(priceCents)` reaproveitando `payment_fees`
 - [x] Implementar `extractTokens(message)` com remoção de stopwords PT-BR
-- [ ] Implementar `detectIntent(message)` completo (greeting / human_request / numbered_choice)
+- [x] Implementar `detectIntent(message)` completo (greeting / human_request / numbered_choice)
 - [x] Detectar saudação simples no webhook (`oi`, `ola`, `bom dia`, `boa tarde`, `boa noite`, `opa`)
 
 #### Rota POST /autoresponder-webhook
@@ -675,6 +675,9 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 #### Cron diário Synology
 
 - [x] Criar script `cron/archive-autoresponder-logs.sh` na VPS (base local criada; ainda falta instalar/validar na VPS)
+- [x] Reduzir uso de RAM do archive com escrita em lotes (`AUTORESPONDER_ARCHIVE_BATCH_SIZE`, default 500) e gzip incremental
+- [x] Instalar pacote do archive na VPS e validar dry-run remoto (`2026-05-05`, 38 logs exportáveis)
+- [x] Validar escrita controlada na VPS em `/tmp/mdv-autoresponder-archive-write-test` (`2026-05-05`, 38 logs, gzip/checksum/JSON ok)
 - [ ] Configurar SSH key da VPS para Synology (autenticação automática)
 - [ ] Criar diretório `/volume1/backups/autoresponder/` no Synology
 - [ ] Adicionar entrada no crontab da VPS: `0 3 * * * /var/www/mdv-api/cron/archive-autoresponder-logs.sh`
@@ -683,14 +686,15 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 
 #### App AutoResponder Pro
 
-- [ ] Confirmar versão Pro instalada no celular da loja
-- [ ] Criar regra "Web request" com URL, headers, body do template
-- [ ] Marcar "Use response from web server as reply"
-- [ ] Desmarcar "Reply in groups"
-- [ ] Marcar "Don't reply if I have answered manually"
-- [ ] Configurar "Reply only 5 times per conversation in 60min"
-- [ ] Configurar "Don't reply within 30 seconds of sending"
-- [ ] Pattern `*`
+- [x] Confirmar versão Pro instalada no celular da loja
+- [x] Criar regra "Web request" com URL, headers, body do template
+- [x] Marcar "Use response from web server as reply"
+- [x] Desmarcar "Reply in groups"
+- [x] Marcar "Don't reply if I have answered manually"
+- [x] Configurar "Reply only 5 times per conversation in 60min"
+- [x] Configurar "Don't reply within 30 seconds of sending"
+- [x] Pattern `*`
+- [x] Validar que o bot está respondendo normalmente em conversa real pelo WhatsApp da loja
 
 #### Testes da Fase 1
 
@@ -771,12 +775,12 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 
 #### Componentes reutilizáveis
 
-- [ ] `components/autoresponder/TagPicker.tsx` (multiselect colorido, filtra por escopo)
-- [ ] `components/autoresponder/ConversationCard.tsx` (card de conversa com ações)
-- [ ] `components/autoresponder/BlockNumberModal.tsx` (form de bloqueio com tipos)
-- [ ] `components/autoresponder/AttachmentUpload.tsx` (drag-drop + preview)
-- [ ] `components/autoresponder/RuleEditor.tsx` (modal CRUD de regra)
-- [ ] `components/autoresponder/MessagePreview.tsx` (renderiza mensagem como WhatsApp)
+- [x] `components/autoresponder/TagPicker.tsx` (multiselect colorido, filtra por escopo)
+- [x] `components/autoresponder/ConversationCard.tsx` (card de conversa com ações)
+- [x] `components/autoresponder/BlockNumberModal.tsx` (form de bloqueio com tipos)
+- [x] `components/autoresponder/AttachmentUpload.tsx` (drag-drop + preview)
+- [x] `components/autoresponder/RuleEditor.tsx` (modal CRUD de regra)
+- [x] `components/autoresponder/MessagePreview.tsx` (renderiza mensagem como WhatsApp)
 
 #### Aba Respostas
 
@@ -841,14 +845,89 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 
 #### Testes da Fase 3
 
-- [ ] CRUD completo em cada aba
+- [x] CRUD completo em cada aba
 - [x] Upload de imagem indo para Synology
 - [x] Polling em tempo real na aba Conversas
 - [x] Filtros funcionando em todas as listagens
 - [x] Templates pré-cadastrados aparecem no dropdown
-- [ ] Curadoria → criar resposta funciona end-to-end
+- [x] Curadoria → criar resposta funciona end-to-end
 
-### Fase 4 — Refinamentos (opcional)
+### Fase 4 — Compra pelo WhatsApp
+
+Objetivo: permitir que o cliente avance da consulta de produto para um pedido assistido no WhatsApp, com resumo pronto para o atendente fechar pagamento/entrega.
+
+#### Base ja pronta
+
+- [x] Buscar produtos reais no banco da VPS
+- [x] Enviar listas de produtos em lotes de 5 por mensagem
+- [x] Manter opcoes numeradas para o cliente responder com numero
+- [x] Responder produto individual quando o cliente escolhe uma opcao numerada
+- [x] Mostrar preco, parcelamento e link do produto
+- [x] Ocultar SKU na lista e mostrar SKU apenas no produto individual
+- [x] Captar nome do cliente quando nao vier no payload
+- [x] Confirmar/salvar nome do cliente no Google Contacts
+- [x] Pausar conversa quando o cliente pedir atendimento humano
+
+#### Fluxo de carrinho/pedido
+
+- [ ] Criar estado `purchase_flow` em `autoresponder_conversations` ou tabela propria para carrinho temporario
+- [ ] Quando cliente responder numero/nome do produto, perguntar se deseja comprar ou ver detalhes
+- [ ] Perguntar quantidade desejada
+- [ ] Validar estoque antes de adicionar ao carrinho
+- [ ] Permitir adicionar mais produtos ao mesmo carrinho
+- [ ] Permitir remover item/cancelar carrinho
+- [ ] Calcular subtotal, total e resumo do pedido
+- [ ] Confirmar se sera retirada na loja ou entrega
+- [ ] Se entrega, coletar endereco completo
+- [ ] Confirmar nome/telefone/endereco antes de fechar
+
+#### Fechamento assistido por atendente
+
+- [ ] Gerar mensagem-resumo para atendente com cliente, telefone, itens, total, entrega/retirada e observacoes
+- [ ] Pausar o bot automaticamente apos gerar resumo de pedido
+- [ ] Criar tag/conversa com status `pedido_em_andamento`
+- [ ] Salvar evento em `autoresponder_logs` com intent `purchase_request`
+- [ ] Criar mensagem para o cliente: "Seu pedido foi separado para um atendente finalizar"
+
+#### Pedido no sistema
+
+- [ ] Criar tabela `whatsapp_orders` ou reaproveitar estrutura de pedidos existente
+- [ ] Criar tabela/JSON de itens do pedido
+- [ ] Status inicial: `draft`, `waiting_payment`, `paid`, `cancelled`, `completed`
+- [ ] Endpoint admin para listar pedidos vindos do WhatsApp
+- [ ] Vincular pedido ao `sender` da conversa e ao contato Google quando houver
+- [ ] Decidir quando baixa estoque: ao pagamento confirmado ou ao atendente aprovar
+
+#### Pagamento
+
+- [ ] Fase inicial: PIX/manual com chave da loja e pedido aguardando comprovante
+- [ ] Mensagem para cliente enviar comprovante no WhatsApp
+- [ ] Opcional: link de pagamento Mercado Pago/Asaas/Stripe
+- [ ] Opcional: Pix copia-e-cola automatico com expiracao
+- [ ] Validar comprovante/pagamento antes de baixar estoque automaticamente
+
+#### Admin e operacao
+
+- [ ] Aba/visao de pedidos do WhatsApp no admin
+- [ ] Filtro por status e periodo
+- [ ] Botao para copiar resumo do pedido
+- [ ] Botao para marcar como pago/concluido/cancelado
+- [ ] Historico da conversa junto do pedido
+- [ ] Relatorio simples de conversao: produto perguntado -> pedido gerado
+
+#### Testes da Fase 4
+
+- [ ] Cliente escolhe produto por numero e bot pergunta quantidade
+- [ ] Produto sem estoque bloqueia compra e sugere atendimento/alternativa
+- [ ] Carrinho com 1 item gera resumo correto
+- [ ] Carrinho com varios itens soma total corretamente
+- [ ] Entrega coleta endereco antes de fechar
+- [ ] Retirada nao pede endereco
+- [ ] Pedido assistido pausa o bot e chama atendente
+- [ ] Pedido fica visivel no admin
+- [ ] Fluxo de cancelamento limpa carrinho temporario
+
+### Fase 5 — Refinamentos (opcional)
 
 - [ ] WebSocket para Conversas em tempo real (substitui polling)
 - [ ] Sugestão automática de keywords ao curar perguntas (NLP simples com extração de tokens relevantes)
@@ -3228,12 +3307,381 @@ node tmp-tests/autoresponder-phase1a-static.test.mjs
 
 ---
 
+### 2026-05-06 — App AutoResponder Pro configurado
+
+**Objetivo da implantação:** registrar que a etapa operacional do app no celular da loja já foi concluída e que o bot está respondendo normalmente pelo WhatsApp real.
+
+**Entregue nesta etapa:**
+- Confirmada a versão Pro instalada no celular da loja.
+- Criada a regra "Web request" apontando para `https://api.xiaomipetrolina.com.br/autoresponder-webhook`.
+- Configurado o uso da resposta do servidor como resposta do WhatsApp.
+- Mantido o bloqueio de respostas em grupos.
+- Configurado para não responder quando houver resposta manual.
+- Configurados os limites do app: até 5 respostas por conversa em 60 minutos e intervalo mínimo de 30 segundos após envio.
+- Pattern configurado como `*`.
+- Confirmado pelo usuário que o bot já está configurado e respondendo normalmente nas conversas reais do WhatsApp da loja.
+
+**Próximo cuidado:**
+- O archive diário para Synology ainda fica pendente. O script agora usa modo de baixa memória: busca logs em lotes (`AUTORESPONDER_ARCHIVE_BATCH_SIZE`, default 500) e escreve gzip incremental. Mesmo assim, manter/agendar a execução de madrugada, preferencialmente `03:00`, e validar depois da chegada da RAM maior.
+
+---
+
+### 2026-05-06 — Archive Synology em baixa memória
+
+**Objetivo da implantação:** reduzir o pico de RAM do archive diário antes de instalar o cron na VPS.
+
+**Arquivos alterados/criados:**
+- `cron/archive-autoresponder-logs.cjs`
+- `tmp-tests/autoresponder-archive-memory-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- Adicionada variável `AUTORESPONDER_ARCHIVE_BATCH_SIZE` com default 500.
+- Exportação dos logs passou a buscar `autoresponder_logs` em lotes por `id`, sem carregar o dia inteiro em uma consulta única.
+- Escrita do JSON compactado passou a usar `zlib.createGzip()` e `fs.createWriteStream()`, evitando montar o payload inteiro em memória antes de comprimir.
+- `dry-run` continua sem escrever no destino final; quando necessário, usa arquivo temporário e remove ao terminar.
+
+**Operação recomendada:**
+- Agendar o cron para madrugada: `0 3 * * * /var/www/mdv-api/cron/archive-autoresponder-logs.sh`.
+- Manter `AUTORESPONDER_ARCHIVE_DELETE_ENABLED=0` até validar checksum e arquivo no Synology com segurança.
+- Se a VPS ainda estiver com RAM limitada, reduzir `AUTORESPONDER_ARCHIVE_BATCH_SIZE` para 100 ou 200 no ambiente do cron.
+
+---
+
+### 2026-05-06 — Preflight local do pacote de archive VPS
+
+**Objetivo da implantação:** deixar o pacote de instalação da VPS pronto para cópia remota controlada, sem tocar ainda em crontab, PM2 ou limpeza de logs.
+
+**Arquivos/artefatos envolvidos:**
+- `reports/autoresponder-archive-vps-package/manifest.json`
+- `reports/autoresponder-archive-vps-package/cron/archive-autoresponder-logs.cjs`
+- `reports/autoresponder-archive-vps-package/cron/archive-autoresponder-logs.sh`
+- `reports/autoresponder-archive-vps-package/docs/operacional/2026-05-05-autoresponder-archive-vps-dry-run.md`
+- `tools/install-autoresponder-archive-vps-dry-run.cjs`
+- `tools/check-autoresponder-synology-readiness.cjs`
+
+**Entregue nesta etapa:**
+- Pacote de deploy regenerado com o script de archive em baixa memória.
+- Plano local do instalador validado, apontando para `/var/www/mdv-api`.
+- Preflight read-only do Synology passou com túnel canônico `mdv-videos`, root `/volume1/backups/autoresponder` e ações proibidas preservadas.
+- Confirmado que o instalador não altera crontab, não reinicia PM2 e não ativa delete.
+
+**Bloqueio atual:**
+- Resolvido: a cópia/validação remota foi executada depois com `AUTORESPONDER_ARCHIVE_INSTALL_APPLY=1`.
+
+**Comando usado para execução remota:**
+
+```powershell
+$env:VPS_ROOT_PASSWORD="<senha-da-vps>"
+$env:AUTORESPONDER_ARCHIVE_INSTALL_APPLY="1"
+$env:AUTORESPONDER_ARCHIVE_DATE="2026-05-05"
+node tools\install-autoresponder-archive-vps-dry-run.cjs
+```
+
+---
+
+### 2026-05-06 — Archive VPS instalado e dry-run remoto validado
+
+**Objetivo da implantação:** copiar o pacote do archive para a VPS e validar execução remota sem escrever no Synology, sem alterar crontab, sem reiniciar PM2 e sem apagar logs.
+
+**Resultado reportado da VPS:**
+- Arquivo remoto `/var/www/mdv-api/cron/archive-autoresponder-logs.cjs` enviado e validado com SHA256 `c6fe48046ab3ebdfbb3cb9c9f9228cd514e63075b668fb5e6d0299de45f50c95`.
+- Arquivo remoto `/var/www/mdv-api/cron/archive-autoresponder-logs.sh` enviado e validado com SHA256 `e796f8f6525830ce4eccd85763704c6a21a0fa98c7550cd4a169133645e05757`.
+- Documento operacional remoto enviado e validado com SHA256 `215c2770fc8749c7dd93c53d59b2e43cd31c27d518cf1e3508826e155c7f4508`.
+- `chmod +x` aplicado no wrapper shell.
+- `node --check` remoto passou.
+- Dry-run remoto em `2026-05-05` retornou `ok: true`, `dry_run: true`, `rows: 38`, `rows_written: 38`, `bytes: 2384`.
+- SHA256 do arquivo que seria gerado no dry-run: `c0364663c37495ff1ca0670155847c2484adcbae626e874a88c0c2f6a2ab30cc`.
+- Limpeza permaneceu desligada: `AUTORESPONDER_ARCHIVE_DELETE_ENABLED is not enabled`.
+
+**Ações proibidas confirmadas pelo instalador:**
+- Crontab não foi alterado.
+- PM2 não foi reiniciado.
+- Delete de logs não foi habilitado.
+
+**Próximo passo sugerido:**
+- Fazer a etapa de Synology real: configurar SSH key/diretório ou confirmar caminho montado, rodar uma escrita manual controlada em `AUTORESPONDER_ARCHIVE_DRY_RUN=0`, validar `.json.gz` e `.sha256`, e só depois ativar o crontab das 03:00.
+
+---
+
+### 2026-05-06 — Escrita controlada do archive em `/tmp` na VPS
+
+**Objetivo da implantação:** validar escrita real de arquivo compactado e checksum na VPS, sem usar ainda o caminho final do Synology.
+
+**Comando usado:**
+
+```powershell
+$env:AUTORESPONDER_ARCHIVE_WRITE_APPLY="1"
+$env:AUTORESPONDER_ARCHIVE_WRITE_DATE="2026-05-05"
+node tools\test-autoresponder-archive-vps-write.cjs
+```
+
+**Resultado reportado da VPS:**
+- Archive gerado em `/tmp/mdv-autoresponder-archive-write-test/2026/05/05.json.gz`.
+- Checksum gerado em `/tmp/mdv-autoresponder-archive-write-test/2026/05/05.json.gz.sha256`.
+- SHA256 validado: `147e34befb284cb0380b2df63961af6bd761b29170859577fa4b54b8fbb1b366`.
+- Payload descompactado: `archive_date: 2026-05-05`, `source: mysql`, `rows: 38`.
+- Saída do archive: `dry_run: false`, `rows_written: 38`, `bytes: 2383`.
+- Validações passaram: arquivo existe, checksum existe, `gzip -t`, checksum bate e `JSON.parse`.
+- Limpeza permaneceu desligada: `AUTORESPONDER_ARCHIVE_DELETE_ENABLED is not enabled`.
+
+**Ações proibidas confirmadas pelo script:**
+- Crontab não foi alterado.
+- PM2 não foi reiniciado.
+- Delete de logs não foi habilitado.
+- Caminho final do Synology não foi usado.
+
+**Próximo passo sugerido:**
+- Validar/usar o destino real `/volume1/backups/autoresponder` no Synology com uma escrita manual controlada. Se a RAM do NAS ainda for preocupação, aguardar a RAM maior antes de ativar crontab automático.
+
+---
+
+### 2026-05-06 — Gate Synology parcialmente validado
+
+**Objetivo da implantação:** iniciar as confirmações manuais/read-only exigidas antes de qualquer escrita no destino real `/volume1/backups/autoresponder`.
+
+**Entregue nesta etapa:**
+- Checklist manual do Synology impresso com os 4 gates obrigatórios: RAM/swap, túnel canônico, DSM API e ausência de `cloudflared --token`.
+- Consulta read-only da DSM API executada com sucesso:
+  - URL: `https://dsm-api.xiaomipetrolina.com.br/webapi/query.cgi?api=SYNO.API.Info&version=1&method=query&query=SYNO.API.Auth,SYNO.FileStation.List`
+  - Resultado: HTTP 200 e JSON `success: true`
+  - APIs retornadas: `SYNO.API.Auth` e `SYNO.FileStation.List`
+- Criado arquivo de evidência parcial: `docs/operacional/autoresponder-synology-manual-evidence-2026-05-06.json`.
+
+**Gate atual:**
+- `AUTORESPONDER_SYNOLOGY_DSM_API_OK` tem evidência validada.
+- Ainda faltam evidências manuais para:
+  - `AUTORESPONDER_SYNOLOGY_RAM_SWAP_OK`
+  - `AUTORESPONDER_SYNOLOGY_TUNNEL_OK`
+  - `AUTORESPONDER_SYNOLOGY_LEGACY_TOKEN_ABSENT`
+
+**Importante:**
+- Nenhuma escrita foi feita no Synology.
+- Crontab não foi alterado.
+- PM2 não foi reiniciado.
+- Delete de logs não foi habilitado.
+
+**Próximo passo sugerido:**
+- Conferir no DSM/painel:
+  1. RAM e swap do NAS em estado seguro.
+  2. Túnel canônico `mdv-videos` com UUID `7680ed44-a7a9-4700-a37e-2026b3653360`.
+  3. Ausência de processo legado `cloudflared` usando `--token`.
+- Depois disso, completar o arquivo de evidência e liberar o safety gate local antes da escrita final.
+
+---
+
+### 2026-05-06 — Seed dos templates de regras aplicado na VPS
+
+**Objetivo da implantação:** concluir o seed dos 22 templates pré-cadastrados de `autoresponder_rules`.
+
+**Arquivos alterados/criados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `tmp-tests/autoresponder-rule-templates-seed-static.test.mjs`
+- `tmp-tests/autoresponder-vps-rule-template-count.cjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- Adicionada constante `AUTORESPONDER_RULE_TEMPLATES` com 22 templates:
+  - 21 templates inativos para respostas comuns.
+  - 1 template ativo: `Falar com humano`.
+- Adicionada função `seedAutoresponderRuleTemplates()` nas migrations do servidor.
+- Seed idempotente usando `WHERE NOT EXISTS`, evitando duplicar templates por nome.
+- Deploy da VPS executado com backup remoto e restart do PM2 `mdv-api`.
+
+**Verificações executadas:**
+- `node tmp-tests\autoresponder-rule-templates-seed-static.test.mjs`
+- `node --check vps_server.cjs`
+- `node --check vps_server.js`
+- `node tmp-tests\autoresponder-phase1a-static.test.mjs`
+- `node tmp-tests\autoresponder-rules-crud-static.test.mjs`
+- `node tmp-tests\autoresponder-admin-page-static.test.mjs`
+- `node tmp-tests\autoresponder-vps-server-deploy.cjs`
+- `node tmp-tests\autoresponder-vps-rule-template-count.cjs`
+
+**Resultado confirmado na VPS:**
+- `total: 22` templates encontrados por nome em `autoresponder_rules`.
+- `active_count: 1`.
+- Template ativo: `Falar com humano`, `active: 1`, `priority: 1000`.
+
+**Importante:**
+- O fluxo de pedido humano continua sendo tratado primeiro pelo webhook, com pausa e mensagem por horário. O template ativo fica disponível no admin como regra pré-cadastrada, mas não substitui o fluxo especial de atendimento humano.
+
+---
+
+### 2026-05-06 — `detectIntent(message)` consolidado
+
+**Objetivo da implantação:** concluir o helper central de intenção do AutoResponder sem alterar a ordem do webhook já em produção.
+
+**Arquivos alterados/criados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `tmp-tests/autoresponder-detect-intent-static.test.mjs`
+- `tmp-tests/autoresponder-greeting-message-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- Adicionado `detectAutoresponderIntent(message)`.
+- O helper centraliza:
+  - `greeting`
+  - `greetingOnly`
+  - `humanRequest`
+  - `numberedChoice`
+  - `moreRequest`
+- Webhook passou a usar `detectedIntent` nos ramos de saudação pura, escolha numerada, paginação `mais` e pedido de humano.
+- A ordem de decisão foi preservada: saudação/contato, escolha numerada, `mais`, humano, regras, tags, busca e fallback.
+- Deploy da VPS executado com backup remoto e restart do PM2 `mdv-api`.
+
+**Verificações executadas:**
+- `node tmp-tests\autoresponder-detect-intent-static.test.mjs`
+- `node tmp-tests\autoresponder-greeting-message-static.test.mjs`
+- `node tmp-tests\autoresponder-phase1a-static.test.mjs`
+- `node tmp-tests\autoresponder-pagination-count-static.test.mjs`
+- `node tmp-tests\autoresponder-choice-instructions-static.test.mjs`
+- `node tmp-tests\autoresponder-rule-templates-seed-static.test.mjs`
+- `node --check vps_server.cjs`
+- `node --check vps_server.js`
+- `node tmp-tests\autoresponder-vps-server-deploy.cjs`
+- Healthcheck público sem token retornou `401 Unauthorized`, mantendo o webhook protegido.
+
+---
+
+### 2026-05-06 — Feriados nacionais no AutoResponder
+
+**Objetivo da implantação:** concluir o item de feriados nacionais usado pela mensagem de transferência humana, sem depender de API externa em tempo real no webhook da VPS.
+
+**Arquivos alterados/criados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `tmp-tests/autoresponder-national-holidays-static.test.mjs`
+- `tmp-tests/autoresponder-store-status-cache-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- Portado o comportamento do `holidayService` para a VPS com cálculo local de feriados nacionais brasileiros.
+- Adicionado `getBrazilianEasterDate(year)` para calcular feriados móveis.
+- Adicionado `getAutoresponderBrazilNationalHoliday(dateString)` para detectar:
+  - Confraternizacao Universal
+  - Carnaval
+  - Sexta-feira Santa
+  - Tiradentes
+  - Dia do Trabalhador
+  - Corpus Christi
+  - Independencia do Brasil
+  - Nossa Senhora Aparecida
+  - Finados
+  - Proclamacao da Republica
+  - Natal
+- `getAutoresponderStoreStatus()` agora considera feriado nacional como `status: 'holiday'`.
+- `company_settings.holiday_overrides` continua podendo liberar uma data nacional específica para atendimento normal.
+- Feriados locais (`company_settings.local_holidays`) seguem com prioridade máxima.
+
+**Verificações executadas:**
+- `node tmp-tests\autoresponder-national-holidays-static.test.mjs`
+- `node tmp-tests\autoresponder-store-status-cache-static.test.mjs`
+- `node tmp-tests\autoresponder-phase1a-static.test.mjs`
+- `node tmp-tests\autoresponder-detect-intent-static.test.mjs`
+- `node tmp-tests\autoresponder-greeting-message-static.test.mjs`
+- `node --check vps_server.cjs`
+- `node --check vps_server.js`
+- `node tmp-tests\autoresponder-vps-server-deploy.cjs`
+- Healthcheck público sem token retornou `401 Unauthorized`.
+
+**Resultado esperado:**
+- Em feriado nacional, pedido de atendimento humano usa mensagem fora do horário.
+- Se a data estiver em `holiday_overrides`, o horário semanal volta a valer normalmente.
+- O bot continua respondendo 24/7; feriado só muda a mensagem de transferência humana.
+
+---
+
+### 2026-05-06 — Componentes reutilizaveis do AutoResponder
+
+**Objetivo da etapa:** materializar os componentes da Fase 3 em arquivos dedicados para reutilizacao no painel admin e futuras telas do AutoResponder.
+
+**Arquivos criados:**
+- `components/autoresponder/TagPicker.tsx`
+- `components/autoresponder/ConversationCard.tsx`
+- `components/autoresponder/BlockNumberModal.tsx`
+- `components/autoresponder/AttachmentUpload.tsx`
+- `components/autoresponder/RuleEditor.tsx`
+- `components/autoresponder/MessagePreview.tsx`
+- `tmp-tests/autoresponder-components-static.test.mjs`
+
+**Entregue nesta etapa:**
+- `TagPicker` com multiselect, bolinha de cor e filtro por escopo (`conversation`, `product`, `rule`).
+- `ConversationCard` com status, resumo, metricas, tags e acoes de pausar/liberar/salvar/bloquear.
+- `BlockNumberModal` com formulario de bloqueio por numero, prefixo ou regex.
+- `AttachmentUpload` com upload por input, suporte a drag-drop, legenda e remocao.
+- `RuleEditor` como modal de CRUD de regra reutilizando `TagPicker`, `AttachmentUpload` e `MessagePreview`.
+- `MessagePreview` renderizando texto/anexo em formato de bolha tipo WhatsApp.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-components-static.test.mjs`
+- `npm.cmd run build`
+
+**Observacao:**
+- A pagina `pages/admin/AutoResponderPage.tsx` segue funcional com a implementacao atual; os componentes agora existem em arquivos proprios para a proxima rodada de integracao/refatoracao visual sem mexer no bot em producao.
+
+---
+
+### 2026-05-06 — Teste de CRUD completo da Fase 3
+
+**Objetivo da etapa:** fechar a verificacao de CRUD completo das abas administrativas do AutoResponder sem depender de Synology.
+
+**Arquivos criados/alterados:**
+- `tmp-tests/autoresponder-phase3-crud-complete-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- Teste estatico confirmando que `autoResponderService.ts` expoe os metodos de criacao, edicao, exclusao e acoes administrativas.
+- Teste estatico confirmando que `pages/admin/AutoResponderPage.tsx` liga:
+  - respostas: criar, editar, excluir e recarregar lista/estatisticas;
+  - conversas: pausar, liberar, salvar tags e bloquear;
+  - bloqueados: criar, editar, excluir e importar em massa;
+  - tags: criar, editar e excluir;
+  - configuracoes: salvar settings.
+- Checklist da Fase 3 atualizado em `CRUD completo em cada aba`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-phase3-crud-complete-static.test.mjs`
+
+**Observacao:**
+- `Curadoria -> criar resposta funciona end-to-end` continua aberto porque ainda pede validacao real UI/API, nao apenas cobertura estatica.
+
+---
+
+### 2026-05-06 — Curadoria end-to-end na VPS
+
+**Objetivo da etapa:** validar que uma pergunta de curadoria consegue virar uma regra real pela API administrativa da VPS, sem tocar em Synology.
+
+**Arquivos criados/alterados:**
+- `tmp-tests/autoresponder-vps-curation-end-to-end.cjs`
+- `tmp-tests/autoresponder-curation-end-to-end-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- Runner controlado que chama `POST /autoresponder/rules/from-question` com uma pergunta unica.
+- Confirmacao de que a regra criada retorna `id`, `pattern`, `reply_text` e permanece inativa para revisao.
+- Confirmacao de que a regra aparece em `GET /autoresponder/rules`.
+- Limpeza automatica com `DELETE /autoresponder/rules/:id` para nao deixar regra de teste na producao.
+- Checklist da Fase 3 atualizado em `Curadoria -> criar resposta funciona end-to-end`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-curation-end-to-end-static.test.mjs`
+- `node tmp-tests\autoresponder-vps-curation-end-to-end.cjs`
+
+**Resultado esperado:**
+- O fluxo de Curadoria esta validado ponta a ponta no backend real da VPS.
+- A tela admin continua usando o modal de revisao antes de salvar, conforme a validacao estatica anterior.
+
+---
+
 ## Pendências abertas
 
-1. **Token secreto:** gerar/configurar `AUTORESPONDER_TOKEN` no `.env` da VPS antes de liberar o app AutoResponder. Não deixar token real hardcoded no código.
+1. **Token secreto:** `AUTORESPONDER_TOKEN` gerado/configurado fora do código e app AutoResponder liberado. Concluído; manter sem hardcode no repositório.
 2. **Texto das mensagens default** (`human_message_in_hours`, `human_message_out_of_hours`, `fallback_message`, `auto_pause_fallback_message`): confirmado e aplicado na VPS. Concluído.
 3. **Granularidade do bot fora do horário:** confirmar que bot responde sempre 24/7 (apenas a mensagem de transferência humana muda por horário). ✅ Confirmado.
-4. **Multi-tenant:** se algum dia a empresa MDV virar produto vendido pra outras lojas, todas as queries precisarão filtrar por `company_id`. Hoje hardcoded.
+4. **Multi-tenant:** decisão atual confirmada: AutoResponder é single-tenant para Mercado do Vale. Se algum dia virar produto vendido para outras lojas, todas as queries precisarão filtrar por `company_id`.
 5. **`getStoreStatus` para `closing_soon`:** decidir se trata como "dentro do horário" (default) ou avisa que está fechando.
 6. **Pesos da busca:** relevância básica aplicada com prioridade para SKU exato, nome, marca e specs/custom fields. Concluído.
 
@@ -3253,5 +3701,5 @@ node tmp-tests/autoresponder-phase1a-static.test.mjs
 
 ---
 
-_Última atualização: 2026-05-04_
+_Última atualização: 2026-05-06_
 _Versão do plano: v11_

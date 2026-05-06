@@ -20,6 +20,36 @@ const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS = 3;
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
+const AUTORESPONDER_RULE_TEMPLATES = [
+  { name: 'Saudacao manha', pattern: 'bom dia, oi bom dia, dia' },
+  { name: 'Saudacao tarde', pattern: 'boa tarde, tarde' },
+  { name: 'Saudacao noite', pattern: 'boa noite, noite' },
+  { name: 'Saudacao generica', pattern: 'oi, ola, e ai, eai, opa, eae' },
+  { name: 'Despedida', pattern: 'tchau, obrigado, obrigada, valeu, vlw, agradecido, brigado' },
+  { name: 'Endereco/localizacao', pattern: 'onde, endereco, localizacao, fica, ficam, lugar, mapa, maps' },
+  { name: 'Horario de funcionamento', pattern: 'horario, abre, fecha, funcionamento, hora, aberto, fechado' },
+  { name: 'Estacionamento', pattern: 'estacionamento, vaga, estacionar, carro' },
+  { name: 'Entrega/frete', pattern: 'entrega, frete, delivery, mandar, enviar, entregar, motoboy' },
+  { name: 'Formas de pagamento', pattern: 'pagamento, pago, pix, cartao, parcela, parcelar, dinheiro, boleto, debito' },
+  { name: 'Desconto a vista / PIX', pattern: 'desconto, a vista, avista, pix, dinheiro, abate' },
+  { name: 'Nota fiscal', pattern: 'nota fiscal, nf, cupom, fiscal, sefaz, recibo' },
+  { name: 'Garantia', pattern: 'garantia, prazo, defeito, problema, queimou, parou' },
+  { name: 'Troca/devolucao', pattern: 'troca, trocar, devolucao, devolver, arrependimento' },
+  { name: 'Assistencia tecnica', pattern: 'assistencia, conserto, consertar, tecnico, reparo, manutencao' },
+  { name: 'Troca de tela / pelicula', pattern: 'tela, pelicula, trocar tela, quebrou, rachou' },
+  { name: 'Desbloqueio', pattern: 'desbloqueio, desbloquear, conta google, mi account, icloud, frp' },
+  { name: 'Aceita usado/seminovo', pattern: 'usado, seminovo, semi novo, troca por outro, dou de entrada, valor do meu' },
+  { name: 'Catalogo / produtos', pattern: 'catalogo, produtos, lista, voces tem, o que vendem' },
+  { name: 'Promocoes/ofertas', pattern: 'promocao, oferta, ofertinha, desconto, barato, baratinho' },
+  {
+    name: 'Falar com humano',
+    pattern: 'humano, atendente, pessoa, real, falar com alguem, especialista, vendedor, gerente',
+    replyText: AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS,
+    priority: 1000,
+    active: 1,
+  },
+  { name: 'Fallback auto', pattern: '*', matchType: 'exact', active: 0 },
+];
 
 function isImmutableImageDerivative(filePath = '') {
   return /-\d+\.(webp|avif)$/i.test(filePath);
@@ -1029,6 +1059,16 @@ function getAutoresponderNumberedChoice(message) {
   return Number.isInteger(choice) && choice > 0 ? choice : null;
 }
 
+function detectAutoresponderIntent(message) {
+  return {
+    greeting: isAutoresponderGreeting(message),
+    greetingOnly: isAutoresponderGreetingOnly(message),
+    humanRequest: isAutoresponderHumanRequest(message),
+    numberedChoice: getAutoresponderNumberedChoice(message),
+    moreRequest: isAutoresponderMoreRequest(message),
+  };
+}
+
 async function getAutoresponderNumberedChoiceContext(sender, validityMinutes) {
   const context = await getAutoresponderOptionsContext(sender, validityMinutes);
   return context.items;
@@ -1329,13 +1369,79 @@ function parseAutoresponderTimeToMinutes(value, fallback) {
   return hour * 60 + minute;
 }
 
+function formatAutoresponderDateUtc(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDaysUtc(date, days) {
+  const copy = new Date(date.getTime());
+  copy.setUTCDate(copy.getUTCDate() + days);
+  return copy;
+}
+
+function getBrazilianEasterDate(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function getAutoresponderBrazilNationalHoliday(dateString) {
+  const year = Number(dateString.slice(0, 4));
+  if (!Number.isFinite(year)) return null;
+
+  const fixedHolidays = {
+    [`${year}-01-01`]: 'Confraternizacao Universal',
+    [`${year}-04-21`]: 'Tiradentes',
+    [`${year}-05-01`]: 'Dia do Trabalhador',
+    [`${year}-09-07`]: 'Independencia do Brasil',
+    [`${year}-10-12`]: 'Nossa Senhora Aparecida',
+    [`${year}-11-02`]: 'Finados',
+    [`${year}-11-15`]: 'Proclamacao da Republica',
+    [`${year}-12-25`]: 'Natal',
+  };
+  if (fixedHolidays[dateString]) {
+    return { date: dateString, name: fixedHolidays[dateString], type: 'national' };
+  }
+
+  const easter = getBrazilianEasterDate(year);
+  const movableHolidays = {
+    [formatAutoresponderDateUtc(addDaysUtc(easter, -48))]: 'Carnaval',
+    [formatAutoresponderDateUtc(addDaysUtc(easter, -47))]: 'Carnaval',
+    [formatAutoresponderDateUtc(addDaysUtc(easter, -2))]: 'Sexta-feira Santa',
+    [formatAutoresponderDateUtc(addDaysUtc(easter, 60))]: 'Corpus Christi',
+  };
+  if (movableHolidays[dateString]) {
+    return { date: dateString, name: movableHolidays[dateString], type: 'national' };
+  }
+
+  return null;
+}
+
 function getAutoresponderStoreStatus(companySettingsRow, now = new Date()) {
   const businessHours = parsePublicJson(companySettingsRow?.business_hours, DEFAULT_AUTORESPONDER_HOURS) || DEFAULT_AUTORESPONDER_HOURS;
+  const holidayOverrides = parsePublicJson(companySettingsRow?.holiday_overrides, []) || [];
   const localHolidays = parsePublicJson(companySettingsRow?.local_holidays, []) || [];
   const { dateString, weekdayIndex, currentTimeMinutes } = getSaoPauloDateParts(now);
 
   if (localHolidays.some((holiday) => holiday?.date === dateString)) {
     return { status: 'holiday' };
+  }
+
+  const nationalHoliday = getAutoresponderBrazilNationalHoliday(dateString);
+  if (nationalHoliday && !holidayOverrides.includes(dateString)) {
+    return { status: 'holiday', holiday: nationalHoliday, message: nationalHoliday.name };
   }
 
   const dayName = AUTORESPONDER_DAYS_OF_WEEK[weekdayIndex] || 'sunday';
@@ -2198,7 +2304,8 @@ fastify.route({
       const message = String(payload.message || payload.text || payload.query || payload.body || payload.received_message || '').trim();
       const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
-      const shouldPrefixGreeting = isAutoresponderGreeting(message);
+      const detectedIntent = detectAutoresponderIntent(message);
+      const shouldPrefixGreeting = detectedIntent.greeting;
       const contactFirstName = getAutoresponderContactFirstName(payload);
 
       const [settingsRows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
@@ -2252,7 +2359,7 @@ fastify.route({
         return { replies: contactFlowReplies.map((replyMessage) => ({ message: replyMessage })) };
       }
 
-      if (isAutoresponderGreetingOnly(message)) {
+      if (detectedIntent.greetingOnly) {
         const contactState = await getAutoresponderContactNameState(senderKey);
         const contactNameStatus = String(contactState?.contact_name_status || '');
         const shouldConfirmContactName = contactFirstName
@@ -2285,7 +2392,7 @@ fastify.route({
         return { replies: [{ message: replyText }] };
       }
 
-      const numberedChoice = getAutoresponderNumberedChoice(message);
+      const numberedChoice = detectedIntent.numberedChoice;
       if (numberedChoice && Number(settings.use_numbered_lists) === 1) {
         const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
         const selectedOption = Array.isArray(options) ? options[numberedChoice - 1] : null;
@@ -2308,7 +2415,7 @@ fastify.route({
         }
       }
 
-      if (isAutoresponderMoreRequest(message) && Number(settings.use_numbered_lists) === 1) {
+      if (detectedIntent.moreRequest && Number(settings.use_numbered_lists) === 1) {
         const context = await getAutoresponderOptionsContext(senderKey, settings.numbered_list_validity_minutes);
         const pagination = context.pagination;
         if (pagination?.source && pagination.hasMore) {
@@ -2357,7 +2464,7 @@ fastify.route({
         }
       }
 
-      if (isAutoresponderHumanRequest(message)) {
+      if (detectedIntent.humanRequest) {
         const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
         const storeStatus = await getCachedAutoresponderStoreStatus();
         const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
@@ -5785,6 +5892,28 @@ async function addColumnIfMissing(table, column, definition) {
   }
 }
 
+async function seedAutoresponderRuleTemplates() {
+  for (const template of AUTORESPONDER_RULE_TEMPLATES) {
+    await pool.query(
+      `INSERT INTO autoresponder_rules
+        (name, match_type, pattern, reply_type, reply_text, priority, active, tag_ids)
+       SELECT ?, ?, ?, 'text', ?, ?, ?, JSON_ARRAY()
+       WHERE NOT EXISTS (
+         SELECT 1 FROM autoresponder_rules WHERE name = ? LIMIT 1
+       )`,
+      [
+        template.name,
+        template.matchType || 'any_keyword',
+        template.pattern,
+        template.replyText || '',
+        Number(template.priority || 0),
+        Number(template.active || 0),
+        template.name,
+      ]
+    );
+  }
+}
+
 async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_favorites (
@@ -5908,6 +6037,8 @@ async function runMigrations() {
       INDEX idx_active_priority (active, priority)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await seedAutoresponderRuleTemplates();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_tags (

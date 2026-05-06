@@ -34,7 +34,7 @@ const storeStatusRoute = server.slice(storeStatusRouteStart, server.indexOf("fas
 assert.ok(storeStatusRoute.includes('getCachedAutoresponderStoreStatus()'), 'store status route should use cached helper');
 assert.ok(!storeStatusRoute.includes('pool.query'), 'store status route should not query company_settings directly');
 
-const humanRequestStart = server.indexOf('if (isAutoresponderHumanRequest(message))');
+const humanRequestStart = server.indexOf('if (detectedIntent.humanRequest)');
 assert.ok(humanRequestStart >= 0, 'human request branch should exist');
 const humanRequestBranch = server.slice(humanRequestStart, server.indexOf('const matchedRule = await findAutoresponderRuleMatch', humanRequestStart));
 assert.ok(humanRequestBranch.includes('getCachedAutoresponderStoreStatus()'), 'human request branch should use cached helper');
