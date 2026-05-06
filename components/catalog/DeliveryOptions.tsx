@@ -189,8 +189,9 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
                                 <input
                                     type="text"
                                     value={selected.address.street}
-                                    readOnly
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50"
+                                    onChange={(e) => handleAddressChange('street', e.target.value)}
+                                    placeholder="Rua, avenida, etc."
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 />
                             </div>
 
@@ -229,8 +230,9 @@ export function DeliveryOptions({ selected, onSelect, storeStatus, subtotal, car
                                 <input
                                     type="text"
                                     value={selected.address.neighborhood}
-                                    readOnly
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50"
+                                    onChange={(e) => handleAddressChange('neighborhood', e.target.value)}
+                                    placeholder="Bairro"
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 />
                             </div>
 
