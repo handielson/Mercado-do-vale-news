@@ -248,6 +248,182 @@ function getAutoresponderContactFirstName(payload) {
   return firstName.length >= 2 ? firstName : '';
 }
 
+function normalizeAutoresponderContactName(value) {
+  return String(value || '')
+    .replace(/[^\p{L}\s'-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function isAutoresponderYes(message) {
+  const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^(sim|s|isso|correto|confirmo|pode|pode sim|ta certo|esta certo)$/.test(text);
+}
+
+function isAutoresponderNo(message) {
+  const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^(nao|n|não|errado|nao e|nao eh|nao sou|outro nome)$/.test(text);
+}
+
+function formatAutoresponderPhoneForGoogle(sender) {
+  const digits = normalizeAutoresponderSender(sender);
+  if (!digits) return '';
+  return digits.startsWith('55') ? `+${digits}` : `+55${digits}`;
+}
+
+async function getGoogleContactsAccessToken() {
+  const clientId = process.env.GOOGLE_CONTACTS_CLIENT_ID || '';
+  const clientSecret = process.env.GOOGLE_CONTACTS_CLIENT_SECRET || '';
+  const refreshToken = process.env.GOOGLE_CONTACTS_REFRESH_TOKEN || '';
+  if (!clientId || !clientSecret || !refreshToken) {
+    return null;
+  }
+
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    throw new Error(`Google token refresh failed: ${res.status} ${await res.text()}`);
+  }
+  const data = await res.json();
+  return data.access_token || null;
+}
+
+async function createOrUpdateGoogleContact({ sender, name }) {
+  const accessToken = await getGoogleContactsAccessToken();
+  if (!accessToken) return { ok: false, skipped: true, reason: 'google_contacts_not_configured' };
+
+  const phoneNumber = formatAutoresponderPhoneForGoogle(sender);
+  if (!phoneNumber || !name) return { ok: false, skipped: true, reason: 'missing_contact_data' };
+
+  const res = await fetch('https://people.googleapis.com/v1/people:createContact', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      names: [{ givenName: name }],
+      phoneNumbers: [{ value: phoneNumber }],
+      biographies: [{ value: 'Cliente WhatsApp Mercado do Vale' }],
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    throw new Error(`Google contact create failed: ${res.status} ${await res.text()}`);
+  }
+  const contact = await res.json();
+  return { ok: true, resourceName: contact.resourceName || null };
+}
+
+async function getAutoresponderContactNameState(sender) {
+  const [rows] = await pool.query(
+    `SELECT contact_name_status, contact_name_suggestion, contact_name_confirmed, google_contact_resource_name
+     FROM autoresponder_conversations
+     WHERE sender = ?
+     LIMIT 1`,
+    [sender]
+  );
+  return rows[0] || null;
+}
+
+async function startAutoresponderContactNameConfirmation(sender, suggestedName) {
+  await pool.query(
+    `INSERT INTO autoresponder_conversations
+      (sender, last_message_at, contact_name_status, contact_name_suggestion, contact_name_updated_at)
+     VALUES (?, CURRENT_TIMESTAMP, 'awaiting_name_confirmation', ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       contact_name_status = 'awaiting_name_confirmation',
+       contact_name_suggestion = ?,
+       contact_name_updated_at = CURRENT_TIMESTAMP`,
+    [sender, suggestedName, suggestedName]
+  );
+}
+
+async function markAutoresponderContactNameAwaitingInput(sender) {
+  await pool.query(
+    `INSERT INTO autoresponder_conversations
+      (sender, last_message_at, contact_name_status, contact_name_updated_at)
+     VALUES (?, CURRENT_TIMESTAMP, 'awaiting_name_input', CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       contact_name_status = 'awaiting_name_input',
+       contact_name_updated_at = CURRENT_TIMESTAMP`,
+    [sender]
+  );
+}
+
+async function saveAutoresponderConfirmedContactName(sender, name, googleResult) {
+  const status = googleResult?.ok ? 'saved_to_google' : 'google_pending';
+  await pool.query(
+    `INSERT INTO autoresponder_conversations
+      (sender, last_message_at, contact_name_status, contact_name_confirmed, google_contact_resource_name, contact_name_updated_at)
+     VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       contact_name_status = ?,
+       contact_name_confirmed = ?,
+       google_contact_resource_name = ?,
+       contact_name_updated_at = CURRENT_TIMESTAMP`,
+    [sender, status, name, googleResult?.resourceName || null, status, name, googleResult?.resourceName || null]
+  );
+}
+
+function formatAutoresponderContactSavedReply(name, googleResult) {
+  if (googleResult?.ok) {
+    return `Perfeito, ${name}! Vou salvar seu contato aqui. ✅`;
+  }
+  return `Perfeito, ${name}! Vou deixar seu contato salvo aqui. ✅`;
+}
+
+async function confirmAutoresponderContactName(sender, name) {
+  const googleResult = await createOrUpdateGoogleContact({ sender, name }).catch((err) => {
+    console.warn('[autoresponder] google contact save failed:', err.message);
+    return { ok: false, skipped: true, reason: 'google_contact_error' };
+  });
+  await saveAutoresponderConfirmedContactName(sender, name, googleResult);
+  return formatAutoresponderContactSavedReply(name, googleResult);
+}
+
+async function handleAutoresponderContactNameFlow({ sender, message, contactFirstName }) {
+  const state = await getAutoresponderContactNameState(sender);
+  const status = String(state?.contact_name_status || '');
+  const suggestedName = normalizeAutoresponderContactName(state?.contact_name_suggestion || contactFirstName);
+
+  if (status === 'saved_to_google' || status === 'google_pending') return null;
+
+  if (status === 'awaiting_name_confirmation') {
+    if (isAutoresponderYes(message) && suggestedName) {
+      return confirmAutoresponderContactName(sender, suggestedName);
+    }
+    if (isAutoresponderNo(message)) {
+      await markAutoresponderContactNameAwaitingInput(sender);
+      return 'Sem problema 😊\nQual nome devo colocar no seu contato?';
+    }
+    return null;
+  }
+
+  if (status === 'awaiting_name_input') {
+    const typedName = normalizeAutoresponderContactName(message);
+    if (typedName.length < 2 || typedName.split(' ').length > 5) {
+      return 'Me envie apenas o nome que devo colocar no seu contato, por favor. 😊';
+    }
+    return confirmAutoresponderContactName(sender, typedName);
+  }
+
+  return null;
+}
+
 function getAutoresponderGreetingPeriod(message) {
   const text = normalizeAutoresponderText(message);
   if (text.includes('bom dia') || text === 'bomdia') return 'morning';
@@ -1993,8 +2169,30 @@ fastify.route({
         return { replies: [] };
       }
 
+      const contactFlowReply = await handleAutoresponderContactNameFlow({ sender: senderKey, message, contactFirstName });
+      if (contactFlowReply) {
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'contact_name',
+          replyText: contactFlowReply,
+          matchedCount: 1,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: contactFlowReply }] };
+      }
+
       if (isAutoresponderGreetingOnly(message)) {
-        const replyText = getAutoresponderGreetingReply(message, contactFirstName);
+        const contactState = await getAutoresponderContactNameState(senderKey);
+        const shouldConfirmContactName = contactFirstName
+          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(String(contactState?.contact_name_status || ''));
+        if (shouldConfirmContactName) {
+          await startAutoresponderContactNameConfirmation(senderKey, contactFirstName);
+        }
+        const contactPrompt = shouldConfirmContactName
+          ? `\n\nSeu nome e ${contactFirstName}? 😊\nResponda "sim" para confirmar ou "nao" para informar outro nome.`
+          : '';
+        const replyText = `${getAutoresponderGreetingReply(message, contactFirstName)}${contactPrompt}`;
         await logAutoresponderReply({
           sender: senderKey,
           message,
@@ -5654,6 +5852,11 @@ async function runMigrations() {
       tag_ids JSON NULL,
       last_options_offered JSON NULL,
       last_options_at TIMESTAMP NULL,
+      contact_name_status VARCHAR(40) NULL,
+      contact_name_suggestion VARCHAR(120) NULL,
+      contact_name_confirmed VARCHAR(120) NULL,
+      google_contact_resource_name VARCHAR(120) NULL,
+      contact_name_updated_at TIMESTAMP NULL,
       INDEX idx_paused (paused_until)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
@@ -5673,6 +5876,11 @@ async function runMigrations() {
   `);
 
   await addColumnIfMissing('products', 'tag_ids', 'JSON NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'contact_name_status', 'VARCHAR(40) NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'contact_name_suggestion', 'VARCHAR(120) NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'contact_name_confirmed', 'VARCHAR(120) NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'google_contact_resource_name', 'VARCHAR(120) NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'contact_name_updated_at', 'TIMESTAMP NULL');
   console.log('[migration] autoresponder phase 1A tables: OK');
 
   await pool.query(`
