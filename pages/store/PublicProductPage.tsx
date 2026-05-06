@@ -56,6 +56,7 @@ export const PublicProductPage: React.FC = () => {
     const [catalogTheme, setCatalogTheme] = useState<Pick<CatalogSettings, 'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'card_background' | 'text_primary' | 'text_secondary'> | null>(null);
     const [comboChildren, setComboChildren] = useState<any[]>([]);
     const [selectedKitQuantity, setSelectedKitQuantity] = useState<number>(1);
+    const [isQuoteCartOpen, setIsQuoteCartOpen] = useState(false);
 
     // Config da categoria: define quais campos existem no template
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
@@ -742,8 +743,11 @@ export const PublicProductPage: React.FC = () => {
 
             <PublicHeader />
 
-            <FloatingCartButton />
-            <QuoteCartSidebar />
+            <FloatingCartButton onClick={() => setIsQuoteCartOpen(true)} />
+            <QuoteCartSidebar
+                isOpen={isQuoteCartOpen}
+                onClose={() => setIsQuoteCartOpen(false)}
+            />
 
             <main className="max-w-7xl mx-auto px-4 py-8">
                 {/* Breadcrumbs */}
