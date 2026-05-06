@@ -37,8 +37,8 @@ export const ClienteLoginPage: React.FC = () => {
         try {
             await signInWithEmail(email, password);
             navigate(nextPath);
-        } catch (error: any) {
-            toast.error(error.message || 'Erro ao fazer login');
+        } catch {
+            // Toast já é mostrado pelo contexto em PT-BR
         } finally {
             setLoading(false);
         }
@@ -53,8 +53,8 @@ export const ClienteLoginPage: React.FC = () => {
         try {
             await signInWithCpf(cpf, password);
             navigate(nextPath);
-        } catch (error: any) {
-            toast.error(error.message || 'CPF ou senha incorretos');
+        } catch {
+            // Toast já é mostrado pelo contexto em PT-BR
         } finally {
             setLoading(false);
         }
@@ -65,8 +65,8 @@ export const ClienteLoginPage: React.FC = () => {
         try {
             if (nextPath !== '/') sessionStorage.setItem('auth_next', nextPath);
             await signInWithGoogle();
-        } catch (error: any) {
-            toast.error(error.message || 'Erro ao fazer login com Google');
+        } catch {
+            // Toast já é mostrado pelo contexto em PT-BR
             setGoogleLoading(false);
         }
     };

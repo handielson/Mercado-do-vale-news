@@ -292,16 +292,38 @@ export const SupabaseAuthProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
     }
 
-    // Sign in with CPF + password (uses placeholder email internally)
+    // Sign in with CPF + password
+    // Looks up the real e-mail registered for the CPF; falls back to the legacy
+    // pseudo-email scheme ({cpf}@cliente.mercadodovale.com.br) for older accounts.
     const signInWithCpf = async (cpf: string, password: string) => {
         const digits = cpf.replace(/\D/g, '')
-        if (!digits) throw new Error('CPF inválido')
-        const email = `${digits}@cliente.mercadodovale.com.br`
+        if (!digits) {
+            notify.error('CPF inválido')
+            throw new Error('CPF inválido')
+        }
         try {
             const supabase = await getSupabaseClient()
-            const { error } = await supabase.auth.signInWithPassword({ email, password })
-            if (error) throw new Error('CPF ou senha incorretos')
-            notify.success('Login realizado com sucesso!')
+
+            const { data: customer } = await supabase
+                .from('customers')
+                .select('email')
+                .eq('cpf_cnpj', digits)
+                .maybeSingle()
+
+            const candidates = [
+                customer?.email,
+                `${digits}@cliente.mercadodovale.com.br`,
+            ].filter(Boolean) as string[]
+
+            for (const email of candidates) {
+                const { error } = await supabase.auth.signInWithPassword({ email, password })
+                if (!error) {
+                    notify.success('Login realizado com sucesso!')
+                    return
+                }
+            }
+
+            throw new Error('CPF ou senha incorretos')
         } catch (error: any) {
             notify.error(error.message || 'CPF ou senha incorretos')
             throw error

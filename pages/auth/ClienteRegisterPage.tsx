@@ -96,8 +96,8 @@ export const ClienteRegisterPage: React.FC = () => {
                 description: 'Sua conta foi criada. Faça login e comece a acumular Moedas do Vale!'
             });
             navigate('/cliente/login');
-        } catch (error: any) {
-            toast.error(error.message || 'Erro ao criar conta');
+        } catch {
+            // Toast já é mostrado pelo contexto em PT-BR
         } finally {
             setLoading(false);
         }
