@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Printer, Settings, Package } from 'lucide-react';
 import Barcode from 'react-barcode';
 import { Product } from '../../types/product';
@@ -31,7 +32,7 @@ const LABEL_SIZES: LabelSize[] = [
     { id: '50x30',  label: '50 × 30 mm  (P50S)',        width: 50, height: 30, fontStore: 10, fontName: 8,  fontPrice: 14, fontPriceCurrency: 7,  barcodeWidth: 1.0, barcodeHeight: 20, barcodeFont: 9,  padding: 1 },
     { id: '30x40',  label: '30 × 40 mm  (P50S)',        width: 30, height: 40, fontStore: 8,  fontName: 7,  fontPrice: 12, fontPriceCurrency: 6,  barcodeWidth: 0.8, barcodeHeight: 24, barcodeFont: 7,  padding: 0.8 },
     { id: '40x25',  label: '40 × 25 mm  (P50S)',        width: 40, height: 25, fontStore: 8,  fontName: 7,  fontPrice: 12, fontPriceCurrency: 6,  barcodeWidth: 0.9, barcodeHeight: 14, barcodeFont: 7,  padding: 0.8 },
-    { id: '30x20',  label: '30 × 20 mm  (P50S)',        width: 30, height: 20, fontStore: 7,  fontName: 6,  fontPrice: 10, fontPriceCurrency: 5,  barcodeWidth: 0.7, barcodeHeight: 12, barcodeFont: 6,  padding: 0.6 },
+    { id: '30x20',  label: '30 × 20 mm  (P50S)',        width: 30, height: 20, fontStore: 7,  fontName: 6,  fontPrice: 10, fontPriceCurrency: 5,  barcodeWidth: 0.55, barcodeHeight: 10, barcodeFont: 6, padding: 0.5 },
     { id: '60x40',  label: '60 × 40 mm',                width: 60, height: 40, fontStore: 11, fontName: 9,  fontPrice: 18, fontPriceCurrency: 8,  barcodeWidth: 1.2, barcodeHeight: 26, barcodeFont: 10, padding: 1.5 },
     { id: '80x40',  label: '80 × 40 mm',                width: 80, height: 40, fontStore: 13, fontName: 10, fontPrice: 22, fontPriceCurrency: 9,  barcodeWidth: 1.5, barcodeHeight: 30, barcodeFont: 11, padding: 1.5 },
     { id: '80x50',  label: '80 × 50 mm',                width: 80, height: 50, fontStore: 14, fontName: 11, fontPrice: 24, fontPriceCurrency: 10, barcodeWidth: 1.6, barcodeHeight: 40, barcodeFont: 12, padding: 2 },
@@ -94,15 +95,17 @@ const LabelContent: React.FC<LabelContentProps> = ({ size, storeName, labelName,
         )}
 
         {barcodeValue && (
-            <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
                 <Barcode
                     value={barcodeValue}
                     format="CODE128"
+                    renderer="img"
                     width={size.barcodeWidth}
                     height={size.barcodeHeight}
                     displayValue={true}
                     fontSize={size.barcodeFont}
                     margin={0}
+                    background="#ffffff"
                 />
             </div>
         )}
@@ -148,17 +151,8 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                     margin: 0 !important;
                     padding: 0 !important;
                     background: #fff !important;
-                }
-                .label-print-page {
                     width: ${size.width}mm;
                     height: ${size.height}mm;
-                    page-break-after: always;
-                    break-after: page;
-                    overflow: hidden;
-                }
-                .label-print-page:last-child {
-                    page-break-after: auto;
-                    break-after: auto;
                 }
             }
         `,
@@ -353,23 +347,44 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                 </div>
             </div>
 
-            {/* Hidden print container — rendered off-screen so react-to-print can clone it */}
-            <div style={{ position: 'fixed', left: '-10000px', top: 0, opacity: 0, pointerEvents: 'none' }} aria-hidden="true">
-                <div ref={printRef}>
-                    {Array.from({ length: safeCopies }).map((_, i) => (
-                        <div key={i} className="label-print-page">
-                            <LabelContent
-                                size={size}
-                                storeName="Mercado do Vale"
-                                labelName={labelName}
-                                showPrice={showPrice}
-                                labelPrice={labelPrice}
-                                barcodeValue={barcodeValue}
-                            />
-                        </div>
-                    ))}
-                </div>
-            </div>
+            {/* Print source rendered in a portal at body level to avoid modal style inheritance */}
+            {createPortal(
+                <div
+                    style={{
+                        position: 'absolute',
+                        left: '-9999px',
+                        top: 0,
+                        background: '#fff',
+                        width: `${size.width}mm`,
+                    }}
+                    aria-hidden="true"
+                >
+                    <div ref={printRef}>
+                        {Array.from({ length: safeCopies }).map((_, i) => (
+                            <div
+                                key={i}
+                                style={{
+                                    width: `${size.width}mm`,
+                                    height: `${size.height}mm`,
+                                    overflow: 'hidden',
+                                    pageBreakAfter: i < safeCopies - 1 ? 'always' : 'auto',
+                                    breakAfter: i < safeCopies - 1 ? 'page' : 'auto',
+                                }}
+                            >
+                                <LabelContent
+                                    size={size}
+                                    storeName="Mercado do Vale"
+                                    labelName={labelName}
+                                    showPrice={showPrice}
+                                    labelPrice={labelPrice}
+                                    barcodeValue={barcodeValue}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
