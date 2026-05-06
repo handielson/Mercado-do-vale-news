@@ -2184,15 +2184,23 @@ fastify.route({
 
       if (isAutoresponderGreetingOnly(message)) {
         const contactState = await getAutoresponderContactNameState(senderKey);
+        const contactNameStatus = String(contactState?.contact_name_status || '');
         const shouldConfirmContactName = contactFirstName
-          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(String(contactState?.contact_name_status || ''));
+          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(contactNameStatus);
+        const shouldAskContactName = !contactFirstName
+          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(contactNameStatus);
         if (shouldConfirmContactName) {
           await startAutoresponderContactNameConfirmation(senderKey, contactFirstName);
+        } else if (shouldAskContactName) {
+          await markAutoresponderContactNameAwaitingInput(senderKey);
         }
         const contactPrompt = shouldConfirmContactName
-          ? `\n\nSeu nome e ${contactFirstName}? 😊\nResponda "sim" para confirmar ou "nao" para informar outro nome.`
+          ? `\n\nSeu nome e ${contactFirstName}? \u{1F60A}\nResponda "sim" para confirmar ou "nao" para informar outro nome.`
+          : shouldAskContactName
+            ? '\n\nComo devo chamar voce? \u{1F60A}'
           : '';
-        const replyText = `${getAutoresponderGreetingReply(message, contactFirstName)}${contactPrompt}`;
+        const greetingText = getAutoresponderGreetingReply(message, contactFirstName);
+        const replyText = `${greetingText}${contactPrompt}`;
         await logAutoresponderReply({
           sender: senderKey,
           message,
@@ -2201,6 +2209,9 @@ fastify.route({
           matchedCount: 1,
         });
         await upsertAutoresponderSuccessConversation(senderKey);
+        if (shouldConfirmContactName || shouldAskContactName) {
+          return { replies: [{ message: greetingText }, { message: contactPrompt.trim() }] };
+        }
         return { replies: [{ message: replyText }] };
       }
 

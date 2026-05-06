@@ -60,4 +60,22 @@ assert.match(
   'pure greeting with contact name must start the confirmation flow',
 );
 
+assert.match(
+  source,
+  /await markAutoresponderContactNameAwaitingInput\(senderKey\)/,
+  'pure greeting without contact name must start the manual name capture flow',
+);
+
+assert.match(
+  source,
+  /Como devo chamar voce\?/,
+  'pure greeting without contact name must ask how to call the customer',
+);
+
+assert.match(
+  source,
+  /return \{ replies: \[\{ message: greetingText \}, \{ message: contactPrompt\.trim\(\) \}\] \}/,
+  'greeting contact prompts must be returned as a second Pro reply',
+);
+
 console.log('autoresponder google contact flow static checks passed');
