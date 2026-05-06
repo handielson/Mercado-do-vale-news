@@ -764,6 +764,7 @@ async function formatAutoresponderProductDetailReply(product, settings = null) {
     product.name,
     `Preco: ${formatAutoresponderCurrency(price)}`,
   ];
+  if (product.sku) lines.push(`SKU: ${product.sku}`);
 
   const installmentLine = formatAutoresponderInstallmentLine(
     await calculateAutoresponderMaxInstallment(getAutoresponderProductPriceCents(product))
