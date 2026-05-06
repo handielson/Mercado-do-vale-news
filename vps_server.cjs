@@ -225,6 +225,57 @@ function isAutoresponderGreeting(message) {
   return /(^|\s)(oi|ola|bom dia|boa tarde|boa noite|e ai|opa)(\s|$)/.test(text);
 }
 
+function isAutoresponderGreetingOnly(message) {
+  const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^(oi|ola|olá|bom dia|boa tarde|boa noite|e ai|opa|bomdia|boatarde|boanoite)$/.test(text);
+}
+
+function getAutoresponderContactFirstName(payload) {
+  const rawName = String(
+    payload?.senderName ||
+    payload?.contactName ||
+    payload?.pushName ||
+    payload?.sender_name ||
+    payload?.contact_name ||
+    payload?.name ||
+    ''
+  ).trim();
+  const cleanName = rawName
+    .replace(/[^\p{L}\s'-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const firstName = cleanName.split(' ')[0] || '';
+  return firstName.length >= 2 ? firstName : '';
+}
+
+function getAutoresponderGreetingPeriod(message) {
+  const text = normalizeAutoresponderText(message);
+  if (text.includes('bom dia') || text === 'bomdia') return 'morning';
+  if (text.includes('boa tarde') || text === 'boatarde') return 'afternoon';
+  if (text.includes('boa noite') || text === 'boanoite') return 'night';
+
+  const hour = Number(new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    hour12: false,
+  }).format(new Date()));
+  if (hour >= 5 && hour < 12) return 'morning';
+  if (hour >= 12 && hour < 18) return 'afternoon';
+  return 'night';
+}
+
+function getAutoresponderGreetingReply(message, contactFirstName = '') {
+  const period = getAutoresponderGreetingPeriod(message);
+  const greeting = period === 'morning'
+    ? 'Bom dia'
+    : period === 'afternoon'
+      ? 'Boa tarde'
+      : 'Boa noite';
+  const emoji = period === 'night' ? '🌙' : '✨';
+  const nameText = contactFirstName ? `, ${contactFirstName}` : '';
+  return `${greeting}${nameText}! 😊 Seja bem-vindo ao Mercado do Vale.\nComo posso ajudar voce hoje? ${emoji}`;
+}
+
 function formatAutoresponderReply(replyText, settings, shouldPrefixGreeting) {
   const text = String(replyText || '').trim();
   const prefix = String(settings?.greeting_prefix || '').trim();
@@ -1904,6 +1955,7 @@ fastify.route({
       const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
       const shouldPrefixGreeting = isAutoresponderGreeting(message);
+      const contactFirstName = getAutoresponderContactFirstName(payload);
 
       const [settingsRows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
       const settings = settingsRows[0];
@@ -1939,6 +1991,19 @@ fastify.route({
       if (recentReplyCount >= replyLimit) {
         await touchAutoresponderConversation(senderKey);
         return { replies: [] };
+      }
+
+      if (isAutoresponderGreetingOnly(message)) {
+        const replyText = getAutoresponderGreetingReply(message, contactFirstName);
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'greeting',
+          replyText,
+          matchedCount: 1,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
       }
 
       const numberedChoice = getAutoresponderNumberedChoice(message);
