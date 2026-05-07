@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Package, RefreshCw, Receipt, FileText } from 'lucide-react';
+import { ShoppingBag, Package, RefreshCw, Receipt, FileText, ExternalLink, Check, Clock, X, CreditCard, Truck, type LucideIcon } from 'lucide-react';
 import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
-import { getSales, deleteSale } from '../../../services/saleService';
+import { getSales } from '../../../services/saleService';
 import { getOrders, cancelOrder } from '../../../services/orderService';
 import { supabase } from '../../../services/supabase';
 import { companySettingsService } from '../../../services/companySettingsService';
@@ -19,6 +19,59 @@ const fmt = (v: number) =>
 const paymentLabel = (m: string): string =>
     ({ money: 'Dinheiro', credit: 'Crédito', debit: 'Débito', pix: 'PIX' }[m] || m);
 
+// Fases do pedido online — ordem de progresso. payment_failed e cancelled
+// são estados terminais negativos e tratados separadamente.
+const ONLINE_ORDER_STAGES: Array<{
+    key: string;
+    label: string;
+    Icon: LucideIcon;
+}> = [
+    { key: 'awaiting_payment', label: 'Aguardando pagamento', Icon: Clock },
+    { key: 'paid', label: 'Pagamento confirmado', Icon: CreditCard },
+    { key: 'preparing', label: 'Em preparação', Icon: Package },
+    { key: 'shipped', label: 'Enviado', Icon: Truck },
+    { key: 'delivered', label: 'Entregue', Icon: Check },
+];
+
+function getStageIndex(status: string): number {
+    // Mapeia status atual para o índice da fase concluída mais recente.
+    // pending e awaiting_payment caem na fase 0 (aguardando pagamento).
+    if (status === 'pending' || status === 'awaiting_payment') return 0;
+    const idx = ONLINE_ORDER_STAGES.findIndex(s => s.key === status);
+    if (idx >= 0) return idx;
+    // 'completed' é equivalente ao último estágio (entregue + finalizado)
+    if (status === 'completed') return ONLINE_ORDER_STAGES.length - 1;
+    return -1;
+}
+
+function getStatusBadge(status: string): { label: string; className: string } {
+    switch (status) {
+        case 'paid':
+            return { label: 'Pago', className: 'bg-emerald-100 text-emerald-800' };
+        case 'preparing':
+            return { label: 'Em preparação', className: 'bg-blue-100 text-blue-800' };
+        case 'shipped':
+            return { label: 'Enviado', className: 'bg-indigo-100 text-indigo-800' };
+        case 'delivered':
+            return { label: 'Entregue', className: 'bg-green-100 text-green-800' };
+        case 'completed':
+            return { label: 'Concluído', className: 'bg-green-100 text-green-800' };
+        case 'awaiting_payment':
+            return { label: 'Aguardando pagamento', className: 'bg-yellow-100 text-yellow-800' };
+        case 'pending':
+            return { label: 'Pendente', className: 'bg-yellow-100 text-yellow-800' };
+        case 'cancelled':
+            return { label: 'Cancelado', className: 'bg-red-100 text-red-800' };
+        case 'payment_failed':
+            return { label: 'Pagamento recusado', className: 'bg-red-100 text-red-800' };
+        case 'refunded':
+        case 'returned':
+            return { label: 'Estornado/Devolvido', className: 'bg-orange-100 text-orange-800' };
+        default:
+            return { label: status || 'Desconhecido', className: 'bg-slate-100 text-slate-800' };
+    }
+}
+
 export const PurchaseHistoryTab: React.FC = () => {
     const { customer } = useSupabaseAuth();
     const [sales, setSales] = useState<SaleWithItems[]>([]);
@@ -26,36 +79,6 @@ export const PurchaseHistoryTab: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [printingReceiptId, setPrintingReceiptId] = useState<string | null>(null);
     const [printingComprovanteId, setPrintingComprovanteId] = useState<string | null>(null);
-    const [isDeleting, setIsDeleting] = useState(false);
-
-    const handleClearPhantomOrders = async () => {
-        if (!confirm('ATENÇÃO: Isso apagará PARA SEMPRE todas as compras exibidas abaixo do banco de dados (Ação para limpar dados de teste). Tem certeza?')) return;
-        
-        setIsDeleting(true);
-        try {
-            // Separa os IDs de vendas do PDV e pedidos online
-            const onlineIds = sales.filter(s => (s as any).payment_methods?.[0]?.method !== undefined && !s.id.includes('-pdv-')).map(s => s.id); // Lógica simples de separação
-            
-            // Delete online orders directly
-            for (const id of onlineIds) {
-                await supabase.from('orders').delete().eq('id', id);
-            }
-            
-            // Delete PDV sales
-            const pdvIds = sales.filter(s => !onlineIds.includes(s.id)).map(s => s.id);
-            for (const id of pdvIds) {
-                await deleteSale(id);
-            }
-
-            toast.success('Histórico de teste apagado do banco de dados!');
-            setSales([]);
-        } catch (e: any) {
-            console.error(e);
-            toast.error('Erro ao apagar pedidos: ' + e.message);
-        } finally {
-            setIsDeleting(false);
-        }
-    };
 
     const handleViewLegacyComprovante = async (sale: SaleWithItems) => {
         setPrintingComprovanteId(sale.id);
@@ -133,8 +156,7 @@ export const PurchaseHistoryTab: React.FC = () => {
                         .eq('reference_id', sale.id)
                         .eq('type', 'earn_purchase')
                         .maybeSingle()
-                        .then(({ data }) => data?.amount ?? 0)
-                        .catch(() => 0)
+                        .then(({ data }) => data?.amount ?? 0, () => 0)
                     : Promise.resolve(0),
             ]);
             if (!settings) return;
@@ -161,12 +183,14 @@ export const PurchaseHistoryTab: React.FC = () => {
                     getOrders({ customer_id: customer.id })
                 ]);
 
-                // Map online orders to match the Sale structure for UI compatibility
+                // Map online orders to match the Sale structure for UI compatibility.
+                // Preservamos o status original do pedido (awaiting_payment, paid,
+                // preparing, shipped, delivered, completed, cancelled, payment_failed)
+                // para o cliente ver a fase real, mesmo que o admin altere manualmente.
                 const mappedOrders = onlineOrders.map(order => ({
                     id: order.id,
                     created_at: order.created_at,
-                    status: order.status === 'completed' || order.status === 'paid' ? 'completed' :
-                        order.status === 'cancelled' ? 'cancelled' : 'pending',
+                    status: order.status,
                     total: order.total,
                     discount_total: order.discount,
                     delivery_total: order.shipping_cost,
@@ -184,8 +208,15 @@ export const PurchaseHistoryTab: React.FC = () => {
                             order.payment_method === 'pix' ? 'pix' :
                                 order.payment_method === 'on_delivery' ? 'Dinheiro/Cartão (Entrega)' : 'Dinheiro',
                         amount: order.total,
-                        installments: 1 // Simplified for now
-                    }]
+                        installments: 1
+                    }],
+                    // Campos extras pra renderização rica (pedido online):
+                    is_online_order: true,
+                    delivery_type: order.delivery_type,
+                    payment_gateway: order.payment_gateway,
+                    gateway_payment_id: order.gateway_payment_id,
+                    gateway_pix_data: order.gateway_pix_data,
+                    gateway_payment_url: order.gateway_payment_url,
                 })) as unknown as SaleWithItems[];
 
                 // Merge and sort
@@ -247,27 +278,6 @@ export const PurchaseHistoryTab: React.FC = () => {
                 Acompanhe todas as suas compras realizadas
             </p>
 
-            {/* Painel de DEBUG/Limpeza de Dados Fantasmas */}
-            {sales.length > 0 && customer?.id && (
-                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div>
-                        <h4 className="text-red-800 font-bold text-sm">🛠️ Modo Desenvolvedor: Dados Fantasmas?</h4>
-                        <p className="text-red-600 text-xs mt-1 leading-relaxed">
-                            O sistema encontrou estes pedidos atrelados ao seu UUID <code>{customer.id}</code>.<br/>
-                            Se você não fez essas compras, elas foram importadas do WooCommerce ou PDV antigo como teste.<br/>
-                            Você pode resetar o histórico deste CPF agora mesmo.
-                        </p>
-                    </div>
-                    <button 
-                        onClick={handleClearPhantomOrders}
-                        disabled={isDeleting}
-                        className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
-                    >
-                        {isDeleting ? 'Apagando...' : 'Limpar Dados Fantasmas'}
-                    </button>
-                </div>
-            )}
-
             {sales.length === 0 ? (
                 <div className="text-center py-12">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 rounded-full mb-4">
@@ -291,6 +301,13 @@ export const PurchaseHistoryTab: React.FC = () => {
                 <div className="space-y-4">
                     {sales.map(sale => {
                         const payments: any[] = (sale as any).payment_methods || [];
+                        const isOnlineOrder: boolean = !!(sale as any).is_online_order;
+                        const orderStatus: string = String(sale.status);
+                        const stageIndex = getStageIndex(orderStatus);
+                        const pixTicketUrl: string | undefined = (sale as any).gateway_pix_data?.ticket_url;
+                        const paymentGateway: string | undefined = (sale as any).payment_gateway;
+                        const gatewayPaymentId: string | undefined = (sale as any).gateway_payment_id;
+                        const isTerminalNegative = orderStatus === 'cancelled' || orderStatus === 'payment_failed';
                         return (
                             <div key={sale.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                                 {/* Header do pedido */}
@@ -336,18 +353,14 @@ export const PurchaseHistoryTab: React.FC = () => {
                                                 Recibo
                                             </button>
                                         )}
-                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${sale.status === 'completed' || sale.status === 'paid' ? 'bg-green-100 text-green-800' :
-                                            sale.status === 'pending' || sale.status === 'awaiting_payment' ? 'bg-yellow-100 text-yellow-800' :
-                                                sale.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                                    sale.status === 'refunded' || sale.status === 'returned' ? 'bg-orange-100 text-orange-800' :
-                                                        'bg-slate-100 text-slate-800'
-                                            }`}>
-                                            {sale.status === 'completed' || sale.status === 'paid' ? 'Concluída' :
-                                                sale.status === 'pending' || sale.status === 'awaiting_payment' ? 'Pendente' :
-                                                    sale.status === 'cancelled' ? 'Cancelada' :
-                                                        sale.status === 'refunded' || sale.status === 'returned' ? 'Estornada/Devolvida' :
-                                                            'Desconhecido'}
-                                        </span>
+                                        {(() => {
+                                            const badge = getStatusBadge(String(sale.status));
+                                            return (
+                                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${badge.className}`}>
+                                                    {badge.label}
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
 
@@ -392,6 +405,81 @@ export const PurchaseHistoryTab: React.FC = () => {
                                             })}
                                         </div>
                                     </div>
+
+                                    {/* Timeline de progresso (somente pedidos online) */}
+                                    {isOnlineOrder && (
+                                        <div>
+                                            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Progresso do pedido</h4>
+                                            {isTerminalNegative ? (
+                                                <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg p-4">
+                                                    <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                                                        <X className="w-5 h-5 text-red-600" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm font-semibold text-red-800">
+                                                            {orderStatus === 'cancelled' ? 'Pedido cancelado' : 'Pagamento recusado'}
+                                                        </div>
+                                                        <div className="text-xs text-red-600 mt-0.5">
+                                                            {orderStatus === 'cancelled'
+                                                                ? 'Este pedido foi cancelado e não será processado.'
+                                                                : 'O pagamento não foi aprovado. Você pode tentar novamente em uma nova compra.'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <ol className="flex items-start justify-between gap-1">
+                                                    {ONLINE_ORDER_STAGES.map((stage, idx) => {
+                                                        const reached = stageIndex >= idx;
+                                                        const current = stageIndex === idx;
+                                                        const StageIcon = stage.Icon;
+                                                        return (
+                                                            <li key={stage.key} className="flex-1 flex flex-col items-center text-center min-w-0">
+                                                                <div className="flex items-center w-full">
+                                                                    <div className={`flex-1 h-0.5 ${idx === 0 ? 'invisible' : reached ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                                                                    <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 flex-shrink-0 ${
+                                                                        reached
+                                                                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                                                                            : 'bg-white border-slate-300 text-slate-400'
+                                                                    } ${current ? 'ring-4 ring-emerald-100' : ''}`}>
+                                                                        <StageIcon size={14} />
+                                                                    </div>
+                                                                    <div className={`flex-1 h-0.5 ${idx === ONLINE_ORDER_STAGES.length - 1 ? 'invisible' : (stageIndex > idx ? 'bg-emerald-500' : 'bg-slate-200')}`} />
+                                                                </div>
+                                                                <span className={`mt-2 text-[11px] leading-tight ${current ? 'font-semibold text-slate-800' : reached ? 'text-slate-600' : 'text-slate-400'}`}>
+                                                                    {stage.label}
+                                                                </span>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ol>
+                                            )}
+
+                                            {/* Detalhes do pagamento (gateway) */}
+                                            {(pixTicketUrl || gatewayPaymentId) && (
+                                                <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-center justify-between gap-3 flex-wrap">
+                                                    <div className="text-xs text-blue-900">
+                                                        {paymentGateway === 'mercado_pago' && (
+                                                            <div className="font-semibold">Pagamento via Mercado Pago</div>
+                                                        )}
+                                                        {gatewayPaymentId && (
+                                                            <div className="text-blue-700">ID do pagamento: <code className="font-mono">{gatewayPaymentId}</code></div>
+                                                        )}
+                                                    </div>
+                                                    {pixTicketUrl && (
+                                                        <a
+                                                            href={pixTicketUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                                                        >
+                                                            <ExternalLink size={13} />
+                                                            Ver no Mercado Pago
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* Resumo + Pagamento */}
                                     <div className="grid grid-cols-2 gap-4">
