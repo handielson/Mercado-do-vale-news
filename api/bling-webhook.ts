@@ -15,6 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { isMercadoPagoWebhook, handleMercadoPagoWebhook } from './_lib/mp-webhook-core';
 
 const VPS_BASE_URL = process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
 const VPS_SYNC_KEY = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
@@ -66,6 +67,18 @@ export default async function handler(req: any, res: any) {
 
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    // Despacho de webhook do Mercado Pago (rota /api/mercadopago-webhook
+    // chega aqui via rewrite no vercel.json para reaproveitar a função).
+    if (isMercadoPagoWebhook(req.body)) {
+        try {
+            const result = await handleMercadoPagoWebhook(req.body);
+            return res.status(result.status).json(result.body);
+        } catch (err: any) {
+            console.error('[bling-webhook] erro ao despachar MP:', err);
+            return res.status(200).json({ ok: false, error: err.message });
+        }
     }
 
     const signature = (req.headers['x-bling-signature-256']
