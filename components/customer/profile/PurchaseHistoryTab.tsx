@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import { ShoppingBag, Package, RefreshCw, Receipt, FileText, ExternalLink, Check, Clock, X, CreditCard, Truck, type LucideIcon } from 'lucide-react';
 import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
 import { getSales } from '../../../services/saleService';
-import { getOrders, cancelOrder } from '../../../services/orderService';
+import { getOrders } from '../../../services/orderService';
 import { supabase } from '../../../services/supabase';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { SaleWithItems } from '../../../types/sale';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
+import { printOnlineOrderReceipt } from '../../../utils/printOnlineOrderReceipt';
 import { getCoinBalance } from '../../../services/cashbackService';
 import { generateLegacySalePdf } from '../../../utils/legacySalePdfGenerator';
 import { benefitService } from '../../../services/benefitService';
@@ -143,6 +144,35 @@ export const PurchaseHistoryTab: React.FC = () => {
     const handlePrintReceipt = async (sale: SaleWithItems) => {
         setPrintingReceiptId(sale.id);
         try {
+            // Pedidos online têm estrutura diferente — usa um recibo dedicado
+            if ((sale as any).is_online_order) {
+                const settings = await companySettingsService.get().catch(() => null);
+                printOnlineOrderReceipt({
+                    id: sale.id,
+                    created_at: sale.created_at,
+                    status: String(sale.status),
+                    total: sale.total,
+                    discount_total: sale.discount_total,
+                    delivery_total: (sale as any).delivery_total,
+                    items: sale.items.map(it => ({
+                        product_name: it.product_name,
+                        product_sku: it.product_sku,
+                        quantity: it.quantity,
+                        unit_price: (it as any).unit_price,
+                        subtotal: it.subtotal,
+                    })),
+                    payment_methods: (sale as any).payment_methods,
+                    delivery_type: (sale as any).delivery_type,
+                    shipping_address: (sale as any).shipping_address,
+                    shipping_cost: (sale as any).shipping_cost,
+                    payment_gateway: (sale as any).payment_gateway,
+                    gateway_payment_id: (sale as any).gateway_payment_id,
+                    gateway_pix_data: (sale as any).gateway_pix_data,
+                    customer_name: customer?.name,
+                    customer_cpf: (customer as any)?.cpf_cnpj,
+                }, settings);
+                return;
+            }
             const customerId = customer?.id;
             const [settings, coinBalance, benefitStatuses, coinsThisSale] = await Promise.all([
                 companySettingsService.get(),
@@ -213,7 +243,10 @@ export const PurchaseHistoryTab: React.FC = () => {
                     // Campos extras pra renderização rica (pedido online):
                     is_online_order: true,
                     delivery_type: order.delivery_type,
+                    shipping_address: order.shipping_address,
+                    shipping_cost: order.shipping_cost,
                     payment_gateway: order.payment_gateway,
+                    payment_method: order.payment_method,
                     gateway_payment_id: order.gateway_payment_id,
                     gateway_pix_data: order.gateway_pix_data,
                     gateway_payment_url: order.gateway_payment_url,
@@ -307,6 +340,9 @@ export const PurchaseHistoryTab: React.FC = () => {
                         const pixTicketUrl: string | undefined = (sale as any).gateway_pix_data?.ticket_url;
                         const paymentGateway: string | undefined = (sale as any).payment_gateway;
                         const gatewayPaymentId: string | undefined = (sale as any).gateway_payment_id;
+                        const deliveryType: string | undefined = (sale as any).delivery_type;
+                        const shippingAddress = (sale as any).shipping_address as { street?: string; number?: string; complement?: string; neighborhood?: string; city?: string; state?: string; cep?: string } | undefined;
+                        const shippingCost: number = Number((sale as any).shipping_cost) || 0;
                         const isTerminalNegative = orderStatus === 'cancelled' || orderStatus === 'payment_failed';
                         return (
                             <div key={sale.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -478,6 +514,40 @@ export const PurchaseHistoryTab: React.FC = () => {
                                                     )}
                                                 </div>
                                             )}
+                                        </div>
+                                    )}
+
+                                    {/* Bloco de entrega */}
+                                    {isOnlineOrder && deliveryType && (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-start gap-3">
+                                            <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                                                {deliveryType === 'pickup'
+                                                    ? <Package className="w-4 h-4 text-slate-700" />
+                                                    : <Truck className="w-4 h-4 text-slate-700" />}
+                                            </div>
+                                            <div className="text-sm text-slate-700 flex-1 min-w-0">
+                                                <div className="font-semibold text-slate-800">
+                                                    {deliveryType === 'pickup' ? 'Retirada na loja' : 'Entrega no endereço'}
+                                                </div>
+                                                {deliveryType === 'pickup' ? (
+                                                    <div className="text-xs text-slate-500 mt-0.5">
+                                                        Você retira o pedido diretamente na loja após a confirmação.
+                                                    </div>
+                                                ) : shippingAddress ? (
+                                                    <div className="text-xs text-slate-600 mt-0.5">
+                                                        {shippingAddress.street}{shippingAddress.number ? `, ${shippingAddress.number}` : ''}
+                                                        {shippingAddress.complement ? ` — ${shippingAddress.complement}` : ''}
+                                                        {shippingAddress.neighborhood ? <><br />{shippingAddress.neighborhood}</> : null}
+                                                        {(shippingAddress.city || shippingAddress.state) ? (
+                                                            <>{shippingAddress.neighborhood ? ' · ' : <br />}{shippingAddress.city}{shippingAddress.state ? `/${shippingAddress.state}` : ''}</>
+                                                        ) : null}
+                                                        {shippingAddress.cep ? <><br />CEP: {shippingAddress.cep}</> : null}
+                                                    </div>
+                                                ) : null}
+                                                {shippingCost > 0 && (
+                                                    <div className="text-xs text-slate-500 mt-1">Frete: {fmt(shippingCost)}</div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
 
