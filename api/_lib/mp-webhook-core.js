@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 /**
  * Núcleo do webhook do Mercado Pago. Mantido em `_lib/` (prefixo `_` faz a
@@ -11,24 +11,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * salvo na integração — nada do payload bruto vai pro banco direto.
  */
 
-interface MPWebhookBody {
-    type?: string;
-    action?: string;
-    data?: { id?: string | number };
-}
-
-export function isMercadoPagoWebhook(body: any): boolean {
+export function isMercadoPagoWebhook(body) {
     if (!body || typeof body !== 'object') return false;
     const type = String(body.type || '').toLowerCase();
     const action = String(body.action || '').toLowerCase();
     return (type === 'payment' || action.startsWith('payment.')) && !!body?.data?.id;
 }
 
-export async function handleMercadoPagoWebhook(body: MPWebhookBody): Promise<{
-    status: number;
-    body: Record<string, any>;
-}> {
-    const paymentId = body.data?.id;
+export async function handleMercadoPagoWebhook(body) {
+    const paymentId = body?.data?.id;
     if (!paymentId) {
         return { status: 200, body: { message: 'ignored', reason: 'no payment id' } };
     }
@@ -45,7 +36,7 @@ export async function handleMercadoPagoWebhook(body: MPWebhookBody): Promise<{
         return { status: 200, body: { error: 'supabase not configured' } };
     }
 
-    const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, {
+    const supabase = createClient(supabaseUrl, supabaseKey, {
         auth: { persistSession: false, autoRefreshToken: false },
     });
 
@@ -71,7 +62,7 @@ export async function handleMercadoPagoWebhook(body: MPWebhookBody): Promise<{
         return { status: 200, body: { error: 'payment lookup failed' } };
     }
 
-    const payment = await mpRes.json() as { id: number; status: string; status_detail?: string };
+    const payment = await mpRes.json();
     console.log(`[MP Webhook] payment ${payment.id} status=${payment.status}`);
 
     if (payment.status !== 'approved') {

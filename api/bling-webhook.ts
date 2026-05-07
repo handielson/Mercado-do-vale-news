@@ -15,7 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import { isMercadoPagoWebhook, handleMercadoPagoWebhook } from './_lib/mp-webhook-core';
+import { isMercadoPagoWebhook, handleMercadoPagoWebhook } from './_lib/mp-webhook-core.js';
 
 const VPS_BASE_URL = process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
 const VPS_SYNC_KEY = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
