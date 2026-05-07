@@ -86,7 +86,7 @@ export default function OrderConfirmationPage() {
                 {hasPix && order.gateway_pix_data && (
                     <div className="bg-white border-2 border-yellow-200 rounded-2xl p-6 mb-6 shadow-sm flex flex-col items-center">
                         <img
-                            src={`data:image/jpeg;base64,${order.gateway_pix_data.qr_code_base64}`}
+                            src={`data:image/png;base64,${order.gateway_pix_data.qr_code_base64}`}
                             alt="QR Code PIX"
                             className="w-48 h-48 mb-4 border rounded-xl"
                         />
