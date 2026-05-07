@@ -103,7 +103,7 @@ const requiredSnippets = [
   'https://www.mercadodovale.com.br/produto/',
   "'product_tag'",
   'matched_products',
-  "'numbered_choice'",
+  "'purchase_product_selected'",
   'last_options_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)',
   'last_options_offered',
   "'more_products'",

@@ -253,6 +253,11 @@ function isAutoresponderHumanRequest(message) {
     || text.includes('atendimento humano');
 }
 
+function isAutoresponderWarrantyRequest(message) {
+  const text = normalizeAutoresponderText(message);
+  return /\b(garantia|garantias|garantido|defeito|defeitos|cobertura|assistencia)\b/.test(text);
+}
+
 function isAutoresponderGreeting(message) {
   const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
   return /(^|\s)(oi|ola|bom dia|boa tarde|boa noite|e ai|opa)(\s|$)/.test(text);
@@ -598,6 +603,37 @@ function findAutoresponderProductTagKeyword(message, settings) {
   return entries.find((entry) => text.includes(entry.keyword)) || null;
 }
 
+function buildAutoresponderCategoryOptions(categories) {
+  return (Array.isArray(categories) ? categories : []).map((category) => ({
+    type: 'category',
+    id: category.id,
+    name: category.name,
+    productCount: Number(category.product_count || 0),
+  }));
+}
+
+function formatAutoresponderGreetingCategoryListReply(categories) {
+  const options = buildAutoresponderCategoryOptions(categories);
+  if (options.length === 0) return '';
+  const lines = [
+    'Categorias disponiveis:',
+    ...options.map((category, index) => `${index + 1}. ${category.name}`),
+    '',
+    'Responda com o numero ou nome da categoria.',
+  ];
+  return lines.join('\n');
+}
+
+function findAutoresponderSelectedCategoryFromMessage(message, categories, numberedChoice = null) {
+  const safeCategories = Array.isArray(categories) ? categories : [];
+  const choiceNumber = Number(numberedChoice || 0);
+  if (choiceNumber > 0) return safeCategories[choiceNumber - 1] || null;
+
+  const text = normalizeAutoresponderText(message).trim();
+  if (text.length < 2) return null;
+  return safeCategories.find((category) => normalizeAutoresponderText(category?.name || '').trim() === text) || null;
+}
+
 function isAutoresponderMoreRequest(message) {
   const text = normalizeAutoresponderText(message).trim();
   return ['mais', 'ver mais', 'proximos', 'proximo', 'mais opcoes', 'mais opções'].includes(text);
@@ -631,12 +667,336 @@ async function getAutoresponderOptionsContext(sender, validityMinutes) {
   return normalizeAutoresponderOptionsContext(rows[0]?.last_options_offered);
 }
 
+function normalizeAutoresponderPurchaseFlow(value) {
+  const parsed = parsePublicJson(value, null);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { status: 'idle', items: [] };
+  }
+
+  return {
+    ...parsed,
+    status: String(parsed.status || 'idle'),
+    items: Array.isArray(parsed.items) ? parsed.items : [],
+  };
+}
+
+async function getAutoresponderPurchaseFlow(sender) {
+  const [rows] = await pool.query(
+    `SELECT purchase_flow
+     FROM autoresponder_conversations
+     WHERE sender = ?
+     LIMIT 1`,
+    [sender]
+  );
+  return normalizeAutoresponderPurchaseFlow(rows[0]?.purchase_flow);
+}
+
+async function saveAutoresponderPurchaseFlow(sender, purchaseFlow) {
+  const normalized = normalizeAutoresponderPurchaseFlow(purchaseFlow);
+  await pool.query(
+    `INSERT INTO autoresponder_conversations
+      (sender, last_message_at, purchase_flow, purchase_flow_updated_at)
+     VALUES (?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       purchase_flow = ?,
+       purchase_flow_updated_at = CURRENT_TIMESTAMP`,
+    [sender, jsonStr(normalized), jsonStr(normalized)]
+  );
+  return normalized;
+}
+
+async function clearAutoresponderPurchaseFlow(sender) {
+  await pool.query(
+    `UPDATE autoresponder_conversations
+     SET purchase_flow = NULL,
+         purchase_flow_updated_at = CURRENT_TIMESTAMP
+     WHERE sender = ?`,
+    [sender]
+  );
+}
+
+function findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice = null) {
+  const safeOptions = Array.isArray(options) ? options : [];
+  const choiceNumber = Number(numberedChoice || 0);
+  if (choiceNumber > 0) return safeOptions[choiceNumber - 1] || null;
+
+  const text = normalizeAutoresponderText(message).trim();
+  if (text.length < 4) return null;
+  const tokens = text.split(/\s+/).filter((token) => token.length >= 2);
+  if (tokens.length < 2) return null;
+
+  return safeOptions.find((option) => {
+    const name = normalizeAutoresponderText(option?.name || '');
+    const sku = normalizeAutoresponderText(option?.sku || '');
+    if (sku && sku === text) return true;
+    if (!name) return false;
+    return tokens.every((token) => name.includes(token));
+  }) || null;
+}
+
+function buildAutoresponderPurchaseActionPrompt(product, selectedOption) {
+  const productName = product?.name || selectedOption?.name || 'produto selecionado';
+  const priceLine = product ? `\nValor: ${formatAutoresponderCurrency(getAutoresponderProductPrice(product))}` : '';
+  return `Certo, voce escolheu:\n${productName}${priceLine}\n\nQuer comprar esse produto ou ver detalhes primeiro?\nResponda "comprar" ou "detalhes".`;
+}
+
+function isAutoresponderPurchaseBuyRequest(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  return [
+    'comprar',
+    'quero comprar',
+    'vou comprar',
+    'comprar esse',
+    'comprar este',
+    'quero esse',
+    'quero este',
+    'fechar',
+  ].includes(text);
+}
+
+function isAutoresponderPurchaseDetailsRequest(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  return [
+    'detalhes',
+    'ver detalhes',
+    'detalhe',
+    'mais detalhes',
+    'informacoes',
+    'informacao',
+    'mais informacoes',
+  ].includes(text);
+}
+
+function isAutoresponderPurchaseAddMoreRequest(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  return [
+    'adicionar mais',
+    'mais produtos',
+    'colocar mais',
+    'incluir mais',
+    'comprar mais',
+    'continuar comprando',
+    'adicionar outro',
+    'outro produto',
+    'mais um',
+  ].includes(text);
+}
+
+function isAutoresponderPurchaseCancelRequest(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  return [
+    'cancelar',
+    'cancelar compra',
+    'cancelar pedido',
+    'cancelar carrinho',
+    'limpar carrinho',
+    'desistir',
+    'nao quero mais',
+  ].includes(text);
+}
+
+function isAutoresponderPurchaseFinalizeRequest(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  return [
+    'finalizar',
+    'fechar pedido',
+    'fechar compra',
+    'concluir',
+    'concluir pedido',
+    'resumo',
+    'ver resumo',
+    'resumo do pedido',
+  ].includes(text);
+}
+
+function getAutoresponderPurchaseRemoveItemIndex(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  const match = text.match(/^(?:remover|tirar|excluir)\s+(?:item\s+)?(\d{1,2})$/);
+  if (!match) return null;
+  const index = Number(match[1]) - 1;
+  return Number.isInteger(index) && index >= 0 ? index : null;
+}
+
+function hasAutoresponderCartItems(purchaseFlow) {
+  return Array.isArray(purchaseFlow?.items) && purchaseFlow.items.length > 0;
+}
+
+function buildAutoresponderQuantityPrompt(product) {
+  const productName = product?.name || 'produto selecionado';
+  const stock = Number(product?.stock_quantity);
+  const stockLine = Number.isFinite(stock) && stock > 0 ? `\nEstoque disponivel agora: ${stock}.` : '';
+  return `Perfeito. Quantas unidades voce deseja?\n${productName}${stockLine}\n\nResponda apenas com a quantidade.`;
+}
+
+function parseAutoresponderRequestedQuantity(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  const exactNumber = text.match(/^\d{1,3}$/);
+  if (exactNumber) return Number(exactNumber[0]);
+  const unitMatch = text.match(/^(\d{1,3})\s*(un|unidade|unidades|peca|pecas)$/);
+  return unitMatch ? Number(unitMatch[1]) : null;
+}
+
+function buildAutoresponderOutOfStockReply(product) {
+  const productName = product?.name || 'produto selecionado';
+  return `Esse produto ficou sem estoque agora: ${productName}.\n\nPosso te mostrar outra opcao ou chamar um atendente para conferir alternativa.`;
+}
+
+function buildAutoresponderInsufficientStockReply(product, requestedQuantity, availableStock) {
+  const productName = product?.name || 'produto selecionado';
+  return `Temos apenas ${availableStock} unidade(s) disponiveis de ${productName}.\n\nVoce pediu ${requestedQuantity}. Responda uma quantidade ate ${availableStock} ou peça atendimento.`;
+}
+
+function buildAutoresponderItemAddedPrompt(item) {
+  const quantity = Number(item?.quantity || 0);
+  const productName = item?.name || 'produto selecionado';
+  return `Adicionei ao carrinho: ${quantity} unidade(s) de ${productName}.\n\nQuer adicionar mais produtos ou finalizar?`;
+}
+
+function buildAutoresponderAddMorePrompt() {
+  return 'Qual produto voce quer adicionar agora? Pode mandar o nome/modelo ou escolher uma opcao de uma lista recente.';
+}
+
+function buildAutoresponderCartCancelledReply() {
+  return 'Carrinho cancelado. Se quiser, posso te ajudar a escolher outros produtos.';
+}
+
+function buildAutoresponderItemRemovedReply(item, remainingItems) {
+  const productName = item?.name || 'item selecionado';
+  const remainingCount = Array.isArray(remainingItems) ? remainingItems.length : 0;
+  if (remainingCount <= 0) {
+    return `Removi do carrinho: ${productName}.\n\nSeu carrinho ficou vazio.`;
+  }
+  return `Removi do carrinho: ${productName}.\n\nAinda ficou ${remainingCount} item(ns) no carrinho.`;
+}
+
+function calculateAutoresponderCartTotals(cartItems) {
+  const items = Array.isArray(cartItems) ? cartItems : [];
+  const subtotalCents = items.reduce((total, item) => total + Number(item?.subtotal_cents || 0), 0);
+  return {
+    itemCount: items.length,
+    subtotal_cents: subtotalCents,
+    total_cents: subtotalCents,
+  };
+}
+
+function formatAutoresponderCartSummaryReply(items) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const totals = calculateAutoresponderCartTotals(safeItems);
+  const lines = ['Resumo do pedido'];
+
+  safeItems.forEach((item, index) => {
+    const quantity = Number(item?.quantity || 0);
+    const name = item?.name || 'produto';
+    const unitPrice = formatAutoresponderCurrency(Number(item?.unit_price_cents || 0) / 100);
+    const subtotal = formatAutoresponderCurrency(Number(item?.subtotal_cents || 0) / 100);
+    lines.push(`${index + 1}. ${quantity}x ${name} - ${unitPrice} cada - Subtotal: ${subtotal}`);
+  });
+
+  lines.push(`Subtotal: ${formatAutoresponderCurrency(totals.subtotal_cents / 100)}`);
+  lines.push(`Total: ${formatAutoresponderCurrency(totals.total_cents / 100)}`);
+  lines.push('');
+  lines.push('Agora preciso confirmar se sera retirada na loja ou entrega.');
+  return lines.join('\n');
+}
+
+function getAutoresponderPurchaseFulfillmentChoice(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  if (/\b(retirada|retirar|buscar|busco|loja|balcao)\b/.test(text)) return 'pickup';
+  if (/\b(entrega|entregar|delivery|frete|motoboy|enviar|mandar)\b/.test(text)) return 'delivery';
+  return null;
+}
+
+function normalizeAutoresponderDeliveryAddress(message) {
+  return String(message || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
+}
+
+function buildAutoresponderPickupConfirmationReply() {
+  return 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.';
+}
+
+function buildAutoresponderDeliveryAddressPrompt() {
+  return 'Combinado: entrega. Me envie o endereco completo com rua, numero, bairro, cidade e ponto de referencia se tiver.';
+}
+
+function buildAutoresponderDeliveryAddressSavedReply() {
+  return 'Endereco anotado. Agora vou confirmar os dados do cadastro para separar seu pedido.';
+}
+
+async function getAutoresponderCustomerDataSnapshot(sender, payload = {}, purchaseFlow = {}) {
+  const contactState = await getAutoresponderContactNameState(sender);
+  const confirmedName = normalizeAutoresponderContactName(
+    contactState?.contact_name_confirmed ||
+    payload?.contactName ||
+    payload?.senderName ||
+    payload?.pushName ||
+    ''
+  );
+  const phone = formatAutoresponderPhoneForGoogle(sender) || normalizeAutoresponderSender(sender);
+  const cpfCnpj = normalizeAutoresponderCustomerDocument(
+    purchaseFlow?.customer_data?.cpf_cnpj ||
+    payload?.cpf_cnpj ||
+    payload?.cpf ||
+    payload?.cnpj ||
+    ''
+  );
+  return {
+    name: confirmedName || 'nao informado',
+    phone: phone || 'nao informado',
+    cpf_cnpj: cpfCnpj || null,
+    fulfillment: purchaseFlow?.fulfillment || null,
+    address: purchaseFlow?.fulfillment === 'delivery'
+      ? normalizeAutoresponderDeliveryAddress(purchaseFlow?.delivery_address)
+      : 'Retirada na loja',
+  };
+}
+
+function buildAutoresponderCustomerDataConfirmationReply(customerData) {
+  const lines = [
+    'Confirme os dados do pedido:',
+    `Nome: ${customerData?.name || 'nao informado'}`,
+    `Telefone: ${customerData?.phone || 'nao informado'}`,
+    `Endereco: ${customerData?.address || 'Retirada na loja'}`,
+    '',
+    'Esta tudo certo? Responda "sim" para confirmar ou "nao" para ajustar com um atendente.',
+  ];
+  return lines.join('\n');
+}
+
+function buildAutoresponderCustomerDataConfirmedReply() {
+  return 'Dados confirmados. Vou separar o pedido para um atendente finalizar com voce.';
+}
+
+function buildAutoresponderCustomerDataNeedsUpdateReply() {
+  return 'Sem problema. Vou deixar marcado para um atendente ajustar seus dados antes de finalizar.';
+}
+
+function normalizeAutoresponderCustomerDocument(message) {
+  const digits = String(message || '').replace(/\D+/g, '');
+  if (digits.length === 11 || digits.length === 14) return digits;
+  return '';
+}
+
+function buildAutoresponderCustomerDocumentPrompt() {
+  return 'Para completar o cadastro, me envie o CPF/CNPJ do cliente. Pode mandar apenas os numeros.';
+}
+
+function buildAutoresponderCustomerDocumentSavedReply() {
+  return 'Dados minimos do cadastro anotados. Vou separar o pedido para um atendente finalizar com voce.';
+}
+
 async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
   const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), AUTORESPONDER_PRODUCT_RESPONSE_LIMIT);
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const numericTagId = Number(tagId);
   const [rows] = await pool.query(
-    `SELECT id, model_id, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+       warranty_type, warranty_template_id,
+       (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
+       (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
      FROM products
      WHERE status = 'active'
@@ -650,6 +1010,56 @@ async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
     [Number.isFinite(numericTagId) ? numericTagId : tagId, String(tagId)]
   );
   return rows;
+}
+
+async function findAutoresponderAvailableCategories(limit = 12) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 12, 1), 20);
+  const [rows] = await pool.query(
+    `SELECT c.id, c.name, c.slug, COUNT(p.id) AS product_count
+     FROM categories c
+     JOIN products p ON p.category_id = c.id
+      AND p.status = 'active'
+      AND (p.is_parent = 0 OR p.is_parent IS NULL)
+      AND p.stock_quantity > 0
+     GROUP BY c.id, c.name, c.slug, c.sort_order
+     ORDER BY c.sort_order ASC, product_count DESC, c.name ASC
+     LIMIT ${safeLimit}`
+  );
+  return rows;
+}
+
+async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset = 0) {
+  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), AUTORESPONDER_PRODUCT_RESPONSE_LIMIT);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+  const [rows] = await pool.query(
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+       warranty_type, warranty_template_id,
+       (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
+       (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND stock_quantity > 0
+       AND category_id = ?
+     ORDER BY updated_at DESC
+     LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+    [categoryId]
+  );
+  return rows;
+}
+
+async function countAutoresponderProductsByCategory(categoryId) {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND stock_quantity > 0
+       AND category_id = ?`,
+    [categoryId]
+  );
+  return Number(rows[0]?.total || 0);
 }
 
 async function countAutoresponderProductsByTag(tagId) {
@@ -901,6 +1311,50 @@ function formatAutoresponderPaginationSummary({ offset = 0, limit = AUTORESPONDE
   return `Pagina ${page} - encontramos ${safeTotal} produtos relacionados.`;
 }
 
+function formatAutoresponderWarrantyPeriod(days) {
+  const safeDays = Number(days || 0);
+  if (!Number.isFinite(safeDays) || safeDays <= 0) return '';
+  if (safeDays % 30 === 0) {
+    const months = safeDays / 30;
+    return months === 1 ? '1 mes' : `${months} meses`;
+  }
+  return safeDays === 1 ? '1 dia' : `${safeDays} dias`;
+}
+
+function formatAutoresponderProductWarrantyLine(product) {
+  const productWarrantyType = String(product?.warranty_type || 'brand').toLowerCase();
+  const brandName = String(product?.brand || '').trim();
+  const brandPeriod = formatAutoresponderWarrantyPeriod(product?.brand_warranty_days);
+  const categoryPeriod = formatAutoresponderWarrantyPeriod(product?.category_warranty_days);
+
+  if (productWarrantyType === 'custom' || productWarrantyType === 'template' || product?.warranty_template_id) {
+    return 'Garantia: conforme termo configurado neste produto.';
+  }
+
+  if (productWarrantyType === 'none' || productWarrantyType === 'sem_garantia') {
+    return 'Garantia: consulte um atendente para confirmar a cobertura deste produto.';
+  }
+
+  if (productWarrantyType === 'category') {
+    return `Garantia: ${categoryPeriod ? `${categoryPeriod} conforme configuracao deste produto` : 'conforme configuracao deste produto'}`;
+  }
+
+  if (productWarrantyType === 'store' || productWarrantyType === 'loja') {
+    const period = categoryPeriod || brandPeriod;
+    return `Garantia: ${period ? `${period} pela loja` : 'pela loja'}`;
+  }
+
+  if (productWarrantyType === 'brand' && brandName) {
+    return `Garantia: ${brandPeriod ? `${brandPeriod} pela ${brandName}` : `pela ${brandName}`}`;
+  }
+
+  if (productWarrantyType === 'brand') {
+    return `Garantia: ${brandPeriod ? `${brandPeriod} conforme marca configurada neste produto` : 'conforme marca configurada neste produto'}`;
+  }
+
+  return '';
+}
+
 function formatAutoresponderProductReplyInstructions(hasMore) {
   const lines = ['Responda com o numero da opcao ou com o nome/modelo do produto.'];
   if (hasMore) lines.push('Se quiser ver mais opcoes, digite "mais".');
@@ -1064,6 +1518,7 @@ function detectAutoresponderIntent(message) {
     greeting: isAutoresponderGreeting(message),
     greetingOnly: isAutoresponderGreetingOnly(message),
     humanRequest: isAutoresponderHumanRequest(message),
+    warrantyRequest: isAutoresponderWarrantyRequest(message),
     numberedChoice: getAutoresponderNumberedChoice(message),
     moreRequest: isAutoresponderMoreRequest(message),
   };
@@ -1076,7 +1531,10 @@ async function getAutoresponderNumberedChoiceContext(sender, validityMinutes) {
 
 async function findAutoresponderProductById(productId) {
   const [rows] = await pool.query(
-    `SELECT id, model_id, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+       warranty_type, warranty_template_id,
+       (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
+       (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
      FROM products
      WHERE id = ?
@@ -1106,6 +1564,9 @@ async function formatAutoresponderProductDetailReply(product, settings = null) {
   );
   if (installmentLine) lines.push(installmentLine);
 
+  const warrantyLine = formatAutoresponderProductWarrantyLine(product);
+  if (warrantyLine) lines.push(warrantyLine);
+
   if (product.slug) {
     lines.push(`Link: ${getAutoresponderProductUrl(product)}`);
   }
@@ -1116,6 +1577,131 @@ async function formatAutoresponderProductDetailReply(product, settings = null) {
   }
 
   return lines.join('\n');
+}
+
+const AUTORESPONDER_WARRANTY_SEARCH_STOPWORDS = new Set([
+  'a', 'as', 'o', 'os', 'um', 'uma', 'uns', 'umas',
+  'de', 'da', 'das', 'do', 'dos', 'e', 'ou', 'para', 'pra', 'pro',
+  'com', 'sem', 'por', 'no', 'na', 'nos', 'nas',
+  'qual', 'quais', 'quanto', 'quantos', 'quantas', 'tempo', 'prazo',
+  'tem', 'ter', 'tens', 'voces', 'voce', 'vc', 'produto', 'produtos',
+  'garantia', 'garantias', 'garantido', 'defeito', 'defeitos', 'cobertura', 'assistencia',
+]);
+
+function extractAutoresponderWarrantySearchTokens(message) {
+  const text = normalizeAutoresponderText(message)
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return [...new Set(text.split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
+    .filter((token) => !AUTORESPONDER_WARRANTY_SEARCH_STOPWORDS.has(token))
+    .slice(0, 6))];
+}
+
+function formatAutoresponderWarrantyRefinementReply(options = []) {
+  const optionHint = Array.isArray(options) && options.length > 0
+    ? '\nSe for um dos itens da lista, responda o numero dele.'
+    : '';
+  return `Para te passar a garantia certinha, me diga a marca ou o produto. Exemplo: "garantia Samsung" ou "garantia do Redmi Note 14".${optionHint}`;
+}
+
+async function handleAutoresponderWarrantyRequest({ sender, message, settings, purchaseFlow, shouldPrefixGreeting }) {
+  const tokens = extractAutoresponderWarrantySearchTokens(message);
+
+  if (tokens.length === 0 && purchaseFlow?.selected_product?.id) {
+    const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
+    const selectedProduct = product || purchaseFlow.selected_product;
+    const warrantyLine = formatAutoresponderProductWarrantyLine(selectedProduct)
+      || 'Garantia: me diga a marca ou o modelo para eu confirmar certinho.';
+    const replyText = formatAutoresponderReply(
+      `${selectedProduct?.name || 'Produto selecionado'}\n${warrantyLine}`,
+      settings,
+      false
+    );
+    await logAutoresponderReply({
+      sender,
+      message,
+      intent: 'warranty_request',
+      replyText,
+      matchedCount: product ? 1 : 0,
+      matchedProducts: [selectedProduct],
+    });
+    await upsertAutoresponderSuccessConversation(sender);
+    return { replies: [{ message: replyText }] };
+  }
+
+  if (tokens.length > 0) {
+    const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+    const rows = await findAutoresponderProductsByTokens(tokens, pageSize + 1);
+    const products = rows.slice(0, pageSize);
+    const hasMore = rows.length > pageSize;
+
+    if (products.length === 1) {
+      const product = products[0];
+      const warrantyLine = formatAutoresponderProductWarrantyLine(product)
+        || 'Garantia: consulte um atendente para confirmar a cobertura deste produto.';
+      const replyText = formatAutoresponderReply(`${product.name}\n${warrantyLine}`, settings, shouldPrefixGreeting);
+      await logAutoresponderReply({
+        sender,
+        message,
+        intent: 'warranty_request',
+        replyText,
+        matchedCount: 1,
+        matchedProducts: [product],
+      });
+      await upsertAutoresponderSuccessConversation(sender);
+      return { replies: [{ message: replyText }] };
+    }
+
+    if (products.length > 1) {
+      const total = await countAutoresponderProductsByTokens(tokens);
+      const productOptions = buildAutoresponderProductOptions(products);
+      const productReplyMessages = appendAutoresponderReplyFooter(
+        await formatAutoresponderProductSearchReplies(products, tokens.join(' '), settings, { offset: 0, limit: pageSize, total }),
+        `${formatAutoresponderWarrantyRefinementReply(productOptions)}${hasMore ? '\nTambem posso mostrar mais opcoes se voce responder "mais".' : ''}`
+      );
+      const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+      const replyText = replyMessages.join('\n\n');
+
+      await logAutoresponderReply({
+        sender,
+        message,
+        intent: 'warranty_refine',
+        replyText,
+        matchedCount: products.length,
+        matchedProducts: productOptions,
+      });
+      await upsertAutoresponderOptionsConversation(sender, productOptions, {
+        source: 'search',
+        tokens,
+        offset: 0,
+        limit: pageSize,
+        total,
+        hasMore,
+      });
+
+      return { replies: formatAutoresponderProReplies(replyMessages) };
+    }
+  }
+
+  const context = await getAutoresponderOptionsContext(sender, Number(settings?.numbered_list_validity_minutes) || 30);
+  const replyText = formatAutoresponderReply(
+    formatAutoresponderWarrantyRefinementReply(context.items),
+    settings,
+    shouldPrefixGreeting
+  );
+  await logAutoresponderReply({
+    sender,
+    message,
+    intent: 'warranty_refine',
+    replyText,
+    matchedCount: 0,
+  });
+  await upsertAutoresponderSuccessConversation(sender);
+  return { replies: [{ message: replyText }] };
 }
 
 const AUTORESPONDER_PRODUCT_SEARCH_STOPWORDS = new Set([
@@ -1189,7 +1775,10 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
   const score = buildAutoresponderProductSearchScoreSql(safeTokens);
 
   const [rows] = await pool.query(
-    `SELECT id, model_id, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+       warranty_type, warranty_template_id,
+       (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
+       (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
        (${score.sql}) AS search_score
      FROM products
@@ -2377,34 +2966,529 @@ fastify.route({
             ? '\n\nComo devo chamar voce? \u{1F60A}'
           : '';
         const greetingText = getAutoresponderGreetingReply(message, contactFirstName);
-        const replyText = `${greetingText}${contactPrompt}`;
+        const categories = await findAutoresponderAvailableCategories();
+        const categoryOptions = buildAutoresponderCategoryOptions(categories);
+        const categoryListText = formatAutoresponderGreetingCategoryListReply(categories);
+        const replyText = [greetingText, contactPrompt.trim(), categoryListText].filter(Boolean).join('\n\n');
         await logAutoresponderReply({
           sender: senderKey,
           message,
-          intent: 'greeting',
+          intent: 'greeting_category_list',
           replyText,
-          matchedCount: 1,
+          matchedCount: categoryOptions.length,
+          matchedProducts: categoryOptions,
         });
-        await upsertAutoresponderSuccessConversation(senderKey);
+        await upsertAutoresponderOptionsConversation(senderKey, categoryOptions, {
+          source: 'category_list',
+          offset: 0,
+          limit: categoryOptions.length,
+          total: categoryOptions.length,
+          hasMore: false,
+        });
         if (shouldConfirmContactName || shouldAskContactName) {
-          return { replies: [{ message: greetingText }, { message: contactPrompt.trim() }] };
+          return { replies: [{ message: greetingText }, { message: [contactPrompt.trim(), categoryListText].filter(Boolean).join('\n\n') }] };
         }
         return { replies: [{ message: replyText }] };
       }
 
-      const numberedChoice = detectedIntent.numberedChoice;
-      if (numberedChoice && Number(settings.use_numbered_lists) === 1) {
-        const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
-        const selectedOption = Array.isArray(options) ? options[numberedChoice - 1] : null;
-        if (selectedOption?.id) {
-          const product = await findAutoresponderProductById(selectedOption.id);
-          const productDetailText = await formatAutoresponderProductDetailReply(product, settings);
-          const replyText = formatAutoresponderReply(productDetailText, settings, false);
+      const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
+      if (detectedIntent.warrantyRequest) {
+        return handleAutoresponderWarrantyRequest({
+          sender: senderKey,
+          message,
+          settings,
+          purchaseFlow,
+          shouldPrefixGreeting,
+        });
+      }
+
+      if (hasAutoresponderCartItems(purchaseFlow) && isAutoresponderPurchaseCancelRequest(message)) {
+        const replyText = formatAutoresponderReply(buildAutoresponderCartCancelledReply(), settings, false);
+        await clearAutoresponderPurchaseFlow(senderKey);
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'purchase_cancelled',
+          replyText,
+          matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+          matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
+      if (hasAutoresponderCartItems(purchaseFlow) && isAutoresponderPurchaseFinalizeRequest(message)) {
+        const items = Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [];
+        const cartTotals = calculateAutoresponderCartTotals(items);
+        const replyText = formatAutoresponderReply(formatAutoresponderCartSummaryReply(items), settings, false);
+        await saveAutoresponderPurchaseFlow(senderKey, {
+          ...purchaseFlow,
+          status: 'summary_ready',
+          selected_product: null,
+          requested_quantity: null,
+          totals: cartTotals,
+        });
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'purchase_summary',
+          replyText,
+          matchedCount: items.length,
+          matchedProducts: items,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
+      if (purchaseFlow.status === 'summary_ready' && hasAutoresponderCartItems(purchaseFlow)) {
+        const fulfillmentChoice = getAutoresponderPurchaseFulfillmentChoice(message);
+        if (fulfillmentChoice === 'pickup') {
+          const replyText = formatAutoresponderReply(buildAutoresponderPickupConfirmationReply(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'customer_data_pending',
+            fulfillment: 'pickup',
+            delivery_address: null,
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_fulfillment_pickup',
+            replyText,
+            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+
+        if (fulfillmentChoice === 'delivery') {
+          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'awaiting_delivery_address',
+            fulfillment: 'delivery',
+            delivery_address: null,
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_fulfillment_delivery',
+            replyText,
+            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      if (purchaseFlow.status === 'awaiting_delivery_address' && hasAutoresponderCartItems(purchaseFlow)) {
+        const deliveryAddress = normalizeAutoresponderDeliveryAddress(message);
+        if (deliveryAddress.length >= 10) {
+          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressSavedReply(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'customer_data_pending',
+            fulfillment: 'delivery',
+            delivery_address: deliveryAddress,
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_delivery_address',
+            replyText,
+            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      if (purchaseFlow.status === 'customer_data_pending' && hasAutoresponderCartItems(purchaseFlow)) {
+        const customerData = await getAutoresponderCustomerDataSnapshot(senderKey, payload, purchaseFlow);
+        const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataConfirmationReply(customerData), settings, false);
+        await saveAutoresponderPurchaseFlow(senderKey, {
+          ...purchaseFlow,
+          status: 'awaiting_customer_confirmation',
+          customer_data: customerData,
+        });
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'purchase_customer_data_confirmation',
+          replyText,
+          matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+          matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
+      if (purchaseFlow.status === 'awaiting_customer_confirmation' && hasAutoresponderCartItems(purchaseFlow)) {
+        if (isAutoresponderYes(message)) {
+          const customerDocument = normalizeAutoresponderCustomerDocument(purchaseFlow?.customer_data?.cpf_cnpj);
+          if (!customerDocument) {
+            const replyText = formatAutoresponderReply(buildAutoresponderCustomerDocumentPrompt(), settings, false);
+            await saveAutoresponderPurchaseFlow(senderKey, {
+              ...purchaseFlow,
+              status: 'awaiting_customer_document',
+              customer_data_confirmed: true,
+            });
+            await logAutoresponderReply({
+              sender: senderKey,
+              message,
+              intent: 'purchase_customer_document_prompt',
+              replyText,
+              matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+              matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+            });
+            await upsertAutoresponderSuccessConversation(senderKey);
+            return { replies: [{ message: replyText }] };
+          }
+
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataConfirmedReply(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'customer_data_confirmed',
+            customer_data_confirmed: true,
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_customer_data_confirmed',
+            replyText,
+            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+
+        if (isAutoresponderNo(message)) {
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataNeedsUpdateReply(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'customer_data_update_needed',
+            customer_data_confirmed: false,
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_customer_data_needs_update',
+            replyText,
+            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      if (purchaseFlow.status === 'awaiting_customer_document' && hasAutoresponderCartItems(purchaseFlow)) {
+        const customerDocument = normalizeAutoresponderCustomerDocument(message);
+        if (customerDocument) {
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDocumentSavedReply(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'customer_registration_ready',
+            customer_data: {
+              ...(purchaseFlow.customer_data || {}),
+              cpf_cnpj: customerDocument,
+            },
+            cpf_cnpj: customerDocument,
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_customer_document_saved',
+            replyText,
+            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      const categoryContext = normalizeAutoresponderOptionsContext(
+        (await pool.query(
+          `SELECT last_options_offered
+           FROM autoresponder_conversations
+           WHERE sender = ?
+             AND last_options_offered IS NOT NULL
+             AND last_options_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+           LIMIT 1`,
+          [senderKey, Number(settings.numbered_list_validity_minutes) > 0 ? Number(settings.numbered_list_validity_minutes) : 30]
+        ))[0][0]?.last_options_offered
+      );
+      if (categoryContext?.pagination?.source === 'category_list') {
+        const selectedCategory = findAutoresponderSelectedCategoryFromMessage(message, categoryContext.items, detectedIntent.numberedChoice);
+        if (selectedCategory?.id) {
+          const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+          const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
+          const products = rows.slice(0, pageSize);
+          const hasMore = rows.length > pageSize;
+          const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+          const productOptions = buildAutoresponderProductOptions(products);
+          const productReplyMessages = appendAutoresponderReplyFooter(
+            await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total }),
+            formatAutoresponderProductReplyInstructions(hasMore)
+          );
+          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+          const replyText = replyMessages.join('\n\n');
 
           await logAutoresponderReply({
             sender: senderKey,
             message,
-            intent: 'numbered_choice',
+            intent: 'category_selected',
+            replyText,
+            matchedCount: products.length,
+            matchedProducts: productOptions,
+          });
+          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+            source: 'category',
+            categoryId: selectedCategory.id,
+            keyword: selectedCategory.name,
+            offset: 0,
+            limit: pageSize,
+            total,
+            hasMore,
+          });
+
+          return { replies: formatAutoresponderProReplies(replyMessages) };
+        }
+      }
+
+      const removeItemIndex = getAutoresponderPurchaseRemoveItemIndex(message);
+      if (hasAutoresponderCartItems(purchaseFlow) && removeItemIndex !== null) {
+        const currentItems = Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [];
+        const removedItem = currentItems[removeItemIndex] || null;
+        if (removedItem) {
+          const remainingItems = currentItems.filter((_, index) => index !== removeItemIndex);
+          const replyText = formatAutoresponderReply(buildAutoresponderItemRemovedReply(removedItem, remainingItems), settings, false);
+          if (remainingItems.length === 0) {
+            await clearAutoresponderPurchaseFlow(senderKey);
+          } else {
+            await saveAutoresponderPurchaseFlow(senderKey, {
+              ...purchaseFlow,
+              status: 'item_added',
+              items: remainingItems,
+            });
+          }
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_item_removed',
+            replyText,
+            matchedCount: remainingItems.length,
+            matchedProducts: remainingItems,
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      if (purchaseFlow.status === 'awaiting_product_action' && purchaseFlow.selected_product?.id) {
+        if (isAutoresponderPurchaseBuyRequest(message)) {
+          const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
+          const selectedProduct = product || purchaseFlow.selected_product;
+          const replyText = formatAutoresponderReply(buildAutoresponderQuantityPrompt(selectedProduct), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'awaiting_quantity',
+            selected_product: {
+              ...purchaseFlow.selected_product,
+              name: selectedProduct?.name || purchaseFlow.selected_product.name || null,
+              sku: selectedProduct?.sku || purchaseFlow.selected_product.sku || null,
+              slug: selectedProduct?.slug || purchaseFlow.selected_product.slug || null,
+              price_cents: product ? getAutoresponderProductPriceCents(product) : purchaseFlow.selected_product.price_cents || null,
+              stock_quantity: selectedProduct?.stock_quantity == null ? purchaseFlow.selected_product.stock_quantity || null : Number(selectedProduct.stock_quantity),
+            },
+            requested_quantity: null,
+          });
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_quantity_prompt',
+            replyText,
+            matchedCount: 1,
+            matchedProducts: [purchaseFlow.selected_product],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+
+          return { replies: [{ message: replyText }] };
+        }
+
+        if (isAutoresponderPurchaseDetailsRequest(message)) {
+          const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
+          const detailText = await formatAutoresponderProductDetailReply(product, settings);
+          const replyText = formatAutoresponderReply(`${detailText}\n\nSe quiser comprar, responda "comprar".`, settings, false);
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_product_details',
+            replyText,
+            matchedCount: product ? 1 : 0,
+            matchedProducts: [purchaseFlow.selected_product],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      if (purchaseFlow.status === 'awaiting_quantity' && purchaseFlow.selected_product?.id) {
+        const requestedQuantity = parseAutoresponderRequestedQuantity(message);
+        const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
+        const selectedProduct = product || purchaseFlow.selected_product;
+
+        if (!requestedQuantity || requestedQuantity < 1) {
+          const replyText = formatAutoresponderReply(buildAutoresponderQuantityPrompt(selectedProduct), settings, false);
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_quantity_invalid',
+            replyText,
+            matchedCount: 1,
+            matchedProducts: [purchaseFlow.selected_product],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+
+        const availableStock = Math.max(Number(selectedProduct?.stock_quantity || 0), 0);
+        if (availableStock <= 0) {
+          const replyText = formatAutoresponderReply(buildAutoresponderOutOfStockReply(selectedProduct), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'stock_blocked',
+            requested_quantity: requestedQuantity,
+            selected_product: {
+              ...purchaseFlow.selected_product,
+              stock_quantity: 0,
+            },
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_stock_blocked',
+            replyText,
+            matchedCount: 0,
+            matchedProducts: [purchaseFlow.selected_product],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+
+        if (requestedQuantity > availableStock) {
+          const replyText = formatAutoresponderReply(
+            buildAutoresponderInsufficientStockReply(selectedProduct, requestedQuantity, availableStock),
+            settings,
+            false
+          );
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'awaiting_quantity',
+            requested_quantity: null,
+            selected_product: {
+              ...purchaseFlow.selected_product,
+              stock_quantity: availableStock,
+            },
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_stock_limited',
+            replyText,
+            matchedCount: 1,
+            matchedProducts: [purchaseFlow.selected_product],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+
+        const unitPriceCents = product ? getAutoresponderProductPriceCents(product) : Number(purchaseFlow.selected_product.price_cents || 0);
+        const item = {
+          product_id: purchaseFlow.selected_product.id,
+          name: selectedProduct?.name || purchaseFlow.selected_product.name || null,
+          sku: selectedProduct?.sku || purchaseFlow.selected_product.sku || null,
+          slug: selectedProduct?.slug || purchaseFlow.selected_product.slug || null,
+          quantity: requestedQuantity,
+          unit_price_cents: unitPriceCents,
+          subtotal_cents: unitPriceCents * requestedQuantity,
+        };
+        const replyText = formatAutoresponderReply(buildAutoresponderItemAddedPrompt(item), settings, false);
+        await saveAutoresponderPurchaseFlow(senderKey, {
+          ...purchaseFlow,
+          status: 'item_added',
+          requested_quantity: requestedQuantity,
+          selected_product: {
+            ...purchaseFlow.selected_product,
+            stock_quantity: availableStock,
+          },
+          items: [...(Array.isArray(purchaseFlow.items) ? purchaseFlow.items : []), item],
+        });
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'purchase_item_added',
+          replyText,
+          matchedCount: 1,
+          matchedProducts: [item],
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
+      if (purchaseFlow.status === 'item_added' && isAutoresponderPurchaseAddMoreRequest(message)) {
+        const replyText = formatAutoresponderReply(buildAutoresponderAddMorePrompt(), settings, false);
+        await saveAutoresponderPurchaseFlow(senderKey, {
+          ...purchaseFlow,
+          status: 'adding_more',
+          selected_product: null,
+          requested_quantity: null,
+          items: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+        });
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'purchase_add_more_prompt',
+          replyText,
+          matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+          matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
+      const numberedChoice = detectedIntent.numberedChoice;
+      if (Number(settings.use_numbered_lists) === 1) {
+        const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
+        const selectedOption = findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice);
+        if (selectedOption?.id) {
+          const product = await findAutoresponderProductById(selectedOption.id);
+          const replyText = formatAutoresponderReply(buildAutoresponderPurchaseActionPrompt(product, selectedOption), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            status: 'awaiting_product_action',
+            selected_product: {
+              id: selectedOption.id,
+              name: product?.name || selectedOption.name || null,
+              sku: product?.sku || selectedOption.sku || null,
+              slug: product?.slug || selectedOption.slug || null,
+              price_cents: product ? getAutoresponderProductPriceCents(product) : null,
+              stock_quantity: product?.stock_quantity == null ? null : Number(product.stock_quantity),
+            },
+            items: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_product_selected',
             replyText,
             matchedCount: product ? 1 : 0,
             matchedProducts: [selectedOption],
@@ -6084,6 +7168,8 @@ async function runMigrations() {
       tag_ids JSON NULL,
       last_options_offered JSON NULL,
       last_options_at TIMESTAMP NULL,
+      purchase_flow JSON NULL,
+      purchase_flow_updated_at TIMESTAMP NULL,
       contact_name_status VARCHAR(40) NULL,
       contact_name_suggestion VARCHAR(120) NULL,
       contact_name_confirmed VARCHAR(120) NULL,
@@ -6113,6 +7199,8 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_conversations', 'contact_name_confirmed', 'VARCHAR(120) NULL');
   await addColumnIfMissing('autoresponder_conversations', 'google_contact_resource_name', 'VARCHAR(120) NULL');
   await addColumnIfMissing('autoresponder_conversations', 'contact_name_updated_at', 'TIMESTAMP NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'purchase_flow', 'JSON NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'purchase_flow_updated_at', 'TIMESTAMP NULL');
   console.log('[migration] autoresponder phase 1A tables: OK');
 
   await pool.query(`

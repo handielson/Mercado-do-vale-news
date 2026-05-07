@@ -74,6 +74,8 @@ export interface AutoResponderConversation {
     reply_window_started_at?: string | null;
     last_options_offered?: unknown;
     last_options_at?: string | null;
+    purchase_flow?: unknown;
+    purchase_flow_updated_at?: string | null;
     tag_ids?: number[] | string | null;
     created_at?: string;
     updated_at?: string;

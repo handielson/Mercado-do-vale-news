@@ -863,23 +863,36 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [x] Manter opcoes numeradas para o cliente responder com numero
 - [x] Responder produto individual quando o cliente escolhe uma opcao numerada
 - [x] Mostrar preco, parcelamento e link do produto
+- [x] Produto individual mostra garantia quando houver contexto de produto
+- [x] Pergunta generica de garantia pede marca/produto quando nao houver contexto
 - [x] Ocultar SKU na lista e mostrar SKU apenas no produto individual
 - [x] Captar nome do cliente quando nao vier no payload
 - [x] Confirmar/salvar nome do cliente no Google Contacts
 - [x] Pausar conversa quando o cliente pedir atendimento humano
+- [x] Saudacao inicial mostra lista numerada de categorias disponiveis
+- [x] Cliente pode responder com numero ou nome da categoria
 
 #### Fluxo de carrinho/pedido
 
-- [ ] Criar estado `purchase_flow` em `autoresponder_conversations` ou tabela propria para carrinho temporario
-- [ ] Quando cliente responder numero/nome do produto, perguntar se deseja comprar ou ver detalhes
-- [ ] Perguntar quantidade desejada
-- [ ] Validar estoque antes de adicionar ao carrinho
-- [ ] Permitir adicionar mais produtos ao mesmo carrinho
-- [ ] Permitir remover item/cancelar carrinho
-- [ ] Calcular subtotal, total e resumo do pedido
-- [ ] Confirmar se sera retirada na loja ou entrega
-- [ ] Se entrega, coletar endereco completo
-- [ ] Confirmar nome/telefone/endereco antes de fechar
+- [x] Criar estado `purchase_flow` em `autoresponder_conversations` ou tabela propria para carrinho temporario
+- [x] Quando cliente responder numero/nome do produto, perguntar se deseja comprar ou ver detalhes
+- [x] Perguntar quantidade desejada
+- [x] Validar estoque antes de adicionar ao carrinho
+- [x] Permitir adicionar mais produtos ao mesmo carrinho
+- [x] Permitir remover item/cancelar carrinho
+- [x] Calcular subtotal, total e resumo do pedido
+- [x] Confirmar se sera retirada na loja ou entrega
+- [x] Se entrega, coletar endereco completo
+- [x] Confirmar nome/telefone/endereco antes de fechar
+
+#### Cadastro do cliente
+
+- [x] Antes de finalizar venda, captar dados minimos para cadastro do cliente
+- [x] Definir campos obrigatorios do cadastro via WhatsApp: nome completo, telefone, CPF/CNPJ quando necessario, endereco quando houver entrega
+- [ ] Consultar cliente existente pelo telefone do WhatsApp, CPF/CNPJ ou e-mail antes de pedir dados novamente
+- [ ] Se cliente ja existir, confirmar dados cadastrados antes de atualizar
+- [ ] Criar/atualizar cliente no sistema a partir das respostas do WhatsApp quando possivel
+- [ ] Vincular cliente cadastrado ao pedido/carrinho do WhatsApp
 
 #### Fechamento assistido por atendente
 
@@ -915,17 +928,27 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [ ] Historico da conversa junto do pedido
 - [ ] Relatorio simples de conversao: produto perguntado -> pedido gerado
 
+#### Consulta pelo cliente
+
+- [ ] Cliente pode consultar cadastro pelo WhatsApp com confirmacao segura de identidade
+- [ ] Cliente pode consultar compras/pedidos pelo WhatsApp
+- [ ] Resposta de consulta mostra resumo simples: data, itens principais, status e proximo passo
+- [ ] Se houver dados sensiveis ou duvida de identidade, encaminhar para atendente
+
 #### Testes da Fase 4
 
-- [ ] Cliente escolhe produto por numero e bot pergunta quantidade
-- [ ] Produto sem estoque bloqueia compra e sugere atendimento/alternativa
-- [ ] Carrinho com 1 item gera resumo correto
-- [ ] Carrinho com varios itens soma total corretamente
-- [ ] Entrega coleta endereco antes de fechar
-- [ ] Retirada nao pede endereco
+- [x] Cliente escolhe produto por numero e bot pergunta quantidade
+- [x] Produto sem estoque bloqueia compra e sugere atendimento/alternativa
+- [x] Carrinho com 1 item gera resumo correto
+- [x] Carrinho com varios itens soma total corretamente
+- [x] Entrega coleta endereco antes de fechar
+- [x] Retirada nao pede endereco
+- [ ] Cliente novo informa dados e cadastro e criado/atualizado antes do pedido
+- [ ] Cliente existente e localizado pelo telefone e confirma dados antes do pedido
+- [ ] Cliente consulta compras e recebe resumo seguro
 - [ ] Pedido assistido pausa o bot e chama atendente
 - [ ] Pedido fica visivel no admin
-- [ ] Fluxo de cancelamento limpa carrinho temporario
+- [x] Fluxo de cancelamento limpa carrinho temporario
 
 ### Fase 5 — Refinamentos (opcional)
 
@@ -939,6 +962,259 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 ---
 
 ## Diário de implantação
+
+### 2026-05-07 — Saudacao com categorias numeradas
+
+**Objetivo da etapa:** quando o cliente entrar em contato sem pedido especifico, mostrar uma lista numerada de categorias disponiveis e aceitar resposta por numero ou nome.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-greeting-category-list-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `findAutoresponderAvailableCategories()` busca categorias reais com produtos ativos e estoque.
+- Helper `buildAutoresponderCategoryOptions()` prepara opcoes numeradas de categoria.
+- Helper `formatAutoresponderGreetingCategoryListReply()` monta a mensagem `Categorias disponiveis:`.
+- Helper `findAutoresponderSelectedCategoryFromMessage()` aceita numero ou nome exato da categoria.
+- Helper `findAutoresponderProductsByCategory()` busca produtos da categoria escolhida.
+- Helper `countAutoresponderProductsByCategory()` mantém paginacao e total da categoria.
+- Saudacao simples salva `last_options_offered` com `source = 'category_list'`.
+- Ao responder numero ou nome da categoria, o bot envia a lista de produtos dessa categoria e salva novo contexto de produtos.
+- Checklist atualizado para marcar saudacao com categorias e selecao por numero/nome.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-greeting-category-list-static.test.mjs`
+
+**Resultado esperado:**
+- Cliente envia `oi` e recebe categorias numeradas.
+- Cliente responde `1` ou `Smartphones` e recebe produtos ativos daquela categoria.
+- Como a lista vem do banco, novas categorias/produtos ativos passam a aparecer automaticamente.
+
+---
+
+### 2026-05-07 — Garantia no produto individual
+
+**Objetivo da etapa:** quando o bot ja tem um produto especifico em contexto, responder a garantia junto do detalhe do produto sem fazer nova pergunta ao cliente.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-product-warranty-line-static.test.mjs`
+- `tmp-tests/autoresponder-warranty-refinement-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `formatAutoresponderWarrantyPeriod()` para transformar dias de garantia em texto simples.
+- Helper `formatAutoresponderProductWarrantyLine()` para montar a linha `Garantia:` conforme o produto.
+- Queries do AutoResponder agora carregam `brand`, `category_id`, `warranty_type`, `warranty_template_id`, `brand_warranty_days` e `category_warranty_days`.
+- A resposta de produto individual inclui garantia quando houver dados suficientes.
+- A garantia oficial vem da configuracao do produto (`warranty_type` e `warranty_template_id`). Marca e categoria entram apenas como origem herdada quando o proprio produto estiver configurado para usar marca ou categoria.
+- Perguntas genericas de garantia agora entram em fluxo de refinamento: se houver produto em contexto, responde esse produto; se houver produto no texto, busca e responde; se nao houver contexto suficiente, pede marca/produto.
+- O checklist passou a marcar `Produto individual mostra garantia quando houver contexto de produto`.
+- O checklist passou a marcar `Pergunta generica de garantia pede marca/produto quando nao houver contexto`.
+
+**Resultado esperado:**
+- Quando o cliente escolhe um item da lista ou pede detalhes de um produto em contexto, o bot mostra preço, parcelamento, garantia e link.
+- Quando o cliente pergunta "qual a garantia do Redmi Note 14?", o bot tenta localizar esse produto e responder a garantia configurada nele.
+- Quando o cliente pergunta apenas "qual a garantia?", o bot pede a marca ou produto antes de responder.
+
+---
+
+### 2026-05-07 — Fase 4E adicionar mais produtos
+
+**Objetivo da etapa:** permitir que o cliente continue montando o carrinho pelo WhatsApp depois de adicionar o primeiro item.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-purchase-add-more-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `isAutoresponderPurchaseAddMoreRequest()` para reconhecer respostas como `adicionar mais`, `mais produtos`, `comprar mais` e `continuar comprando`.
+- Helper `buildAutoresponderAddMorePrompt()` para pedir o proximo produto.
+- Quando `purchase_flow.status = 'item_added'` e o cliente pede mais produtos, o bot muda para `adding_more`, limpa o produto selecionado e preserva `purchase_flow.items`.
+- Ao selecionar outro produto por numero/nome, o bot passa para `awaiting_product_action` sem zerar os itens ja adicionados.
+- Log novo com `intent = 'purchase_add_more_prompt'`.
+- Checklist atualizado para marcar `Permitir adicionar mais produtos ao mesmo carrinho`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-add-more-static.test.mjs`
+
+**Resultado esperado:**
+- Cliente adiciona um item, responde `adicionar mais`, escolhe outro produto e o carrinho temporario continua com os itens anteriores.
+- A proxima etapa ainda precisa remover/cancelar item e depois calcular subtotal/total do carrinho.
+
+---
+
+### 2026-05-07 — Fase 4F remover item/cancelar carrinho
+
+**Objetivo da etapa:** permitir que o cliente corrija ou cancele o carrinho temporario pelo WhatsApp antes de finalizar.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-purchase-cancel-remove-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `isAutoresponderPurchaseCancelRequest()` para reconhecer `cancelar`, `cancelar carrinho`, `limpar carrinho`, `desistir` e equivalentes.
+- Helper `getAutoresponderPurchaseRemoveItemIndex()` para comandos como `remover 1`, `tirar item 2` e `excluir 3`.
+- Helper `hasAutoresponderCartItems()` para proteger comandos de carrinho quando nao ha itens.
+- Helper `buildAutoresponderCartCancelledReply()` para confirmar cancelamento.
+- Helper `buildAutoresponderItemRemovedReply()` para confirmar item removido e avisar se o carrinho ficou vazio.
+- Cancelamento chama `clearAutoresponderPurchaseFlow(senderKey)` e registra `intent = 'purchase_cancelled'`.
+- Remocao atualiza `purchase_flow.items`; se remover o ultimo item, limpa o carrinho temporario.
+- Checklist atualizado para marcar `Permitir remover item/cancelar carrinho` e `Fluxo de cancelamento limpa carrinho temporario`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-cancel-remove-static.test.mjs`
+
+**Resultado esperado:**
+- Cliente pode responder `cancelar carrinho` para limpar o fluxo de compra.
+- Cliente pode responder `remover 1` para tirar o primeiro item do carrinho.
+- A proxima etapa pode calcular subtotal/total e montar resumo do pedido.
+
+---
+
+### 2026-05-07 — Fase 4G resumo e total do carrinho
+
+**Objetivo da etapa:** permitir que o cliente finalize a montagem do carrinho temporario e receba um resumo com subtotais e total antes de escolher retirada/entrega.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-purchase-summary-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `isAutoresponderPurchaseFinalizeRequest()` para reconhecer `finalizar`, `fechar pedido`, `concluir` e `resumo`.
+- Helper `calculateAutoresponderCartTotals()` para somar `subtotal_cents` dos itens.
+- Helper `formatAutoresponderCartSummaryReply()` para montar `Resumo do pedido`, lista de itens, `Subtotal:` e `Total:`.
+- Quando ha itens no carrinho e o cliente pede para finalizar, o bot salva `purchase_flow.status = 'summary_ready'`.
+- O `purchase_flow.totals` passa a guardar `itemCount`, `subtotal_cents` e `total_cents`.
+- Log novo com `intent = 'purchase_summary'`.
+- Checklist atualizado para marcar resumo/total e os testes de carrinho com 1 ou varios itens.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-summary-static.test.mjs`
+
+**Resultado esperado:**
+- Cliente responde `finalizar` e recebe o resumo do carrinho.
+- A proxima etapa deve confirmar se sera retirada na loja ou entrega.
+
+---
+
+### 2026-05-07 — Fase 4H retirada/entrega e endereco
+
+**Objetivo da etapa:** depois do resumo, confirmar se o pedido sera retirado na loja ou entregue e coletar endereco quando houver entrega.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-purchase-fulfillment-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `getAutoresponderPurchaseFulfillmentChoice()` para reconhecer retirada ou entrega.
+- Helper `normalizeAutoresponderDeliveryAddress()` para limpar e limitar o endereco informado.
+- Helper `buildAutoresponderPickupConfirmationReply()` para confirmar retirada sem pedir endereco.
+- Helper `buildAutoresponderDeliveryAddressPrompt()` para pedir endereco completo quando for entrega.
+- Helper `buildAutoresponderDeliveryAddressSavedReply()` para confirmar endereco recebido.
+- Quando `purchase_flow.status = 'summary_ready'` e o cliente escolhe retirada, o bot salva `fulfillment = 'pickup'` e avanca para `customer_data_pending`.
+- Quando o cliente escolhe entrega, o bot salva `fulfillment = 'delivery'` e avanca para `awaiting_delivery_address`.
+- Quando o cliente envia o endereco, o bot salva `delivery_address` e avanca para `customer_data_pending`.
+- Logs novos: `purchase_fulfillment_pickup`, `purchase_fulfillment_delivery` e `purchase_delivery_address`.
+- Checklist atualizado para marcar retirada/entrega, coleta de endereco, teste de entrega e teste de retirada.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-fulfillment-static.test.mjs`
+
+**Resultado esperado:**
+- Retirada na loja nao pede endereco.
+- Entrega pede endereco completo antes de seguir para confirmacao dos dados do cliente.
+
+---
+
+### 2026-05-07 — Fase 4I confirmacao dos dados do cliente
+
+**Objetivo da etapa:** antes de fechar o pedido assistido, confirmar com o cliente os dados principais do pedido: nome, telefone e endereco/retirada.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-purchase-customer-confirmation-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `getAutoresponderCustomerDataSnapshot()` para montar nome, telefone, forma de recebimento e endereco/retirada.
+- Helper `buildAutoresponderCustomerDataConfirmationReply()` para pedir confirmacao dos dados.
+- Helper `buildAutoresponderCustomerDataConfirmedReply()` para confirmar dados corretos.
+- Helper `buildAutoresponderCustomerDataNeedsUpdateReply()` para marcar necessidade de ajuste com atendente.
+- Quando `purchase_flow.status = 'customer_data_pending'`, o bot salva `customer_data` e muda para `awaiting_customer_confirmation`.
+- Se o cliente responde `sim`, o bot muda para `customer_data_confirmed`.
+- Se o cliente responde `nao`, o bot muda para `customer_data_update_needed`.
+- Logs novos: `purchase_customer_data_confirmation`, `purchase_customer_data_confirmed` e `purchase_customer_data_needs_update`.
+- Checklist atualizado para marcar `Confirmar nome/telefone/endereco antes de fechar`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-customer-confirmation-static.test.mjs`
+
+**Resultado esperado:**
+- Antes de fechar, o cliente ve nome, telefone e endereco/retirada.
+- A proxima etapa pode captar dados minimos faltantes e consultar cliente existente.
+
+---
+
+### 2026-05-07 — Fase 4J dados minimos do cadastro
+
+**Objetivo da etapa:** antes de finalizar a venda assistida, garantir que o carrinho tenha dados minimos para cadastro do cliente.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-purchase-customer-document-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `normalizeAutoresponderCustomerDocument()` para aceitar CPF/CNPJ com 11 ou 14 digitos.
+- Helper `buildAutoresponderCustomerDocumentPrompt()` para pedir CPF/CNPJ quando ainda faltar.
+- Helper `buildAutoresponderCustomerDocumentSavedReply()` para confirmar dados minimos anotados.
+- `getAutoresponderCustomerDataSnapshot()` passa a carregar `cpf_cnpj` quando vier do payload ou do proprio `purchase_flow`.
+- Quando o cliente confirma os dados e ainda falta CPF/CNPJ, o bot muda para `awaiting_customer_document`.
+- Quando o cliente informa CPF/CNPJ valido, o bot salva em `purchase_flow.customer_data.cpf_cnpj` e muda para `customer_registration_ready`.
+- Logs novos: `purchase_customer_document_prompt` e `purchase_customer_document_saved`.
+- Checklist atualizado para marcar dados minimos e campos obrigatorios via WhatsApp.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-customer-document-static.test.mjs`
+
+**Resultado esperado:**
+- Nome, telefone, endereco/retirada e CPF/CNPJ ficam reunidos no `purchase_flow` antes da etapa de consulta/criacao do cliente.
+- A proxima etapa deve consultar cliente existente por telefone, CPF/CNPJ ou e-mail antes de pedir dados novamente.
+
+---
+
+### 2026-05-07 — Requisitos de cadastro e consulta do cliente
+
+**Objetivo da anotação:** ampliar o escopo da compra pelo WhatsApp para cobrir cadastro do cliente e consultas futuras.
+
+**Itens adicionados ao checklist:**
+- Captar dados mínimos antes de finalizar venda: nome completo, telefone, CPF/CNPJ quando necessário e endereço quando houver entrega.
+- Consultar cliente existente pelo telefone do WhatsApp, CPF/CNPJ ou e-mail antes de pedir dados novamente.
+- Confirmar dados cadastrados quando o cliente já existir.
+- Criar ou atualizar cliente no sistema a partir das respostas do WhatsApp quando possível.
+- Vincular o cliente ao pedido/carrinho do WhatsApp.
+- Permitir consulta segura de cadastro pelo WhatsApp.
+- Permitir consulta de compras/pedidos pelo WhatsApp com resumo simples.
+
+**Decisão de segurança:**
+- Consulta de cadastro/compras deve confirmar identidade antes de mostrar dados.
+- Se houver dado sensível ou dúvida de identidade, o bot deve encaminhar para atendente.
+
+---
 
 ### 2026-05-05 — Fase 1W cores disponíveis
 
@@ -3673,6 +3949,125 @@ node tools\test-autoresponder-archive-vps-write.cjs
 **Resultado esperado:**
 - O fluxo de Curadoria esta validado ponta a ponta no backend real da VPS.
 - A tela admin continua usando o modal de revisao antes de salvar, conforme a validacao estatica anterior.
+
+---
+
+### 2026-05-06 — Fase 4A estado `purchase_flow`
+
+**Objetivo da etapa:** iniciar a base da compra pelo WhatsApp com estado persistente de carrinho/conversa, sem depender de Synology.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `types/autoResponder.ts`
+- `tmp-tests/autoresponder-purchase-flow-state-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- `autoresponder_conversations` ganhou `purchase_flow JSON NULL`.
+- `autoresponder_conversations` ganhou `purchase_flow_updated_at TIMESTAMP NULL`.
+- Migracao idempotente com `addColumnIfMissing()` para aplicar as colunas em VPS ja existente.
+- Tipo `AutoResponderConversation` agora expoe `purchase_flow` e `purchase_flow_updated_at`.
+- Helpers preparados:
+  - `normalizeAutoresponderPurchaseFlow()`
+  - `getAutoresponderPurchaseFlow()`
+  - `saveAutoresponderPurchaseFlow()`
+  - `clearAutoresponderPurchaseFlow()`
+- Checklist da Fase 4 atualizado no item `purchase_flow`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-flow-state-static.test.mjs`
+
+**Resultado esperado:**
+- A proxima etapa pode usar esse estado para transformar escolha de produto em fluxo de compra assistida.
+- O bot ainda nao inicia carrinho automaticamente nesta etapa; isso fica para o proximo item da Fase 4.
+
+---
+
+### 2026-05-06 — Fase 4B seleção de produto para compra
+
+**Objetivo da etapa:** quando o cliente escolher um produto da lista, iniciar a intenção de compra assistida sem fechar pedido automaticamente.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `tmp-tests/autoresponder-purchase-selection-static.test.mjs`
+- `tmp-tests/autoresponder-phase1a-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- Helper `findAutoresponderSelectedOptionFromMessage()` para aceitar escolha por numero ou por nome/modelo dentro das opcoes recentes.
+- Helper `buildAutoresponderPurchaseActionPrompt()` para responder com o produto escolhido e perguntar se o cliente quer comprar ou ver detalhes.
+- Ao selecionar uma opcao valida, o bot salva `purchase_flow.status = 'awaiting_product_action'`.
+- O `purchase_flow.selected_product` guarda id, nome, SKU, slug, preco em centavos e estoque atual quando disponiveis.
+- O log passa a registrar `intent = 'purchase_product_selected'` para essa entrada do fluxo de compra.
+- Checklist da Fase 4 atualizado no item de escolha por numero/nome.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-selection-static.test.mjs`
+
+**Resultado esperado:**
+- Cliente que responder `1` ou o nome/modelo de uma opcao recente recebe: comprar ou detalhes.
+- O bot ainda nao pergunta quantidade nesta etapa; isso fica para o proximo item da Fase 4.
+
+---
+
+### 2026-05-06 — Fase 4C pergunta de quantidade
+
+**Objetivo da etapa:** depois que o cliente escolhe um produto e confirma que quer comprar, pedir a quantidade desejada antes de montar o carrinho.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-purchase-quantity-prompt-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `isAutoresponderPurchaseBuyRequest()` para reconhecer respostas como `comprar`, `quero comprar` e `fechar`.
+- Helper `isAutoresponderPurchaseDetailsRequest()` para permitir que o cliente veja detalhes antes de comprar.
+- Helper `buildAutoresponderQuantityPrompt()` com pergunta direta de quantidade e estoque atual quando disponivel.
+- O webhook agora trata `purchase_flow.status = 'awaiting_product_action'` antes de novas escolhas numeradas.
+- Ao responder `comprar`, o bot salva `purchase_flow.status = 'awaiting_quantity'`, mantem o produto selecionado e registra log com intent `purchase_quantity_prompt`.
+- Ao responder `detalhes`, o bot mostra o detalhe do produto e mantem a conversa pronta para o cliente responder `comprar`.
+- Checklist atualizado para marcar `Perguntar quantidade desejada` e o teste `Cliente escolhe produto por numero e bot pergunta quantidade`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-quantity-prompt-static.test.mjs`
+
+**Resultado esperado:**
+- Cliente que escolheu produto e respondeu `comprar` recebe `Quantas unidades voce deseja?`.
+- A validacao de estoque antes de adicionar ao carrinho ainda fica para o proximo item da Fase 4.
+
+---
+
+### 2026-05-07 — Fase 4D validacao de estoque
+
+**Objetivo da etapa:** validar a quantidade solicitada contra o estoque atual antes de adicionar o item ao carrinho temporario.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-purchase-stock-validation-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `parseAutoresponderRequestedQuantity()` para aceitar quantidade numerica simples, como `1`, `2 unidades` ou `3 un`.
+- Helper `buildAutoresponderOutOfStockReply()` para bloquear produto sem estoque e sugerir alternativa/atendimento.
+- Helper `buildAutoresponderInsufficientStockReply()` para avisar quando a quantidade pedida passa do estoque disponivel.
+- Helper `buildAutoresponderItemAddedPrompt()` para confirmar o item adicionado ao carrinho temporario.
+- O webhook agora trata `purchase_flow.status = 'awaiting_quantity'` antes de novas escolhas numeradas.
+- Se o estoque atual for `0`, o bot salva `purchase_flow.status = 'stock_blocked'`, nao adiciona item e registra log `purchase_stock_blocked`.
+- Se a quantidade passar do estoque, o bot mantem `awaiting_quantity` e pede uma quantidade valida.
+- Se houver estoque suficiente, o bot salva item em `purchase_flow.items`, muda para `item_added` e registra log `purchase_item_added`.
+- Checklist atualizado para marcar validacao de estoque e teste de produto sem estoque.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-stock-validation-static.test.mjs`
+
+**Resultado esperado:**
+- Produto sem estoque nao entra no carrinho.
+- Produto com estoque insuficiente pede uma quantidade menor.
+- Produto com estoque suficiente entra no carrinho temporario; a etapa seguinte decide adicionar mais produtos ou finalizar.
 
 ---
 
