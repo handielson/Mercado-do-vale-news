@@ -59,6 +59,18 @@ export interface AutoResponderTag {
     updated_at?: string;
 }
 
+export interface AutoResponderCategoryTag {
+    id: string | number;
+    name: string;
+    slug?: string | null;
+    parent_id?: string | number | null;
+    warranty_days?: number | null;
+    product_count?: number;
+    in_stock_count?: number;
+    appears_on_greeting?: boolean | number;
+    updated_at?: string;
+}
+
 export interface AutoResponderConversation {
     id?: number;
     sender: string;

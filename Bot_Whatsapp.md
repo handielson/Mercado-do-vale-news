@@ -54,7 +54,7 @@ Quando cliente perguntar algo no WhatsApp da loja (ex.: *"tem capa para note 14"
 - `services/installmentCalculator.ts` → cálculo de parcelas até 12x via `payment_fees`
 - `utils/storeStatus.ts` → portado para CommonJS na VPS, com cache 60s
 - `utils/whatsappMessageGenerator.ts` → padrão visual das mensagens (espelha orçamento)
-- `pages/admin/settings/CompanyDataPage.tsx` → horários de funcionamento já gerenciáveis em `/admin/settings/empresa`
+- `pages/admin/settings/CompanyDataPage.tsx` → horários de funcionamento já gerenciáveis em `/admin/settings/company`
 - `vps_server.cjs` → padrão Fastify estabelecido (~80 rotas existentes)
 
 ---
@@ -412,7 +412,7 @@ Ou veja todo nosso catálogo: https://mercadodovale.com.br
 | **Curadoria** | Perguntas sem resposta agrupadas por frequência, botão "Criar resposta" (auto-aprendizado supervisionado) |
 | **Tags** | CRUD de `autoresponder_tags` por escopo (rule / conversation / product) |
 | **Estatísticas** | KPIs (msgs hoje/semana/mês, taxa resposta, top produtos, top regras), `?source=synology` para histórico antigo |
-| **Configurações** | Settings completas: mensagens, durações, limites, mapeamento palavra→tag, link para `/admin/settings/empresa` (horários) |
+| **Configurações** | Settings completas: mensagens, durações, limites, mapeamento palavra→tag, link para `/admin/settings/company` (horários) |
 
 ### Template de regras pré-cadastradas (~22 itens, palavras-chave prontas, resposta vazia)
 
@@ -729,6 +729,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 #### Tags
 
 - [x] `GET /autoresponder/tags` (filtro por escopo)
+- [x] `GET /autoresponder/category-tags` (categorias dinâmicas usadas como tags de categoria)
 - [x] `POST /autoresponder/tags`
 - [x] `PATCH /autoresponder/tags/:id`
 - [x] `DELETE /autoresponder/tags/:id`
@@ -816,6 +817,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 
 - [x] Tabela com nome / cor / escopo / descrição / ações
 - [x] CRUD com seletor de cores + multi-select de escopos
+- [x] Tags de categoria visíveis no admin como categorias dinâmicas
 
 #### Aba Estatísticas
 
@@ -835,7 +837,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 - [x] Bloco "Imagens"
 - [x] Bloco "Listas numeradas"
 - [x] Bloco "Mapeamento palavra → tag"
-- [x] Bloco "Horário de funcionamento" com link para `/admin/settings/empresa`
+- [x] Bloco "Horário de funcionamento" com link para `/admin/settings/company`
 
 #### Integração TagPicker em produtos
 
@@ -2330,7 +2332,7 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - Conversão das linhas do admin para mapa `{ tagId: [palavras] }`, compatível com o backend já implantado.
 - Leitura segura de mapas antigos por tag ou por palavra-chave.
 - Seletor usando somente tags com escopo `product`.
-- Link da aba Configurações para `/admin/settings/empresa`.
+- Link da aba Configurações para `/admin/settings/company`.
 - Checklist da aba Configurações atualizado.
 
 **Verificações executadas nesta etapa:**
@@ -4071,6 +4073,31 @@ node tools\test-autoresponder-archive-vps-write.cjs
 
 ---
 
+### 2026-05-07 - Ajuste tags de categoria e link de horários
+
+**Objetivo da etapa:** corrigir o 404 do botão de horários e deixar as categorias dinâmicas mais claras para uso em outras respostas do bot.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `types/autoResponder.ts`
+- `services/autoResponderService.ts`
+- `pages/admin/AutoResponderPage.tsx`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-category-tags-visible-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Endpoint `GET /autoresponder/category-tags` para expor categorias como tags dinâmicas, com produtos ativos, produtos em estoque e garantia da categoria.
+- Aba Tags agora mostra a seção "Tags de categoria" separada das tags manuais.
+- Informativos no admin para usar `{categorias_disponiveis}` e `{categoria:Nome da categoria}` em respostas automáticas.
+- Link de horário corrigido de `/admin/settings/empresa` para `/admin/settings/company`.
+
+**Verificações executadas:**
+- `node tmp-tests\autoresponder-category-tags-visible-static.test.mjs`
+- `node tmp-tests\autoresponder-settings-polish-static.test.mjs`
+
+---
+
 ## Pendências abertas
 
 1. **Token secreto:** `AUTORESPONDER_TOKEN` gerado/configurado fora do código e app AutoResponder liberado. Concluído; manter sem hardcode no repositório.
@@ -4087,7 +4114,7 @@ node tools\test-autoresponder-archive-vps-write.cjs
 - App: [autoresponder.ai](https://www.autoresponder.ai/) (TK Studio, Alemanha)
 - Webhook URL: `https://api.xiaomipetrolina.com.br/autoresponder-webhook`
 - Página admin: `/admin/atendimento-automatico`
-- Página de horários da loja: `/admin/settings/empresa`
+- Página de horários da loja: `/admin/settings/company`
 - Helper de horário: [utils/storeStatus.ts](utils/storeStatus.ts)
 - Helper de parcelas: [services/installmentCalculator.ts](services/installmentCalculator.ts)
 - Padrão de mensagem: [utils/whatsappMessageGenerator.ts](utils/whatsappMessageGenerator.ts)

@@ -624,6 +624,38 @@ function formatAutoresponderGreetingCategoryListReply(categories) {
   return lines.join('\n');
 }
 
+async function resolveAutoresponderReplyTemplate(replyText, settings = null) {
+  let text = String(replyText || '');
+  if (!text.includes('{categorias_disponiveis}') && !/\{categoria:[^}]+\}/i.test(text)) return text;
+
+  let categories = null;
+  if (text.includes('{categorias_disponiveis}')) {
+    categories = await findAutoresponderAvailableCategories(100);
+    text = text.split('{categorias_disponiveis}').join(formatAutoresponderGreetingCategoryListReply(categories));
+  }
+
+  const categoryMatches = Array.from(text.matchAll(/\{categoria:([^}]+)\}/gi));
+  if (categoryMatches.length === 0) return text;
+
+  categories = categories || await findAutoresponderAvailableCategories(100);
+  for (const match of categoryMatches) {
+    const rawName = String(match[1] || '').trim();
+    const normalizedName = normalizeAutoresponderText(rawName).trim();
+    const category = categories.find((item) => normalizeAutoresponderText(item?.name || '').trim() === normalizedName)
+      || categories.find((item) => normalizeAutoresponderText(item?.name || '').includes(normalizedName));
+    let replacement = `Nao encontrei a categoria "${rawName}".`;
+    if (category) {
+      const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+      const total = await countAutoresponderProductsByCategory(category.id);
+      const products = await findAutoresponderProductsByCategory(category.id, pageSize);
+      replacement = await formatAutoresponderProductSearchReply(products, category.name, settings, { offset: 0, limit: pageSize, total });
+    }
+    text = text.split(match[0]).join(replacement);
+  }
+
+  return text;
+}
+
 function findAutoresponderSelectedCategoryFromMessage(message, categories, numberedChoice = null) {
   const safeCategories = Array.isArray(categories) ? categories : [];
   const choiceNumber = Number(numberedChoice || 0);
@@ -2458,6 +2490,32 @@ fastify.get('/autoresponder/tags', { preHandler: requireSyncKey }, async (req) =
   return rows;
 });
 
+fastify.get('/autoresponder/category-tags', { preHandler: requireSyncKey }, async () => {
+  const [rows] = await pool.query(
+    `SELECT
+       c.id,
+       c.name,
+       c.slug,
+       c.parent_id,
+       c.warranty_days,
+       c.updated_at,
+       COUNT(p.id) AS product_count,
+       COALESCE(SUM(CASE WHEN COALESCE(p.stock_quantity, 0) > 0 THEN 1 ELSE 0 END), 0) AS in_stock_count
+     FROM categories c
+     LEFT JOIN products p ON p.category_id = c.id
+      AND p.status = 'active'
+      AND (p.is_parent = 0 OR p.is_parent IS NULL)
+     GROUP BY c.id, c.name, c.slug, c.parent_id, c.warranty_days, c.updated_at, c.sort_order
+     ORDER BY COALESCE(c.sort_order, 999999), c.name ASC`
+  );
+  return rows.map((row) => ({
+    ...row,
+    product_count: Number(row.product_count || 0),
+    in_stock_count: Number(row.in_stock_count || 0),
+    appears_on_greeting: Number(row.in_stock_count || 0) > 0,
+  }));
+});
+
 fastify.post('/autoresponder/tags', { preHandler: requireSyncKey }, async (req, reply) => {
   const body = req.body || {};
   if (!body.name || !body.scopes) return reply.code(400).send({ error: 'name and scopes are required' });
@@ -3666,8 +3724,12 @@ fastify.route({
           return { replies: formatAutoresponderProReplies(replyMessages) };
         }
 
-        const replyText = formatAutoresponderReply(
+        const resolvedRuleText = await resolveAutoresponderReplyTemplate(
           appendAutoresponderRuleAttachment(matchedRule.reply_text, matchedRule),
+          settings
+        );
+        const replyText = formatAutoresponderReply(
+          resolvedRuleText,
           settings,
           shouldPrefixGreeting
         );

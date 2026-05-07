@@ -27,6 +27,7 @@ import type {
     AutoResponderSettings,
     AutoResponderStats,
     AutoResponderStoreStatus,
+    AutoResponderCategoryTag,
     AutoResponderConversation,
     AutoResponderBlocklistEntry,
     AutoResponderBlocklistInput,
@@ -1051,6 +1052,7 @@ const AutoResponderPage: React.FC = () => {
     const [storeStatus, setStoreStatus] = React.useState<AutoResponderStoreStatus | null>(null);
     const [rules, setRules] = React.useState<AutoResponderRule[]>([]);
     const [tags, setTags] = React.useState<AutoResponderTag[]>([]);
+    const [categoryTags, setCategoryTags] = React.useState<AutoResponderCategoryTag[]>([]);
     const [conversations, setConversations] = React.useState<AutoResponderConversation[]>([]);
     const [blocklist, setBlocklist] = React.useState<AutoResponderBlocklistEntry[]>([]);
     const [unansweredQuestions, setUnansweredQuestions] = React.useState<AutoResponderUnansweredQuestion[]>([]);
@@ -1101,6 +1103,7 @@ const AutoResponderPage: React.FC = () => {
                 storeStatusData,
                 rulesData,
                 tagsData,
+                categoryTagsData,
                 conversationsData,
                 blocklistData,
                 unansweredData,
@@ -1113,6 +1116,7 @@ const AutoResponderPage: React.FC = () => {
                 autoResponderService.getStoreStatus(),
                 autoResponderService.listRules(),
                 autoResponderService.listTags(),
+                autoResponderService.listCategoryTags(),
                 autoResponderService.listConversations({ limit: 100 }),
                 autoResponderService.listBlocklist(),
                 autoResponderService.listUnanswered({ limit: 100 }),
@@ -1124,6 +1128,7 @@ const AutoResponderPage: React.FC = () => {
             setStoreStatus(storeStatusData);
             setRules(rulesData);
             setTags(tagsData);
+            setCategoryTags(categoryTagsData);
             setConversations(conversationsData);
             setBlocklist(blocklistData);
             setUnansweredQuestions(unansweredData);
@@ -1207,6 +1212,15 @@ const AutoResponderPage: React.FC = () => {
                 .some((value) => String(value).toLowerCase().includes(search))
         );
     }, [tags, tagSearch]);
+    const filteredCategoryTags = React.useMemo(() => {
+        const search = tagSearch.trim().toLowerCase();
+        if (!search) return categoryTags;
+        return categoryTags.filter((category) =>
+            [category.name, category.slug, category.parent_id]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(search))
+        );
+    }, [categoryTags, tagSearch]);
     const totalMessages = Number(summary.total_messages || 0);
     const fallbackMessages = Number(summary.fallback_messages || 0);
     const productMessages = Number(summary.product_messages || 0);
@@ -1247,8 +1261,12 @@ const AutoResponderPage: React.FC = () => {
     };
 
     const reloadTags = async () => {
-        const data = await autoResponderService.listTags();
+        const [data, dynamicCategories] = await Promise.all([
+            autoResponderService.listTags(),
+            autoResponderService.listCategoryTags(),
+        ]);
         setTags(data);
+        setCategoryTags(dynamicCategories);
     };
 
     const openNewRule = () => {
@@ -2265,6 +2283,87 @@ const AutoResponderPage: React.FC = () => {
                                 </div>
                             </div>
 
+                            <div className="overflow-hidden rounded-lg border border-emerald-200 bg-white">
+                                <div className="flex flex-col gap-1 border-b border-emerald-100 bg-emerald-50 px-5 py-4">
+                                    <h3 className="text-base font-semibold text-emerald-900">Tags de categoria</h3>
+                                    <p className="text-sm text-emerald-700">
+                                        Categorias dinamicas. Vem da tabela categories e muda automaticamente quando a categoria ou seus produtos mudam.
+                                    </p>
+                                </div>
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Categoria</th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Produtos ativos</th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Com estoque</th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Garantia</th>
+                                            <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Bot</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                        {filteredCategoryTags.map((category) => {
+                                            const appearsOnGreeting = isEnabled(category.appears_on_greeting);
+                                            return (
+                                                <tr key={category.id} className="align-top hover:bg-slate-50">
+                                                    <td className="px-5 py-4">
+                                                        <div className="font-semibold text-slate-900">{category.name}</div>
+                                                        <div className="mt-1 text-xs text-slate-500">
+                                                            Vem da tabela categories{category.slug ? ` - ${category.slug}` : ''}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                                                        {formatNumber(category.product_count)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                                                        {formatNumber(category.in_stock_count)}
+                                                    </td>
+                                                    <td className="px-5 py-4 text-sm text-slate-600">
+                                                        {category.warranty_days ? `${category.warranty_days} dias` : 'Conforme produto'}
+                                                    </td>
+                                                    <td className="px-5 py-4">
+                                                        <span
+                                                            className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                                                                appearsOnGreeting
+                                                                    ? 'bg-emerald-50 text-emerald-700'
+                                                                    : 'bg-slate-100 text-slate-600'
+                                                            }`}
+                                                        >
+                                                            {appearsOnGreeting ? 'Aparece na saudacao' : 'Sem estoque ativo'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {filteredCategoryTags.length === 0 && (
+                                    <div className="px-5 py-10 text-center text-sm text-slate-500">
+                                        Nenhuma categoria dinamica encontrada.
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+                                <h3 className="text-base font-semibold text-blue-950">Informativos para outras mensagens</h3>
+                                <p className="mt-1 text-sm text-blue-800">
+                                    Use nas respostas automáticas para reaproveitar as categorias dinamicas sem manter texto manual.
+                                </p>
+                                <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                    <div className="rounded-lg border border-blue-100 bg-white p-4">
+                                        <code className="text-sm font-semibold text-blue-900">{'{categorias_disponiveis}'}</code>
+                                        <p className="mt-2 text-sm text-slate-600">
+                                            Insere a lista numerada atual de categorias com produtos em estoque.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border border-blue-100 bg-white p-4">
+                                        <code className="text-sm font-semibold text-blue-900">{'{categoria:Nome da categoria}'}</code>
+                                        <p className="mt-2 text-sm text-slate-600">
+                                            Insere uma lista curta de produtos da categoria informada, por exemplo {'{categoria:Smartphones}'}.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                                 <table className="min-w-full divide-y divide-slate-200">
                                     <thead className="bg-slate-50">
@@ -2813,7 +2912,7 @@ const AutoResponderPage: React.FC = () => {
                                 <div className="rounded-lg border border-slate-200 bg-white p-5">
                                     <h3 className="text-base font-semibold text-slate-900">Horário de funcionamento</h3>
                                     <a
-                                        href="/admin/settings/empresa"
+                                        href="/admin/settings/company"
                                         className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                                     >
                                         <Clock size={16} />

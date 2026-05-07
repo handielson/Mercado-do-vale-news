@@ -33,7 +33,7 @@ const doc = fs.readFileSync(docPath, 'utf8');
   'Adicionar mapeamento',
   'Remover',
   'Horário de funcionamento',
-  '/admin/settings/empresa',
+  '/admin/settings/company',
   'Abrir horários da empresa',
 ].forEach((label) => {
   assert(page.includes(label), `Settings polish must render label: ${label}`);
@@ -49,7 +49,7 @@ assert(
   'Bot_Whatsapp.md must mark keyword mapping block'
 );
 assert(
-  doc.includes('- [x] Bloco "Horário de funcionamento" com link para `/admin/settings/empresa`'),
+  doc.includes('- [x] Bloco "Horário de funcionamento" com link para `/admin/settings/company`'),
   'Bot_Whatsapp.md must mark business hours link'
 );
 

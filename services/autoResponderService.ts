@@ -4,6 +4,7 @@ import type {
     AutoResponderBlocklistEntry,
     AutoResponderBlocklistInput,
     AutoResponderBlocklistUpdate,
+    AutoResponderCategoryTag,
     AutoResponderConversation,
     AutoResponderConversationFilters,
     AutoResponderOk,
@@ -87,6 +88,10 @@ export const autoResponderService = {
 
     deleteTag: (id: number): Promise<void> => {
         return vpsClient.delete(`/autoresponder/tags/${id}`);
+    },
+
+    listCategoryTags: (): Promise<AutoResponderCategoryTag[]> => {
+        return vpsClient.get<AutoResponderCategoryTag[]>('/autoresponder/category-tags');
     },
 
     listConversations: (filters: AutoResponderConversationFilters = {}): Promise<AutoResponderConversation[]> => {
