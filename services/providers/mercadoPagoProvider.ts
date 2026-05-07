@@ -56,11 +56,21 @@ export const mercadoPagoProvider = {
             + (orderData.shipping_cost || 0)
             - (orderData.coupon_discount || 0);
 
+        const cpfDigits = (orderData.customer_document || '').replace(/\D/g, '');
+        const identification = cpfDigits.length === 11
+            ? { type: 'CPF', number: cpfDigits }
+            : cpfDigits.length === 14
+                ? { type: 'CNPJ', number: cpfDigits }
+                : undefined;
+
+        const payer: Record<string, unknown> = { email, first_name: firstName, last_name: lastName };
+        if (identification) payer.identification = identification;
+
         const payload = {
             transaction_amount: Number((totalCentavos / 100).toFixed(2)),
             description: `Pedido Mercado do Vale - ${orderData.items.length} itens`,
             payment_method_id: 'pix',
-            payer: { email, first_name: firstName, last_name: lastName }
+            payer
         };
 
         const response = await fetch('https://api.mercadopago.com/v1/payments', {
@@ -75,8 +85,13 @@ export const mercadoPagoProvider = {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            console.error('Erro Mercado Pago PIX:', errorData);
-            throw new Error(`Falha ao gerar PIX Mercado Pago: ${errorData.message || response.statusText}`);
+            console.error('Erro Mercado Pago PIX:', { payload, errorData });
+            const detail = errorData?.cause?.[0]?.description
+                || errorData?.cause?.[0]?.code
+                || errorData?.message
+                || errorData?.error
+                || response.statusText;
+            throw new Error(`Falha ao gerar PIX Mercado Pago: ${detail}`);
         }
 
         return (await response.json()) as MercadoPagoPixResponse;

@@ -127,6 +127,7 @@ export interface OrderInput {
     customer_phone: string;
     customer_email?: string;
     customer_id?: string;
+    customer_document?: string;       // CPF/CNPJ — exigido pelo Mercado Pago para PIX em produção
 
     items: OrderItemInput[];
 

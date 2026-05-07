@@ -275,6 +275,7 @@ export default function CheckoutPage() {
                 customer_name: form.customer_name,
                 customer_phone: form.customer_phone,
                 customer_email: form.customer_email || undefined,
+                customer_document: customer?.cpf_cnpj || undefined,
                 items: [...productItems, ...warrantyItem],
                 payment_method: paymentMethodToSave,
                 payment_gateway: gatewayToSave,
