@@ -66,12 +66,17 @@ export const mercadoPagoProvider = {
         const payer: Record<string, unknown> = { email, first_name: firstName, last_name: lastName };
         if (identification) payer.identification = identification;
 
-        const payload = {
+        const notificationUrl = typeof window !== 'undefined' && window.location?.origin
+            ? `${window.location.origin}/api/mercadopago-webhook`
+            : undefined;
+
+        const payload: Record<string, unknown> = {
             transaction_amount: Number((totalCentavos / 100).toFixed(2)),
             description: `Pedido Mercado do Vale - ${orderData.items.length} itens`,
             payment_method_id: 'pix',
             payer
         };
+        if (notificationUrl) payload.notification_url = notificationUrl;
 
         const response = await fetch('https://api.mercadopago.com/v1/payments', {
             method: 'POST',

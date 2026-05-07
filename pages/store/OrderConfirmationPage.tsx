@@ -18,18 +18,34 @@ export default function OrderConfirmationPage() {
     const pixDataFromState = (location.state as any)?.pix_data;
 
     useEffect(() => {
-        if (id) {
-            getOrderById(id)
-                .then(fetchedOrder => {
-                    if (fetchedOrder && pixDataFromState && !fetchedOrder.gateway_pix_data) {
-                        // Banco ainda não atualizou — usa o dado em memória
-                        setOrder({ ...fetchedOrder, gateway_pix_data: pixDataFromState } as any);
-                    } else {
-                        setOrder(fetchedOrder);
-                    }
-                })
-                .finally(() => setLoading(false));
-        }
+        if (!id) return;
+        let cancelled = false;
+        let intervalId: ReturnType<typeof setInterval> | undefined;
+
+        const fetchOnce = async () => {
+            const fetchedOrder = await getOrderById(id).catch(() => null);
+            if (cancelled) return;
+            if (fetchedOrder && pixDataFromState && !fetchedOrder.gateway_pix_data) {
+                setOrder({ ...fetchedOrder, gateway_pix_data: pixDataFromState } as any);
+            } else {
+                setOrder(fetchedOrder);
+            }
+            // Para o polling assim que o pedido sair de awaiting_payment/pending
+            const finalStatuses = ['paid', 'preparing', 'shipped', 'delivered', 'completed', 'cancelled', 'payment_failed'];
+            if (fetchedOrder && finalStatuses.includes(fetchedOrder.status) && intervalId) {
+                clearInterval(intervalId);
+                intervalId = undefined;
+            }
+        };
+
+        fetchOnce().finally(() => { if (!cancelled) setLoading(false); });
+        // Polling: a cada 4s busca o status até confirmar pagamento
+        intervalId = setInterval(fetchOnce, 4000);
+
+        return () => {
+            cancelled = true;
+            if (intervalId) clearInterval(intervalId);
+        };
     }, [id, pixDataFromState]);
 
     // Sem redirecionamento automático — o usuário clica no botão manualmente
@@ -54,7 +70,8 @@ export default function OrderConfirmationPage() {
         );
     }
 
-    const hasPix = order?.gateway_pix_data?.qr_code_base64;
+    const isAwaiting = order?.status === 'awaiting_payment' || order?.status === 'pending';
+    const hasPix = !!order?.gateway_pix_data?.qr_code_base64 && isAwaiting;
     const hasProCheckoutUrl = order?.gateway_payment_url && order.status === 'awaiting_payment';
     const isPendingPayment = hasPix || hasProCheckoutUrl;
 
