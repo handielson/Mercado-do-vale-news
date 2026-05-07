@@ -339,8 +339,11 @@ export async function createOrder(input: OrderInput): Promise<Order> {
             }
         } catch (mpError: any) {
             console.error("Falha ao gerar Pix MP:", mpError);
-            // Cancela o pedido e mostra o erro ao usuário
-            await supabase.from('orders').delete().eq('id', order.id);
+            // Marca pedido como payment_failed para preservar histórico (não deleta)
+            await supabase
+                .from('orders')
+                .update({ status: 'payment_failed', payment_status: 'failed' })
+                .eq('id', order.id);
             throw new Error(mpError.message || "Erro ao gerar cobrança PIX. Tente novamente.");
         }
     } else if (orderData.payment_gateway === 'mercado_pago' && orderData.payment_method === 'credit_card') {
@@ -377,7 +380,10 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                     }
                 }
                 if (mpResponse.status === 'rejected') {
-                    await supabase.from('orders').delete().eq('id', order.id);
+                    await supabase
+                        .from('orders')
+                        .update({ status: 'payment_failed', payment_status: 'failed' })
+                        .eq('id', order.id);
                     const MP_REJECTION_MESSAGES: Record<string, string> = {
                         cc_rejected_insufficient_amount: 'Saldo insuficiente no cartão. Tente outro cartão.',
                         cc_rejected_bad_filled_security_code: 'CVV incorreto. Verifique o código de segurança.',
@@ -415,7 +421,10 @@ export async function createOrder(input: OrderInput): Promise<Order> {
             }
         } catch (mpError: any) {
             console.error("Falha no pagamento MP:", mpError);
-            await supabase.from('orders').delete().eq('id', order.id);
+            await supabase
+                .from('orders')
+                .update({ status: 'payment_failed', payment_status: 'failed' })
+                .eq('id', order.id);
             throw new Error(mpError.message || "Erro de integração com o Mercado Pago.");
         }
     }
