@@ -2461,7 +2461,7 @@ export default function BlingPage() {
                                             { label: 'URL do webhook cadastrada no Bling (Aplicativo → Webhooks → Servidores)', tip: 'Use a URL acima. O Bling faz um GET de verificação, então ela precisa responder 200.' },
                                             { label: 'Webhook de estoque habilitado (stock.updated / virtual_stock.updated / movimentacaoEstoque)', tip: 'Sem os eventos de estoque, não há baixa automática na loja.' },
                                             { label: 'Webhook de nome habilitado (product.updated / produto)', tip: 'Sem evento de produto, mudanças de nome no Bling não refletem na loja.' },
-                                            { label: 'Webhook de valor habilitado (product.updated com preço)', tip: 'Sem evento de produto/preço, alterações de valor no Bling não sincronizam.' },
+                                            { label: 'Webhook de valor habilitado (product.updated com preço)', tip: 'Quando o payload traz preco, o webhook converte para centavos e atualiza price_retail na VPS e no Supabase.' },
                                             { label: 'Versão do payload: versão 1 (formato recomendado)', tip: 'O sistema suporta v3 (event em inglês) e legado em português.' },
                                             { label: 'App Bling tem escopo de Estoques habilitado', tip: 'Sem esse escopo, o recurso de Webhook de Estoque não aparece nas opções.' },
                                             { label: 'Produto importado pelo Bling (tem bling_id salvo)', tip: 'Produtos criados manualmente não têm bling_id — o webhook não consegue associá-los.' },

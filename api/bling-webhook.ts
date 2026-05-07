@@ -11,6 +11,8 @@
  * Supported events:
  * - stock / movimentacaoEstoque / stock.created / virtual_stock.updated
  * - product / products / product.created / product.updated
+ *   - name updates sync through /products/name
+ *   - price updates from data.preco sync as local price_retail cents through /products/prices-stock
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -249,6 +251,7 @@ export default async function handler(req: any, res: any) {
             const blingId: number | undefined = productData?.id;
             const nome: string | undefined = productData?.nome || productData?.name;
             const codigo: string | undefined = productData?.codigo;
+            const preco: number | undefined = productData?.preco;
 
             if (!blingId && !codigo) {
                 return res.status(200).json({ ok: true, message: 'No product identifier in product event' });
@@ -286,19 +289,28 @@ export default async function handler(req: any, res: any) {
 
             const updates: Record<string, any> = {};
             if (resolvedName) updates.name = resolvedName;
+            if (preco !== undefined && preco !== null && Number.isFinite(Number(preco))) {
+                updates.price_retail = Math.round(Number(preco) * 100);
+            }
 
             if (Object.keys(updates).length === 0) {
                 return res.status(200).json({ ok: true, message: 'Nothing to update' });
             }
 
-            const vpsUpdated = await patchVps('/products/name', { sku: resolvedSku, ...updates });
+            const vpsNameUpdated = updates.name
+                ? await patchVps('/products/name', { sku: resolvedSku, name: updates.name })
+                : true;
+            const vpsPriceUpdated = updates.price_retail !== undefined
+                ? await patchVps('/products/prices-stock', { sku: resolvedSku, ...updates })
+                : true;
+            const vpsUpdated = vpsNameUpdated && vpsPriceUpdated;
 
             await supabase
                 .from('products')
                 .update(updates)
                 .eq('bling_id', blingId);
 
-            console.log(`[bling-webhook] product -> SKU=${resolvedSku} name="${resolvedName}" VPS=${vpsUpdated}`);
+            console.log(`[bling-webhook] product -> SKU=${resolvedSku} name="${resolvedName}" price_retail=${updates.price_retail ?? 'unchanged'} VPS=${vpsUpdated}`);
             return res.status(200).json({ ok: true, event, sku: resolvedSku, updates, vpsUpdated });
         }
 

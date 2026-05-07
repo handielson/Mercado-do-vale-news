@@ -37,4 +37,22 @@ assert.match(
   'the webhook must strip the sha256= prefix from Bling signatures before comparing the HMAC',
 );
 
+assert.match(
+  webhookSource,
+  /const\s+preco\s*:\s*number\s*\|\s*undefined\s*=\s*productData\?\.preco;/,
+  'product.updated webhooks must read the Bling preco field from payloads',
+);
+
+assert.match(
+  webhookSource,
+  /updates\.price_retail\s*=\s*Math\.round\(Number\(preco\)\s*\*\s*100\);/,
+  'product.updated webhooks must convert Bling preco in reais to local price_retail cents',
+);
+
+assert.match(
+  webhookSource,
+  /patchVps\('\/products\/prices-stock',\s*\{\s*sku:\s*resolvedSku,\s*\.\.\.updates\s*\}\)/,
+  'product.updated price changes must sync to the VPS commercial fields endpoint',
+);
+
 console.log('bling-webhook regression guard ok');
