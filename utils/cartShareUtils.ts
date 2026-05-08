@@ -30,14 +30,40 @@ const VARIATION_LABELS: Record<string, string> = {
     material: 'Materiais',
 };
 
+const ALLOWED_VARIATION_KEYS = new Set([
+    'color',
+    'cor',
+    'colour',
+    'storage',
+    'memoria',
+    'memory',
+    'armazenamento',
+    'ram',
+    'material',
+]);
+
 const IGNORED_SPEC_KEYS = new Set([
     'color_hex',
     'cor_hex',
+    'dimensions.depth',
+    'dimensions.depth_cms',
+    'dimensions.height',
+    'dimensions.height_cms',
+    'dimensions.width',
+    'dimensions.width_cms',
     'imei',
     'imei1',
     'imei2',
     'serial',
     'inmetro_certificate',
+    'meta_description',
+    'meta_descriptions',
+    'meta_title',
+    'meta_titles',
+    'slug',
+    'slugs',
+    'weight_kg',
+    'weight_kgs',
 ]);
 
 function normalizeSpecKey(key: string): string {
@@ -83,6 +109,7 @@ function buildVariationSummary(rows: Array<{ specs?: Record<string, unknown> }>)
         for (const [key, rawValue] of Object.entries(specs)) {
             const normalizedKey = normalizeSpecKey(key);
             if (IGNORED_SPEC_KEYS.has(normalizedKey)) continue;
+            if (!ALLOWED_VARIATION_KEYS.has(normalizedKey)) continue;
 
             const value = formatSpecValue(rawValue);
             if (!value) continue;

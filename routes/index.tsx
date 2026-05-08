@@ -105,6 +105,7 @@ const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard/AdminDash
 const AdminLayout = lazy(() => import('../layouts/AdminLayout').then(module => ({ default: module.AdminLayout })));
 
 const ProductListPage = lazy(() => import('../pages/admin/products/ProductListPage').then(module => ({ default: module.ProductListPage })));
+const ProductLabelPrintPage = lazy(() => import('../pages/admin/products/ProductLabelPrintPage').then(module => ({ default: module.ProductLabelPrintPage })));
 const ProductFormPage = lazy(() => import('../pages/admin/products/ProductFormPage').then(module => ({ default: module.ProductFormPage })));
 const ProductDetailPage = lazy(() => import('../pages/admin/products/ProductDetailPage').then(module => ({ default: module.ProductDetailPage })));
 const ProductCombosPage = lazy(() => import('../pages/admin/products/ProductCombosPage').then(module => ({ default: module.ProductCombosPage })));
@@ -268,6 +269,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductFormPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/products/labels",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ProductLabelPrintPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

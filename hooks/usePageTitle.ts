@@ -35,6 +35,7 @@ const getPageTitleFromRoute = (pathname: string): string => {
     const routeTitleMap: Record<string, string> = {
         '/admin': 'Dashboard',
         '/admin/products': 'Produtos',
+        '/admin/products/labels': 'Etiquetas',
         '/admin/products/new': 'Novo Produto',
         '/admin/products/bulk': 'Cadastro em Massa',
         '/admin/inventory': 'Estoque',

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
@@ -208,6 +208,13 @@ export const ProductListPage: React.FC = () => {
                 {/* Linha 2: Ações secundárias */}
                 <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-medium text-slate-400 uppercase tracking-wider mr-1">Ferramentas:</span>
+                    <button
+                        onClick={() => navigate('/admin/products/labels')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-xs font-medium"
+                    >
+                        <Barcode className="w-3.5 h-3.5" />
+                        Etiquetas
+                    </button>
                     <button
                         onClick={() => setIsExportModalOpen(true)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm text-xs font-medium"

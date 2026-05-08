@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode } from 'lucide-react';
 
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -28,6 +28,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/financeiro', icon: <Banknote size={18} />, label: 'Financeiro', keywords: 'dinheiro pagamentos taxas contas' },
         { to: '/admin/contabilidade', icon: <BookOpen size={18} />, label: 'Contabilidade', keywords: 'imposto simples nacional das nfe faturamento tributavel' },
         { to: '/admin/products', icon: <Package size={18} />, label: 'Produtos', keywords: 'catalogo itens mercadoria' },
+        { to: '/admin/products/labels', icon: <Barcode size={18} />, label: 'Etiquetas', keywords: 'imprimir etiqueta codigo barras ean sku' },
         { to: '/admin/inventory', icon: <ClipboardList size={18} />, label: 'Estoque', keywords: 'quantidade inventario' },
         { to: '/admin/customers', icon: <Users size={18} />, label: 'Clientes', keywords: 'usuarios compradores' },
         { to: '/admin/team', icon: <Users size={18} />, label: 'Equipe', keywords: 'funcionarios vendedores' },
@@ -111,6 +112,18 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     }).filter(group => group.items.length > 0);
   }, [search, menuGroups]);
 
+  const activeItemPath = useMemo(() => {
+    const allItems = menuGroups.flatMap(group => group.items);
+    const match = allItems
+      .filter(item =>
+        location.pathname === item.to ||
+        (item.to !== '/admin' && location.pathname.startsWith(`${item.to}/`))
+      )
+      .sort((a, b) => b.to.length - a.to.length)[0];
+
+    return match?.to || '';
+  }, [location.pathname, menuGroups]);
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
       {DEV_MODE && (
@@ -171,7 +184,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                       to={item.to} 
                       icon={item.icon} 
                       label={item.label} 
-                      active={location.pathname === item.to || (item.to !== '/admin' && location.pathname.startsWith(item.to))} 
+                      active={activeItemPath === item.to} 
                     />
                   );
                 })}

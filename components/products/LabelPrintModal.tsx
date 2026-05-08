@@ -40,6 +40,19 @@ const LABEL_SIZES: LabelSize[] = [
 ];
 
 const MAX_COPIES = 500;
+const LABEL_SIZE_STORAGE_KEY = 'mdv.labelPrint.preferredSizeId';
+const DEFAULT_LABEL_SIZE_ID = '30x20';
+
+function getPreferredLabelSizeId(): string {
+    if (typeof window === 'undefined') return DEFAULT_LABEL_SIZE_ID;
+
+    try {
+        const stored = localStorage.getItem(LABEL_SIZE_STORAGE_KEY);
+        return LABEL_SIZES.some((size) => size.id === stored) ? stored! : DEFAULT_LABEL_SIZE_ID;
+    } catch {
+        return DEFAULT_LABEL_SIZE_ID;
+    }
+}
 
 interface LabelContentProps {
     size: LabelSize;
@@ -394,7 +407,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
         product?.eans && product.eans.length > 0 ? product.eans[0] : product?.sku || ''
     );
     const [copies, setCopies] = useState<number>(1);
-    const [sizeId, setSizeId] = useState<string>(LABEL_SIZES[0].id);
+    const [sizeId, setSizeId] = useState<string>(() => getPreferredLabelSizeId());
     const [isGenerating, setIsGenerating] = useState(false);
 
     React.useEffect(() => {
@@ -420,6 +433,15 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     const handleUseStock = () => {
         if (stockQty > 0) {
             setCopies(Math.min(MAX_COPIES, stockQty));
+        }
+    };
+
+    const handleSizeChange = (nextSizeId: string) => {
+        setSizeId(nextSizeId);
+        try {
+            localStorage.setItem(LABEL_SIZE_STORAGE_KEY, nextSizeId);
+        } catch {
+            // Preferencia local indisponivel; a impressao continua normalmente.
         }
     };
 
@@ -487,7 +509,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                             </label>
                             <select
                                 value={sizeId}
-                                onChange={(e) => setSizeId(e.target.value)}
+                                onChange={(e) => handleSizeChange(e.target.value)}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                             >
                                 {LABEL_SIZES.map((s) => (
