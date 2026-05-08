@@ -17,9 +17,11 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
     'function buildAutoresponderCustomerDocumentSavedReply',
     "status: 'awaiting_customer_document'",
     "status: 'customer_registration_ready'",
+    "status: 'customer_record_ready'",
     "intent: 'purchase_customer_document_prompt'",
-    "intent: 'purchase_customer_document_saved'",
+    "intent: 'purchase_customer_upserted'",
     'cpf_cnpj: customerDocument',
+    'customer_record',
     'CPF/CNPJ',
     'Dados minimos do cadastro anotados',
   ].forEach((token) => {

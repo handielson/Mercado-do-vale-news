@@ -912,6 +912,22 @@ function calculateAutoresponderCartTotals(cartItems) {
   };
 }
 
+function getAutoresponderShippingCents(purchaseFlow = {}) {
+  const price = Number(purchaseFlow?.shipping_quote?.price);
+  if (!Number.isFinite(price) || price <= 0) return 0;
+  return Math.round(price * 100);
+}
+
+function calculateAutoresponderCartTotalsWithShipping(cartItems, purchaseFlow = {}) {
+  const totals = calculateAutoresponderCartTotals(cartItems);
+  const shippingCents = getAutoresponderShippingCents(purchaseFlow);
+  return {
+    ...totals,
+    shipping_cents: shippingCents,
+    total_cents: totals.subtotal_cents + shippingCents,
+  };
+}
+
 function formatAutoresponderCartSummaryReply(items) {
   const safeItems = Array.isArray(items) ? items : [];
   const totals = calculateAutoresponderCartTotals(safeItems);
@@ -946,21 +962,115 @@ function normalizeAutoresponderDeliveryAddress(message) {
     .slice(0, 500);
 }
 
+function normalizeAutoresponderCep(value) {
+  const digits = String(value || '').replace(/\D+/g, '');
+  return digits.length === 8 ? digits : '';
+}
+
+function formatAutoresponderCep(value) {
+  const cep = normalizeAutoresponderCep(value);
+  return cep ? cep.replace(/^(\d{5})(\d{3})$/, '$1-$2') : '';
+}
+
+function parseAutoresponderNumberComplement(message) {
+  const text = normalizeAutoresponderDeliveryAddress(message);
+  if (!text) return null;
+  const match = text.match(/^(\d+[a-zA-Z]?|s\/n|sn|sem numero)(?:\s*[-,]\s*(.+))?$/i);
+  if (match) {
+    return {
+      number: match[1],
+      complement: normalizeAutoresponderDeliveryAddress(match[2] || ''),
+    };
+  }
+  return {
+    number: text,
+    complement: '',
+  };
+}
+
+function isAutoresponderFullName(value) {
+  const cleanName = normalizeAutoresponderContactName(value);
+  if (!cleanName || cleanName.toLowerCase() === 'nao informado') return false;
+  const parts = cleanName.split(/\s+/).filter((part) => part.length >= 2);
+  return parts.length >= 2;
+}
+
+function buildAutoresponderFullNamePrompt() {
+  return 'Para finalizar o pedido, me envie seu nome completo.';
+}
+
 function buildAutoresponderPickupConfirmationReply() {
   return 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.';
 }
 
 function buildAutoresponderDeliveryAddressPrompt() {
-  return 'Combinado: entrega. Me envie o endereco completo com rua, numero, bairro, cidade e ponto de referencia se tiver.';
+  return 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.';
 }
 
-function buildAutoresponderDeliveryAddressSavedReply() {
-  return 'Endereco anotado. Agora vou confirmar os dados do cadastro para separar seu pedido.';
+function buildAutoresponderDeliveryCepNotFoundReply() {
+  return 'Nao consegui encontrar esse CEP. Confira os 8 numeros e me envie novamente.';
+}
+
+function buildAutoresponderDeliveryCepConfirmationReply(address, shippingQuote) {
+  const lines = [
+    'Encontrei este endereco:',
+    `Rua: ${address.street || 'nao informado'}`,
+    `Bairro: ${address.neighborhood || 'nao informado'}`,
+    `Cidade: ${address.city || 'nao informado'} - ${address.state || ''}`.trim(),
+    `CEP: ${formatAutoresponderCep(address.cep)}`,
+    '',
+  ];
+  if (shippingQuote) {
+    lines.push('Frete:');
+    lines.push(`${shippingQuote.name}: ${shippingQuote.isFree ? 'Gratis' : formatAutoresponderCurrency(Number(shippingQuote.price || 0))}`);
+    if (shippingQuote.daysLabel) lines.push(`Prazo: ${shippingQuote.daysLabel}`);
+    lines.push('');
+  } else {
+    lines.push('Nao encontrei uma regra de frete automatica para esse CEP. Vou deixar para o atendente confirmar o valor.');
+    lines.push('');
+  }
+  lines.push('Esta correto? Responda "sim" para confirmar ou envie outro CEP.');
+  return lines.join('\n');
+}
+
+function buildAutoresponderDeliveryNumberPrompt() {
+  return 'Agora me envie o numero da casa/predio. Se tiver complemento, pode mandar junto. Ex: 123, apto 202';
+}
+
+function formatAutoresponderDeliveryAddress(address) {
+  if (!address) return 'Endereco nao informado';
+  const firstLine = [address.street, address.number].filter(Boolean).join(', ');
+  const cityLine = [address.neighborhood, [address.city, address.state].filter(Boolean).join('/')].filter(Boolean).join(' - ');
+  return [
+    firstLine,
+    address.complement ? `Complemento: ${address.complement}` : '',
+    cityLine,
+    address.cep ? `CEP: ${formatAutoresponderCep(address.cep)}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function buildAutoresponderDeliveryAddressSavedReply(purchaseFlow = {}) {
+  const totals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+  const lines = [
+    'Endereco anotado.',
+    '',
+    'Endereco de entrega:',
+    formatAutoresponderDeliveryAddress(purchaseFlow.delivery_address),
+  ];
+  if (purchaseFlow.shipping_quote) {
+    lines.push('');
+    lines.push(`Frete: ${purchaseFlow.shipping_quote.isFree ? 'Gratis' : formatAutoresponderCurrency(Number(purchaseFlow.shipping_quote.price || 0))}`);
+    lines.push(`Total com frete: ${formatAutoresponderCurrency(totals.total_cents / 100)}`);
+  }
+  lines.push('');
+  lines.push('Agora vou confirmar os dados do cadastro para separar seu pedido.');
+  return lines.join('\n');
 }
 
 async function getAutoresponderCustomerDataSnapshot(sender, payload = {}, purchaseFlow = {}) {
   const contactState = await getAutoresponderContactNameState(sender);
   const confirmedName = normalizeAutoresponderContactName(
+    purchaseFlow?.customer_data?.name ||
     contactState?.contact_name_confirmed ||
     payload?.contactName ||
     payload?.senderName ||
@@ -981,20 +1091,442 @@ async function getAutoresponderCustomerDataSnapshot(sender, payload = {}, purcha
     cpf_cnpj: cpfCnpj || null,
     fulfillment: purchaseFlow?.fulfillment || null,
     address: purchaseFlow?.fulfillment === 'delivery'
-      ? normalizeAutoresponderDeliveryAddress(purchaseFlow?.delivery_address)
+      ? formatAutoresponderDeliveryAddress(purchaseFlow?.delivery_address)
       : 'Retirada na loja',
+    shipping_quote: purchaseFlow?.shipping_quote || null,
+    cart_totals: calculateAutoresponderCartTotalsWithShipping(purchaseFlow?.items, purchaseFlow),
   };
 }
 
+async function lookupAutoresponderCep(cepValue) {
+  const cep = normalizeAutoresponderCep(cepValue);
+  if (!cep) return null;
+
+  try {
+    const res = await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        cep,
+        street: data.street || '',
+        neighborhood: data.neighborhood || '',
+        city: data.city || '',
+        state: data.state || '',
+        lat: Number(data.location?.coordinates?.latitude) || null,
+        lng: Number(data.location?.coordinates?.longitude) || null,
+      };
+    }
+  } catch (err) {
+    console.warn('[autoresponder] BrasilAPI CEP lookup error:', err.message);
+  }
+
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.erro) return null;
+    return {
+      cep,
+      street: data.logradouro || '',
+      neighborhood: data.bairro || '',
+      city: data.localidade || '',
+      state: data.uf || '',
+      lat: null,
+      lng: null,
+    };
+  } catch (err) {
+    console.warn('[autoresponder] ViaCEP lookup error:', err.message);
+    return null;
+  }
+}
+
+function autoresponderCepInRanges(cepValue, ranges = []) {
+  const cep = normalizeAutoresponderCep(cepValue);
+  if (!cep) return false;
+  return (Array.isArray(ranges) ? ranges : []).some((range) => {
+    const [from, to] = String(range || '').split(':').map((part) => part.replace(/\D+/g, ''));
+    if (!from) return false;
+    if (!to) return cep === from;
+    return cep >= from && cep <= to;
+  });
+}
+
+function autoresponderShippingDaysLabel(min, max) {
+  const safeMin = Number(min || 0);
+  const safeMax = Number(max || safeMin || 0);
+  if (safeMin === 0 && safeMax === 0) return 'Hoje';
+  if (safeMin === safeMax) return `${safeMin} dia${safeMin > 1 ? 's uteis' : ' util'}`;
+  return `${safeMin}-${safeMax} dias uteis`;
+}
+
+function autoresponderHaversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], address = null) {
+  const cep = normalizeAutoresponderCep(cepValue);
+  if (!cep) return [];
+  const totals = calculateAutoresponderCartTotals(cartItems);
+
+  const [[settings]] = await pool.query('SELECT * FROM shipping_settings LIMIT 1');
+  if (!settings || settings.local_delivery_enabled === 0) return [];
+
+  const [zones] = await pool.query('SELECT * FROM shipping_zones WHERE enabled = 1 ORDER BY display_order ASC');
+  const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges ORDER BY min_km ASC');
+  const rangesByZone = new Map();
+  ranges.forEach((range) => {
+    const current = rangesByZone.get(range.zone_id) || [];
+    current.push(range);
+    rangesByZone.set(range.zone_id, current);
+  });
+
+  let originAddress = null;
+  if (settings.origin_cep) originAddress = await lookupAutoresponderCep(settings.origin_cep);
+  const hasCoords = originAddress?.lat && originAddress?.lng && address?.lat && address?.lng;
+  const distanceKm = hasCoords
+    ? autoresponderHaversineKm(Number(originAddress.lat), Number(originAddress.lng), Number(address.lat), Number(address.lng))
+    : null;
+
+  const options = [];
+  zones.forEach((zone) => {
+    const cities = typeof zone.cities === 'string' ? JSON.parse(zone.cities || '[]') : (zone.cities || []);
+    const cepRanges = typeof zone.cep_ranges === 'string' ? JSON.parse(zone.cep_ranges || '[]') : (zone.cep_ranges || []);
+    const cityMatch = Array.isArray(cities) && cities.some((city) => normalizeAutoresponderText(city) === normalizeAutoresponderText(address?.city || ''));
+    const cepMatch = autoresponderCepInRanges(cep, cepRanges);
+    if (!cityMatch && !cepMatch && zone.type !== 'national') return;
+
+    const zoneRanges = rangesByZone.get(zone.id) || [];
+    const minOrderFree = Number(zone.min_order_free || 0);
+    const meetsFreeOrder = minOrderFree > 0 && totals.subtotal_cents >= minOrderFree;
+    const estimatedDaysMin = Number(zone.estimated_days_min || 0);
+    const estimatedDaysMax = Number(zone.estimated_days_max || estimatedDaysMin);
+
+    if (zone.type === 'local_free' && (!minOrderFree || meetsFreeOrder)) {
+      options.push({
+        id: zone.id,
+        name: zone.name,
+        price: 0,
+        isFree: true,
+        daysLabel: autoresponderShippingDaysLabel(estimatedDaysMin, estimatedDaysMax),
+        type: zone.type,
+      });
+      return;
+    }
+
+    if (zone.type === 'local_paid' && meetsFreeOrder) {
+      options.push({
+        id: zone.id,
+        name: zone.name,
+        price: 0,
+        isFree: true,
+        daysLabel: autoresponderShippingDaysLabel(estimatedDaysMin, estimatedDaysMax),
+        type: zone.type,
+      });
+      return;
+    }
+
+    const distanceRange = distanceKm == null ? null : zoneRanges.find((range) =>
+      distanceKm >= Number(range.min_km || 0) &&
+      (range.max_km == null || distanceKm <= Number(range.max_km))
+    );
+    const price = distanceRange
+      ? Number(distanceRange.price || 0)
+      : zone.fixed_price != null
+        ? Number(zone.fixed_price || 0)
+        : zone.price_per_km && distanceKm != null
+          ? Math.ceil(distanceKm * Number(zone.price_per_km || 0))
+          : null;
+
+    if (price == null) return;
+    options.push({
+      id: zone.id,
+      name: distanceRange?.label ? `${zone.name} (${distanceRange.label})` : zone.name,
+      price,
+      isFree: price <= 0,
+      daysLabel: autoresponderShippingDaysLabel(
+        distanceRange?.estimated_days_min ?? estimatedDaysMin,
+        distanceRange?.estimated_days_max ?? estimatedDaysMax
+      ),
+      type: zone.type,
+    });
+  });
+
+  return options.sort((a, b) => {
+    if (a.isFree && !b.isFree) return -1;
+    if (!a.isFree && b.isFree) return 1;
+    return Number(a.price || 0) - Number(b.price || 0);
+  });
+}
+
+function normalizeAutoresponderCustomerLookupPhone(value) {
+  const digits = String(value || '').replace(/\D+/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55') && digits.length > 11) return digits.slice(2);
+  return digits;
+}
+
+function buildAutoresponderCustomerLookupCandidates(customerData = {}) {
+  const phone = normalizeAutoresponderCustomerLookupPhone(customerData.phone);
+  const cpfCnpj = normalizeAutoresponderCustomerDocument(customerData.cpf_cnpj);
+  const email = String(customerData.email || '').trim().toLowerCase();
+  const candidates = [];
+  if (phone) {
+    candidates.push({ field: 'phone', value: phone });
+    candidates.push({ field: 'phone', value: `55${phone}` });
+  }
+  if (cpfCnpj) candidates.push({ field: 'cpf_cnpj', value: cpfCnpj });
+  if (email && email.includes('@')) candidates.push({ field: 'email', value: email });
+
+  const seen = new Set();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.field}:${candidate.value}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildAutoresponderCustomerLookupFilter(candidates) {
+  return candidates
+    .map((candidate) => `${candidate.field}.eq.${encodeURIComponent(candidate.value)}`)
+    .join(',');
+}
+
+function normalizeAutoresponderExistingCustomer(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name || null,
+    cpf_cnpj: normalizeAutoresponderCustomerDocument(row.cpf_cnpj) || null,
+    email: row.email || null,
+    phone: row.phone || null,
+    address: row.address || null,
+    is_active: row.is_active == null ? true : Boolean(row.is_active),
+  };
+}
+
+let autoresponderCompanyIdCache = null;
+
+async function getAutoresponderCompanyId() {
+  if (autoresponderCompanyIdCache) return autoresponderCompanyIdCache;
+  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) return null;
+
+  const endpoint = `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/companies?select=id&slug=eq.mercado-do-vale&limit=1`;
+  try {
+    const res = await fetch(endpoint, {
+      headers: {
+        apikey: SUPABASE_AUTH_KEY,
+        Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      console.warn('[autoresponder] company lookup failed:', res.status);
+      return null;
+    }
+    const rows = await res.json();
+    autoresponderCompanyIdCache = rows?.[0]?.id || null;
+    return autoresponderCompanyIdCache;
+  } catch (err) {
+    console.warn('[autoresponder] company lookup error:', err.message);
+    return null;
+  }
+}
+
+async function findAutoresponderExistingCustomer(customerData = {}) {
+  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) return null;
+  const candidates = buildAutoresponderCustomerLookupCandidates(customerData);
+  if (candidates.length === 0) return null;
+
+  const endpointBase = `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/customers?select=id,name,cpf_cnpj,email,phone,address,is_active`;
+  const query = [
+    `or=(${buildAutoresponderCustomerLookupFilter(candidates)})`,
+    'limit=1',
+  ].join('&');
+
+  try {
+    const res = await fetch(`${endpointBase}&${query}`, {
+      headers: {
+        apikey: SUPABASE_AUTH_KEY,
+        Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      console.warn('[autoresponder] customer lookup failed:', res.status);
+      return null;
+    }
+    const rows = await res.json();
+    return normalizeAutoresponderExistingCustomer(rows?.[0]);
+  } catch (err) {
+    console.warn('[autoresponder] customer lookup error:', err.message);
+    return null;
+  }
+}
+
+function mergeAutoresponderExistingCustomerData(customerData = {}, existingCustomer = null) {
+  if (!existingCustomer) return customerData;
+  return {
+    ...customerData,
+    name: existingCustomer.name || customerData.name,
+    phone: existingCustomer.phone || customerData.phone,
+    cpf_cnpj: existingCustomer.cpf_cnpj || customerData.cpf_cnpj || null,
+    email: existingCustomer.email || customerData.email || null,
+    existing_customer_id: existingCustomer.id,
+  };
+}
+
+function buildAutoresponderCustomerAddress(customerData = {}, purchaseFlow = {}) {
+  if (purchaseFlow?.fulfillment !== 'delivery') return undefined;
+  const address = purchaseFlow?.delivery_address;
+  if (address && typeof address === 'object') {
+    return {
+      street: address.street || '',
+      number: address.number || '',
+      complement: address.complement || '',
+      neighborhood: address.neighborhood || '',
+      city: address.city || '',
+      state: address.state || '',
+      zipCode: normalizeAutoresponderCep(address.cep),
+    };
+  }
+  const addressText = normalizeAutoresponderDeliveryAddress(address || customerData?.address || '');
+  if (!addressText || addressText === 'Retirada na loja') return undefined;
+  return {
+    street: addressText,
+    number: '',
+    complement: '',
+    neighborhood: '',
+    city: '',
+    state: '',
+    zipCode: '',
+  };
+}
+
+function buildAutoresponderReferralCode(customerId) {
+  const hash = String(customerId || '').replace(/-/g, '').slice(0, 5).toUpperCase() || 'WHATS';
+  return `MV-${hash}`;
+}
+
+async function buildAutoresponderCustomerPayload(customerData = {}, purchaseFlow = {}, sender = '') {
+  const companyId = await getAutoresponderCompanyId();
+  const name = normalizeAutoresponderContactName(customerData.name);
+  const phone = normalizeAutoresponderCustomerLookupPhone(customerData.phone || sender);
+  const cpfCnpj = normalizeAutoresponderCustomerDocument(customerData.cpf_cnpj);
+  const email = String(customerData.email || '').trim().toLowerCase();
+  const address = buildAutoresponderCustomerAddress(customerData, purchaseFlow);
+
+  const payload = {
+    name: name && name !== 'nao informado' ? name : 'Cliente WhatsApp',
+    cpf_cnpj: cpfCnpj || null,
+    phone: phone || null,
+    customer_type: 'retail',
+    is_active: true,
+    custom_data: {
+      source: 'whatsapp_autoresponder',
+      whatsapp_sender: normalizeAutoresponderSender(sender),
+      purchase_flow_status: purchaseFlow?.status || null,
+    },
+  };
+
+  if (companyId) payload.company_id = companyId;
+  if (email && email.includes('@')) payload.email = email;
+  if (address) payload.address = address;
+
+  return payload;
+}
+
+async function createOrUpdateAutoresponderCustomer(customerData = {}, purchaseFlow = {}, sender = '') {
+  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) return null;
+  const payload = await buildAutoresponderCustomerPayload(customerData, purchaseFlow, sender);
+  const existingCustomer = purchaseFlow?.existing_customer || null;
+  const baseUrl = `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/customers`;
+  const headers = {
+    apikey: SUPABASE_AUTH_KEY,
+    Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  };
+
+  try {
+    if (existingCustomer?.id) {
+      const updatePayload = { ...payload };
+      delete updatePayload.company_id;
+      delete updatePayload.customer_type;
+      delete updatePayload.is_active;
+      delete updatePayload.custom_data;
+      Object.keys(updatePayload).forEach((key) => {
+        if (updatePayload[key] == null || updatePayload[key] === '') delete updatePayload[key];
+      });
+      const res = await fetch(`${baseUrl}?id=eq.${encodeURIComponent(existingCustomer.id)}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(updatePayload),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        console.warn('[autoresponder] customer update failed:', res.status);
+        return existingCustomer;
+      }
+      const rows = await res.json();
+      return normalizeAutoresponderExistingCustomer(rows?.[0]) || existingCustomer;
+    }
+
+    const newId = crypto.randomUUID();
+    const insertPayload = {
+      id: newId,
+      referral_code: buildAutoresponderReferralCode(newId),
+      ...payload,
+    };
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(insertPayload),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      console.warn('[autoresponder] customer create failed:', res.status);
+      return null;
+    }
+    const rows = await res.json();
+    return normalizeAutoresponderExistingCustomer(rows?.[0]);
+  } catch (err) {
+    console.warn('[autoresponder] customer upsert error:', err.message);
+    return existingCustomer || null;
+  }
+}
+
 function buildAutoresponderCustomerDataConfirmationReply(customerData) {
+  const shippingQuote = customerData?.shipping_quote || null;
+  const totals = customerData?.cart_totals || null;
   const lines = [
     'Confirme os dados do pedido:',
     `Nome: ${customerData?.name || 'nao informado'}`,
     `Telefone: ${customerData?.phone || 'nao informado'}`,
     `Endereco: ${customerData?.address || 'Retirada na loja'}`,
-    '',
-    'Esta tudo certo? Responda "sim" para confirmar ou "nao" para ajustar com um atendente.',
   ];
+  if (shippingQuote) {
+    lines.push(`Frete: ${shippingQuote.isFree ? 'Gratis' : formatAutoresponderCurrency(Number(shippingQuote.price || 0))}`);
+  }
+  if (totals) {
+    lines.push(`Total com frete: ${formatAutoresponderCurrency(Number(totals.total_cents || 0) / 100)}`);
+  }
+  lines.push('');
+  lines.push('Esta tudo certo? Responda "sim" para confirmar ou "nao" para ajustar com um atendente.');
   return lines.join('\n');
 }
 
@@ -3142,19 +3674,107 @@ fastify.route({
       }
 
       if (purchaseFlow.status === 'awaiting_delivery_address' && hasAutoresponderCartItems(purchaseFlow)) {
-        const deliveryAddress = normalizeAutoresponderDeliveryAddress(message);
-        if (deliveryAddress.length >= 10) {
-          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressSavedReply(), settings, false);
+        const cep = normalizeAutoresponderCep(message);
+        if (cep) {
+          const cepAddress = await lookupAutoresponderCep(cep);
+          if (!cepAddress) {
+            const replyText = formatAutoresponderReply(buildAutoresponderDeliveryCepNotFoundReply(), settings, false);
+            await logAutoresponderReply({
+              sender: senderKey,
+              message,
+              intent: 'purchase_delivery_cep_not_found',
+              replyText,
+              matchedCount: 0,
+              matchedProducts: [],
+            });
+            await upsertAutoresponderSuccessConversation(senderKey);
+            return { replies: [{ message: replyText }] };
+          }
+          const shippingOptions = await calculateAutoresponderShippingOptions(cep, purchaseFlow.items, cepAddress);
+          const shippingQuote = shippingOptions[0] || null;
+          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryCepConfirmationReply(cepAddress, shippingQuote), settings, false);
           await saveAutoresponderPurchaseFlow(senderKey, {
             ...purchaseFlow,
-            status: 'customer_data_pending',
+            status: 'awaiting_delivery_cep_confirmation',
             fulfillment: 'delivery',
-            delivery_address: deliveryAddress,
+            delivery_address_lookup: cepAddress,
+            shipping_options: shippingOptions,
+            shipping_quote: shippingQuote,
           });
           await logAutoresponderReply({
             sender: senderKey,
             message,
-            intent: 'purchase_delivery_address',
+            intent: 'purchase_delivery_cep_quote',
+            replyText,
+            matchedCount: shippingOptions.length,
+            matchedProducts: shippingOptions,
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+        const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(), settings, false);
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
+      if (purchaseFlow.status === 'awaiting_delivery_cep_confirmation' && hasAutoresponderCartItems(purchaseFlow)) {
+        if (isAutoresponderNo(message) || normalizeAutoresponderCep(message)) {
+          const nextFlow = {
+            ...purchaseFlow,
+            status: 'awaiting_delivery_address',
+            delivery_address_lookup: null,
+            shipping_options: [],
+            shipping_quote: null,
+          };
+          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
+          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(), settings, false);
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+        if (isAutoresponderYes(message)) {
+          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryNumberPrompt(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'awaiting_delivery_number',
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_delivery_cep_confirmed',
+            replyText,
+            matchedCount: purchaseFlow.shipping_quote ? 1 : 0,
+            matchedProducts: purchaseFlow.shipping_quote ? [purchaseFlow.shipping_quote] : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
+      if (purchaseFlow.status === 'awaiting_delivery_number' && hasAutoresponderCartItems(purchaseFlow)) {
+        const numberData = parseAutoresponderNumberComplement(message);
+        if (numberData) {
+          const lookup = purchaseFlow.delivery_address_lookup || {};
+          const deliveryAddress = {
+            cep: normalizeAutoresponderCep(lookup.cep),
+            street: lookup.street || '',
+            neighborhood: lookup.neighborhood || '',
+            city: lookup.city || '',
+            state: lookup.state || '',
+            number: numberData.number,
+            complement: numberData.complement,
+          };
+          const nextFlow = {
+            ...purchaseFlow,
+            status: 'customer_data_pending',
+            fulfillment: 'delivery',
+            delivery_address: deliveryAddress,
+          };
+          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressSavedReply(nextFlow), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_delivery_number_saved',
             replyText,
             matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
             matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
@@ -3164,13 +3784,94 @@ fastify.route({
         }
       }
 
+      if (purchaseFlow.status === 'awaiting_customer_full_name' && hasAutoresponderCartItems(purchaseFlow)) {
+        const fullName = normalizeAutoresponderContactName(message);
+        if (isAutoresponderFullName(fullName)) {
+          const nextFlow = {
+            ...purchaseFlow,
+            status: 'customer_data_pending',
+            customer_data: {
+              ...(purchaseFlow.customer_data || {}),
+              name: fullName,
+            },
+          };
+          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
+          const customerData = await getAutoresponderCustomerDataSnapshot(senderKey, payload, nextFlow);
+          const existingCustomer = await findAutoresponderExistingCustomer(customerData);
+          const mergedCustomerData = mergeAutoresponderExistingCustomerData(customerData, existingCustomer);
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataConfirmationReply(mergedCustomerData), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...nextFlow,
+            status: 'awaiting_customer_confirmation',
+            customer_data: mergedCustomerData,
+            existing_customer: existingCustomer,
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_customer_full_name_saved',
+            replyText,
+            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+          if (existingCustomer) {
+            await logAutoresponderReply({
+              sender: senderKey,
+              message,
+              intent: 'purchase_existing_customer_found',
+              replyText,
+              matchedCount: 1,
+              matchedProducts: [existingCustomer],
+            });
+          } else {
+            await logAutoresponderReply({
+              sender: senderKey,
+              message,
+              intent: 'purchase_existing_customer_not_found',
+              replyText,
+              matchedCount: 0,
+              matchedProducts: [],
+            });
+          }
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+        const replyText = formatAutoresponderReply(buildAutoresponderFullNamePrompt(), settings, false);
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
       if (purchaseFlow.status === 'customer_data_pending' && hasAutoresponderCartItems(purchaseFlow)) {
-        const customerData = await getAutoresponderCustomerDataSnapshot(senderKey, payload, purchaseFlow);
+        let customerData = await getAutoresponderCustomerDataSnapshot(senderKey, payload, purchaseFlow);
+        if (!isAutoresponderFullName(customerData.name)) {
+          const replyText = formatAutoresponderReply(buildAutoresponderFullNamePrompt(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'awaiting_customer_full_name',
+            customer_data: {
+              ...(purchaseFlow.customer_data || {}),
+              ...customerData,
+            },
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_customer_full_name_prompt',
+            replyText,
+            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+        const existingCustomer = await findAutoresponderExistingCustomer(customerData);
+        customerData = mergeAutoresponderExistingCustomerData(customerData, existingCustomer);
         const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataConfirmationReply(customerData), settings, false);
         await saveAutoresponderPurchaseFlow(senderKey, {
           ...purchaseFlow,
           status: 'awaiting_customer_confirmation',
           customer_data: customerData,
+          existing_customer: existingCustomer,
         });
         await logAutoresponderReply({
           sender: senderKey,
@@ -3180,6 +3881,25 @@ fastify.route({
           matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
           matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
         });
+        if (existingCustomer) {
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_existing_customer_found',
+            replyText,
+            matchedCount: 1,
+            matchedProducts: [existingCustomer],
+          });
+        } else {
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_existing_customer_not_found',
+            replyText,
+            matchedCount: 0,
+            matchedProducts: [],
+          });
+        }
         await upsertAutoresponderSuccessConversation(senderKey);
         return { replies: [{ message: replyText }] };
       }
@@ -3206,19 +3926,29 @@ fastify.route({
             return { replies: [{ message: replyText }] };
           }
 
+          const nextPurchaseFlow = {
+            ...purchaseFlow,
+            status: 'customer_registration_ready',
+            customer_data_confirmed: true,
+          };
+          const customerRecord = await createOrUpdateAutoresponderCustomer(
+            nextPurchaseFlow.customer_data || {},
+            nextPurchaseFlow,
+            senderKey
+          );
           const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataConfirmedReply(), settings, false);
           await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'customer_data_confirmed',
-            customer_data_confirmed: true,
+            ...nextPurchaseFlow,
+            status: 'customer_record_ready',
+            customer_record: customerRecord,
           });
           await logAutoresponderReply({
             sender: senderKey,
             message,
-            intent: 'purchase_customer_data_confirmed',
+            intent: 'purchase_customer_upserted',
             replyText,
-            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+            matchedCount: customerRecord ? 1 : 0,
+            matchedProducts: customerRecord ? [customerRecord] : [],
           });
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
@@ -3247,23 +3977,36 @@ fastify.route({
       if (purchaseFlow.status === 'awaiting_customer_document' && hasAutoresponderCartItems(purchaseFlow)) {
         const customerDocument = normalizeAutoresponderCustomerDocument(message);
         if (customerDocument) {
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDocumentSavedReply(), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
+          const documentCustomerData = {
+            ...(purchaseFlow.customer_data || {}),
+            cpf_cnpj: customerDocument,
+          };
+          const existingCustomer = await findAutoresponderExistingCustomer(documentCustomerData);
+          const nextPurchaseFlow = {
             ...purchaseFlow,
             status: 'customer_registration_ready',
-            customer_data: {
-              ...(purchaseFlow.customer_data || {}),
-              cpf_cnpj: customerDocument,
-            },
+            customer_data: mergeAutoresponderExistingCustomerData(documentCustomerData, existingCustomer),
+            existing_customer: existingCustomer,
             cpf_cnpj: customerDocument,
+          };
+          const customerRecord = await createOrUpdateAutoresponderCustomer(
+            nextPurchaseFlow.customer_data || {},
+            nextPurchaseFlow,
+            senderKey
+          );
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDocumentSavedReply(), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...nextPurchaseFlow,
+            status: 'customer_record_ready',
+            customer_record: customerRecord,
           });
           await logAutoresponderReply({
             sender: senderKey,
             message,
-            intent: 'purchase_customer_document_saved',
+            intent: 'purchase_customer_upserted',
             replyText,
-            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+            matchedCount: customerRecord ? 1 : 0,
+            matchedProducts: customerRecord ? [customerRecord] : [],
           });
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
@@ -4526,12 +5269,20 @@ fastify.delete('/brands/:id', { preHandler: requireSyncKey }, async (req, reply)
 });
 
 // ─── Products (read) ───────────────────────────────────────────────────────
+function normalizeCatalogProductSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;
   const category = req.query.category;
   const status   = req.query.status;
   const search   = req.query.search;
+  const normalizedSearch = normalizeCatalogProductSearchText(search);
   const favoritesOnly = req.query.favoritesOnly === 'true';
   const customerId = req.query.customerId;
   const compact  = req.query.compact === 'true'; // sem images (evita 90+ MB de base64)
@@ -4595,7 +5346,21 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
       params.push(...categoryIds);
     }
   }
-  if (search)             { sql += ' AND (name LIKE ? OR sku LIKE ? OR ean LIKE ? OR model_id LIKE ? OR slug LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
+  if (normalizedSearch) {
+    const searchLike = `%${normalizedSearch}%`;
+    sql += ` AND (
+      name COLLATE utf8mb4_unicode_ci LIKE ?
+      OR sku COLLATE utf8mb4_unicode_ci LIKE ?
+      OR ean COLLATE utf8mb4_unicode_ci LIKE ?
+      OR CAST(alternative_eans AS CHAR) COLLATE utf8mb4_unicode_ci LIKE ?
+      OR brand COLLATE utf8mb4_unicode_ci LIKE ?
+      OR model_id COLLATE utf8mb4_unicode_ci LIKE ?
+      OR slug COLLATE utf8mb4_unicode_ci LIKE ?
+      OR CAST(specs AS CHAR) COLLATE utf8mb4_unicode_ci LIKE ?
+      OR CAST(custom_fields AS CHAR) COLLATE utf8mb4_unicode_ci LIKE ?
+    )`;
+    params.push(searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, searchLike);
+  }
   if (req.query.parent_id){ sql += ' AND parent_id = ?';     params.push(req.query.parent_id); }
   if (req.query.sku)      { sql += ' AND sku = ?';           params.push(req.query.sku); }
   if (req.query.ean)      { sql += ' AND (ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?)))'; params.push(req.query.ean, req.query.ean); }

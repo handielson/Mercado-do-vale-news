@@ -885,15 +885,18 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [x] Calcular subtotal, total e resumo do pedido
 - [x] Confirmar se sera retirada na loja ou entrega
 - [x] Se entrega, coletar endereco completo
+- [x] Entrega pede CEP, consulta endereco e pede somente numero/complemento
+- [x] Frete dinamico entra no resumo/confirmacao antes de chamar atendente
 - [x] Confirmar nome/telefone/endereco antes de fechar
 
 #### Cadastro do cliente
 
 - [x] Antes de finalizar venda, captar dados minimos para cadastro do cliente
 - [x] Definir campos obrigatorios do cadastro via WhatsApp: nome completo, telefone, CPF/CNPJ quando necessario, endereco quando houver entrega
-- [ ] Consultar cliente existente pelo telefone do WhatsApp, CPF/CNPJ ou e-mail antes de pedir dados novamente
-- [ ] Se cliente ja existir, confirmar dados cadastrados antes de atualizar
-- [ ] Criar/atualizar cliente no sistema a partir das respostas do WhatsApp quando possivel
+- [x] Nome completo obrigatorio antes de finalizar pedido assistido
+- [x] Consultar cliente existente pelo telefone do WhatsApp, CPF/CNPJ ou e-mail antes de pedir dados novamente
+- [x] Se cliente ja existir, confirmar dados cadastrados antes de atualizar
+- [x] Criar/atualizar cliente no sistema a partir das respostas do WhatsApp quando possivel
 - [ ] Vincular cliente cadastrado ao pedido/carrinho do WhatsApp
 
 #### Fechamento assistido por atendente
@@ -944,9 +947,10 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [x] Carrinho com 1 item gera resumo correto
 - [x] Carrinho com varios itens soma total corretamente
 - [x] Entrega coleta endereco antes de fechar
+- [x] Entrega consulta CEP e calcula frete dinamico antes de pedir numero
 - [x] Retirada nao pede endereco
-- [ ] Cliente novo informa dados e cadastro e criado/atualizado antes do pedido
-- [ ] Cliente existente e localizado pelo telefone e confirma dados antes do pedido
+- [x] Cliente novo informa dados e cadastro e criado/atualizado antes do pedido
+- [x] Cliente existente e localizado pelo telefone e confirma dados antes do pedido
 - [ ] Cliente consulta compras e recebe resumo seguro
 - [ ] Pedido assistido pausa o bot e chama atendente
 - [ ] Pedido fica visivel no admin
@@ -4095,6 +4099,75 @@ node tools\test-autoresponder-archive-vps-write.cjs
 **Verificações executadas:**
 - `node tmp-tests\autoresponder-category-tags-visible-static.test.mjs`
 - `node tmp-tests\autoresponder-settings-polish-static.test.mjs`
+
+---
+
+### 2026-05-07 - Fase 4K consulta de cliente existente
+
+**Objetivo da etapa:** antes de pedir dados novamente, consultar cliente existente pelo telefone do WhatsApp, CPF/CNPJ ou e-mail.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-existing-customer-lookup-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `buildAutoresponderCustomerLookupCandidates()` normaliza telefone, CPF/CNPJ e e-mail para consulta.
+- Helper `findAutoresponderExistingCustomer()` consulta `customers` no Supabase pela REST API com service role já configurada na VPS.
+- Quando o fluxo chega em `customer_data_pending`, o bot procura cliente existente antes de pedir confirmação dos dados.
+- Se encontrar cliente, o `purchase_flow` salva `existing_customer` e complementa `customer_data` com nome, telefone, e-mail e CPF/CNPJ disponíveis.
+- Quando o cliente informa CPF/CNPJ, o bot consulta novamente por documento antes de avançar para `customer_registration_ready`.
+- Logs novos: `purchase_existing_customer_found` e `purchase_existing_customer_not_found`.
+
+**Verificações executadas:**
+- `node tmp-tests\autoresponder-existing-customer-lookup-static.test.mjs`
+
+---
+
+### 2026-05-07 - Fase 4L criar/atualizar cliente
+
+**Objetivo da etapa:** depois que o cliente confirma os dados do pedido, criar ou atualizar o cadastro em `customers` antes de entregar o pedido para o atendente.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-customer-upsert-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `getAutoresponderCompanyId()` consulta e cacheia o `company_id` do Mercado do Vale pelo slug `mercado-do-vale`.
+- Helper `buildAutoresponderCustomerPayload()` monta o payload seguro com nome, telefone, CPF/CNPJ, tipo `retail`, endereco de entrega quando houver e `custom_data.source = whatsapp_autoresponder`.
+- Helper `createOrUpdateAutoresponderCustomer()` cria cliente novo via Supabase REST ou atualiza cliente existente somente depois da confirmacao do cliente.
+- O fluxo que chega em `customer_registration_ready` agora grava `customer_record` no `purchase_flow` e muda para `customer_record_ready`.
+- Log novo: `purchase_customer_upserted`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-customer-upsert-static.test.mjs`
+
+---
+
+### 2026-05-07 - Fase 4M nome completo, CEP e frete dinamico
+
+**Objetivo da etapa:** deixar o fechamento assistido mais confiavel, exigindo nome completo e calculando frete dinamico por CEP antes de pedir numero/complemento.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-delivery-cep-shipping-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Nome completo agora e obrigatorio antes de confirmar cadastro/pedido.
+- Entrega deixou de pedir endereco livre e passou a pedir primeiro o CEP.
+- Helper `lookupAutoresponderCep()` consulta BrasilAPI CEP e usa ViaCEP como fallback.
+- Helper `calculateAutoresponderShippingOptions()` reaproveita a regra dinamica de frete local da VPS com `shipping_settings`, `shipping_zones` e `shipping_price_ranges`.
+- O bot confirma rua, bairro, cidade, CEP, frete e prazo antes de pedir numero/complemento.
+- O endereco final e salvo estruturado em `purchase_flow.delivery_address`.
+- A confirmacao de dados mostra frete e `Total com frete`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-delivery-cep-shipping-static.test.mjs`
 
 ---
 
