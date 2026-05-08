@@ -36,10 +36,6 @@ export const PublicHeader: React.FC = () => {
         navigate('/');
     };
 
-    const handleLogoRefresh = () => {
-        window.location.reload();
-    };
-
     const getCustomerTypeBadge = () => {
         if (!customer) return null;
 
@@ -96,12 +92,11 @@ export const PublicHeader: React.FC = () => {
             <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
                 {/* Logo */}
                 <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={handleLogoRefresh}
+                    <Link
+                        to="/"
                         className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
-                        title="Atualizar página"
-                        aria-label="Atualizar página"
+                        title="Ir para o catalogo"
+                        aria-label="Ir para o catalogo"
                     >
                         {themeSettings.logo_main ? (
                             <img
@@ -117,7 +112,7 @@ export const PublicHeader: React.FC = () => {
                                 <h1 className="text-2xl font-bold text-slate-800">{themeSettings.company_name}</h1>
                             </>
                         )}
-                    </button>
+                    </Link>
                     {/* Badge anos — só no desktop */}
                     <div className="hidden sm:flex">{getStoreAgeBadge()}</div>
                     {/* Clima — só no desktop */}
@@ -238,6 +233,15 @@ export const PublicHeader: React.FC = () => {
                                                 Meus Favoritos
                                             </Link>
                                         )}
+
+                                        <Link
+                                            to="/perfil?tab=history"
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                                            onClick={() => setShowUserMenu(false)}
+                                        >
+                                            <ShoppingBag size={16} />
+                                            Meus Pedidos
+                                        </Link>
 
                                         <Link
                                             to="/perfil"
