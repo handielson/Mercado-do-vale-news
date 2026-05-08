@@ -45,6 +45,20 @@ for (const serverPath of serverPaths) {
   assert(page.includes(needle), `AutoResponderPage must render dynamic category tag UI: ${needle}`);
 });
 
+[
+  'copyCategoryTagPlaceholder',
+  'navigator.clipboard.writeText',
+  'Copiar tag',
+  'Copiado',
+].forEach((needle) => {
+  assert(page.includes(needle), `AutoResponderPage must render category tag copy UI: ${needle}`);
+});
+
+assert(
+  page.includes('copyCategoryTagPlaceholder(`{categoria:${category.name}}`)'),
+  'Each dynamic category row must expose a copy action for its {categoria:Nome} placeholder'
+);
+
 assert(
   doc.includes('- [x] Tags de categoria visiveis no admin como categorias dinamicas') ||
   doc.includes('- [x] Tags de categoria visíveis no admin como categorias dinâmicas'),

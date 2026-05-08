@@ -6,6 +6,7 @@ import {
     Bot,
     CheckCircle2,
     Clock,
+    Copy,
     Edit3,
     MessageCircle,
     MessageSquareText,
@@ -1081,6 +1082,7 @@ const AutoResponderPage: React.FC = () => {
     const [isTagModalOpen, setIsTagModalOpen] = React.useState(false);
     const [isSavingTag, setIsSavingTag] = React.useState(false);
     const [tagActionId, setTagActionId] = React.useState<number | null>(null);
+    const [copiedCategoryTagPlaceholder, setCopiedCategoryTagPlaceholder] = React.useState<string | null>(null);
     const [editingRule, setEditingRule] = React.useState<AutoResponderRule | null>(null);
     const [isRuleModalOpen, setIsRuleModalOpen] = React.useState(false);
     const [isSavingRule, setIsSavingRule] = React.useState(false);
@@ -1229,6 +1231,19 @@ const AutoResponderPage: React.FC = () => {
         ? Math.max(0, Math.round(((totalMessages - fallbackMessages) / totalMessages) * 100))
         : 0;
     const maxIntentTotal = Math.max(...(stats?.byIntent || []).map((item) => Number(item.total || 0)), 1);
+
+    const copyCategoryTagPlaceholder = React.useCallback(async (placeholder: string) => {
+        try {
+            await navigator.clipboard.writeText(placeholder);
+            setCopiedCategoryTagPlaceholder(placeholder);
+            window.setTimeout(() => {
+                setCopiedCategoryTagPlaceholder((current) => current === placeholder ? null : current);
+            }, 1800);
+        } catch (err) {
+            console.error('[AutoResponderPage] copy tag placeholder error:', err);
+            setError('Nao foi possivel copiar a tag automaticamente.');
+        }
+    }, []);
 
     const reloadConversations = React.useCallback(async () => {
         const data = await autoResponderService.listConversations({ limit: 100 });
@@ -2298,11 +2313,13 @@ const AutoResponderPage: React.FC = () => {
                                             <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Com estoque</th>
                                             <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Garantia</th>
                                             <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Bot</th>
+                                            <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">Copiar</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 bg-white">
                                         {filteredCategoryTags.map((category) => {
                                             const appearsOnGreeting = isEnabled(category.appears_on_greeting);
+                                            const categoryPlaceholder = `{categoria:${category.name}}`;
                                             return (
                                                 <tr key={category.id} className="align-top hover:bg-slate-50">
                                                     <td className="px-5 py-4">
@@ -2331,6 +2348,17 @@ const AutoResponderPage: React.FC = () => {
                                                             {appearsOnGreeting ? 'Aparece na saudacao' : 'Sem estoque ativo'}
                                                         </span>
                                                     </td>
+                                                    <td className="px-5 py-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => copyCategoryTagPlaceholder(`{categoria:${category.name}}`)}
+                                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                                                            title={`Copiar ${categoryPlaceholder}`}
+                                                        >
+                                                            <Copy size={16} />
+                                                            {copiedCategoryTagPlaceholder === categoryPlaceholder ? 'Copiado' : 'Copiar tag'}
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
@@ -2350,13 +2378,33 @@ const AutoResponderPage: React.FC = () => {
                                 </p>
                                 <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
                                     <div className="rounded-lg border border-blue-100 bg-white p-4">
-                                        <code className="text-sm font-semibold text-blue-900">{'{categorias_disponiveis}'}</code>
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <code className="text-sm font-semibold text-blue-900">{'{categorias_disponiveis}'}</code>
+                                            <button
+                                                type="button"
+                                                onClick={() => copyCategoryTagPlaceholder('{categorias_disponiveis}')}
+                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                                            >
+                                                <Copy size={16} />
+                                                {copiedCategoryTagPlaceholder === '{categorias_disponiveis}' ? 'Copiado' : 'Copiar tag'}
+                                            </button>
+                                        </div>
                                         <p className="mt-2 text-sm text-slate-600">
                                             Insere a lista numerada atual de categorias com produtos em estoque.
                                         </p>
                                     </div>
                                     <div className="rounded-lg border border-blue-100 bg-white p-4">
-                                        <code className="text-sm font-semibold text-blue-900">{'{categoria:Nome da categoria}'}</code>
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <code className="text-sm font-semibold text-blue-900">{'{categoria:Nome da categoria}'}</code>
+                                            <button
+                                                type="button"
+                                                onClick={() => copyCategoryTagPlaceholder('{categoria:Nome da categoria}')}
+                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                                            >
+                                                <Copy size={16} />
+                                                {copiedCategoryTagPlaceholder === '{categoria:Nome da categoria}' ? 'Copiado' : 'Copiar tag'}
+                                            </button>
+                                        </div>
                                         <p className="mt-2 text-sm text-slate-600">
                                             Insere uma lista curta de produtos da categoria informada, por exemplo {'{categoria:Smartphones}'}.
                                         </p>
@@ -2441,6 +2489,15 @@ const AutoResponderPage: React.FC = () => {
                                                     </td>
                                                     <td className="px-5 py-4">
                                                         <div className="flex flex-wrap justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => copyCategoryTagPlaceholder(tag.name)}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                                                                title={`Copiar tag ${tag.name}`}
+                                                            >
+                                                                <Copy size={16} />
+                                                                {copiedCategoryTagPlaceholder === tag.name ? 'Copiado' : 'Copiar tag'}
+                                                            </button>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => openEditTag(tag)}
