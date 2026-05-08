@@ -883,6 +883,7 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [x] Permitir adicionar mais produtos ao mesmo carrinho
 - [x] Permitir remover item/cancelar carrinho
 - [x] Calcular subtotal, total e resumo do pedido
+- [x] Carrinho calcula parcelamento/juros da maquina de cartao pela tabela `payment_fees`
 - [x] Confirmar se sera retirada na loja ou entrega
 - [x] Se entrega, coletar endereco completo
 - [x] Entrega pede CEP, consulta endereco e pede somente numero/complemento
@@ -894,6 +895,7 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [x] Antes de finalizar venda, captar dados minimos para cadastro do cliente
 - [x] Definir campos obrigatorios do cadastro via WhatsApp: nome completo, telefone, CPF/CNPJ quando necessario, endereco quando houver entrega
 - [x] Nome completo obrigatorio antes de finalizar pedido assistido
+- [x] CPF/CNPJ remove pontuacao e valida digitos verificadores antes de salvar
 - [x] Consultar cliente existente pelo telefone do WhatsApp, CPF/CNPJ ou e-mail antes de pedir dados novamente
 - [x] Se cliente ja existir, confirmar dados cadastrados antes de atualizar
 - [x] Criar/atualizar cliente no sistema a partir das respostas do WhatsApp quando possivel
@@ -919,6 +921,7 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 #### Pagamento
 
 - [ ] Fase inicial: PIX/manual com chave da loja e pedido aguardando comprovante
+- [ ] Responder pergunta de parcela especifica com destaque e tabela completa: `Em 5x fica R$ X = xxxx`
 - [ ] Mensagem para cliente enviar comprovante no WhatsApp
 - [ ] Opcional: link de pagamento Mercado Pago/Asaas/Stripe
 - [ ] Opcional: Pix copia-e-cola automatico com expiracao
@@ -4168,6 +4171,50 @@ node tools\test-autoresponder-archive-vps-write.cjs
 
 **Verificacoes executadas:**
 - `node tmp-tests\autoresponder-delivery-cep-shipping-static.test.mjs`
+
+---
+
+### 2026-05-07 - Fase 4N validacao real de CPF/CNPJ
+
+**Objetivo da etapa:** impedir que CPF/CNPJ com pontuacao ou caracteres extras seja salvo sem validar os digitos verificadores.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-customer-document-checkdigits-static.test.mjs`
+
+**Entregue nesta etapa:**
+- CPF/CNPJ continua aceitando entrada com ponto, traco, barra e espacos, mas o bot aproveita somente os numeros.
+- CPF agora precisa ter 11 digitos, nao pode ser sequencia repetida e precisa passar nos dois digitos verificadores.
+- CNPJ agora precisa ter 14 digitos, nao pode ser sequencia repetida e precisa passar nos dois digitos verificadores.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-customer-document-checkdigits-static.test.mjs`
+
+---
+
+### 2026-05-07 - Fase 4O parcelamento do carrinho
+
+**Objetivo da etapa:** usar a mesma regra de juros/parcelamento da maquina de cartao no resumo do carrinho do WhatsApp.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-cart-card-fees-static.test.mjs`
+
+**Entregue nesta etapa:**
+- O resumo do carrinho consulta `payment_fees` pelo helper `calculateAutoresponderMaxInstallment()`.
+- A mensagem do carrinho passa a mostrar `Parcelamento no cartao`.
+- A confirmacao final do cliente calcula o parcelamento sobre o total com frete quando houver entrega.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-cart-card-fees-static.test.mjs`
+
+**Proxima etapa documentada:**
+- Quando o cliente perguntar uma parcela especifica, por exemplo `em 5x fica quanto?`, responder destacando a parcela solicitada no formato `Em 5x fica R$ X = xxxx` e enviar tambem a tabela completa de 1x ate 12x com base em `payment_fees`.
+- Se houver carrinho ativo, calcular sobre o total atual do carrinho; se ja houver frete confirmado, calcular sobre o total com frete.
 
 ---
 

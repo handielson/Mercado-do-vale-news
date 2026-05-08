@@ -928,9 +928,16 @@ function calculateAutoresponderCartTotalsWithShipping(cartItems, purchaseFlow = 
   };
 }
 
-function formatAutoresponderCartSummaryReply(items) {
+function formatAutoresponderCartPaymentLine(plan) {
+  const installmentLine = formatAutoresponderInstallmentLine(plan);
+  return installmentLine ? installmentLine.replace('Parcelamento:', 'Parcelamento no cartao:') : '';
+}
+
+async function formatAutoresponderCartSummaryReply(items) {
   const safeItems = Array.isArray(items) ? items : [];
   const totals = calculateAutoresponderCartTotals(safeItems);
+  const paymentPlan = await calculateAutoresponderMaxInstallment(totals.total_cents);
+  const paymentLine = formatAutoresponderCartPaymentLine(paymentPlan);
   const lines = ['Resumo do pedido'];
 
   safeItems.forEach((item, index) => {
@@ -943,6 +950,7 @@ function formatAutoresponderCartSummaryReply(items) {
 
   lines.push(`Subtotal: ${formatAutoresponderCurrency(totals.subtotal_cents / 100)}`);
   lines.push(`Total: ${formatAutoresponderCurrency(totals.total_cents / 100)}`);
+  if (paymentLine) lines.push(paymentLine);
   lines.push('');
   lines.push('Agora preciso confirmar se sera retirada na loja ou entrega.');
   return lines.join('\n');
@@ -1085,6 +1093,8 @@ async function getAutoresponderCustomerDataSnapshot(sender, payload = {}, purcha
     payload?.cnpj ||
     ''
   );
+  const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow?.items, purchaseFlow);
+  const paymentPlan = await calculateAutoresponderMaxInstallment(cartTotals.total_cents);
   return {
     name: confirmedName || 'nao informado',
     phone: phone || 'nao informado',
@@ -1094,7 +1104,8 @@ async function getAutoresponderCustomerDataSnapshot(sender, payload = {}, purcha
       ? formatAutoresponderDeliveryAddress(purchaseFlow?.delivery_address)
       : 'Retirada na loja',
     shipping_quote: purchaseFlow?.shipping_quote || null,
-    cart_totals: calculateAutoresponderCartTotalsWithShipping(purchaseFlow?.items, purchaseFlow),
+    cart_totals: cartTotals,
+    payment_plan: paymentPlan,
   };
 }
 
@@ -1525,6 +1536,8 @@ function buildAutoresponderCustomerDataConfirmationReply(customerData) {
   if (totals) {
     lines.push(`Total com frete: ${formatAutoresponderCurrency(Number(totals.total_cents || 0) / 100)}`);
   }
+  const paymentLine = formatAutoresponderCartPaymentLine(customerData?.payment_plan);
+  if (paymentLine) lines.push(paymentLine);
   lines.push('');
   lines.push('Esta tudo certo? Responda "sim" para confirmar ou "nao" para ajustar com um atendente.');
   return lines.join('\n');
@@ -1538,9 +1551,44 @@ function buildAutoresponderCustomerDataNeedsUpdateReply() {
   return 'Sem problema. Vou deixar marcado para um atendente ajustar seus dados antes de finalizar.';
 }
 
+function hasAutoresponderRepeatedDigitsOnly(digits) {
+  return /^(\d)\1+$/.test(String(digits || ''));
+}
+
+function validateAutoresponderCpf(digits) {
+  if (!/^\d{11}$/.test(digits) || hasAutoresponderRepeatedDigitsOnly(digits)) return false;
+
+  const calculateDigit = (baseLength) => {
+    let sum = 0;
+    for (let i = 0; i < baseLength; i += 1) {
+      sum += Number(digits[i]) * (baseLength + 1 - i);
+    }
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  return calculateDigit(9) === Number(digits[9]) && calculateDigit(10) === Number(digits[10]);
+}
+
+function validateAutoresponderCnpj(digits) {
+  if (!/^\d{14}$/.test(digits) || hasAutoresponderRepeatedDigitsOnly(digits)) return false;
+
+  const calculateDigit = (baseLength) => {
+    const weights = baseLength === 12
+      ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+      : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const sum = weights.reduce((total, weight, index) => total + Number(digits[index]) * weight, 0);
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  return calculateDigit(12) === Number(digits[12]) && calculateDigit(13) === Number(digits[13]);
+}
+
 function normalizeAutoresponderCustomerDocument(message) {
   const digits = String(message || '').replace(/\D+/g, '');
-  if (digits.length === 11 || digits.length === 14) return digits;
+  if (digits.length === 11 && validateAutoresponderCpf(digits)) return digits;
+  if (digits.length === 14 && validateAutoresponderCnpj(digits)) return digits;
   return '';
 }
 
@@ -3610,7 +3658,7 @@ fastify.route({
       if (hasAutoresponderCartItems(purchaseFlow) && isAutoresponderPurchaseFinalizeRequest(message)) {
         const items = Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [];
         const cartTotals = calculateAutoresponderCartTotals(items);
-        const replyText = formatAutoresponderReply(formatAutoresponderCartSummaryReply(items), settings, false);
+        const replyText = formatAutoresponderReply(await formatAutoresponderCartSummaryReply(items), settings, false);
         await saveAutoresponderPurchaseFlow(senderKey, {
           ...purchaseFlow,
           status: 'summary_ready',
