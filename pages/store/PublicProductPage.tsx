@@ -202,21 +202,27 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
-                // Busca a marca diretamente do Supabase caso a VPS não envie
-                if (!data.brand && data.model_id) {
+                // Busca marca/descrição do modelo no Supabase como fallback quando a VPS não envia.
+                // Modelo guarda uma descrição padrão herdada por todos os produtos do mesmo modelo.
+                const needsBrand = !data.brand && data.model_id;
+                const needsDescription = !data.description && data.model_id;
+                if (needsBrand || needsDescription) {
                     try {
                         const { data: modelData } = await supabase
                             .from('models')
-                            .select('brands(name)')
+                            .select('description, brands(name)')
                             .eq('id', data.model_id)
                             .single();
-                            
-                        if (modelData?.brands && typeof modelData.brands === 'object') {
+
+                        if (needsBrand && modelData?.brands && typeof modelData.brands === 'object') {
                             const bRaw: any = modelData.brands;
                             data.brand = Array.isArray(bRaw) ? bRaw[0]?.name : bRaw.name;
                         }
+                        if (needsDescription && modelData?.description) {
+                            data.description = modelData.description;
+                        }
                     } catch (e) {
-                        console.warn('Falha ao tentar recuperar marca do Supabase', e);
+                        console.warn('Falha ao tentar recuperar marca/descrição do Supabase', e);
                     }
                 }
 
@@ -436,39 +442,46 @@ export const PublicProductPage: React.FC = () => {
     const taxaAplicada12x = presencial12x?.applied_fee_pct || 0;
     const value12x = (displayPrice * (1 + taxaAplicada12x / 100)) / 12;
 
-    const resolvedDescription = (() => {
-        const candidates: unknown[] = [
-            product.description,
-            (product as any).long_description,
-            (product as any).descricao,
-            product.specs?.description,
-            product.specs?.descricao,
-        ];
+    // Descrições salvas via admin podem ser texto puro (com \n) — vira bloco único
+    // sob dangerouslySetInnerHTML. Converte para HTML quando não vier marcado.
+    const normalizeRichText = (raw: string): string => {
+        if (/<\/?(p|div|br|h[1-6]|ul|ol|li|table|img|span|strong|em)\b/i.test(raw)) {
+            return raw;
+        }
+        const escape = (s: string) => s
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        return raw
+            .split(/\r?\n\s*\r?\n+/)
+            .map(p => `<p>${escape(p).replace(/\r?\n/g, '<br>')}</p>`)
+            .join('');
+    };
 
+    const pickFirstString = (candidates: unknown[]): string => {
         for (const candidate of candidates) {
             if (typeof candidate === 'string' && candidate.trim()) {
-                return candidate;
+                return normalizeRichText(candidate);
             }
         }
         return '';
-    })();
+    };
 
-    const resolvedTechnicalSpecifications = (() => {
-        const candidates: unknown[] = [
-            (product as any).technical_specifications,
-            (product as any).technicalSpecifications,
-            product.specs?.technical_specifications,
-            product.specs?.technicalSpecifications,
-            product.specs?.ficha_tecnica,
-        ];
+    const resolvedDescription = pickFirstString([
+        product.description,
+        (product as any).long_description,
+        (product as any).descricao,
+        product.specs?.description,
+        product.specs?.descricao,
+    ]);
 
-        for (const candidate of candidates) {
-            if (typeof candidate === 'string' && candidate.trim()) {
-                return candidate;
-            }
-        }
-        return '';
-    })();
+    const resolvedTechnicalSpecifications = pickFirstString([
+        (product as any).technical_specifications,
+        (product as any).technicalSpecifications,
+        product.specs?.technical_specifications,
+        product.specs?.technicalSpecifications,
+        product.specs?.ficha_tecnica,
+    ]);
 
     const title = product.meta_title || `${toTitleCase(product.name)} | Mercado do Vale`;
     const description = product.meta_description || resolvedDescription || `Compre ${product.name} no Mercado do Vale.`;
