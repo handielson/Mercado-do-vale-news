@@ -35,6 +35,13 @@ export function buildShopeeAddItemStockVariants({ stock, locationIds = [] }) {
 
   return [
     {
+      key: 'seller_stock_top_level',
+      label: 'seller_stock no topo',
+      stockFields: {
+        seller_stock: buildSellerStockEntries(safeStock, locationIds, false),
+      },
+    },
+    {
       key: 'normal_stock_legacy',
       label: 'normal_stock legada',
       stockFields: {
@@ -79,6 +86,7 @@ export function buildShopeeAddItemStockVariants({ stock, locationIds = [] }) {
 
 export function applyShopeeStockFields(basePayload, stockFields) {
   const nextPayload = { ...basePayload };
+  delete nextPayload.seller_stock;
   delete nextPayload.normal_stock;
   delete nextPayload.stock_info;
   delete nextPayload.stock_info_v2;

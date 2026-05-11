@@ -9,21 +9,25 @@ import {
 
 const variants = buildShopeeAddItemStockVariants({ stock: 3.8, locationIds: ['LOC-1', 'LOC-1', 'LOC-2'] });
 
-assert.equal(variants.length, 4);
-assert.equal(variants[0].stockFields.normal_stock, 3);
-assert.deepEqual(variants[1].stockFields.stock_info, [{ stock_type: 'NORMAL', normal_stock: 3 }]);
-assert.deepEqual(variants[2].stockFields.stock_info_v2.seller_stock, [
+assert.equal(variants.length, 5);
+assert.deepEqual(variants[0].stockFields.seller_stock, [
   { location_id: 'LOC-1', stock: 3 },
   { location_id: 'LOC-2', stock: 3 },
 ]);
-assert.deepEqual(variants[3].stockFields.stock_info[0].seller_stock, [
+assert.equal(variants[1].stockFields.normal_stock, 3);
+assert.deepEqual(variants[2].stockFields.stock_info, [{ stock_type: 'NORMAL', normal_stock: 3 }]);
+assert.deepEqual(variants[3].stockFields.stock_info_v2.seller_stock, [
+  { location_id: 'LOC-1', stock: 3 },
+  { location_id: 'LOC-2', stock: 3 },
+]);
+assert.deepEqual(variants[4].stockFields.stock_info[0].seller_stock, [
   { location_id: 'LOC-1', stock: 3, allocated_stock: 0 },
   { location_id: 'LOC-2', stock: 3, allocated_stock: 0 },
 ]);
 
 assert.deepEqual(
   applyShopeeStockFields(
-    { item_name: 'Produto', normal_stock: 9, stock_info: [{ old: true }] },
+    { item_name: 'Produto', seller_stock: [{ stock: 9 }], normal_stock: 9, stock_info: [{ old: true }] },
     { stock_info_v2: { seller_stock: [{ stock: 1 }] } }
   ),
   { item_name: 'Produto', stock_info_v2: { seller_stock: [{ stock: 1 }] } }
