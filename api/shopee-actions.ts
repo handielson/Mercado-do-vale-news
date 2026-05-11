@@ -18,6 +18,30 @@ function generateSign(partnerId: string, partnerKey: string, apiPath: string, ti
     return crypto.createHmac('sha256', partnerKey).update(baseString).digest('hex');
 }
 
+function firstNonEmpty(...values: any[]): string {
+    for (const value of values) {
+        if (value === undefined || value === null) continue;
+        const normalized = String(value).trim();
+        if (normalized) return normalized;
+    }
+    return '';
+}
+
+function isRetryableShopeeError(data: any): boolean {
+    const normalized = String(data?.error || data?.message || '').toLowerCase();
+    return (
+        normalized.includes('timeout') ||
+        normalized.includes('temporar') ||
+        normalized.includes('system_busy') ||
+        normalized.includes('too many') ||
+        normalized.includes('rate')
+    );
+}
+
+async function sleep(ms: number) {
+    await new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST' && req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
@@ -70,6 +94,42 @@ export default async function handler(req: any, res: any) {
 
     try {
         const shopeeApiUrl = getShopeeBaseUrl(partnerId);
+        const buildSignedUrl = (apiPath: string, extraParams = '') => {
+            const timestamp = Math.floor(Date.now() / 1000);
+            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
+            return `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}${extraParams}`;
+        };
+
+        const shopeeGetSigned = async (apiPath: string, extraParams = '') => {
+            const r = await fetch(buildSignedUrl(apiPath, extraParams));
+            return r.json();
+        };
+
+        const shopeePostSigned = async (apiPath: string, body: any, retries = 2) => {
+            let lastError: any = null;
+
+            for (let attempt = 0; attempt <= retries; attempt += 1) {
+                try {
+                    const r = await fetch(buildSignedUrl(apiPath), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+                    const data = await r.json();
+                    if (!data?.error || !isRetryableShopeeError(data) || attempt === retries) {
+                        return data;
+                    }
+                    lastError = data;
+                } catch (error) {
+                    lastError = error;
+                    if (attempt === retries) throw error;
+                }
+
+                await sleep(500 * (attempt + 1));
+            }
+
+            return lastError;
+        };
 
         if (action === 'refresh_token') {
             if (!settings?.shopee_refresh_token || !settings?.id) {
@@ -281,27 +341,108 @@ export default async function handler(req: any, res: any) {
         if (action === 'ship_order') {
             const { order_sn } = payload;
             if (!order_sn) return res.status(400).json({ error: 'order_sn não fornecido' });
-            
+
+            const orderSn = String(order_sn).trim();
+            const requestedPackageNumber = String(package_number || '').trim();
+            const orderDetail = await shopeeGetSigned(
+                '/api/v2/order/get_order_detail',
+                `&order_sn_list=${encodeURIComponent(orderSn)}&response_optional_fields=package_list,shipping_carrier,order_status,fulfillment_flag`
+            );
+
+            if (orderDetail?.error) {
+                return res.status(200).json({
+                    error: 'ship_order_precheck_failed',
+                    message: orderDetail.message || orderDetail.error,
+                    details: orderDetail,
+                });
+            }
+
+            const order = orderDetail?.response?.order_list?.[0];
+            if (!order) {
+                return res.status(200).json({
+                    error: 'ship_order_precheck_failed',
+                    message: 'Pedido nÃ£o encontrado na Shopee antes de preparar envio.',
+                    details: orderDetail,
+                });
+            }
+
+            if (order.order_status !== 'READY_TO_SHIP') {
+                return res.status(200).json({
+                    error: 'ship_order_not_ready',
+                    message: `Pedido ${orderSn} estÃ¡ com status ${order.order_status || 'desconhecido'}; ship_order sÃ³ serÃ¡ chamado para READY_TO_SHIP.`,
+                    details: { order_status: order.order_status },
+                });
+            }
+
+            const packageList = Array.isArray(order.package_list) ? order.package_list : [];
+            const selectedPackage = requestedPackageNumber
+                ? packageList.find((pkg: any) => String(pkg?.package_number || '').trim() === requestedPackageNumber)
+                : packageList[0];
+            const resolvedPackageNumber = firstNonEmpty(selectedPackage?.package_number, requestedPackageNumber);
+
+            if (!resolvedPackageNumber) {
+                return res.status(200).json({
+                    error: 'ship_order_package_not_found',
+                    message: 'NÃ£o foi possÃ­vel identificar o pacote do pedido para validar o preparo de envio.',
+                    details: { order_sn: orderSn, package_list: packageList },
+                });
+            }
+
+            const packageDetail = await shopeeGetSigned(
+                '/api/v2/order/get_package_detail',
+                `&order_sn=${encodeURIComponent(orderSn)}&package_number=${encodeURIComponent(resolvedPackageNumber)}`
+            );
+            const detailPackage =
+                packageDetail?.response?.package_detail ||
+                packageDetail?.response?.package_list?.[0] ||
+                packageDetail?.response ||
+                {};
+            const fulfillmentStatus = firstNonEmpty(
+                detailPackage.fulfillment_status,
+                detailPackage.logistics_status,
+                selectedPackage?.fulfillment_status,
+                selectedPackage?.logistics_status,
+            );
+            const isShipmentArrangedRaw =
+                detailPackage.is_shipment_arranged ??
+                selectedPackage?.is_shipment_arranged;
+            const isShipmentArranged = isShipmentArrangedRaw === true || String(isShipmentArrangedRaw).toLowerCase() === 'true';
+
+            if (packageDetail?.error || !fulfillmentStatus) {
+                return res.status(200).json({
+                    error: 'ship_order_precheck_failed',
+                    message: 'NÃ£o foi possÃ­vel confirmar que o pacote estÃ¡ pronto para envio. A chamada ship_order foi bloqueada para preservar a taxa de sucesso da Shopee.',
+                    details: { package_detail: packageDetail, package_number: resolvedPackageNumber },
+                });
+            }
+
+            if (isShipmentArranged || fulfillmentStatus === 'LOGISTICS_REQUEST_CREATED') {
+                return res.status(200).json({
+                    success: true,
+                    already_arranged: true,
+                    message: 'O envio deste pacote jÃ¡ foi preparado anteriormente.',
+                    details: { package_number: resolvedPackageNumber, fulfillment_status: fulfillmentStatus, is_shipment_arranged: isShipmentArranged },
+                });
+            }
+
+            if (fulfillmentStatus !== 'LOGISTICS_READY') {
+                return res.status(200).json({
+                    error: 'ship_order_package_not_ready',
+                    message: `Pacote ${resolvedPackageNumber} ainda nÃ£o estÃ¡ pronto para ship_order. Status atual: ${fulfillmentStatus}.`,
+                    details: { package_number: resolvedPackageNumber, fulfillment_status: fulfillmentStatus, is_shipment_arranged: isShipmentArranged },
+                });
+            }
+
             // First we need to get shipping parameter to fulfill logistics properly
             // But a simple ship_order for drop-off usually requires dropoff object.
             // Let's implement standard ship_order
-            const apiPath = '/api/v2/logistics/ship_order';
-            const timestamp = Math.floor(Date.now() / 1000);
-            const sign = generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
-            
-            const url = `${shopeeApiUrl}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&access_token=${accessToken}&shop_id=${shopId}&sign=${sign}`;
-
             const shipPayload = {
-                order_sn: order_sn,
+                order_sn: orderSn,
+                package_number: resolvedPackageNumber,
                 dropoff: {} // Try simple dropoff
             };
 
-            const r = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(shipPayload)
-            });
-            const data = await r.json();
+            const data = await shopeePostSigned('/api/v2/logistics/ship_order', shipPayload);
             return res.status(200).json(data);
         }
 

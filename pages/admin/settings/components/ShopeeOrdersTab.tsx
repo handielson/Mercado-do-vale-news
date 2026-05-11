@@ -114,17 +114,25 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
         }
     };
 
-    const handleShipOrder = async (orderSn: string) => {
+    const handleShipOrder = async (orderSn: string, packageNumber?: string) => {
         toast.loading(`Preparando envio do pedido #${orderSn}...`, { id: 'ship' });
         try {
-            const res = await fetch(`/api/shopee-actions?action=ship_order&order_sn=${orderSn}`);
+            const params = new URLSearchParams({ action: 'ship_order', order_sn: orderSn });
+            if (packageNumber) params.set('package_number', packageNumber);
+            const res = await fetch(`/api/shopee-actions?${params.toString()}`);
             const data = await res.json();
-            
+
             if (data.error) {
                 toast.error(`Erro: ${data.message || data.error}`, { id: 'ship' });
                 return;
             }
-            
+
+            if (data.already_arranged) {
+                toast.success(data.message || `Pedido #${orderSn} ja estava preparado para envio.`, { id: 'ship' });
+                fetchOrders();
+                return;
+            }
+
             toast.success(`Pedido #${orderSn} preparado para envio!`, { id: 'ship' });
             fetchOrders(); // refresh
         } catch (error) {
@@ -517,8 +525,8 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                                     Rastrear
                                 </button>
                                 {order.order_status === 'READY_TO_SHIP' && (
-                                    <button 
-                                        onClick={() => handleShipOrder(order.order_sn)}
+                                    <button
+                                        onClick={() => handleShipOrder(order.order_sn, order.package_list?.[0]?.package_number)}
                                         className="px-4 py-2 bg-[#ee4d2d] text-white rounded-xl text-sm font-bold hover:bg-[#d73f21] transition-colors"
                                     >
                                         Preparar Envio

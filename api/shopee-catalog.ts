@@ -153,14 +153,14 @@ async function shopeeGet(apiPath: string, creds: Creds, extraParams: string): Pr
     return data;
 }
 
-async function shopeePost(apiPath: string, creds: Creds, body: any): Promise<any> {
+async function shopeePost(apiPath: string, creds: Creds, body: any, extraParams = ''): Promise<any> {
     const { url } = buildShopeeUrl(apiPath, creds);
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await fetch(`${url}${extraParams}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const data = await r.json();
     if ((data.error === 'invalid_access_token' || data.error === 'invalid_acceess_token' || data.error === 'error_auth') && creds.refreshToken) {
         creds.accessToken = await doRefreshToken(creds);
         const { url: url2 } = buildShopeeUrl(apiPath, creds);
-        const r2 = await fetch(url2, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const r2 = await fetch(`${url2}${extraParams}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         return r2.json();
     }
     return data;
@@ -213,7 +213,7 @@ export default async function handler(req: any, res: any) {
             });
             if (valueName) params.set('value_name', valueName);
 
-            const data = await shopeeGet('/api/v2/product/search_attribute_value_list', creds, `&${params}`);
+            const data = await shopeePost('/api/v2/product/search_attribute_value_list', creds, {}, `&${params}`);
             return res.status(200).json(data);
         }
         if (action === 'shop_info') {
