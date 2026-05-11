@@ -1,0 +1,453 @@
+# Shopee
+
+Documentacao operacional da integracao Shopee Open Platform v2 no Mercado do Vale.
+
+Ultima revisao: 2026-05-11
+
+## Objetivo
+
+Manter um guia rapido para publicar, atualizar e diagnosticar produtos na Shopee sem depender de memoria da conversa.
+
+Este arquivo cobre o fluxo atual de:
+
+- autorizacao e proxy da API Shopee;
+- publicacao de produto;
+- estoque, dimensoes e frete;
+- GTIN/EAN e SKU principal;
+- marca do anuncio e atributos de marca/modelo;
+- upload de imagens e video;
+- templates de categoria/campos, com o primeiro template para capa de celular.
+
+## Arquivos principais
+
+| Area | Arquivo |
+| --- | --- |
+| API/proxy Shopee | `api/shopee-catalog.ts` |
+| OAuth Shopee | `api/shopee.ts` |
+| Tela admin Shopee | `pages/admin/settings/ShopeePage.tsx` |
+| Defaults de descricao/estoque | `pages/admin/settings/shopeeSyncDefaults.js` |
+| Payloads de estoque | `pages/admin/settings/shopeeStockPayloads.js` |
+| Busca/sugestao de categoria | `pages/admin/settings/shopeeCategoryHelpers.js` |
+| Templates de categoria/campos | `pages/admin/settings/shopeeFieldTemplates.js` |
+| Vinculo local x Shopee | tabela `shopee_products` |
+
+## Fluxo de publicacao de produto
+
+1. O usuario abre a acao de sincronizar/publicar produto na Shopee.
+2. O modal carrega a arvore de categorias via `action=categories`.
+3. Se existir template aplicavel, o sistema pode selecionar a categoria automaticamente.
+4. Ao selecionar uma categoria folha, o sistema busca:
+   - atributos da categoria via `action=attributes`;
+   - lista oficial de marcas via `action=brand_list`;
+   - canais logisticos habilitados antes de publicar.
+5. O modal preenche campos conhecidos:
+   - SKU principal com `product.sku`;
+   - GTIN/EAN com primeiro EAN cadastrado, ou permite marcar "Produto sem GTIN";
+   - marca do produto quando possivel;
+   - atributos do template quando aplicavel;
+   - peso e dimensoes com fallback seguro.
+6. Imagens sao enviadas para a Shopee antes do `add_item`.
+7. Video e enviado quando houver arquivo local ou URL remota compativel.
+8. O produto e publicado via `action=add_item`.
+9. O retorno com `item_id` e salvo em `shopee_products`.
+
+## Categoria e templates de campos
+
+O sistema agora tem um primeiro template em `shopeeFieldTemplates.js`.
+
+### Template: Capa de celular
+
+Reconhecimento:
+
+- nome, SKU ou categoria interna contendo `capa`, `case`, `capinha` ou `cover`;
+- ignora casos obvios de `pelicula`, `carregador`, `fone` e `cabo`.
+
+Categoria Shopee:
+
+- `100490`
+
+Campos preenchidos automaticamente quando existem na categoria:
+
+| Campo Shopee | Valor padrao |
+| --- | --- |
+| Duracao da Garantia | `3 Months` |
+| Material | `TPU` |
+| Estampa | `Sem` |
+| Tipo de Garantia | `Supplier Warranty` |
+| Recursos da Capa | `Water Resistant` |
+| Material da Correia | `Others` |
+| Tipo de Capa | `Others` |
+| Tipo de Cabo Movel | `Others` |
+| Tipo de Tela | `Soft` |
+| Marca de Celular Aplicavel | marca local do produto, ex.: `Xiaomi` |
+| Modelo do Celular | extraido do nome, ex.: `Redmi Note 12 Pro Plus` |
+
+Importante: campos com lista fechada so sao preenchidos se a opcao existir na lista retornada pela Shopee. Isso evita enviar valores invalidos quando a Shopee altera opcoes da categoria.
+
+## Marca: duas coisas diferentes
+
+Na tela existem dois conceitos parecidos, mas separados:
+
+### Marca Shopee
+
+Campo de marca oficial do item, enviado no payload como:
+
+```json
+{
+  "brand": {
+    "brand_id": 0,
+    "original_brand_name": "Xiaomi"
+  }
+}
+```
+
+Quando a Shopee nao retorna uma marca oficial por `get_brand_list`, o sistema usa marca livre:
+
+- `brand_id: 0`;
+- `original_brand_name` com a marca local do produto.
+
+### Marca de Celular Aplicavel
+
+Esse e um atributo da categoria de capa de celular. Exemplo:
+
+- atributo: `Marca de Celular Aplicavel`;
+- valor: `Xiaomi`.
+
+Esse campo pode aparecer preenchido mesmo quando a marca oficial do item nao foi localizada na lista de marcas da Shopee.
+
+## SKU principal
+
+O campo "SKU principal" no modal vem de `product.sku`.
+
+Ele e enviado no `add_item` como:
+
+```json
+{
+  "item_sku": "CCRN12PP13"
+}
+```
+
+No importador/catalogo Shopee, o vinculo tambem usa SKU como principal criterio de match antes de tentar nome parecido.
+
+## GTIN/EAN
+
+O modal usa o primeiro EAN disponivel em `product.eans`.
+
+Modos:
+
+- `Informar GTIN/EAN`: envia o codigo digitado;
+- `Produto sem GTIN`: envia `SEM GTIN`.
+
+No payload, o valor vai em:
+
+```json
+{
+  "tax_info": {
+    "gtin": "7890001684506"
+  },
+  "gtin_code": "7890001684506"
+}
+```
+
+Para produto sem GTIN:
+
+```json
+{
+  "tax_info": {
+    "gtin": "SEM GTIN"
+  },
+  "gtin_code": "SEM GTIN"
+}
+```
+
+## Estoque
+
+Historico do problema:
+
+- a Shopee retornava `invalid field seller_stock, value must Not Null`;
+- a variante aceita atualmente e `seller_stock` no topo do payload.
+
+Formato atual para item sem variacao:
+
+```json
+{
+  "seller_stock": [
+    {
+      "stock": 1
+    }
+  ]
+}
+```
+
+O sistema ainda mantem diagnosticos de estoque para comparar:
+
+- estoque bruto;
+- estoque parseado;
+- `product.stock_quantity`;
+- `track_inventory`;
+- categoria selecionada;
+- atributos obrigatorios/preenchidos.
+
+## Dimensoes e peso
+
+A Shopee passou a exigir dimensao de pacote.
+
+Payload atual:
+
+```json
+{
+  "weight": 0.3,
+  "dimension": {
+    "package_length": 20,
+    "package_width": 15,
+    "package_height": 10
+  }
+}
+```
+
+Origem dos valores:
+
+- `product.dimensions.depth_cm`, `shipping_length`, fallback `20`;
+- `product.dimensions.width_cm`, `shipping_width`, fallback `15`;
+- `product.dimensions.height_cm`, `shipping_height`, fallback `10`;
+- peso em `weight_kg`, `shipping_weight`, fallback `0.3`.
+
+Sempre envia minimo `1` cm para cada dimensao.
+
+## Logistica/frete
+
+Historico do problema:
+
+- erro: `At least one shipping channel must be enabled for the product`;
+- causa comum: enviar `logistics_info` plural ou canal fixo invalido.
+
+Formato correto no `add_item`:
+
+```json
+{
+  "logistic_info": [
+    {
+      "logistic_id": 80031,
+      "enabled": true
+    }
+  ]
+}
+```
+
+O sistema busca os canais habilitados por:
+
+- `action=logistics_channel_list`;
+- endpoint Shopee: `/api/v2/logistics/get_channel_list`.
+
+Regra:
+
+- usar somente canais retornados como habilitados;
+- nao fixar canal se a loja nao tiver o canal aberto.
+
+## Imagens
+
+As imagens do produto sao enviadas para:
+
+- `/api/v2/media_space/upload_image`;
+- proxy: `action=upload_image`.
+
+O `add_item` recebe apenas os `image_id` retornados:
+
+```json
+{
+  "image": {
+    "image_id_list": [
+      "sg-11134201-..."
+    ]
+  }
+}
+```
+
+## Video
+
+Historico:
+
+- antes o front tentava converter URL remota em base64;
+- isso falhava para video remoto/Synology;
+- agora o front envia `video_url` ao backend quando existe URL remota.
+
+Payload para backend:
+
+```json
+{
+  "video_url": "https://...",
+  "file_name": "video.mp4"
+}
+```
+
+Quando for upload local:
+
+```json
+{
+  "video_data_url": "data:video/mp4;base64,...",
+  "file_name": "video.mp4"
+}
+```
+
+O backend faz o upload para:
+
+- `/api/v2/media_space/upload_video`;
+- consulta resultado em `/api/v2/media_space/get_video_upload_result`.
+
+Se o backend responder `error_not_found`, o modal publica sem video e mostra mensagem de diagnostico.
+
+## Atributos com muitas opcoes
+
+A Shopee comunicou o endpoint:
+
+- `/api/v2/product/search_attribute_value_list`
+
+Proxy local:
+
+- `action=search_attribute_values`
+
+Quando o atributo vem com:
+
+- `attribute_info.input_type = 2`;
+- `attribute_info.support_search_value = true`;
+
+o modal usa busca paginada em vez de depender da lista completa de opcoes.
+
+Parametros:
+
+- `attribute_id`;
+- `value_name` opcional;
+- `cursor`;
+- `limit` entre `1` e `100`.
+
+## Ship order e conformidade
+
+A Shopee exige taxa diaria de sucesso acima de 90% em:
+
+- `v2.logistics.ship_order`
+
+Regras importantes:
+
+- nao chamar `ship_order` para pedido/pacote ainda nao pronto;
+- validar status antes da chamada;
+- evitar duplicidade;
+- tratar erros transitorios com retry;
+- para prontidao de pacote, preferir APIs de pacote em vez de olhar apenas o status do pedido.
+
+Fluxo recomendado pela Shopee:
+
+1. Chamar `v2.order.search_package_list` com:
+   - `package_status = 2`;
+   - `invoice_pending = false`.
+2. Filtrar pacotes com:
+   - `is_shipment_arranged = true`.
+3. Chamar `v2.order.get_package_detail`.
+4. So chamar `v2.logistics.ship_order` quando:
+   - `fulfillment_status = LOGISTICS_READY`;
+   - `is_shipment_arranged = false`.
+
+## Erros comuns e causas
+
+### `invalid field seller_stock, value must Not Null`
+
+Causa: formato de estoque errado para `add_item`.
+
+Correcao atual: usar `seller_stock` no topo do payload.
+
+### `Parcel size is required. Please fill in it.`
+
+Causa: falta de `dimension`.
+
+Correcao atual: enviar `dimension` com comprimento/largura/altura.
+
+### `At least one shipping channel must be enabled`
+
+Causa: canal logistico ausente, invalido ou campo incorreto.
+
+Correcao atual:
+
+- buscar canais habilitados;
+- enviar `logistic_info` singular;
+- usar pelo menos um canal aberto.
+
+### Marca oficial nao encontrada, mas atributo de marca encontrado
+
+Isso pode ser normal.
+
+- `Marca Shopee` e marca oficial do item.
+- `Marca de Celular Aplicavel` e atributo da categoria.
+
+Quando a marca oficial nao volta no `get_brand_list`, o sistema envia marca livre com `brand_id: 0`.
+
+## Testes relevantes
+
+Rodar antes de mexer no fluxo de publicacao:
+
+```bash
+node tmp-tests/shopee-add-item-dimension-logistic-static.test.mjs
+node pages/admin/settings/shopeeFieldTemplates.test.mjs
+node pages/admin/settings/shopeeStockPayloads.test.mjs
+node pages/admin/settings/shopeeSyncDefaults.test.mjs
+node pages/admin/settings/shopeeCategoryHelpers.test.mjs
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+No ambiente Codex, o build pode precisar rodar fora do sandbox por causa de acesso ao `vite.config.ts`.
+
+## Como adicionar novo template de categoria/campos
+
+1. Editar `pages/admin/settings/shopeeFieldTemplates.js`.
+2. Criar uma funcao de reconhecimento do produto.
+3. Definir:
+   - `id`;
+   - `label`;
+   - `category_id`;
+   - `attribute_defaults`.
+4. Preencher somente valores estaveis e repetitivos.
+5. Manter campos especificos fora do default sempre que variarem por produto.
+6. Atualizar `pages/admin/settings/shopeeFieldTemplates.test.mjs`.
+7. Rodar testes e build.
+
+Exemplo de campos especificos que nao devem ficar fixos:
+
+- cor;
+- modelo exato do aparelho quando vier do nome;
+- GTIN;
+- SKU;
+- preco;
+- estoque;
+- imagens;
+- video.
+
+## Checklist antes de publicar um produto
+
+- Categoria correta selecionada.
+- Template aplicado quando for produto recorrente.
+- Marca oficial ou marca livre revisada.
+- Marca/modelo aplicavel preenchidos quando for capa.
+- GTIN ou "Produto sem GTIN" definido.
+- SKU principal preenchido.
+- Preco correto.
+- Estoque correto.
+- Peso e dimensoes coerentes.
+- Pelo menos uma imagem valida.
+- Canal logistico habilitado retornado pela Shopee.
+- Video revisado quando existir.
+
+## Deploy
+
+Fluxo atual:
+
+1. Alterar arquivos.
+2. Rodar testes relevantes.
+3. Rodar `npm run build`.
+4. Commitar somente arquivos do escopo.
+5. Push para `main`.
+6. Vercel gera deploy de producao automaticamente.
+7. Confirmar deploy `Ready` com Vercel.
+
