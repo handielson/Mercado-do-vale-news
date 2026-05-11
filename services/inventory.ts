@@ -7,6 +7,40 @@ import {
 } from '../types/inventory';
 import { Product } from '../types/product';
 
+const INVENTORY_PRODUCT_SELECT = [
+    'id',
+    'name',
+    'sku',
+    'ean',
+    'category_id',
+    'price_cost',
+    'price_retail',
+    'price_reseller',
+    'price_wholesale',
+    'stock_quantity',
+    'specs',
+    'created_at'
+].join(', ');
+
+function normalizeStockQuantity(product: { stock_quantity?: number | string | null; specs?: Record<string, any> | null }): number {
+    return Number(product.stock_quantity ?? product.specs?.stock_quantity ?? 0) || 0;
+}
+
+function escapeSearchTerm(value: string): string {
+    return value.trim().replace(/[%_,]/g, '\\$&').toLowerCase();
+}
+
+function buildProductSearchFilter(searchTerm: string): string {
+    return [
+        `name.ilike.%${searchTerm}%`,
+        `sku.ilike.%${searchTerm}%`,
+        `ean.ilike.%${searchTerm}%`,
+        `specs->>imei1.ilike.%${searchTerm}%`,
+        `specs->>imei2.ilike.%${searchTerm}%`,
+        `specs->>serial.ilike.%${searchTerm}%`
+    ].join(',');
+}
+
 /**
  * Inventory Service
  * Manages stock movements and inventory operations
@@ -23,18 +57,14 @@ class InventoryService {
     async getInventory(filters: InventoryFilters = {}): Promise<Product[]> {
         let query = supabase
             .from('products')
-            .select('*');
+            .select(INVENTORY_PRODUCT_SELECT);
         // Note: Not filtering by track_inventory since it doesn't exist in online DB
         // All products are considered for inventory
 
         // Search filter (name, SKU, EAN, IMEI1)
         if (filters.search) {
-            const searchTerm = filters.search.toLowerCase();
-            query = query.or(`
-                name.ilike.%${searchTerm}%,
-                sku.ilike.%${searchTerm}%,
-                specs->>imei1.ilike.%${searchTerm}%
-            `);
+            const searchTerm = escapeSearchTerm(filters.search);
+            query = query.or(buildProductSearchFilter(searchTerm));
         }
 
         // Category filter
@@ -73,7 +103,7 @@ class InventoryService {
 
         let products = (data || []).map(p => ({
             ...p,
-            stock_quantity: parseInt(p.specs?.stock_quantity || '0', 10)
+            stock_quantity: normalizeStockQuantity(p)
         }));
 
         // Post-process filters
@@ -107,18 +137,12 @@ class InventoryService {
     async getInventoryGrouped(filters: InventoryFilters = {}): Promise<import('../types/inventory').InventoryGroup[]> {
         let query = supabase
             .from('products')
-            .select('*');
+            .select(INVENTORY_PRODUCT_SELECT);
 
         // Apply filters
         if (filters.search) {
-            const searchTerm = filters.search.toLowerCase();
-            query = query.or(`
-                name.ilike.%${searchTerm}%,
-                sku.ilike.%${searchTerm}%,
-                specs->>imei1.ilike.%${searchTerm}%,
-                specs->>imei2.ilike.%${searchTerm}%,
-                specs->>serial.ilike.%${searchTerm}%
-            `);
+            const searchTerm = escapeSearchTerm(filters.search);
+            query = query.or(buildProductSearchFilter(searchTerm));
         }
 
         if (filters.category_id) {
@@ -130,7 +154,7 @@ class InventoryService {
         }
 
         if (filters.status) {
-            query = query.eq('unit_status', filters.status);
+            query = query.eq('specs->>unit_status', filters.status);
         }
 
         const { data: products, error } = await query;
@@ -191,17 +215,18 @@ class InventoryService {
             }
 
             const group = groups.get(groupKey)!;
+            const stockQuantity = Math.max(0, normalizeStockQuantity(product));
 
             // Count by status
-            const status = product.unit_status || 'available';
-            group.total_units++;
+            const status = product.specs?.unit_status || 'available';
+            group.total_units += isSerialized ? 1 : stockQuantity;
 
             switch (status) {
-                case 'available': group.available++; break;
-                case 'reserved': group.reserved++; break;
-                case 'sold': group.sold++; break;
-                case 'maintenance': group.in_maintenance++; break;
-                case 'defective': group.defective++; break;
+                case 'available': group.available += isSerialized ? 1 : stockQuantity; break;
+                case 'reserved': group.reserved += isSerialized ? 1 : stockQuantity; break;
+                case 'sold': group.sold += isSerialized ? 1 : stockQuantity; break;
+                case 'maintenance': group.in_maintenance += isSerialized ? 1 : stockQuantity; break;
+                case 'defective': group.defective += isSerialized ? 1 : stockQuantity; break;
             }
 
             // Add to units list if serialized
@@ -264,7 +289,7 @@ class InventoryService {
     async getStats(): Promise<InventoryStats> {
         const { data: products, error } = await supabase
             .from('products')
-            .select('specs, price_cost, unit_status');
+            .select('specs, price_cost, stock_quantity');
 
         if (error) {
             console.error('Error fetching inventory stats:', error);
@@ -273,7 +298,7 @@ class InventoryService {
 
         const stats: InventoryStats = {
             total_products: products?.length || 0,
-            total_units: products?.length || 0,
+            total_units: 0,
             serialized_groups: 0,
             non_serialized_groups: 0,
             available: 0,
@@ -297,9 +322,10 @@ class InventoryService {
 
             if (isSerialized) {
                 stats.serialized_groups++;
+                stats.total_units++;
 
                 // Count by status
-                const status = product.unit_status || 'available';
+                const status = product.specs?.unit_status || 'available';
                 switch (status) {
                     case 'available': stats.available++; break;
                     case 'reserved': stats.reserved++; break;
@@ -315,7 +341,8 @@ class InventoryService {
             } else {
                 stats.non_serialized_groups++;
 
-                const qty = parseInt(product.specs?.stock_quantity || '0', 10);
+                const qty = Math.max(0, normalizeStockQuantity(product));
+                stats.total_units += qty;
 
                 if (qty === 0) {
                     stats.out_of_stock++;
@@ -340,16 +367,12 @@ class InventoryService {
         // Get current product
         const { data: product, error: fetchError } = await supabase
             .from('products')
-            .select('stock_quantity, track_inventory')
+            .select('stock_quantity')
             .eq('id', adjustment.product_id)
             .single();
 
         if (fetchError || !product) {
             throw new Error('Product not found');
-        }
-
-        if (!product.track_inventory) {
-            throw new Error('Product does not track inventory');
         }
 
         const previousQty = product.stock_quantity || 0;
@@ -447,18 +470,18 @@ class InventoryService {
     async getLowStockProducts(threshold: number = 10): Promise<Product[]> {
         const { data, error } = await supabase
             .from('products')
-            .select('*');
+            .select(INVENTORY_PRODUCT_SELECT);
 
         if (error) {
             console.error('Error fetching low stock products:', error);
             throw error;
         }
 
-        // Filter and sort in memory since stock_quantity is in specs
+        // Filter and sort in memory because low-stock thresholds are dynamic.
         const products = (data || [])
             .map(p => ({
                 ...p,
-                stock_quantity: parseInt(p.specs?.stock_quantity || '0', 10)
+                stock_quantity: normalizeStockQuantity(p)
             }))
             .filter(p => {
                 const qty = p.stock_quantity || 0;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Package } from 'lucide-react';
 import { InventoryFilters as FiltersType, InventoryStats as StatsType, InventoryGroup } from '../../../types/inventory';
 import { inventoryService } from '../../../services/inventory';
@@ -44,10 +44,11 @@ export function InventoryPage() {
     const [selectedGroup, setSelectedGroup] = useState<InventoryGroup | null>(null);
     const [showUnitsModal, setShowUnitsModal] = useState(false);
     const [showAdjustModal, setShowAdjustModal] = useState(false);
+    const productRequestIdRef = useRef(0);
 
     // Load initial data
     useEffect(() => {
-        loadData();
+        loadStats();
         loadCategories();
         loadBrands();
     }, []);
@@ -65,14 +66,23 @@ export function InventoryPage() {
     };
 
     const loadProducts = async () => {
+        const requestId = productRequestIdRef.current + 1;
+        productRequestIdRef.current = requestId;
+
         try {
             setLoading(true);
             const data = await inventoryService.getInventoryGrouped(filters);
-            setGroups(data);
+            if (requestId === productRequestIdRef.current) {
+                setGroups(data);
+            }
         } catch (error) {
-            console.error('Error loading inventory groups:', error);
+            if (requestId === productRequestIdRef.current) {
+                console.error('Error loading inventory groups:', error);
+            }
         } finally {
-            setLoading(false);
+            if (requestId === productRequestIdRef.current) {
+                setLoading(false);
+            }
         }
     };
 
