@@ -64,6 +64,30 @@ assert.match(
   'Shopee add_item payload must send SEM GTIN when no-GTIN mode is selected'
 );
 
+assert.match(
+  source,
+  /item_sku: cleanItemSku \|\| undefined/,
+  'Shopee add_item payload must send the local product SKU as item_sku'
+);
+
+assert.match(
+  source,
+  /const brandInfo = await collectShopeeBrandInfo\(\);[\s\S]*brand: brandInfo/,
+  'Shopee add_item payload must use a mapped Shopee brand when available'
+);
+
+assert.match(
+  apiSource,
+  /action === 'brand_list'[\s\S]*\/api\/v2\/product\/get_brand_list/,
+  'Shopee catalog proxy must expose product/get_brand_list'
+);
+
+assert.match(
+  source,
+  /video\.video_url \? \{ video_url: video\.video_url \} : \{ video_data_url: resolvedVideoDataUrl \}/,
+  'Shopee add_item must send remote videos as video_url so the backend downloads and uploads them'
+);
+
 assert.doesNotMatch(
   source,
   /logistics_info: \[\{ logistic_id: 80031, enabled: true \}\]/,

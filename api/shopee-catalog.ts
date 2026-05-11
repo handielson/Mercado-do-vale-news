@@ -48,6 +48,21 @@ function isNoGtinValue(value: string): boolean {
     return normalized === 'SEM GTIN' || normalized === 'SEM_GTIN' || normalized === 'NAO POSSUI' || normalized === 'ISENTO';
 }
 
+function normalizeLookupText(value: unknown): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function extractShopeeBrandList(data: any): any[] {
+    if (Array.isArray(data?.response?.brand_list)) return data.response.brand_list;
+    if (Array.isArray(data?.response?.list)) return data.response.list;
+    return [];
+}
+
 function parseDataUrl(dataUrl: string): { mimeType: string; buffer: Buffer } | null {
     const matches = String(dataUrl || '').match(/^data:([^;]+);base64,(.*)$/);
     if (!matches) return null;
@@ -215,6 +230,73 @@ export default async function handler(req: any, res: any) {
 
             const data = await shopeePost('/api/v2/product/search_attribute_value_list', creds, {}, `&${params}`);
             return res.status(200).json(data);
+        }
+        if (action === 'brand_list') {
+            const categoryId = Number(req.query.category_id);
+            if (!Number.isFinite(categoryId) || categoryId <= 0) {
+                return res.status(400).json({ error: 'category_id required' });
+            }
+
+            const pageSizeRaw = Number(req.query.page_size ?? 100);
+            const pageSize = Number.isFinite(pageSizeRaw) ? Math.max(1, Math.min(100, pageSizeRaw)) : 100;
+            const offsetRaw = Number(req.query.offset ?? 0);
+            const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
+            const brandName = String(req.query.brand_name || '').trim();
+            const targetBrand = normalizeLookupText(brandName);
+
+            const fetchBrandPage = (nextOffset: number) => {
+                const params = new URLSearchParams({
+                    category_id: String(categoryId),
+                    status: String(req.query.status ?? 1),
+                    offset: String(nextOffset),
+                    page_size: String(pageSize),
+                });
+                return shopeeGet('/api/v2/product/get_brand_list', creds, `&${params}`);
+            };
+
+            if (!targetBrand) {
+                return res.status(200).json(await fetchBrandPage(offset));
+            }
+
+            const collected: any[] = [];
+            let nextOffset = 0;
+            for (let attempt = 0; attempt < 20; attempt += 1) {
+                const data = await fetchBrandPage(nextOffset);
+                if (data?.error && data.error !== '') return res.status(200).json(data);
+
+                const pageBrands = extractShopeeBrandList(data);
+                collected.push(...pageBrands);
+
+                const exactMatches = collected.filter((brand: any) => {
+                    const label = firstString(brand?.display_brand_name, brand?.brand_name, brand?.name, brand?.original_brand_name);
+                    const original = firstString(brand?.original_brand_name, brand?.brand_name, brand?.name);
+                    return normalizeLookupText(label) === targetBrand || normalizeLookupText(original) === targetBrand;
+                });
+
+                if (exactMatches.length > 0) {
+                    return res.status(200).json({
+                        error: '',
+                        message: '',
+                        response: {
+                            brand_list: exactMatches,
+                            total_count: exactMatches.length,
+                        },
+                    });
+                }
+
+                const hasNext = data?.response?.has_next_page === true || pageBrands.length >= pageSize;
+                if (!hasNext) break;
+                nextOffset += pageSize;
+            }
+
+            return res.status(200).json({
+                error: '',
+                message: '',
+                response: {
+                    brand_list: collected.slice(0, pageSize),
+                    total_count: collected.length,
+                },
+            });
         }
         if (action === 'shop_info') {
             const data = await shopeeGet('/api/v2/shop/get_shop_info', creds, '');

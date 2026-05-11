@@ -140,9 +140,24 @@ type ShopeeAttributeField = {
     support_search_value?: boolean;
 };
 
+type ShopeeBrandOption = {
+    brand_id: number;
+    label: string;
+    original_brand_name: string;
+};
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+
+function normalizeLookupText(value: unknown): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
 
 function translateShopeeText(entity: any, fallbackKeys: string[] = []): string {
     if (Array.isArray(entity?.multi_lang)) {
@@ -248,6 +263,36 @@ function normalizeShopeeAttributes(data: any): ShopeeAttributeField[] {
             } satisfies ShopeeAttributeField;
         })
         .filter((attr: ShopeeAttributeField) => Number.isFinite(attr.attribute_id) && attr.attribute_id > 0);
+}
+
+function normalizeShopeeBrandOptions(data: any): ShopeeBrandOption[] {
+    const rawList = Array.isArray(data?.response?.brand_list)
+        ? data.response.brand_list
+        : Array.isArray(data?.response?.list)
+            ? data.response.list
+            : [];
+
+    return rawList
+        .map((brand: any) => {
+            const label =
+                translateShopeeText(brand, ['display_brand_name', 'brand_name', 'name', 'original_brand_name']) ||
+                String(brand?.brand_id || '').trim();
+            return {
+                brand_id: Number(brand?.brand_id) || 0,
+                label,
+                original_brand_name: String(brand?.original_brand_name || brand?.brand_name || brand?.name || label).trim(),
+            };
+        })
+        .filter((brand: ShopeeBrandOption) => brand.brand_id > 0 && brand.label);
+}
+
+function findShopeeBrandOption(options: ShopeeBrandOption[], brandName: string | undefined): ShopeeBrandOption | null {
+    const target = normalizeLookupText(brandName);
+    if (!target) return null;
+    return options.find((option) =>
+        normalizeLookupText(option.label) === target ||
+        normalizeLookupText(option.original_brand_name) === target
+    ) || null;
 }
 
 function hasFilledAttributeValue(value: string | string[] | undefined): boolean {
@@ -1458,6 +1503,9 @@ export function ShopeeSyncModal({
     const [attributes, setAttributes] = useState<ShopeeAttributeField[]>([]);
     const [loadingAttrs, setLoadingAttrs] = useState(false);
     const [attrValues, setAttrValues] = useState<Record<number, string | string[]>>({});
+    const [brandOptions, setBrandOptions] = useState<ShopeeBrandOption[]>([]);
+    const [selectedBrandId, setSelectedBrandId] = useState('');
+    const [loadingBrands, setLoadingBrands] = useState(false);
     const [syncing, setSyncing] = useState(false);
 
     const initialDefaults = resolveShopeeSyncDefaults(product);
@@ -1654,16 +1702,56 @@ export function ShopeeSyncModal({
         setSelectedCat(cat);
         setStep(2);
         setLoadingAttrs(true);
+        setLoadingBrands(true);
         setAttrValues({});
+        setBrandOptions([]);
+        setSelectedBrandId('');
         try {
-            const res = await fetch(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`);
-            const data = await res.json();
+            const brandParams = new URLSearchParams({
+                action: 'brand_list',
+                category_id: String(cat.category_id),
+                brand_name: product.brand || '',
+            });
+            const [attrRes, brandRes] = await Promise.all([
+                fetch(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`),
+                fetch(`/api/shopee-catalog?${brandParams.toString()}`),
+            ]);
+            const data = await attrRes.json();
             if (data.error && data.error !== '') {
                 throw new Error(data.message || data.error);
             }
             setAttributes(normalizeShopeeAttributes(data));
+            const brandData = await brandRes.json();
+            if (brandData.error && brandData.error !== '') {
+                console.warn('[Shopee Sync] Failed to load brand list:', brandData);
+            } else {
+                const nextBrandOptions = normalizeShopeeBrandOptions(brandData);
+                setBrandOptions(nextBrandOptions);
+                const matchedBrand = findShopeeBrandOption(nextBrandOptions, product.brand);
+                if (matchedBrand) {
+                    setSelectedBrandId(String(matchedBrand.brand_id));
+                }
+            }
         } catch { toast.error('Erro ao carregar atributos.'); }
-        finally { setLoadingAttrs(false); }
+        finally {
+            setLoadingAttrs(false);
+            setLoadingBrands(false);
+        }
+    };
+
+    const collectShopeeBrandInfo = async () => {
+        const selectedBrand = brandOptions.find((brand) => String(brand.brand_id) === String(selectedBrandId));
+        if (selectedBrand) {
+            return {
+                brand_id: selectedBrand.brand_id,
+                original_brand_name: selectedBrand.original_brand_name || selectedBrand.label,
+            };
+        }
+
+        return {
+            brand_id: 0,
+            original_brand_name: (product.brand || 'NoBrand').trim() || 'NoBrand',
+        };
     };
 
     const buildAttributePayload = () => {
@@ -2041,6 +2129,7 @@ export function ShopeeSyncModal({
         try {
             const attributeList = buildAttributePayload();
             const cleanItemName = (itemName.trim() || product.name || '').slice(0, 120);
+            const cleanItemSku = String(product.sku || '').trim().slice(0, 100);
             const cleanDescription = (normalizeShopeeDescription(itemDescription) || cleanItemName).slice(0, 3000);
             const imageIdList: string[] = [];
             const videoIdList: string[] = [];
@@ -2059,6 +2148,9 @@ export function ShopeeSyncModal({
                 selected_category_id: selectedCat.category_id,
                 required_attributes_count: requiredAttributes.length,
                 filled_attributes_count: attributeList.length,
+                selected_brand_id: selectedBrandId || null,
+                product_brand: product.brand || null,
+                item_sku: cleanItemSku || null,
                 gtin_mode: gtinMode,
                 gtin_value: gtinPayloadValue || null,
             });
@@ -2096,14 +2188,15 @@ export function ShopeeSyncModal({
 
                 const resolvedVideoDataUrl = video.data_url?.startsWith('data:video/')
                     ? video.data_url
-                    : (video.video_url ? await readRemoteUrlAsDataUrl(video.video_url) : '');
-                if (!resolvedVideoDataUrl) continue;
+                    : '';
+                if (!video.video_url && !resolvedVideoDataUrl) continue;
 
                 try {
-                    const uploadData = await postShopeeDebug('upload_video', {
-                        video_data_url: resolvedVideoDataUrl,
+                    const videoUploadPayload = {
+                        ...(video.video_url ? { video_url: video.video_url } : { video_data_url: resolvedVideoDataUrl }),
                         file_name: video.file_name || 'video.mp4',
-                    });
+                    };
+                    const uploadData = await postShopeeDebug('upload_video', videoUploadPayload);
                     const uploadedId = uploadData?.response?.video_id;
                     if (!uploadedId) {
                         throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de video');
@@ -2120,10 +2213,12 @@ export function ShopeeSyncModal({
             }
 
             const logisticInfo = await collectShopeeLogisticInfo();
+            const brandInfo = await collectShopeeBrandInfo();
             const basePayload = {
                 original_price: parsedPrice,
                 description: cleanDescription,
                 item_name: cleanItemName,
+                item_sku: cleanItemSku || undefined,
                 category_id: selectedCat.category_id,
                 attribute_list: attributeList,
                 logistic_info: logisticInfo,
@@ -2133,10 +2228,7 @@ export function ShopeeSyncModal({
                 ...(videoIdList.length > 0 ? { video_info: { video_id_list: videoIdList } } : {}),
                 weight: weightValue,
                 dimension: packageDimension,
-                brand: {
-                    brand_id: 0,
-                    original_brand_name: (product.brand || 'NoBrand').trim() || 'NoBrand',
-                },
+                brand: brandInfo,
                 ...(gtinPayloadValue ? {
                     tax_info: { gtin: gtinPayloadValue },
                     gtin_code: gtinPayloadValue,
@@ -2363,6 +2455,40 @@ export function ShopeeSyncModal({
                                                     Embalagem base do cadastro: {packageLength || 0} x {packageWidth || 0} x {packageHeight || 0} cm
                                                 </div>
                                             )}
+
+                                            <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-2">
+                                                <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2">
+                                                    <div>
+                                                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">SKU principal</label>
+                                                        <input
+                                                            value={product.sku || ''}
+                                                            readOnly
+                                                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-mono text-slate-600"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Marca Shopee</label>
+                                                        <select
+                                                            value={selectedBrandId}
+                                                            onChange={(e) => setSelectedBrandId(e.target.value)}
+                                                            disabled={loadingBrands}
+                                                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-orange-200 outline-none"
+                                                        >
+                                                            <option value="">
+                                                                {loadingBrands ? 'Buscando marcas...' : `Sem marca mapeada (${product.brand || 'NoBrand'})`}
+                                                            </option>
+                                                            {brandOptions.map((brand) => (
+                                                                <option key={`${brand.brand_id}-${brand.original_brand_name}`} value={String(brand.brand_id)}>
+                                                                    {brand.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                {!loadingBrands && product.brand && !selectedBrandId && (
+                                                    <p className="text-[11px] text-amber-600">Nao encontramos "{product.brand}" na lista de marcas desta categoria. O anuncio sera enviado como NoBrand.</p>
+                                                )}
+                                            </div>
 
                                             <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-2">
                                                 <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2">
