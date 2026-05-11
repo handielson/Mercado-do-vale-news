@@ -31,6 +31,11 @@ import {
     searchShopeeCategories,
     suggestShopeeCategories,
 } from './shopeeCategoryHelpers.js';
+import {
+    buildShopeeTemplateAttributeValues,
+    findShopeeTemplateCategory,
+    resolveShopeeFieldTemplate,
+} from './shopeeFieldTemplates.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ShopeeProduct {
@@ -1560,6 +1565,8 @@ export function ShopeeSyncModal({
     const stockDirtyRef = useRef(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
+    const templateAutoAppliedRef = useRef(false);
+    const activeFieldTemplate = useMemo(() => resolveShopeeFieldTemplate(product), [product]);
 
     // Carrega toda a árvore de categorias ao abrir o modal
     useEffect(() => {
@@ -1720,7 +1727,12 @@ export function ShopeeSyncModal({
             if (data.error && data.error !== '') {
                 throw new Error(data.message || data.error);
             }
-            setAttributes(normalizeShopeeAttributes(data));
+            const normalizedAttributes = normalizeShopeeAttributes(data);
+            setAttributes(normalizedAttributes);
+            const templateValues = buildShopeeTemplateAttributeValues(normalizedAttributes, product, activeFieldTemplate);
+            if (Object.keys(templateValues).length > 0) {
+                setAttrValues(templateValues);
+            }
             const brandData = await brandRes.json();
             if (brandData.error && brandData.error !== '') {
                 console.warn('[Shopee Sync] Failed to load brand list:', brandData);
@@ -1738,6 +1750,17 @@ export function ShopeeSyncModal({
             setLoadingBrands(false);
         }
     };
+
+    useEffect(() => {
+        if (templateAutoAppliedRef.current) return;
+        if (selectedCat || !activeFieldTemplate || allCatTree.length === 0) return;
+
+        const templateCategory = findShopeeTemplateCategory(allCatTree, activeFieldTemplate);
+        if (!templateCategory) return;
+
+        templateAutoAppliedRef.current = true;
+        selectCategory(templateCategory);
+    }, [activeFieldTemplate, allCatTree, selectedCat]);
 
     const collectShopeeBrandInfo = async () => {
         const selectedBrand = brandOptions.find((brand) => String(brand.brand_id) === String(selectedBrandId));
@@ -2475,7 +2498,7 @@ export function ShopeeSyncModal({
                                                             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-orange-200 outline-none"
                                                         >
                                                             <option value="">
-                                                                {loadingBrands ? 'Buscando marcas...' : `Sem marca mapeada (${product.brand || 'NoBrand'})`}
+                                                                {loadingBrands ? 'Buscando marcas...' : `Marca livre (${product.brand || 'NoBrand'})`}
                                                             </option>
                                                             {brandOptions.map((brand) => (
                                                                 <option key={`${brand.brand_id}-${brand.original_brand_name}`} value={String(brand.brand_id)}>
@@ -2486,9 +2509,15 @@ export function ShopeeSyncModal({
                                                     </div>
                                                 </div>
                                                 {!loadingBrands && product.brand && !selectedBrandId && (
-                                                    <p className="text-[11px] text-amber-600">Nao encontramos "{product.brand}" na lista de marcas desta categoria. O anuncio sera enviado como NoBrand.</p>
+                                                    <p className="text-[11px] text-amber-600">A lista oficial de marcas da Shopee nao retornou "{product.brand}". Vamos enviar como marca livre e manter os atributos especificos preenchidos.</p>
                                                 )}
                                             </div>
+
+                                            {activeFieldTemplate && (
+                                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
+                                                    Template aplicado: <strong>{activeFieldTemplate.label}</strong>. Revise apenas modelo, cor, GTIN, preco, estoque e midias antes de publicar.
+                                                </div>
+                                            )}
 
                                             <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-2">
                                                 <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2">
