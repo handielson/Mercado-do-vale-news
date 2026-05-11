@@ -40,6 +40,30 @@ assert.match(
   'Shopee add_item payload must include dimension'
 );
 
+assert.match(
+  source,
+  /const \[gtinMode, setGtinMode\] = useState<'code' \| 'no_gtin'>\(initialGtinMode\);/,
+  'Shopee add_item modal must let the seller choose GTIN mode'
+);
+
+assert.match(
+  source,
+  /<option value="no_gtin">Produto sem GTIN<\/option>/,
+  'Shopee add_item modal must offer a no-GTIN option'
+);
+
+assert.match(
+  source,
+  /tax_info: \{ gtin: gtinPayloadValue \},\s*gtin_code: gtinPayloadValue,/,
+  'Shopee add_item payload must send GTIN through tax_info and gtin_code'
+);
+
+assert.match(
+  source,
+  /gtinPayloadValue = gtinMode === 'no_gtin'\s*\? 'SEM GTIN'\s*: cleanGtin;/,
+  'Shopee add_item payload must send SEM GTIN when no-GTIN mode is selected'
+);
+
 assert.doesNotMatch(
   source,
   /logistics_info: \[\{ logistic_id: 80031, enabled: true \}\]/,

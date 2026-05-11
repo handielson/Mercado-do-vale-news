@@ -483,6 +483,16 @@ function isUnsupportedVideoUploadMessage(message: unknown): boolean {
     return normalized.includes('upload_video') && normalized.includes('nao suporta');
 }
 
+function isNoGtinValue(value: string): boolean {
+    const normalized = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, ' ');
+    return normalized === 'SEM GTIN' || normalized === 'SEM_GTIN' || normalized === 'NAO POSSUI' || normalized === 'ISENTO';
+}
+
 const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
     if (status === 'active')
         return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-700">🟢 Ativo</span>;
@@ -1464,6 +1474,8 @@ export function ShopeeSyncModal({
     })();
     const primaryImage = (product.images || []).find((image) => typeof image === 'string' && image.trim()) || '';
     const gtinValue = (product.eans || []).find((ean) => typeof ean === 'string' && ean.trim()) || '';
+    const initialGtinMode = gtinValue && isNoGtinValue(gtinValue) ? 'no_gtin' : 'code';
+    const initialGtinInput = initialGtinMode === 'code' ? gtinValue.trim() : '';
     const packageLength = Number(product.dimensions?.depth_cm ?? product.shipping_length ?? 0) || 0;
     const packageWidth = Number(product.dimensions?.width_cm ?? product.shipping_width ?? 0) || 0;
     const packageHeight = Number(product.dimensions?.height_cm ?? product.shipping_height ?? 0) || 0;
@@ -1483,6 +1495,8 @@ export function ShopeeSyncModal({
     const [itemDescription, setItemDescription] = useState(defaultDescription);
     const [shopeePrice, setShopeePrice] = useState((product.price_retail || 0) / 100);
     const [shopeeStock, setShopeeStock] = useState(defaultStock);
+    const [gtinMode, setGtinMode] = useState<'code' | 'no_gtin'>(initialGtinMode);
+    const [gtinInput, setGtinInput] = useState(initialGtinInput);
     const [mediaImages, setMediaImages] = useState<EditableImage[]>(() =>
         (product.images || [])
             .filter((image) => typeof image === 'string' && image.trim())
@@ -2032,6 +2046,10 @@ export function ShopeeSyncModal({
             const videoIdList: string[] = [];
             let videoUploadSkipped = false;
             const weightValue = Number(defaultWeightKg.toFixed(3));
+            const cleanGtin = gtinInput.trim();
+            const gtinPayloadValue = gtinMode === 'no_gtin'
+                ? 'SEM GTIN'
+                : cleanGtin;
 
             pushSyncDebug('add_item:stock_diagnostics', {
                 raw_shopeeStock_state: shopeeStock,
@@ -2041,6 +2059,8 @@ export function ShopeeSyncModal({
                 selected_category_id: selectedCat.category_id,
                 required_attributes_count: requiredAttributes.length,
                 filled_attributes_count: attributeList.length,
+                gtin_mode: gtinMode,
+                gtin_value: gtinPayloadValue || null,
             });
 
             for (const image of availableImages) {
@@ -2117,6 +2137,10 @@ export function ShopeeSyncModal({
                     brand_id: 0,
                     original_brand_name: (product.brand || 'NoBrand').trim() || 'NoBrand',
                 },
+                ...(gtinPayloadValue ? {
+                    tax_info: { gtin: gtinPayloadValue },
+                    gtin_code: gtinPayloadValue,
+                } : {}),
                 item_status: 'NORMAL',
                 condition: 'NEW',
             };
@@ -2339,6 +2363,35 @@ export function ShopeeSyncModal({
                                                     Embalagem base do cadastro: {packageLength || 0} x {packageWidth || 0} x {packageHeight || 0} cm
                                                 </div>
                                             )}
+
+                                            <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-2">
+                                                <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-2">
+                                                    <div>
+                                                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Tipo de GTIN</label>
+                                                        <select
+                                                            value={gtinMode}
+                                                            onChange={(e) => setGtinMode(e.target.value as 'code' | 'no_gtin')}
+                                                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-orange-200 outline-none"
+                                                        >
+                                                            <option value="code">Informar GTIN/EAN</option>
+                                                            <option value="no_gtin">Produto sem GTIN</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">GTIN / EAN</label>
+                                                        <input
+                                                            value={gtinInput}
+                                                            onChange={(e) => setGtinInput(e.target.value)}
+                                                            disabled={gtinMode === 'no_gtin'}
+                                                            placeholder={gtinMode === 'no_gtin' ? 'Sera enviado como SEM GTIN' : 'ex: 7891234560123'}
+                                                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400 focus:ring-2 focus:ring-orange-200 outline-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {gtinMode === 'no_gtin' && (
+                                                    <p className="text-[11px] text-amber-600">A Shopee recebera este item como sem GTIN.</p>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
