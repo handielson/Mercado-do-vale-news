@@ -899,15 +899,15 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [x] Consultar cliente existente pelo telefone do WhatsApp, CPF/CNPJ ou e-mail antes de pedir dados novamente
 - [x] Se cliente ja existir, confirmar dados cadastrados antes de atualizar
 - [x] Criar/atualizar cliente no sistema a partir das respostas do WhatsApp quando possivel
-- [ ] Vincular cliente cadastrado ao pedido/carrinho do WhatsApp
+- [x] Vincular cliente cadastrado ao pedido/carrinho do WhatsApp
 
 #### Fechamento assistido por atendente
 
-- [ ] Gerar mensagem-resumo para atendente com cliente, telefone, itens, total, entrega/retirada e observacoes
-- [ ] Pausar o bot automaticamente apos gerar resumo de pedido
-- [ ] Criar tag/conversa com status `pedido_em_andamento`
-- [ ] Salvar evento em `autoresponder_logs` com intent `purchase_request`
-- [ ] Criar mensagem para o cliente: "Seu pedido foi separado para um atendente finalizar"
+- [x] Gerar mensagem-resumo para atendente com cliente, telefone, itens, total, entrega/retirada e observacoes
+- [x] Pausar o bot automaticamente apos gerar resumo de pedido
+- [x] Criar tag/conversa com status `pedido_em_andamento`
+- [x] Salvar evento em `autoresponder_logs` com intent `purchase_request`
+- [x] Criar mensagem para o cliente: "Seu pedido foi separado para um atendente finalizar"
 
 #### Pedido no sistema
 
@@ -921,7 +921,8 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 #### Pagamento
 
 - [ ] Fase inicial: PIX/manual com chave da loja e pedido aguardando comprovante
-- [ ] Responder pergunta de parcela especifica com destaque e tabela completa: `Em 5x fica R$ X = xxxx`
+- [x] Responder pergunta de parcela especifica com destaque e tabela completa: `Em 5x fica R$ X = xxxx`
+- [x] Captar escolha de parcelamento do cliente e salvar no carrinho do WhatsApp
 - [ ] Mensagem para cliente enviar comprovante no WhatsApp
 - [ ] Opcional: link de pagamento Mercado Pago/Asaas/Stripe
 - [ ] Opcional: Pix copia-e-cola automatico com expiracao
@@ -954,6 +955,8 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [x] Retirada nao pede endereco
 - [x] Cliente novo informa dados e cadastro e criado/atualizado antes do pedido
 - [x] Cliente existente e localizado pelo telefone e confirma dados antes do pedido
+- [x] Cliente pergunta parcela especifica e recebe destaque + tabela completa
+- [x] Cliente escolhe parcelamento e o bot salva a forma de pagamento no carrinho
 - [ ] Cliente consulta compras e recebe resumo seguro
 - [ ] Pedido assistido pausa o bot e chama atendente
 - [ ] Pedido fica visivel no admin
@@ -4218,6 +4221,94 @@ node tools\test-autoresponder-archive-vps-write.cjs
 
 ---
 
+### 2026-05-07 - Fase 4P pergunta de parcela especifica
+
+**Objetivo da etapa:** responder diretamente quando o cliente perguntar uma parcela especifica do carrinho, como `em 5x fica quanto?`.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-specific-installment-reply-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `getAutoresponderRequestedInstallments()` para detectar mensagens como `5x`, `em 5x`, `5 vezes`, `parcelar em 5` e perguntas genericas de parcelamento.
+- Helper `calculateAutoresponderInstallmentOptions()` para montar opcoes de 1x ate 12x usando `payment_fees` do canal presencial.
+- Helper `formatAutoresponderSpecificInstallmentReply()` destacando a parcela solicitada e enviando a tabela completa.
+- O webhook responde a pergunta de parcelamento antes de tratar categorias/listas numeradas.
+- Se houver frete confirmado, o calculo usa o total do carrinho com frete.
+- Log novo: `purchase_specific_installment_quote`.
+
+**Verificacoes executadas:**
+- `node tmp-tests/autoresponder-specific-installment-reply-static.test.mjs`
+
+---
+
+### 2026-05-07 - Fase 4Q escolha de parcelamento
+
+**Objetivo da etapa:** permitir que o cliente escolha uma opcao de parcelamento do carrinho e deixar essa forma de pagamento salva para o fechamento assistido.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-installment-choice-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `isAutoresponderInstallmentChoiceRequest()` para diferenciar pergunta de parcelamento de escolha do cliente.
+- Helper `buildAutoresponderSelectedInstallmentPayment()` para montar `selected_payment` com metodo, parcelas, valor da parcela, total no cartao e taxa aplicada.
+- Helper `buildAutoresponderSelectedInstallmentReply()` para confirmar a escolha ao cliente.
+- O webhook salva `selected_payment` no `purchase_flow` quando o cliente responder frases como `quero 5x`, `pode ser 3x` ou `fecha em 10x`.
+- O snapshot de dados do pedido passa a priorizar `selected_payment` quando existir.
+- Log novo: `purchase_installment_selected`.
+
+**Verificacoes executadas:**
+- `node tmp-tests/autoresponder-installment-choice-static.test.mjs`
+
+---
+
+### 2026-05-07 - Fase 4R vinculo do cliente ao carrinho
+
+**Objetivo da etapa:** deixar o cliente criado ou encontrado vinculado explicitamente ao carrinho/pedido temporario do WhatsApp.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-customer-cart-link-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `buildAutoresponderCustomerLinkedPurchaseFlow()` para centralizar o vinculo do cliente ao `purchase_flow`.
+- Ao finalizar cadastro/atualizacao, o carrinho salva `customer_id`, `customer_record` e `customer_linked_at`.
+- O status segue como `customer_record_ready`, agora com dados suficientes para o fechamento assistido gerar resumo do pedido sem buscar o cliente de novo.
+
+**Verificacoes executadas:**
+- `node tmp-tests/autoresponder-customer-cart-link-static.test.mjs`
+
+---
+
+### 2026-05-07 - Fase 4S fechamento assistido
+
+**Objetivo da etapa:** quando o cliente ja estiver vinculado ao carrinho, gerar o resumo para atendente, pausar o bot e avisar o cliente que a equipe vai finalizar.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-attendant-handoff-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `formatAutoresponderAttendantOrderSummary()` para montar resumo interno com cliente, telefone, CPF/CNPJ, itens, subtotal, frete, total, pagamento escolhido, entrega/retirada e observacoes.
+- Helper `buildAutoresponderCustomerOrderHandoffReply()` com a mensagem para o cliente: "Seu pedido foi separado para um atendente finalizar...".
+- Helper `pauseAutoresponderConversationForPurchase()` para pausar automaticamente a conversa com `pause_reason = pedido_em_andamento`.
+- Ao finalizar o cadastro, o `purchase_flow` passa para `pedido_em_andamento`, salva `attendant_summary` e `handoff_created_at`.
+- Log novo: `purchase_request`.
+
+**Verificacoes executadas:**
+- `node tmp-tests/autoresponder-attendant-handoff-static.test.mjs`
+
+---
+
 ## Pendências abertas
 
 1. **Token secreto:** `AUTORESPONDER_TOKEN` gerado/configurado fora do código e app AutoResponder liberado. Concluído; manter sem hardcode no repositório.
@@ -4243,5 +4334,5 @@ node tools\test-autoresponder-archive-vps-write.cjs
 
 ---
 
-_Última atualização: 2026-05-06_
-_Versão do plano: v11_
+_Última atualização: 2026-05-07_
+_Versão do plano: v13_

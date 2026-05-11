@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Barcode, Edit, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2 } from 'lucide-react';
+import { Barcode, Edit, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { Company } from '../../types/company';
@@ -72,6 +72,11 @@ const readJsonSafe = <T,>(text: string): T | null => {
 const getUploadErrorMessage = (payload: SynologyUploadResponse | SynologyUploadStatus | null, fallback: string) => {
     const detail = payload?.detail ? ` (${payload.detail})` : '';
     return `${payload?.error || fallback}${detail}`;
+};
+
+const buildStockLocationsHref = (product: Product) => {
+    const term = product.sku || product.name || product.id;
+    return `/admin/inventory/locations?search=${encodeURIComponent(term)}`;
 };
 
 const uploadVideoWithProgress = (
@@ -656,6 +661,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         >
                             <Barcode className="w-4 h-4 text-indigo-600 group-hover:text-indigo-700" />
                         </button>
+                        <a
+                            href={buildStockLocationsHref(product)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="shrink-0 p-1.5 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors group"
+                            title="Ver locais de estoque"
+                            aria-label="Ver locais de estoque"
+                        >
+                            <MapPin className="w-4 h-4 text-emerald-600 group-hover:text-emerald-700" />
+                        </a>
 
                         <button
                             onClick={handleOpenShopeeModal}

@@ -2,13 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Package, Plus, Tags } from 'lucide-react';
+import { ArrowLeft, MapPin, Package, Plus, Tags } from 'lucide-react';
 import { Product, ProductInput } from '../../../types/product';
 import { Unit, UnitInput } from '../../../types/unit';
 import { productService } from '../../../services/products';
 import { unitService } from '../../../services/units';
 import { autoResponderService } from '../../../services/autoResponderService';
+import { stockLocationService } from '../../../services/stockLocationService';
 import type { AutoResponderTag } from '../../../types/autoResponder';
+import type { ProductStockLocation } from '../../../types/stock-location';
 import { ProductForm } from '../../../components/products/ProductForm';
 import { UnitList } from '../../../components/units/UnitList';
 import { UnitForm } from '../../../components/units/UnitForm';
@@ -107,6 +109,9 @@ export const ProductDetailPage: React.FC = () => {
     const [product, setProduct] = useState<Product | undefined>();
     const [units, setUnits] = useState<Unit[]>([]);
     const [stats, setStats] = useState({ total: 0, available: 0, reserved: 0, sold: 0, rma: 0 });
+    const [productStockDistribution, setProductStockDistribution] = useState<ProductStockLocation[]>([]);
+    const [isLoadingStockDistribution, setIsLoadingStockDistribution] = useState(false);
+    const [stockDistributionError, setStockDistributionError] = useState<string | null>(null);
 
     const [isLoadingProduct, setIsLoadingProduct] = useState(false);
     const [isLoadingUnits, setIsLoadingUnits] = useState(false);
@@ -150,6 +155,7 @@ export const ProductDetailPage: React.FC = () => {
             setIsLoadingProduct(true);
             const data = await productService.getById(id);
             setProduct(data);
+            await fetchProductStockDistribution(data);
         } catch (error) {
             console.error('Error fetching product:', error);
             toast.error('Erro ao carregar produto');
@@ -217,6 +223,21 @@ export const ProductDetailPage: React.FC = () => {
         }
     };
 
+    const fetchProductStockDistribution = async (product: Product) => {
+        try {
+            setIsLoadingStockDistribution(true);
+            setStockDistributionError(null);
+            const distribution = await stockLocationService.getProductStockDistribution(product.id);
+            setProductStockDistribution(distribution);
+        } catch (error) {
+            console.error('Error fetching product stock distribution:', error);
+            setProductStockDistribution([]);
+            setStockDistributionError('Nao foi possivel carregar a distribuicao por local.');
+        } finally {
+            setIsLoadingStockDistribution(false);
+        }
+    };
+
     const handleUnitSubmit = async (data: UnitInput) => {
         try {
             setIsSaving(true);
@@ -250,6 +271,12 @@ export const ProductDetailPage: React.FC = () => {
     const handleCancel = () => {
         navigate('/admin/products');
     };
+
+    const locationSearchTerm = encodeURIComponent(product?.sku || product?.name || '');
+    const stockLocationsHref = `/admin/inventory/locations?search=${locationSearchTerm}`;
+    const distributionTotal = productStockDistribution.reduce((total, item) => total + item.quantity, 0);
+    const distributionReserved = productStockDistribution.reduce((total, item) => total + item.reserved_quantity, 0);
+    const distributionAvailable = distributionTotal - distributionReserved;
 
     // Loading state
     if (isLoadingProduct) {
@@ -393,6 +420,83 @@ export const ProductDetailPage: React.FC = () => {
 
                     {activeTab === 'inventory' && (
                         <div className="space-y-4">
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                            <MapPin size={18} className="text-blue-600" />
+                                            Distribuicao por local
+                                        </h3>
+                                        <p className="mt-1 text-sm text-slate-500">
+                                            Leitura interna dos depositos e locais cadastrados para este produto.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(stockLocationsHref)}
+                                        className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                                    >
+                                        Ver locais de estoque
+                                    </button>
+                                </div>
+
+                                {stockDistributionError && (
+                                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                                        {stockDistributionError}
+                                    </div>
+                                )}
+
+                                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <div className="rounded-lg bg-slate-50 p-3">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fisico por locais</p>
+                                        <p className="mt-1 text-xl font-bold text-slate-900">{distributionTotal}</p>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-50 p-3">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reservado</p>
+                                        <p className="mt-1 text-xl font-bold text-amber-700">{distributionReserved}</p>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-50 p-3">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Saldo disponivel</p>
+                                        <p className="mt-1 text-xl font-bold text-emerald-700">{distributionAvailable}</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 overflow-x-auto">
+                                    {isLoadingStockDistribution ? (
+                                        <div className="py-8 text-center text-sm text-slate-500">Carregando distribuicao por local...</div>
+                                    ) : productStockDistribution.length === 0 ? (
+                                        <div className="py-8 text-center text-sm text-slate-500">Nenhum saldo por local cadastrado para este produto.</div>
+                                    ) : (
+                                        <table className="w-full min-w-[620px] text-left text-sm">
+                                            <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                                                <tr>
+                                                    <th className="px-4 py-3">Loja / deposito</th>
+                                                    <th className="px-4 py-3">Local</th>
+                                                    <th className="px-4 py-3 text-right">Fisico</th>
+                                                    <th className="px-4 py-3 text-right">Reservado</th>
+                                                    <th className="px-4 py-3 text-right">Saldo disponivel</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {productStockDistribution.map((item) => {
+                                                    const available = item.quantity - item.reserved_quantity;
+
+                                                    return (
+                                                        <tr key={item.id} className="hover:bg-slate-50">
+                                                            <td className="px-4 py-3 font-semibold text-slate-900">{item.deposit?.name || '-'}</td>
+                                                            <td className="px-4 py-3 text-slate-700">{item.location?.name || '-'}</td>
+                                                            <td className="px-4 py-3 text-right">{item.quantity}</td>
+                                                            <td className="px-4 py-3 text-right">{item.reserved_quantity}</td>
+                                                            <td className="px-4 py-3 text-right font-bold text-emerald-700">{available}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            </div>
+
                             {/* Add Unit Button */}
                             {!showUnitForm && (
                                 <div className="flex justify-end">

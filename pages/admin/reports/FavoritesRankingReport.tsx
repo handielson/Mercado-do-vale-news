@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LayoutDashboard, Heart, Flame, RefreshCcw, Search, BarChart3, BellRing, ShoppingCart } from 'lucide-react';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { formatCurrency } from '../../../utils/saleCalculations';
 
 interface RankingItem {
   product_id: string;
@@ -255,7 +256,7 @@ export const FavoritesRankingReport: React.FC = () => {
                         </td>
                       )}
                       <td className="px-6 py-4 text-right font-medium text-gray-900 dark:text-white">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price_retail || 0)}
+                        {formatCurrency(item.price_retail || 0)}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.stock_quantity > 0 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>

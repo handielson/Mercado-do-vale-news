@@ -1223,6 +1223,156 @@ const AutoResponderPage: React.FC = () => {
                 .some((value) => String(value).toLowerCase().includes(search))
         );
     }, [categoryTags, tagSearch]);
+    const greetingCategoryPreviewCategories = React.useMemo(
+        () => categoryTags.filter((category) => isEnabled(category.appears_on_greeting)),
+        [categoryTags]
+    );
+    const greetingCategoryPreviewText = React.useMemo(() => {
+        if (greetingCategoryPreviewCategories.length === 0) {
+            return 'Nenhuma categoria com estoque ativo para mostrar na saudacao automatica.';
+        }
+
+        return [
+            'Ola!',
+            '',
+            'Categorias disponiveis:',
+            ...greetingCategoryPreviewCategories.map((category, index) => `${index + 1}. ${category.name}`),
+            '',
+            'Responda com o numero ou nome da categoria.',
+        ].join('\n');
+    }, [greetingCategoryPreviewCategories]);
+    const hiddenAutoResponderMessageSamples = React.useMemo(() => [
+        {
+            title: 'Produto escolhido',
+            source: 'Fluxo de compra',
+            text: [
+                'Certo, voce escolheu:',
+                'Capa Anti Impacto Redmi Note 14',
+                'Valor: R$ 39,90',
+                '',
+                'Quer comprar esse produto ou ver detalhes primeiro?',
+                'Responda "comprar" ou "detalhes".',
+            ].join('\n'),
+        },
+        {
+            title: 'Pergunta de quantidade',
+            source: 'Fluxo de compra',
+            text: [
+                'Quantas unidades voce quer adicionar ao carrinho?',
+                'Estoque disponivel: 5 unidade(s).',
+                'Responda apenas com o numero.',
+            ].join('\n'),
+        },
+        {
+            title: 'Sem estoque',
+            source: 'Estoque',
+            text: [
+                'Esse produto esta sem estoque no momento:',
+                'Capa Anti Impacto Redmi Note 14',
+                '',
+                'Posso procurar uma opcao parecida para voce.',
+            ].join('\n'),
+        },
+        {
+            title: 'Estoque insuficiente',
+            source: 'Estoque',
+            text: [
+                'Temos apenas 2 unidade(s) disponiveis desse produto.',
+                'Responda com uma quantidade menor para continuar.',
+            ].join('\n'),
+        },
+        {
+            title: 'Item adicionado',
+            source: 'Carrinho',
+            text: [
+                'Adicionei ao seu pedido:',
+                '2x Capa Anti Impacto Redmi Note 14',
+                'Subtotal: R$ 79,80',
+            ].join('\n'),
+        },
+        {
+            title: 'Adicionar mais produtos',
+            source: 'Carrinho',
+            text: [
+                'Deseja adicionar mais algum produto?',
+                'Responda "sim" para continuar comprando ou "finalizar" para concluir o pedido.',
+            ].join('\n'),
+        },
+        {
+            title: 'Carrinho cancelado',
+            source: 'Carrinho',
+            text: 'Tudo certo, cancelei o pedido em andamento. Se precisar, e so chamar.',
+        },
+        {
+            title: 'Item removido',
+            source: 'Carrinho',
+            text: 'Removi esse item do seu pedido. Quer ver o resumo atualizado?',
+        },
+        {
+            title: 'Resumo do pedido',
+            source: 'Fechamento',
+            text: [
+                'Resumo do pedido:',
+                '1. 2x Capa Anti Impacto Redmi Note 14 - R$ 79,80',
+                '',
+                'Total: R$ 79,80',
+                'Como deseja receber: retirada ou entrega?',
+            ].join('\n'),
+        },
+        {
+            title: 'Retirada na loja',
+            source: 'Fechamento',
+            text: [
+                'Combinado, seu pedido ficara para retirada na loja.',
+                'Vamos confirmar seus dados para separar tudo certinho.',
+            ].join('\n'),
+        },
+        {
+            title: 'Entrega',
+            source: 'Fechamento',
+            text: [
+                'Me envie o endereco completo para entrega:',
+                'Rua, numero, bairro, cidade e ponto de referencia se tiver.',
+            ].join('\n'),
+        },
+        {
+            title: 'Endereco anotado',
+            source: 'Fechamento',
+            text: 'Endereco anotado. Agora vou confirmar seus dados para finalizar o pedido.',
+        },
+        {
+            title: 'Confirmacao de dados',
+            source: 'Cliente',
+            text: [
+                'Confira seus dados:',
+                'Nome: Maria Silva',
+                'Telefone: 559999999999',
+                '',
+                'Esta tudo correto? Responda "sim" ou envie a correcao.',
+            ].join('\n'),
+        },
+        {
+            title: 'CPF/CNPJ',
+            source: 'Cliente',
+            text: 'Para finalizar, envie seu CPF ou CNPJ. Pode mandar somente os numeros.',
+        },
+        {
+            title: 'Produto indisponivel',
+            source: 'Busca de produtos',
+            text: [
+                'Nao encontrei estoque ativo para esse produto agora.',
+                'Posso te mostrar opcoes parecidas ou outras categorias.',
+            ].join('\n'),
+        },
+        {
+            title: 'Garantia precisa detalhe',
+            source: 'Garantia',
+            text: [
+                'Para consultar garantia, me envie o produto ou modelo que deseja verificar.',
+                'Exemplo: garantia capa iPhone 13.',
+            ].join('\n'),
+        },
+    ], []);
     const totalMessages = Number(summary.total_messages || 0);
     const fallbackMessages = Number(summary.fallback_messages || 0);
     const productMessages = Number(summary.product_messages || 0);
@@ -2298,6 +2448,50 @@ const AutoResponderPage: React.FC = () => {
                                 </div>
                             </div>
 
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                        <h3 className="text-base font-semibold text-amber-950">Previa da saudacao automatica</h3>
+                                        <p className="mt-1 text-sm text-amber-800">
+                                            Esta e a amostra da mensagem que o bot envia quando o cliente manda apenas uma saudacao.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => copyCategoryTagPlaceholder(greetingCategoryPreviewText)}
+                                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                                    >
+                                        <Copy size={16} />
+                                        {copiedCategoryTagPlaceholder === greetingCategoryPreviewText ? 'Copiado' : 'Copiar amostra'}
+                                    </button>
+                                </div>
+                                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(260px,0.75fr)]">
+                                    <pre className="min-h-[180px] whitespace-pre-wrap rounded-lg border border-amber-100 bg-white p-4 text-sm leading-6 text-slate-800 shadow-sm">
+                                        {greetingCategoryPreviewText}
+                                    </pre>
+                                    <div className="rounded-lg border border-amber-100 bg-white p-4">
+                                        <h4 className="text-sm font-semibold text-slate-900">Categorias que aparecem nesta mensagem</h4>
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            Entra aqui somente categoria com produto ativo e estoque disponivel.
+                                        </p>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            {greetingCategoryPreviewCategories.length > 0 ? (
+                                                greetingCategoryPreviewCategories.map((category) => (
+                                                    <span
+                                                        key={category.id}
+                                                        className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                                                    >
+                                                        {category.name}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span className="text-sm text-slate-500">Nenhuma categoria aparece agora.</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="overflow-hidden rounded-lg border border-emerald-200 bg-white">
                                 <div className="flex flex-col gap-1 border-b border-emerald-100 bg-emerald-50 px-5 py-4">
                                     <h3 className="text-base font-semibold text-emerald-900">Tags de categoria</h3>
@@ -2724,6 +2918,42 @@ const AutoResponderPage: React.FC = () => {
                                     />
                                     <span className="text-sm font-semibold text-slate-700">Bot ativo</span>
                                 </label>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div>
+                                        <h3 className="text-base font-semibold text-slate-900">Amostras de mensagens automaticas</h3>
+                                        <p className="text-sm text-slate-500">
+                                            Mensagens geradas pelo fluxo do bot que nao aparecem como regras editaveis.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                    {hiddenAutoResponderMessageSamples.map((sample) => (
+                                        <div key={sample.title} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <h4 className="text-sm font-semibold text-slate-900">{sample.title}</h4>
+                                                    <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                        {sample.source}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copyCategoryTagPlaceholder(sample.text)}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                                                >
+                                                    <Copy size={14} />
+                                                    {copiedCategoryTagPlaceholder === sample.text ? 'Copiado' : 'Copiar'}
+                                                </button>
+                                            </div>
+                                            <pre className="mt-3 min-h-[128px] whitespace-pre-wrap rounded-lg border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800">
+                                                {sample.text}
+                                            </pre>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

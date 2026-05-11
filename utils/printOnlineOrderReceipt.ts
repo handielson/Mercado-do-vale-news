@@ -60,6 +60,8 @@ interface OnlineOrderReceiptInput {
         cep?: string;
     };
     shipping_cost?: number;
+    shipping_origin_label?: string;
+    shipping_origin_cep?: string;
     payment_gateway?: string;
     gateway_payment_id?: string;
     gateway_pix_data?: { ticket_url?: string };
@@ -79,6 +81,7 @@ export function printOnlineOrderReceipt(order: OnlineOrderReceiptInput, settings
         phone: settings?.phone || '',
         address: settings?.address || '',
         email: settings?.email || '',
+        logoUrl: settings?.receipt_logo_url || '',
     };
 
     const created = new Date(order.created_at);
@@ -115,6 +118,10 @@ export function printOnlineOrderReceipt(order: OnlineOrderReceiptInput, settings
             ? 'Entrega no endereço'
             : '-';
 
+    const originLine = order.shipping_origin_label
+        ? `${order.delivery_type === 'pickup' ? 'Loja' : 'Saindo de'}: <strong>${escape(order.shipping_origin_label)}</strong>${order.shipping_origin_cep ? ` · <span style="font-family:monospace">${escape(order.shipping_origin_cep)}</span>` : ''}`
+        : '';
+
     const addr = order.shipping_address;
     const addressBlock = addr
         ? [
@@ -123,6 +130,10 @@ export function printOnlineOrderReceipt(order: OnlineOrderReceiptInput, settings
               [addr.neighborhood, addr.city && addr.state ? `${addr.city}/${addr.state}` : (addr.city || addr.state)].filter(Boolean).join(' · '),
               addr.cep ? `CEP: ${addr.cep}` : '',
           ].filter(Boolean).map(line => `<div>${escape(line)}</div>`).join('')
+        : '';
+
+    const shippingCostLine = order.delivery_type === 'delivery'
+        ? `<div class="muted" style="margin-top:6px;">Custo da entrega: <strong>${(order.shipping_cost || 0) > 0 ? fmt(order.shipping_cost || 0) : 'Grátis'}</strong></div>`
         : '';
 
     const html = `<!doctype html>
@@ -140,6 +151,8 @@ export function printOnlineOrderReceipt(order: OnlineOrderReceiptInput, settings
     .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 16px; border-bottom: 2px solid #1f2937; }
     .header .left { flex: 1; }
     .header .right { text-align: right; font-size: 12px; color: #4b5563; }
+    .brand { display: flex; align-items: center; gap: 16px; }
+    .logo { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; }
     .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background: #dcfce7; color: #166534; margin-top: 4px; }
     .badge.pending { background: #fef3c7; color: #92400e; }
     .badge.cancelled { background: #fee2e2; color: #991b1b; }
@@ -175,11 +188,16 @@ export function printOnlineOrderReceipt(order: OnlineOrderReceiptInput, settings
 
     <div class="header">
         <div class="left">
-            <h1>${escape(company.name)}</h1>
-            <div class="muted">
-                ${company.cnpj ? `CNPJ: ${escape(company.cnpj)}<br />` : ''}
-                ${company.address ? `${escape(company.address)}<br />` : ''}
-                ${company.phone ? `${escape(company.phone)}` : ''}${company.phone && company.email ? ' · ' : ''}${company.email ? escape(company.email) : ''}
+            <div class="brand">
+                ${company.logoUrl ? `<img src="${escape(company.logoUrl)}" alt="${escape(company.name)}" class="logo" />` : ''}
+                <div>
+                    <h1>${escape(company.name)}</h1>
+                    <div class="muted">
+                        ${company.cnpj ? `CNPJ: ${escape(company.cnpj)}<br />` : ''}
+                        ${company.address ? `${escape(company.address)}<br />` : ''}
+                        ${company.phone ? `${escape(company.phone)}` : ''}${company.phone && company.email ? ' · ' : ''}${company.email ? escape(company.email) : ''}
+                    </div>
+                </div>
             </div>
         </div>
         <div class="right">
@@ -234,12 +252,13 @@ export function printOnlineOrderReceipt(order: OnlineOrderReceiptInput, settings
 </body>
 </html>`;
 
-    const win = window.open('', '_blank', 'width=900,height=900');
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank', 'width=900,height=900');
     if (!win) {
+        URL.revokeObjectURL(url);
         alert('Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-up está desativado.');
         return;
     }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

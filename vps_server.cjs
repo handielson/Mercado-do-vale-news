@@ -1105,7 +1105,7 @@ async function getAutoresponderCustomerDataSnapshot(sender, payload = {}, purcha
       : 'Retirada na loja',
     shipping_quote: purchaseFlow?.shipping_quote || null,
     cart_totals: cartTotals,
-    payment_plan: paymentPlan,
+    payment_plan: purchaseFlow?.selected_payment || paymentPlan,
   };
 }
 
@@ -1547,6 +1547,81 @@ function buildAutoresponderCustomerDataConfirmedReply() {
   return 'Dados confirmados. Vou separar o pedido para um atendente finalizar com voce.';
 }
 
+function formatAutoresponderAttendantOrderSummary(purchaseFlow = {}, sender = '') {
+  const customer = purchaseFlow.customer_record || purchaseFlow.existing_customer || {};
+  const customerData = purchaseFlow.customer_data || {};
+  const totals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+  const selectedPayment = purchaseFlow.selected_payment || purchaseFlow.payment_plan || null;
+  const lines = [
+    'Pedido WhatsApp - fechamento assistido',
+    `Cliente: ${customer.name || customerData.name || 'nao informado'}`,
+    `Telefone: ${customer.phone || customerData.phone || sender || 'nao informado'}`,
+    `CPF/CNPJ: ${customer.cpf_cnpj || customerData.cpf_cnpj || 'nao informado'}`,
+    `Cliente ID: ${purchaseFlow.customer_id || customer.id || 'nao vinculado'}`,
+    '',
+    'Itens:',
+  ];
+
+  (Array.isArray(purchaseFlow.items) ? purchaseFlow.items : []).forEach((item, index) => {
+    const quantity = Number(item?.quantity || 0);
+    const name = item?.name || 'produto';
+    const unitPrice = formatAutoresponderCurrency(Number(item?.unit_price_cents || 0) / 100);
+    const subtotal = formatAutoresponderCurrency(Number(item?.subtotal_cents || 0) / 100);
+    lines.push(`${index + 1}. ${quantity}x ${name} - ${unitPrice} cada - Subtotal: ${subtotal}`);
+  });
+
+  lines.push('');
+  lines.push(`Subtotal: ${formatAutoresponderCurrency(Number(totals.subtotal_cents || 0) / 100)}`);
+  if (Number(totals.shipping_cents || 0) > 0) {
+    lines.push(`Frete: ${formatAutoresponderCurrency(Number(totals.shipping_cents || 0) / 100)}`);
+  }
+  lines.push(`Total: ${formatAutoresponderCurrency(Number(totals.total_cents || 0) / 100)}`);
+
+  if (selectedPayment?.installments) {
+    lines.push(`Pagamento: Cartao em ${selectedPayment.installments}x de ${formatAutoresponderCurrency(Number(selectedPayment.value_cents || selectedPayment.value || 0) / 100)}`);
+    lines.push(`Total no cartao: ${formatAutoresponderCurrency(Number(selectedPayment.total_cents || selectedPayment.total || 0) / 100)}`);
+  } else {
+    lines.push('Pagamento: nao escolhido');
+  }
+
+  lines.push(`Entrega/retirada: ${purchaseFlow.fulfillment === 'delivery' ? 'Entrega' : 'Retirada na loja'}`);
+  if (purchaseFlow.fulfillment === 'delivery') {
+    lines.push(`Endereco: ${formatAutoresponderDeliveryAddress(purchaseFlow.delivery_address)}`);
+  }
+  lines.push(`Observacoes: origem WhatsApp AutoResponder; sender ${sender || 'nao informado'}`);
+  return lines.join('\n');
+}
+
+function buildAutoresponderCustomerOrderHandoffReply() {
+  return 'Seu pedido foi separado para um atendente finalizar com voce. Vou pausar o bot por aqui para nossa equipe continuar o atendimento.';
+}
+
+function buildAutoresponderCustomerLinkedPurchaseFlow(purchaseFlow = {}, customerRecord = null) {
+  return {
+    ...purchaseFlow,
+    status: 'customer_record_ready',
+    customer_id: customerRecord?.id || purchaseFlow?.customer_id || null,
+    customer_record: customerRecord,
+    customer_linked_at: new Date().toISOString(),
+  };
+}
+
+async function pauseAutoresponderConversationForPurchase(sender, pauseMinutes = 60) {
+  const minutes = Number(pauseMinutes) > 0 ? Number(pauseMinutes) : 60;
+  await pool.query(
+    `INSERT INTO autoresponder_conversations
+      (sender, last_message_at, last_bot_reply_at, total_messages, paused_until, pause_reason)
+     VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'pedido_em_andamento')
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       last_bot_reply_at = CURRENT_TIMESTAMP,
+       total_messages = total_messages + 1,
+       paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+       pause_reason = 'pedido_em_andamento'`,
+    [sender, minutes, minutes]
+  );
+}
+
 function buildAutoresponderCustomerDataNeedsUpdateReply() {
   return 'Sem problema. Vou deixar marcado para um atendente ajustar seus dados antes de finalizar.';
 }
@@ -1766,9 +1841,122 @@ async function calculateAutoresponderMaxInstallment(priceCents, maxInstallments 
   }
 }
 
+function getAutoresponderRequestedInstallments(message) {
+  const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const patterns = [
+    /\bem\s+(\d{1,2})\s*x\b/,
+    /\b(\d{1,2})\s*x\b/,
+    /\b(\d{1,2})\s+vezes\b/,
+    /\bparcela(?:r|s)?\s+(?:em\s+)?(\d{1,2})\b/,
+    /\bdivide\s+(?:em\s+)?(\d{1,2})\b/,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const installments = Number(match[1]);
+    if (Number.isInteger(installments) && installments >= 1 && installments <= 12) return installments;
+  }
+  if (/\b(parcelamento|parcelas|parcelar|cartao|cartao de credito)\b/.test(text)) return 12;
+  return null;
+}
+
+function isAutoresponderInstallmentChoiceRequest(message) {
+  const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return /\b(quero|vou querer|escolho|pode ser|fecha|fechar|fechado|combinado|deixa|coloca|bota)\b/.test(text)
+    && /\b(\d{1,2}\s*x|\d{1,2}\s+vezes|parcelar|parcelas|cartao)\b/.test(text);
+}
+
+async function calculateAutoresponderInstallmentOptions(priceCents, maxInstallments = 12) {
+  const safePriceCents = Math.max(Math.round(Number(priceCents) || 0), 0);
+  const safeMaxInstallments = Math.min(Math.max(Number(maxInstallments) || 12, 1), 12);
+  if (safePriceCents <= 0) return [];
+
+  let feesByInstallment = new Map();
+  try {
+    const [rows] = await pool.query(
+      `SELECT installments, applied_fee_pct
+       FROM payment_fees
+       WHERE channel = ?
+         AND installments BETWEEN 2 AND ?
+       ORDER BY installments ASC, applied_fee_pct ASC`,
+      ['presencial', safeMaxInstallments]
+    );
+    feesByInstallment = rows.reduce((map, row) => {
+      const installments = Number(row.installments || 0);
+      if (!Number.isInteger(installments) || installments < 2) return map;
+      if (!map.has(installments)) map.set(installments, Number(row.applied_fee_pct || 0));
+      return map;
+    }, new Map());
+  } catch (err) {
+    console.warn('[autoresponder] installment table calculation skipped:', err.message);
+  }
+
+  return Array.from({ length: safeMaxInstallments }, (_, index) => {
+    const installments = index + 1;
+    const appliedFeePct = installments === 1 ? 0 : Number(feesByInstallment.get(installments) || 0);
+    const total = Math.round(safePriceCents * (1 + appliedFeePct / 100));
+    return {
+      installments,
+      value: Math.round(total / installments),
+      total,
+      appliedFeePct,
+    };
+  });
+}
+
 function formatAutoresponderInstallmentLine(plan) {
   if (!plan?.installments || !plan?.value) return '';
   return `Parcelamento: ate ${plan.installments}x de ${formatAutoresponderCurrency(plan.value / 100)}`;
+}
+
+function buildAutoresponderSelectedInstallmentPayment(requestedInstallments, installmentOptions, totalCents) {
+  const options = Array.isArray(installmentOptions) ? installmentOptions : [];
+  const selectedOption = options.find((option) => Number(option.installments) === Number(requestedInstallments));
+  if (!selectedOption) return null;
+  return {
+    method: 'credit',
+    installments: Number(selectedOption.installments),
+    value_cents: Number(selectedOption.value || 0),
+    total_cents: Number(selectedOption.total || 0),
+    base_total_cents: Number(totalCents || 0),
+    applied_fee_pct: Number(selectedOption.appliedFeePct || 0),
+    label: `Cartao em ${selectedOption.installments}x de ${formatAutoresponderCurrency(Number(selectedOption.value || 0) / 100)}`,
+  };
+}
+
+function buildAutoresponderSelectedInstallmentReply(selectedPayment) {
+  if (!selectedPayment) {
+    return 'Nao consegui confirmar essa parcela agora. Me diga novamente em quantas vezes voce quer fazer.';
+  }
+  return [
+    'Combinado, deixei o pagamento como:',
+    `Cartao em ${selectedPayment.installments}x de ${formatAutoresponderCurrency(Number(selectedPayment.value_cents || 0) / 100)}`,
+    `Total no cartao: ${formatAutoresponderCurrency(Number(selectedPayment.total_cents || 0) / 100)}`,
+    '',
+    'Agora posso seguir com o fechamento do pedido.',
+  ].join('\n');
+}
+
+function formatAutoresponderSpecificInstallmentReply(requestedInstallments, installmentOptions, totalCents) {
+  const options = Array.isArray(installmentOptions) ? installmentOptions : [];
+  const requestedOption = options.find((option) => Number(option.installments) === Number(requestedInstallments))
+    || options[options.length - 1];
+  const lines = [
+    'Parcelamento do carrinho',
+    `Total base: ${formatAutoresponderCurrency(Number(totalCents || 0) / 100)}`,
+  ];
+
+  if (requestedOption) {
+    lines.push('');
+    lines.push(`Em ${requestedOption.installments}x fica ${formatAutoresponderCurrency(requestedOption.value / 100)} = ${formatAutoresponderCurrency(requestedOption.total / 100)}`);
+  }
+
+  lines.push('');
+  lines.push('Tabela completa:');
+  options.forEach((option) => {
+    lines.push(`${option.installments}x de ${formatAutoresponderCurrency(option.value / 100)} = ${formatAutoresponderCurrency(option.total / 100)}`);
+  });
+  return lines.join('\n');
 }
 
 function getAutoresponderProductColor(product) {
@@ -3984,12 +4172,17 @@ fastify.route({
             nextPurchaseFlow,
             senderKey
           );
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataConfirmedReply(), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...nextPurchaseFlow,
-            status: 'customer_record_ready',
-            customer_record: customerRecord,
-          });
+          const linkedPurchaseFlow = buildAutoresponderCustomerLinkedPurchaseFlow(nextPurchaseFlow, customerRecord);
+          const attendantSummary = formatAutoresponderAttendantOrderSummary(linkedPurchaseFlow, senderKey);
+          const handoffPurchaseFlow = {
+            ...linkedPurchaseFlow,
+            attendant_summary: attendantSummary,
+            status: 'pedido_em_andamento',
+            handoff_created_at: new Date().toISOString(),
+          };
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(), settings, false);
+          const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
+          await saveAutoresponderPurchaseFlow(senderKey, handoffPurchaseFlow);
           await logAutoresponderReply({
             sender: senderKey,
             message,
@@ -3998,6 +4191,15 @@ fastify.route({
             matchedCount: customerRecord ? 1 : 0,
             matchedProducts: customerRecord ? [customerRecord] : [],
           });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_request',
+            replyText,
+            matchedCount: 1,
+            matchedProducts: [handoffPurchaseFlow],
+          });
+          await pauseAutoresponderConversationForPurchase(senderKey, pauseMinutes);
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
         }
@@ -4042,12 +4244,17 @@ fastify.route({
             nextPurchaseFlow,
             senderKey
           );
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDocumentSavedReply(), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...nextPurchaseFlow,
-            status: 'customer_record_ready',
-            customer_record: customerRecord,
-          });
+          const linkedPurchaseFlow = buildAutoresponderCustomerLinkedPurchaseFlow(nextPurchaseFlow, customerRecord);
+          const attendantSummary = formatAutoresponderAttendantOrderSummary(linkedPurchaseFlow, senderKey);
+          const handoffPurchaseFlow = {
+            ...linkedPurchaseFlow,
+            attendant_summary: attendantSummary,
+            status: 'pedido_em_andamento',
+            handoff_created_at: new Date().toISOString(),
+          };
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(), settings, false);
+          const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
+          await saveAutoresponderPurchaseFlow(senderKey, handoffPurchaseFlow);
           await logAutoresponderReply({
             sender: senderKey,
             message,
@@ -4056,9 +4263,66 @@ fastify.route({
             matchedCount: customerRecord ? 1 : 0,
             matchedProducts: customerRecord ? [customerRecord] : [],
           });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_request',
+            replyText,
+            matchedCount: 1,
+            matchedProducts: [handoffPurchaseFlow],
+          });
+          await pauseAutoresponderConversationForPurchase(senderKey, pauseMinutes);
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
         }
+      }
+
+      const requestedInstallments = getAutoresponderRequestedInstallments(message);
+      if (requestedInstallments && hasAutoresponderCartItems(purchaseFlow)) {
+        const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+        const installmentOptions = await calculateAutoresponderInstallmentOptions(cartTotals.total_cents, 12);
+        if (isAutoresponderInstallmentChoiceRequest(message)) {
+          const selectedPayment = buildAutoresponderSelectedInstallmentPayment(
+            requestedInstallments,
+            installmentOptions,
+            cartTotals.total_cents
+          );
+          const replyText = formatAutoresponderReply(
+            buildAutoresponderSelectedInstallmentReply(selectedPayment),
+            settings,
+            false
+          );
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            selected_payment: selectedPayment,
+            totals: cartTotals,
+          });
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_installment_selected',
+            replyText,
+            matchedCount: selectedPayment ? 1 : 0,
+            matchedProducts: selectedPayment ? [selectedPayment] : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+        const replyText = formatAutoresponderReply(
+          formatAutoresponderSpecificInstallmentReply(requestedInstallments, installmentOptions, cartTotals.total_cents),
+          settings,
+          false
+        );
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'purchase_specific_installment_quote',
+          replyText,
+          matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+          matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
       }
 
       const categoryContext = normalizeAutoresponderOptionsContext(
@@ -5947,8 +6211,8 @@ fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
   await pool.query(
     `INSERT INTO units (
        id, product_id, imei_1, imei_2, serial, status, \`condition\`,
-       internal_notes, cost_price, order_id, sale_id, reserved_at, sold_at
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       internal_notes, cost_price, deposit_id, location_id, order_id, sale_id, reserved_at, sold_at
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       id, u.product_id,
       u.imei_1 || null, u.imei_2 || null, u.serial || null,
@@ -5956,6 +6220,7 @@ fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
       u.condition || 'new',
       u.internal_notes || null,
       u.cost_price ?? null,
+      u.deposit_id || null, u.location_id || null,
       u.order_id || null, u.sale_id || null,
       u.reserved_at || null, u.sold_at || null,
     ]
@@ -5981,8 +6246,8 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
       await pool.query(
         `INSERT INTO units (
            id, product_id, imei_1, imei_2, serial, status, \`condition\`,
-           internal_notes, cost_price
-         ) VALUES (?,?,?,?,?,?,?,?,?)`,
+           internal_notes, cost_price, deposit_id, location_id
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
         [
           id, u.product_id,
           u.imei_1 || null, u.imei_2 || null, u.serial || null,
@@ -5990,6 +6255,8 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
           u.condition || 'new',
           u.internal_notes || null,
           u.cost_price ?? null,
+          u.deposit_id || null,
+          u.location_id || null,
         ]
       );
       productIds.add(u.product_id);
@@ -6008,7 +6275,7 @@ fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => 
   const allowed = [
     'imei_1', 'imei_2', 'serial', 'status', 'condition',
     'internal_notes', 'cost_price', 'order_id', 'sale_id',
-    'reserved_at', 'sold_at',
+    'reserved_at', 'sold_at', 'deposit_id', 'location_id',
   ];
   const sets = [];
   const vals = [];
@@ -7851,6 +8118,20 @@ async function addColumnIfMissing(table, column, definition) {
   }
 }
 
+async function addIndexIfMissing(table, indexName, column) {
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [table, indexName]
+  );
+  if (Number(row.cnt) === 0) {
+    await pool.query(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (\`${column}\`)`);
+    console.log(`[migration] Added index ${table}.${indexName}`);
+  } else {
+    console.log(`[migration] index ${table}.${indexName} already exists - skip`);
+  }
+}
+
 async function seedAutoresponderRuleTemplates() {
   for (const template of AUTORESPONDER_RULE_TEMPLATES) {
     await pool.query(
@@ -8102,6 +8383,8 @@ async function runMigrations() {
       \`condition\`     VARCHAR(20)  NOT NULL DEFAULT 'new',
       internal_notes  TEXT NULL,
       cost_price      INT NULL,
+      deposit_id      CHAR(36) NULL,
+      location_id     CHAR(36) NULL,
       order_id        CHAR(36) NULL,
       sale_id         CHAR(36) NULL,
       reserved_at     TIMESTAMP NULL,
@@ -8112,9 +8395,15 @@ async function runMigrations() {
       INDEX idx_units_imei_1     (imei_1),
       INDEX idx_units_imei_2     (imei_2),
       INDEX idx_units_serial     (serial),
-      INDEX idx_units_status     (status)
+      INDEX idx_units_status     (status),
+      INDEX idx_units_deposit_id (deposit_id),
+      INDEX idx_units_location_id (location_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('units', 'deposit_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('units', 'location_id', 'CHAR(36) NULL');
+  await addIndexIfMissing('units', 'idx_units_deposit_id', 'deposit_id');
+  await addIndexIfMissing('units', 'idx_units_location_id', 'location_id');
   console.log('[migration] units table: OK');
 
   // Stock sync de units é feito em app-level (helper syncProductStock chamado pelos
