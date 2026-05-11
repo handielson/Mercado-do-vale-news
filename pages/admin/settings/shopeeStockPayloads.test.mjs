@@ -48,4 +48,15 @@ assert.deepEqual(
   ['WH-1', 'WH-2']
 );
 
+// shop/get_warehouse_detail returns response as a top-level array
+assert.deepEqual(
+  extractShopeeLocationIds({
+    response: [
+      { warehouse_id: 6, location_id: 'BRZ', address_id: 123 },
+      { warehouse_id: 7, location_id: 'BRA', address_id: 124 },
+    ],
+  }),
+  ['BRZ', 'BRA']
+);
+
 console.log('shopeeStockPayloads.test.mjs: ok');

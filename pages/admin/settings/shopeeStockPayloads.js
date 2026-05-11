@@ -100,6 +100,8 @@ export function extractShopeeLocationIds(payload) {
     payload?.response?.warehouse_list,
     payload?.response?.location_list,
     payload?.response?.list,
+    // /api/v2/shop/get_warehouse_detail returns the array directly under "response"
+    Array.isArray(payload?.response) ? payload.response : null,
   ];
 
   const locationIds = [];

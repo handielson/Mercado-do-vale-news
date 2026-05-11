@@ -224,6 +224,12 @@ export default async function handler(req: any, res: any) {
             const data = await shopeeGet('/api/v2/inventory/get_warehouse_list', creds, '');
             return res.status(200).json(data);
         }
+        if (action === 'warehouse_detail') {
+            const warehouseTypeRaw = Number(req.query.warehouse_type ?? 1);
+            const warehouseType = Number.isFinite(warehouseTypeRaw) && warehouseTypeRaw > 0 ? warehouseTypeRaw : 1;
+            const data = await shopeeGet('/api/v2/shop/get_warehouse_detail', creds, `&warehouse_type=${warehouseType}`);
+            return res.status(200).json(data);
+        }
         if (action === 'warehouse_locations') {
             const merchantId = String(req.query.merchant_id || '').trim();
             const extraParams = merchantId ? `&merchant_id=${encodeURIComponent(merchantId)}` : '';

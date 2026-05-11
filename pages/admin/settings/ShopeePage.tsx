@@ -1878,6 +1878,7 @@ export function ShopeeSyncModal({
         }
 
         for (const probe of [
+            { action: 'warehouse_detail', label: 'stock_context:warehouse_detail' },
             { action: 'warehouse_list', label: 'stock_context:warehouse_list' },
             { action: 'warehouse_locations', label: 'stock_context:warehouse_locations' },
         ]) {
