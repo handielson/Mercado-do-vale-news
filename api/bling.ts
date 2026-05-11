@@ -601,24 +601,46 @@ export default async function handler(req: any, res: any) {
         }
     }
 
-    // ─── IMAGE-PROXY: baixa a imagem do Bling ignorando CORS ──────────────
+    // ─── IMAGE-PROXY: baixa a imagem de hosts confiaveis ignorando CORS ────
     if (resource === 'image-proxy') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
         const { url } = req.query;
         if (!url || typeof url !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
-        
+
         try {
             const parsedUrl = new URL(url);
-            if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'orgbling.s3.amazonaws.com') {
-                return res.status(400).json({ error: 'Unsupported image host' });
+            if (parsedUrl.protocol !== 'https:') {
+                return res.status(400).json({ error: 'Only https URLs are supported' });
+            }
+
+            const allowedExactHosts = new Set<string>([
+                'orgbling.s3.amazonaws.com',
+            ]);
+            const allowedSuffixes: string[] = [
+                'xiaomipetrolina.com.br',
+                'mercadodovale.com.br',
+                'supabase.co',
+            ];
+
+            const vpsBase = process.env.VITE_VPS_BASE_URL || process.env.VPS_BASE_URL;
+            if (vpsBase) {
+                try { allowedExactHosts.add(new URL(vpsBase).hostname); } catch { /* ignore */ }
+            }
+
+            const host = parsedUrl.hostname.toLowerCase();
+            const isAllowed = allowedExactHosts.has(host)
+                || allowedSuffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+
+            if (!isAllowed) {
+                return res.status(400).json({ error: 'Unsupported image host', host });
             }
 
             const imgRes = await fetch(url);
             if (!imgRes.ok) return res.status(imgRes.status).json({ error: 'Failed to fetch image from URL' });
-            
+
             const arrayBuffer = await imgRes.arrayBuffer();
             const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-            
+
             res.setHeader('Content-Type', contentType);
             res.setHeader('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable');
             return res.status(200).send(Buffer.from(arrayBuffer));

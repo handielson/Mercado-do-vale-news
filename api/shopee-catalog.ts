@@ -195,6 +195,27 @@ export default async function handler(req: any, res: any) {
             const data = await shopeeGet('/api/v2/product/get_attribute_tree', creds, `&category_id_list=${category_id}&language=pt-BR`);
             return res.status(200).json(data);
         }
+        if (action === 'search_attribute_values') {
+            const attributeId = Number(req.query.attribute_id);
+            if (!Number.isFinite(attributeId) || attributeId <= 0) {
+                return res.status(400).json({ error: 'attribute_id required' });
+            }
+            const cursorRaw = Number(req.query.cursor ?? 0);
+            const cursor = Number.isFinite(cursorRaw) && cursorRaw >= 0 ? cursorRaw : 0;
+            const limitRaw = Number(req.query.limit ?? 100);
+            const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, limitRaw)) : 100;
+            const valueName = String(req.query.value_name ?? '').trim();
+
+            const params = new URLSearchParams({
+                attribute_id: String(attributeId),
+                cursor: String(cursor),
+                limit: String(limit),
+            });
+            if (valueName) params.set('value_name', valueName);
+
+            const data = await shopeeGet('/api/v2/product/search_attribute_value_list', creds, `&${params}`);
+            return res.status(200).json(data);
+        }
         if (action === 'shop_info') {
             const data = await shopeeGet('/api/v2/shop/get_shop_info', creds, '');
             return res.status(200).json(data);

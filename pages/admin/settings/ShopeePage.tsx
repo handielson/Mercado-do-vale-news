@@ -134,9 +134,10 @@ type ShopeeAttributeField = {
     attribute_id: number;
     label: string;
     mandatory: boolean;
-    input_kind: 'select' | 'multiselect' | 'text';
+    input_kind: 'select' | 'multiselect' | 'text' | 'searchable';
     attribute_value_list: ShopeeAttributeOption[];
     raw_input_type?: string | number;
+    support_search_value?: boolean;
 };
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -223,15 +224,27 @@ function normalizeShopeeAttributes(data: any): ShopeeAttributeField[] {
                 attr?.is_multiple === true ||
                 attr?.multiple_enter === true;
 
+            const supportSearchValue = Boolean(attr?.attribute_info?.support_search_value);
+
+            let inputKind: ShopeeAttributeField['input_kind'];
+            if (supportSearchValue) {
+                inputKind = 'searchable';
+            } else if (options.length > 0) {
+                inputKind = allowsMultiple ? 'multiselect' : 'select';
+            } else {
+                inputKind = 'text';
+            }
+
             return {
                 attribute_id: Number(attr?.attribute_id) || 0,
                 label:
                     translateShopeeText(attr, ['display_attribute_name', 'name', 'original_attribute_name']) ||
                     `Atributo ${attr?.attribute_id || ''}`.trim(),
                 mandatory: Boolean(attr?.mandatory ?? attr?.is_mandatory),
-                input_kind: options.length > 0 ? (allowsMultiple ? 'multiselect' : 'select') : 'text',
+                input_kind: inputKind,
                 attribute_value_list: options,
                 raw_input_type: rawInputType,
+                support_search_value: supportSearchValue,
             } satisfies ShopeeAttributeField;
         })
         .filter((attr: ShopeeAttributeField) => Number.isFinite(attr.attribute_id) && attr.attribute_id > 0);
@@ -242,6 +255,132 @@ function hasFilledAttributeValue(value: string | string[] | undefined): boolean 
         return value.some((entry) => String(entry || '').trim().length > 0);
     }
     return String(value || '').trim().length > 0;
+}
+
+type SearchableAttributeComboboxProps = {
+    attributeId: number;
+    value: string;
+    placeholder: string;
+    onChange: (next: string) => void;
+};
+
+function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange }: SearchableAttributeComboboxProps) {
+    const [query, setQuery] = useState<string>(value || '');
+    const [options, setOptions] = useState<{ value_id: number; value_name: string }[]>([]);
+    const [loading, setLoading] = useState<boolean>(false);
+    const [open, setOpen] = useState<boolean>(false);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Sincroniza o input quando o valor externo muda (ex.: reset entre produtos)
+    useEffect(() => {
+        setQuery(value || '');
+    }, [value]);
+
+    // Fecha o dropdown ao clicar fora
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const fetchOptions = useCallback(async (term: string) => {
+        if (!attributeId) return;
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({
+                attribute_id: String(attributeId),
+                cursor: '0',
+                limit: '100',
+            });
+            const trimmed = term.trim();
+            if (trimmed) params.set('value_name', trimmed);
+            const res = await fetch(`/api/shopee-catalog?action=search_attribute_values&${params}`);
+            const data = await res.json();
+            if (data?.error) {
+                console.error('[ShopeePage] search_attribute_values error', data);
+                setOptions([]);
+            } else {
+                const list = Array.isArray(data?.response?.value_list) ? data.response.value_list : [];
+                setOptions(list.map((entry: any) => ({
+                    value_id: Number(entry?.value_id) || 0,
+                    value_name: String(entry?.value_name || '').trim(),
+                })).filter((entry: { value_name: string }) => entry.value_name));
+            }
+        } catch (err) {
+            console.error('[ShopeePage] search_attribute_values fetch failed', err);
+            setOptions([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [attributeId]);
+
+    const scheduleFetch = useCallback((term: string) => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => fetchOptions(term), 300);
+    }, [fetchOptions]);
+
+    const handleFocus = () => {
+        setOpen(true);
+        if (options.length === 0 && !loading) {
+            fetchOptions(query);
+        }
+    };
+
+    const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const next = event.target.value;
+        setQuery(next);
+        onChange(next);
+        setOpen(true);
+        scheduleFetch(next);
+    };
+
+    const handleSelect = (optionName: string) => {
+        setQuery(optionName);
+        onChange(optionName);
+        setOpen(false);
+    };
+
+    return (
+        <div ref={containerRef} className="relative">
+            <input
+                type="text"
+                value={query}
+                placeholder={placeholder}
+                onChange={handleInputChange}
+                onFocus={handleFocus}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+            />
+            {open && (
+                <div className="absolute z-20 mt-1 w-full max-h-60 overflow-auto bg-white border border-slate-200 rounded-xl shadow-lg">
+                    {loading && (
+                        <div className="px-3 py-2 text-xs text-slate-500 flex items-center gap-2">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Buscando...
+                        </div>
+                    )}
+                    {!loading && options.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-slate-400">
+                            {query.trim() ? 'Nenhuma opcao encontrada. O texto sera enviado como digitado.' : 'Digite para buscar opcoes...'}
+                        </div>
+                    )}
+                    {!loading && options.map((option, idx) => (
+                        <button
+                            type="button"
+                            key={`${option.value_id}-${option.value_name}-${idx}`}
+                            onClick={() => handleSelect(option.value_name)}
+                            className="block w-full text-left px-3 py-2 text-sm hover:bg-orange-50"
+                        >
+                            {option.value_name}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 }
 
 async function fetchJsonStrict(url: string, init?: RequestInit): Promise<any> {
@@ -324,7 +463,14 @@ async function readRemoteUrlAsDataUrl(url: string): Promise<string> {
         : url;
     const res = await fetch(targetUrl);
     if (!res.ok) {
-        throw new Error(`Falha ao baixar midia do sistema (${res.status}).`);
+        let detail = '';
+        try {
+            const body = await res.text();
+            detail = body.slice(0, 200);
+        } catch { /* ignore */ }
+        console.error('[ShopeePage] readRemoteUrlAsDataUrl failed', { url, targetUrl, status: res.status, detail });
+        const suffix = detail ? ` - ${detail}` : '';
+        throw new Error(`Falha ao baixar midia do sistema (${res.status})${suffix}. URL: ${url}`);
     }
     const blob = await res.blob();
     const extFromType = blob.type.split('/')[1] || 'bin';
@@ -1531,6 +1677,18 @@ export function ShopeeSyncModal({
 
     const renderAttributeField = (attr: ShopeeAttributeField) => {
         const currentValue = attrValues[attr.attribute_id];
+
+        if (attr.input_kind === 'searchable') {
+            const flatValue = Array.isArray(currentValue) ? currentValue[0] || '' : currentValue || '';
+            return (
+                <SearchableAttributeCombobox
+                    attributeId={attr.attribute_id}
+                    value={flatValue}
+                    placeholder={attr.label}
+                    onChange={(next) => updateAttributeValue(attr.attribute_id, next)}
+                />
+            );
+        }
 
         if (attr.input_kind === 'multiselect') {
             return (
