@@ -1467,6 +1467,11 @@ export function ShopeeSyncModal({
     const packageLength = Number(product.dimensions?.depth_cm ?? product.shipping_length ?? 0) || 0;
     const packageWidth = Number(product.dimensions?.width_cm ?? product.shipping_width ?? 0) || 0;
     const packageHeight = Number(product.dimensions?.height_cm ?? product.shipping_height ?? 0) || 0;
+    const packageDimension = {
+        package_length: Math.max(1, Math.round(packageLength || 20)),
+        package_width: Math.max(1, Math.round(packageWidth || 15)),
+        package_height: Math.max(1, Math.round(packageHeight || 10)),
+    };
     const defaultVideoUrl = (() => {
         if (typeof product.video_url === 'string' && product.video_url.trim()) {
             return product.video_url.trim();
@@ -1928,7 +1933,7 @@ export function ShopeeSyncModal({
                 video_count: Array.isArray(payload?.video_info?.video_id_list) ? payload.video_info.video_id_list.length : 0,
                 attribute_ids: Array.isArray(payload.attribute_list) ? payload.attribute_list.map((attr: any) => attr.attribute_id) : [],
                 brand: payload.brand,
-                logistics_info: payload.logistics_info,
+                logistic_info: payload.logistic_info,
                 stock_fields: variant.stockFields,
                 payload,
             });
@@ -2060,12 +2065,13 @@ export function ShopeeSyncModal({
                 item_name: cleanItemName,
                 category_id: selectedCat.category_id,
                 attribute_list: attributeList,
-                logistics_info: [{ logistic_id: 80031, enabled: true }],
+                logistic_info: [{ logistic_id: 80031, enabled: true }],
                 image: {
                     image_id_list: imageIdList
                 },
                 ...(videoIdList.length > 0 ? { video_info: { video_id_list: videoIdList } } : {}),
                 weight: weightValue,
+                dimension: packageDimension,
                 brand: {
                     brand_id: 0,
                     original_brand_name: (product.brand || 'NoBrand').trim() || 'NoBrand',
@@ -3318,5 +3324,4 @@ function ExpandedItemPanel({
         </tr>
     );
 }
-
 
