@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode, Boxes, Printer } from 'lucide-react';
 
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -30,6 +30,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/products', icon: <Package size={18} />, label: 'Produtos', keywords: 'catalogo itens mercadoria' },
         { to: '/admin/products/labels', icon: <Barcode size={18} />, label: 'Etiquetas', keywords: 'imprimir etiqueta codigo barras ean sku' },
         { to: '/admin/inventory', icon: <ClipboardList size={18} />, label: 'Estoque', keywords: 'quantidade inventario' },
+        { to: '/admin/inventory/locations', icon: <Boxes size={18} />, label: 'Locais de Estoque', keywords: 'depositos locais prateleira caixa balcao almoxarifado' },
+        { to: '/admin/inventory/print-list', icon: <Printer size={18} />, label: 'Lista de Impressao', keywords: 'separacao caixa imprimir ean sku conferencia' },
         { to: '/admin/customers', icon: <Users size={18} />, label: 'Clientes', keywords: 'usuarios compradores' },
         { to: '/admin/team', icon: <Users size={18} />, label: 'Equipe', keywords: 'funcionarios vendedores' },
       ]

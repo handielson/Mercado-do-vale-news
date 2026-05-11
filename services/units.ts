@@ -23,6 +23,8 @@ function transformFromDB(row: any): Unit {
         status: row.status as UnitStatus,
         internal_notes: row.internal_notes,
         cost_price: row.cost_price ?? undefined,
+        deposit_id: row.deposit_id ?? undefined,
+        location_id: row.location_id ?? undefined,
         order_id: row.order_id ?? undefined,
         sale_id: row.sale_id ?? undefined,
         reserved_at: row.reserved_at ?? undefined,
@@ -41,6 +43,8 @@ function toPayload(input: Partial<UnitInput>): any {
     if (input.condition !== undefined) out.condition = input.condition;
     if (input.status !== undefined) out.status = input.status;
     if (input.cost_price !== undefined) out.cost_price = input.cost_price;
+    if (input.deposit_id !== undefined) out.deposit_id = input.deposit_id || null;
+    if (input.location_id !== undefined) out.location_id = input.location_id || null;
     if (input.internal_notes !== undefined) out.internal_notes = input.internal_notes || null;
     return out;
 }

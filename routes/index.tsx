@@ -111,6 +111,8 @@ const ProductDetailPage = lazy(() => import('../pages/admin/products/ProductDeta
 const ProductCombosPage = lazy(() => import('../pages/admin/products/ProductCombosPage').then(module => ({ default: module.ProductCombosPage })));
 const ProductImageBankPage = lazy(() => import('../pages/admin/products/ProductImageBankPage').then(module => ({ default: module.ProductImageBankPage })));
 const InventoryPage = lazy(() => import('../pages/admin/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })));
+const StockLocationsPage = lazy(() => import('../pages/admin/inventory/StockLocationsPage').then(module => ({ default: module.StockLocationsPage })));
+const InventoryPrintListPage = lazy(() => import('../pages/admin/inventory/InventoryPrintListPage').then(module => ({ default: module.InventoryPrintListPage })));
 const BrandsPage = lazy(() => import('../pages/admin/settings/BrandsPage').then(module => ({ default: module.BrandsPage })));
 const ModelsPage = lazy(() => import('../pages/admin/settings/ModelsPage').then(module => ({ default: module.ModelsPage })));
 const ColorsPage = lazy(() => import('../pages/admin/settings/ColorsPage').then(module => ({ default: module.ColorsPage })));
@@ -317,6 +319,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><InventoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/inventory/locations",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><StockLocationsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/inventory/print-list",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><InventoryPrintListPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

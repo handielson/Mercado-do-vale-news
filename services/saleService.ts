@@ -18,6 +18,114 @@ import { benefitService } from './benefitService';
 import { syncStockToBling } from './blingService';
 import { cancelReferralReward } from './cashbackService';
 import { unitService } from './units';
+import { stockLocationService } from './stockLocationService';
+
+const shouldFallbackToLegacyStock = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String((error as any)?.message || error || '');
+    const lowerMessage = message.toLowerCase();
+
+    return [
+        'decrement_product_stock_by_priority',
+        'could not find the function',
+        'function',
+        'does not exist',
+        'schema cache',
+        'pgrst202',
+        'stock_deposits',
+        'stock_locations',
+        'product_stock_locations',
+        'stock_location_movements',
+    ].some(fragment => lowerMessage.includes(fragment));
+};
+
+const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<void> => {
+    if (!item.product_id) return;
+
+    try {
+        await stockLocationService.decrementStockByPriority({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            reason: `Venda PDV #${saleId}`,
+            reference_type: 'sale',
+            reference_id: saleId,
+            notes: 'Baixa automatica por prioridade: Loja Principal antes dos demais depositos.',
+        });
+        return;
+    } catch (priorityError) {
+        if (!shouldFallbackToLegacyStock(priorityError)) {
+            console.error(`[saleService] Falha na baixa por prioridade do produto ${item.product_id}:`, priorityError);
+            return;
+        }
+
+        console.warn(
+            `[saleService] Baixa por prioridade indisponivel; usando decrement_stock legado para produto ${item.product_id}.`,
+            priorityError
+        );
+    }
+
+    const { error: stockError } = await supabase.rpc('decrement_stock', {
+        p_product_id: item.product_id,
+        p_quantity: item.quantity
+    });
+    if (stockError) {
+        console.error(`Falha ao atualizar estoque do produto ${item.product_id}:`, stockError);
+    }
+};
+
+type SaleStockRestoreItem = {
+    product_id: string | null;
+    quantity: number;
+};
+
+const shouldFallbackToLegacyStockRestore = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String((error as any)?.message || error || '');
+    const lowerMessage = message.toLowerCase();
+
+    return shouldFallbackToLegacyStock(error) || [
+        'restore_product_stock_from_sale_movements',
+        'sale_location_movements_not_found',
+    ].some(fragment => lowerMessage.includes(fragment));
+};
+
+const restoreSaleStockForItems = async (
+    saleId: string,
+    items: SaleStockRestoreItem[] | null | undefined,
+    reason: string
+): Promise<void> => {
+    try {
+        await stockLocationService.restoreSaleStockByLocation({
+            sale_id: saleId,
+            reason,
+            notes: 'Devolucao automatica pelo fluxo de venda PDV.',
+        });
+        return;
+    } catch (restoreError) {
+        if (!shouldFallbackToLegacyStockRestore(restoreError)) {
+            console.error(`[saleService] Falha ao restaurar estoque por local da venda ${saleId}:`, restoreError);
+            return;
+        }
+
+        console.warn(
+            `[saleService] Restauracao por local indisponivel; usando increment_stock legado para venda ${saleId}.`,
+            restoreError
+        );
+    }
+
+    if (!items) return;
+
+    for (const item of items) {
+        if (!item.product_id) continue;
+
+        const { error: stockError } = await supabase.rpc('increment_stock', {
+            p_product_id: item.product_id,
+            p_quantity: item.quantity
+        });
+
+        if (stockError) {
+            console.error(`Falha ao restaurar estoque do produto ${item.product_id}:`, stockError);
+        }
+    }
+};
 
 /**
  * Create a new sale
@@ -101,18 +209,12 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             }
         }
 
-        // Estoque manual (não-serializado) decrementa via RPC do Supabase
+        // Estoque manual (não-serializado) baixa primeiro da Loja Principal, depois dos demais depositos.
         const itemsWithInventory = saleInput.items.filter(
             item => item.track_inventory && item.product_id && !(item as any).serialized_unit?.unitId
         );
         for (const item of itemsWithInventory) {
-            const { error: stockError } = await supabase.rpc('decrement_stock', {
-                p_product_id: item.product_id,
-                p_quantity: item.quantity
-            });
-            if (stockError) {
-                console.error(`Falha ao atualizar estoque do produto ${item.product_id}:`, stockError);
-            }
+            await decrementSaleStockByPriority(item, sale.id);
         }
 
         // Sync bidirecional: deduzir estoque no Bling (fire-and-forget, não bloqueia a venda)
@@ -312,15 +414,7 @@ export const cancelSale = async (id: string): Promise<void> => {
 
         if (error) throw error;
 
-        // Restore stock for each item
-        if (items) {
-            for (const item of items) {
-                await supabase.rpc('increment_stock', {
-                    p_product_id: item.product_id,
-                    p_quantity: item.quantity
-                });
-            }
-        }
+        await restoreSaleStockForItems(id, items, `Cancelamento PDV #${id}`);
 
         // Cancel associated delivery credits
         await supabase
@@ -354,15 +448,7 @@ export const refundSale = async (id: string): Promise<void> => {
 
         if (error) throw error;
 
-        // Restore stock for each item
-        if (items) {
-            for (const item of items) {
-                await supabase.rpc('increment_stock', {
-                    p_product_id: item.product_id,
-                    p_quantity: item.quantity
-                });
-            }
-        }
+        await restoreSaleStockForItems(id, items, `Estorno PDV #${id}`);
 
         // Cancel associated delivery credits
         await supabase
@@ -389,14 +475,7 @@ export const deleteSale = async (id: string): Promise<void> => {
             .select('product_id, quantity')
             .eq('sale_id', id);
 
-        if (items) {
-            for (const item of items) {
-                await supabase.rpc('increment_stock', {
-                    p_product_id: item.product_id,
-                    p_quantity: item.quantity
-                });
-            }
-        }
+        await restoreSaleStockForItems(id, items, `Exclusao PDV #${id}`);
 
         // Delete sale (cascade will delete sale_items and delivery_credits)
         const { error } = await supabase

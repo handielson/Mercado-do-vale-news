@@ -27,6 +27,10 @@ export interface Unit {
     // Financial (optional - specific cost for this unit)
     cost_price?: number;               // Custo de aquisição (centavos)
 
+    // Physical stock location
+    deposit_id?: string | null;
+    location_id?: string | null;
+
     // Notes
     internal_notes?: string;           // Notas internas sobre esta unidade
 
@@ -55,5 +59,7 @@ export interface UnitInput {
     battery_health?: number;
     status: UnitStatus;
     cost_price?: number;
+    deposit_id?: string | null;
+    location_id?: string | null;
     internal_notes?: string;           // Notas internas sobre esta unidade
 }
