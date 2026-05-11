@@ -1909,6 +1909,46 @@ export function ShopeeSyncModal({
         return resolved;
     };
 
+    const collectShopeeLogisticInfo = async () => {
+        try {
+            const data = await getShopeeDebug('logistics_channel_list', 'logistics_context:channel_list');
+            const channelList =
+                data?.response?.logistics_channel_list ||
+                data?.response?.logistic_channel_list ||
+                data?.response?.channel_list ||
+                data?.logistics_channel_list ||
+                data?.logistic_channel_list ||
+                [];
+
+            const logisticInfo = (Array.isArray(channelList) ? channelList : [])
+                .filter((channel: any) => channel?.enabled === true || channel?.enabled === 1 || channel?.enabled === 'true')
+                .map((channel: any) => {
+                    const logisticId = Number(
+                        channel?.logistic_id ??
+                        channel?.logistics_channel_id ??
+                        channel?.logistic_channel_id ??
+                        channel?.channel_id
+                    );
+
+                    if (!Number.isFinite(logisticId) || logisticId <= 0) return null;
+                    return { logistic_id: logisticId, enabled: true };
+                })
+                .filter(Boolean);
+
+            pushSyncDebug('logistics_context:summary', {
+                channel_count: Array.isArray(channelList) ? channelList.length : 0,
+                enabled_channel_count: logisticInfo.length,
+                logistic_info: logisticInfo,
+            });
+
+            if (logisticInfo.length > 0) return logisticInfo;
+        } catch (error: any) {
+            pushSyncDebug('logistics_context:channel_list:error', error?.message || error);
+        }
+
+        return [{ logistic_id: 80031, enabled: true }];
+    };
+
     const publishShopeeItemWithStockFallback = async (basePayload: Record<string, any>, parsedStockValue: number) => {
         const locationIds = await collectShopeeStockContext();
         const variants = buildShopeeAddItemStockVariants({
@@ -2059,13 +2099,14 @@ export function ShopeeSyncModal({
                 }
             }
 
+            const logisticInfo = await collectShopeeLogisticInfo();
             const basePayload = {
                 original_price: parsedPrice,
                 description: cleanDescription,
                 item_name: cleanItemName,
                 category_id: selectedCat.category_id,
                 attribute_list: attributeList,
-                logistic_info: [{ logistic_id: 80031, enabled: true }],
+                logistic_info: logisticInfo,
                 image: {
                     image_id_list: imageIdList
                 },
@@ -3324,4 +3365,3 @@ function ExpandedItemPanel({
         </tr>
     );
 }
-

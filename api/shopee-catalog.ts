@@ -220,6 +220,10 @@ export default async function handler(req: any, res: any) {
             const data = await shopeeGet('/api/v2/shop/get_shop_info', creds, '');
             return res.status(200).json(data);
         }
+        if (action === 'logistics_channel_list') {
+            const data = await shopeeGet('/api/v2/logistics/get_channel_list', creds, '');
+            return res.status(200).json(data);
+        }
         if (action === 'warehouse_list') {
             const data = await shopeeGet('/api/v2/inventory/get_warehouse_list', creds, '');
             return res.status(200).json(data);

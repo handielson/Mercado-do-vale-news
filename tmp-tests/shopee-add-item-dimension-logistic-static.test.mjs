@@ -11,8 +11,27 @@ assert.match(
 
 assert.match(
   source,
-  /logistic_info: \[\{ logistic_id: 80031, enabled: true \}\]/,
+  /const logisticInfo = await collectShopeeLogisticInfo\(\);[\s\S]*logistic_info: logisticInfo/,
   'Shopee add_item payload must use logistic_info singular, not logistics_info'
+);
+
+assert.match(
+  source,
+  /getShopeeDebug\('logistics_channel_list', 'logistics_context:channel_list'\)/,
+  'Shopee add_item must discover enabled logistics channels from Shopee before publishing'
+);
+
+assert.match(
+  source,
+  /enabled_channel_count: logisticInfo\.length/,
+  'Shopee add_item must log how many enabled logistics channels were found'
+);
+
+const apiSource = fs.readFileSync('api/shopee-catalog.ts', 'utf8');
+assert.match(
+  apiSource,
+  /action === 'logistics_channel_list'[\s\S]*\/api\/v2\/logistics\/get_channel_list/,
+  'Shopee catalog proxy must expose logistics/get_channel_list'
 );
 
 assert.match(
