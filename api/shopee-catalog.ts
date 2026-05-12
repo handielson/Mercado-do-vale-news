@@ -73,6 +73,29 @@ function parseDataUrl(dataUrl: string): { mimeType: string; buffer: Buffer } | n
     };
 }
 
+function md5Hex(buffer: Buffer): string {
+    return crypto.createHash('md5').update(buffer).digest('hex');
+}
+
+function getShopeeVideoUploadId(data: any): string {
+    return firstString(
+        data?.response?.video_upload_id,
+        data?.response?.upload_id,
+        data?.video_upload_id,
+        data?.upload_id,
+    );
+}
+
+function getShopeeVideoUploadStatus(data: any): string {
+    return String(
+        data?.response?.status ||
+        data?.response?.video_upload_result?.status ||
+        data?.response?.video_info?.status ||
+        data?.status ||
+        ''
+    ).toLowerCase();
+}
+
 async function resolveMediaInput(dataUrl: string, remoteUrl: string, expectedPrefix: 'image/' | 'video/'): Promise<{ mimeType: string; buffer: Buffer; fileNameHint: string } | null> {
     if (dataUrl) {
         const parsed = parseDataUrl(dataUrl);
@@ -535,45 +558,51 @@ export default async function handler(req: any, res: any) {
             const ext = parsed.mimeType.split('/')[1] || 'mp4';
             const fileName = String(req.body?.file_name || parsed.fileNameHint || `video_${Date.now()}.${ext}`);
 
-            const formData = new FormData();
-            formData.append('video', new Blob([new Uint8Array(parsed.buffer)], { type: parsed.mimeType }), fileName);
-
-            const upload = await shopeeMultipart('/api/v2/media_space/upload_video', creds, formData);
-            if (upload?.error && upload.error !== '') {
-                return res.status(200).json(upload);
+            const startedAt = Date.now();
+            const init = await shopeePost('/api/v2/media_space/init_video_upload', creds, {
+                file_md5: md5Hex(parsed.buffer),
+                file_size: parsed.buffer.length,
+            });
+            if (init?.error && init.error !== '') {
+                return res.status(200).json(init);
             }
 
-            const uploadId = firstString(
-                upload?.response?.video_upload_id,
-                upload?.response?.video_upload_id_list?.[0],
-                upload?.response?.upload_id,
-                upload?.response?.upload_id_list?.[0],
-            );
-
-            const directVideoId = firstString(
-                upload?.response?.video_id,
-                upload?.response?.video_info?.video_id,
-                upload?.response?.video_info_list?.[0]?.video_id,
-                upload?.response?.video_list?.[0]?.video_id,
-            );
-
-            if (directVideoId) {
-                return res.status(200).json({
-                    error: '',
-                    message: '',
-                    response: {
-                        video_id: directVideoId,
-                        ...(uploadId ? { video_upload_id: uploadId } : {}),
-                    },
-                });
-            }
-
+            const uploadId = getShopeeVideoUploadId(init);
             if (!uploadId) {
                 return res.status(200).json({
                     error: 'video_upload_id_not_found',
-                    message: 'Shopee não retornou video_upload_id no upload de vídeo',
-                    response: upload?.response,
+                    message: 'Shopee nao retornou video_upload_id ao iniciar o upload de video',
+                    response: init?.response,
                 });
+            }
+
+            const maxPartSize = 4 * 1024 * 1024;
+            const partSeqList: number[] = [];
+            for (let offset = 0, partSeq = 0; offset < parsed.buffer.length; offset += maxPartSize, partSeq += 1) {
+                const partBuffer = parsed.buffer.subarray(offset, Math.min(offset + maxPartSize, parsed.buffer.length));
+                partSeqList.push(partSeq);
+
+                const formData = new FormData();
+                formData.append('video_upload_id', uploadId);
+                formData.append('part_seq', String(partSeq));
+                formData.append('content_md5', md5Hex(partBuffer));
+                formData.append('part_content', new Blob([new Uint8Array(partBuffer)], { type: 'application/octet-stream' }), `${fileName}.part${partSeq}`);
+
+                const part = await shopeeMultipart('/api/v2/media_space/upload_video_part', creds, formData);
+                if (part?.error && part.error !== '') {
+                    return res.status(200).json(part);
+                }
+            }
+
+            const complete = await shopeePost('/api/v2/media_space/complete_video_upload', creds, {
+                video_upload_id: uploadId,
+                part_seq_list: partSeqList,
+                report_data: {
+                    upload_cost: Math.max(1, Date.now() - startedAt),
+                },
+            });
+            if (complete?.error && complete.error !== '') {
+                return res.status(200).json(complete);
             }
 
             const maxAttempts = 12;
@@ -585,20 +614,21 @@ export default async function handler(req: any, res: any) {
                     `&${new URLSearchParams({ video_upload_id: uploadId }).toString()}`,
                 );
 
-                const resolvedVideoId = firstString(
-                    result?.response?.video_id,
-                    result?.response?.video_info?.video_id,
-                    result?.response?.video_info_list?.[0]?.video_id,
-                    result?.response?.video_list?.[0]?.video_id,
-                );
-
-                if (resolvedVideoId) {
+                const status = getShopeeVideoUploadStatus(result);
+                if (
+                    status === 'success' ||
+                    status === 'succeeded' ||
+                    status === 'complete' ||
+                    status === 'completed' ||
+                    result?.response?.video_info
+                ) {
                     return res.status(200).json({
                         error: '',
                         message: '',
                         response: {
-                            video_id: resolvedVideoId,
                             video_upload_id: uploadId,
+                            video_info: result?.response?.video_info || null,
+                            status: result?.response?.status || status,
                         },
                     });
                 }
@@ -614,7 +644,7 @@ export default async function handler(req: any, res: any) {
 
             return res.status(408).json({
                 error: 'video_upload_timeout',
-                message: 'Upload do vídeo ainda em processamento. Tente salvar novamente em alguns segundos.',
+                message: 'Upload do video ainda em processamento. Tente salvar novamente em alguns segundos.',
                 response: { video_upload_id: uploadId },
             });
         }

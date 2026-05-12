@@ -156,8 +156,32 @@ assert.match(
 
 assert.match(
   apiSource,
+  /'\/api\/v2\/media_space\/init_video_upload'/,
+  'Shopee video upload must start with media_space/init_video_upload'
+);
+
+assert.match(
+  apiSource,
+  /'\/api\/v2\/media_space\/upload_video_part'/,
+  'Shopee video upload must send video bytes with media_space/upload_video_part'
+);
+
+assert.match(
+  apiSource,
+  /'\/api\/v2\/media_space\/complete_video_upload'/,
+  'Shopee video upload must complete with media_space/complete_video_upload'
+);
+
+assert.match(
+  apiSource,
   /shopeeGet\([\s\S]*'\/api\/v2\/media_space\/get_video_upload_result'[\s\S]*video_upload_id/,
   'Shopee video upload result must be polled with the media_space get endpoint and video_upload_id'
+);
+
+assert.doesNotMatch(
+  apiSource,
+  /'\/api\/v2\/media_space\/upload_video'/,
+  'Shopee video upload must not call the nonexistent single-step media_space/upload_video endpoint'
 );
 
 assert.doesNotMatch(
