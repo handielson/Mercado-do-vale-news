@@ -3013,16 +3013,26 @@ export function ShopeeSyncModal({
                         variationImageIdsByProductId[child.id] = firstImage;
                         continue;
                     }
-                    const resolvedImageDataUrl = typeof firstImage === 'string'
-                        ? await readRemoteUrlAsDataUrl(firstImage)
-                        : '';
-                    if (!resolvedImageDataUrl) continue;
-                    const uploadData = await postShopeeDebug('upload_image', {
-                        image_data_url: resolvedImageDataUrl,
-                        file_name: `${child.sku || child.id}.jpg`,
-                    }, `upload_image:variation:${child.sku || child.id}`);
-                    const uploadedId = uploadData?.response?.image_info?.image_id || uploadData?.response?.image_id;
-                    if (uploadedId) variationImageIdsByProductId[child.id] = String(uploadedId);
+                    try {
+                        const resolvedImageDataUrl = typeof firstImage === 'string'
+                            ? await readRemoteUrlAsDataUrl(firstImage)
+                            : '';
+                        if (!resolvedImageDataUrl) continue;
+                        const uploadData = await postShopeeDebug('upload_image', {
+                            image_data_url: resolvedImageDataUrl,
+                            file_name: `${child.sku || child.id}.jpg`,
+                        }, `upload_image:variation:${child.sku || child.id}`);
+                        const uploadedId = uploadData?.response?.image_info?.image_id || uploadData?.response?.image_id;
+                        if (uploadedId) variationImageIdsByProductId[child.id] = String(uploadedId);
+                    } catch (error: any) {
+                        pushSyncDebug('variation_image:skipped', {
+                            product_id: child.id,
+                            sku: child.sku || null,
+                            image_url: firstImage,
+                            reason: error?.message || String(error),
+                        });
+                        continue;
+                    }
                 }
             }
 
