@@ -626,9 +626,105 @@ A primeira versao deve entregar:
 - aplicacao do template em titulo, descricao, categoria e atributos;
 - testes cobrindo resolucao de template, variaveis e termos perigosos.
 
+## Envio em massa Shopee
+
+### Objetivo
+
+Permitir publicar varios produtos locais na Shopee sem abrir a tela de produtos um por um, mantendo a revisao antes de cada envio.
+
+### Primeira entrega: envio assistido em lote
+
+O envio em massa inicial deve ser assistido, nao totalmente automatico.
+
+Fluxo:
+
+1. O usuario acessa **Shopee > Envio em massa**.
+2. A tela lista produtos ainda nao sincronizados.
+3. O usuario filtra por nome ou SKU.
+4. O usuario seleciona varios produtos ou usa **Selecionar prontos**.
+5. O sistema abre o modal atual de sincronizacao para o primeiro produto.
+6. Ao publicar com sucesso, o proximo produto do lote abre automaticamente.
+7. O lote termina quando todos os selecionados forem publicados ou quando o usuario cancelar.
+
+Motivo dessa abordagem:
+
+- reaproveita o fluxo ja validado de categoria, template, atributos, estoque, imagem e video;
+- permite editar o nome final antes de publicar;
+- reduz risco de publicar em massa com categoria ou atributo errado;
+- deixa o operador revisar produtos com excecoes antes de enviar.
+
+### Regras da primeira entrega
+
+- Entram no lote apenas produtos com status **nao sincronizado**.
+- Produtos sem imagem podem aparecer na lista, mas devem ser sinalizados como pendentes de revisao de midia.
+- O envio usa o mesmo `ShopeeSyncModal` do produto individual.
+- Depois de cada sucesso, o sistema recarrega os vinculos da Shopee.
+- O primeiro lote nao agrupa variacoes no mesmo anuncio.
+
+### Entrega futura: envio automatico
+
+Depois que o envio assistido estiver estavel, podemos criar um modo automatico para produtos que passam em pre-validacao:
+
+- template resolvido;
+- categoria Shopee definida;
+- atributos obrigatorios preenchidos;
+- preco valido;
+- estoque valido;
+- imagem principal presente;
+- titulo seguro sem bloqueios;
+- video enviado quando existir suporte e arquivo valido.
+
+Produtos com qualquer alerta continuam indo para revisao manual.
+
+## Variacoes no mesmo anuncio Shopee
+
+### Como deve funcionar
+
+Variacoes devem ser usadas quando varios produtos locais representam o mesmo anuncio com opcoes diferentes, por exemplo:
+
+- mesma capa com cores diferentes;
+- mesma pelicula com modelos diferentes;
+- mesmo cabo com tamanhos diferentes.
+
+Na Shopee, esse fluxo nao deve criar varios anuncios separados. Deve criar um item principal com `model_list`, onde cada variacao tem:
+
+- SKU proprio;
+- preco proprio quando necessario;
+- estoque proprio;
+- imagem propria quando aplicavel;
+- GTIN/EAN proprio quando existir.
+
+### Regra de agrupamento local
+
+Antes de implementar variacoes em massa, o sistema precisa saber quais produtos pertencem ao mesmo anuncio.
+
+Possiveis bases de agrupamento:
+
+- `parent_id` local;
+- familia/modelo no cadastro;
+- SKU base;
+- regra do template Shopee;
+- selecao manual do operador.
+
+### Etapas recomendadas
+
+1. Implementar envio em massa assistido somente para produtos simples.
+2. Criar uma tela de agrupamento de variacoes.
+3. Permitir selecionar produto pai e filhos.
+4. Mapear dimensoes de variacao, como `Cor`, `Modelo`, `Tamanho`.
+5. Montar o payload da Shopee com `tier_variation` e `model_list`.
+6. Validar estoque/preco/GTIN por variacao.
+7. Publicar variacoes em um unico anuncio.
+
+### Fora da primeira entrega de envio em massa
+
+- Agrupar automaticamente variacoes no mesmo anuncio.
+- Converter anuncios simples ja publicados em anuncios com variacao.
+- Envio automatico sem revisao.
+
 ### Fora da primeira versao
 
 - IA gerando templates automaticamente.
-- Sincronizacao automatica em massa para varios produtos.
+- Sincronizacao totalmente automatica em massa para varios produtos.
 - Aprendizado automatico com anuncios derrubados.
 - Importacao de templates direto da Shopee.

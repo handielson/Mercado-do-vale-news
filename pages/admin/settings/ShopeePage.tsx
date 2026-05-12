@@ -111,7 +111,7 @@ export interface LocalProduct {
     };
 }
 
-type Tab = 'config' | 'products' | 'orders' | 'finance' | 'printers';
+type Tab = 'config' | 'products' | 'bulk' | 'orders' | 'finance' | 'printers';
 type Filter = 'all' | 'synced' | 'not_synced' | 'inactive';
 
 type EditableImage = {
@@ -599,6 +599,32 @@ const StatusBadge = ({ status }: { status: ShopeeProduct['status'] }) => {
 };
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+function toLocalProduct(p: ShopeeProduct): LocalProduct {
+    return {
+        id: p.product_id,
+        name: p.name || '',
+        sku: p.sku || '',
+        images: p.images || [],
+        price_retail: p.price_retail || 0,
+        price_cost: p.price_cost || 0,
+        category_slug: p.category_slug || '',
+        description: p.description || '',
+        brand: p.brand || '',
+        bling_id: p.bling_id ?? null,
+        video_url: p.video_url ?? null,
+        stock_quantity: p.stock_quantity || 0,
+        track_inventory: p.track_inventory !== false,
+        eans: p.eans || [],
+        weight_kg: p.weight_kg,
+        shipping_weight: p.shipping_weight,
+        shipping_length: p.shipping_length,
+        shipping_width: p.shipping_width,
+        shipping_height: p.shipping_height,
+        dimensions: p.dimensions,
+        ncm: p.ncm || '',
+    };
+}
+
 export default function ShopeePage() {
     const [searchParams] = useSearchParams();
     const requestedTab = searchParams.get('tab');
@@ -619,6 +645,11 @@ export default function ShopeePage() {
     const [priceMin, setPriceMin] = useState('');
     const [priceMax, setPriceMax] = useState('');
     const [syncModal, setSyncModal] = useState<LocalProduct | null>(null);
+    const [bulkSearchQ, setBulkSearchQ] = useState('');
+    const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
+    const [bulkQueueIds, setBulkQueueIds] = useState<string[]>([]);
+    const [bulkCompletedIds, setBulkCompletedIds] = useState<string[]>([]);
+    const [bulkActiveProduct, setBulkActiveProduct] = useState<LocalProduct | null>(null);
     const [editingPrice, setEditingPrice] = useState<Record<string, number>>({});
     const [linkingProductId, setLinkingProductId] = useState<string | null>(null);
     const [linkInput, setLinkInput] = useState('');
@@ -629,7 +660,7 @@ export default function ShopeePage() {
     const [savingRenameProductId, setSavingRenameProductId] = useState<string | null>(null);
 
     useEffect(() => {
-        if (requestedTab === 'config' || requestedTab === 'products' || requestedTab === 'orders' || requestedTab === 'finance' || requestedTab === 'printers') {
+        if (requestedTab === 'config' || requestedTab === 'products' || requestedTab === 'bulk' || requestedTab === 'orders' || requestedTab === 'finance' || requestedTab === 'printers') {
             setTab(requestedTab);
         }
     }, [requestedTab]);
@@ -724,7 +755,7 @@ export default function ShopeePage() {
     }, []);
 
     useEffect(() => {
-        if (tab === 'products') loadProducts();
+        if (tab === 'products' || tab === 'bulk') loadProducts();
     }, [tab, loadProducts]);
 
     const handleSave = async () => {
@@ -1012,6 +1043,69 @@ export default function ShopeePage() {
         }
     };
 
+    const toggleBulkProductSelection = (productId: string) => {
+        setBulkSelectedIds(prev =>
+            prev.includes(productId)
+                ? prev.filter(id => id !== productId)
+                : [...prev, productId]
+        );
+    };
+
+    const selectBulkReadyProducts = (items: ShopeeProduct[]) => {
+        const readyIds = items
+            .filter(p => p.status === 'not_synced' && (p.images?.length || 0) > 0)
+            .map(p => p.product_id);
+        setBulkSelectedIds(readyIds);
+        if (readyIds.length === 0) {
+            toast.info('Nenhum produto pronto para envio em massa nesta lista.');
+        }
+    };
+
+    const startBulkAssistedSync = () => {
+        const queue = bulkSelectedIds
+            .map(id => products.find(p => p.product_id === id))
+            .filter((p): p is ShopeeProduct => Boolean(p))
+            .filter(p => p.status === 'not_synced');
+
+        if (queue.length === 0) {
+            toast.error('Selecione pelo menos um produto ainda nao sincronizado.');
+            return;
+        }
+
+        setBulkQueueIds(queue.map(p => p.product_id));
+        setBulkCompletedIds([]);
+        setBulkActiveProduct(toLocalProduct(queue[0]));
+    };
+
+    const closeBulkAssistedSync = () => {
+        setBulkActiveProduct(null);
+        setBulkQueueIds([]);
+        setBulkCompletedIds([]);
+    };
+
+    const handleBulkModalSuccess = () => {
+        const currentId = bulkActiveProduct?.id;
+        const completed = currentId ? [...bulkCompletedIds, currentId] : bulkCompletedIds;
+        setBulkCompletedIds(completed);
+        if (currentId) {
+            setBulkSelectedIds(prev => prev.filter(id => id !== currentId));
+        }
+
+        const nextId = bulkQueueIds.find(id => id !== currentId && !completed.includes(id));
+        const nextProduct = nextId ? products.find(p => p.product_id === nextId) : null;
+        loadProducts();
+
+        if (nextProduct) {
+            setBulkActiveProduct(toLocalProduct(nextProduct));
+            toast.success('Produto enviado. Abrindo o proximo do lote.');
+            return;
+        }
+
+        setBulkActiveProduct(null);
+        setBulkQueueIds([]);
+        toast.success(`Envio em massa finalizado: ${completed.length} produto(s) enviados.`);
+    };
+
     if (loading) return (
         <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
@@ -1039,6 +1133,16 @@ export default function ShopeePage() {
         inactive: products.filter(p => p.status === 'inactive').length,
         notSynced: products.filter(p => p.status === 'not_synced').length,
     };
+
+    const bulkCandidates = products.filter(p => p.status === 'not_synced');
+    const bulkFiltered = bulkCandidates.filter(p => {
+        const q = bulkSearchQ.trim().toLowerCase();
+        return !q || p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q);
+    });
+    const bulkSelectedSet = new Set(bulkSelectedIds);
+    const bulkReadyCount = bulkFiltered.filter(p => (p.images?.length || 0) > 0).length;
+    const bulkSelectedCount = bulkSelectedIds.length;
+    const bulkCurrentPosition = bulkActiveProduct ? bulkQueueIds.findIndex(id => id === bulkActiveProduct.id) + 1 : 0;
 
     return (
         <div className="animate-in fade-in duration-500 max-w-5xl mx-auto space-y-6">
@@ -1079,6 +1183,7 @@ export default function ShopeePage() {
                 {[
                     { id: 'config' as Tab, label: 'Configurações', icon: Key },
                     { id: 'products' as Tab, label: 'Produtos', icon: Package },
+                    { id: 'bulk' as Tab, label: 'Envio em massa', icon: Upload },
                     { id: 'orders' as Tab, label: 'Pedidos', icon: ShoppingBag },
                     { id: 'finance' as Tab, label: 'Financeiro', icon: DollarSign },
                     { id: 'printers' as Tab, label: 'Impressoras', icon: Printer },
@@ -1450,29 +1555,7 @@ export default function ShopeePage() {
                                                             ) : (
                                                                 <div className="flex items-center gap-1">
                                                                     <button
-                                                                        onClick={() => setSyncModal({
-                                                                            id: p.product_id,
-                                                                            name: p.name || '',
-                                                                            sku: p.sku || '',
-                                                                            images: p.images || [],
-                                                                            price_retail: p.price_retail || 0,
-                                                                            price_cost: p.price_cost || 0,
-                                                                            category_slug: p.category_slug || '',
-                                                                            description: p.description || '',
-                                                                            brand: p.brand || '',
-                                                                            bling_id: p.bling_id ?? null,
-                                                                            video_url: p.video_url ?? null,
-                                                                            stock_quantity: p.stock_quantity || 0,
-                                                                            track_inventory: p.track_inventory !== false,
-                                                                            eans: p.eans || [],
-                                                                            weight_kg: p.weight_kg,
-                                                                            shipping_weight: p.shipping_weight,
-                                                                            shipping_length: p.shipping_length,
-                                                                            shipping_width: p.shipping_width,
-                                                                            shipping_height: p.shipping_height,
-                                                                            dimensions: p.dimensions,
-                                                                            ncm: p.ncm || '',
-                                                                        })}
+                                                                        onClick={() => setSyncModal(toLocalProduct(p))}
                                                                         className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all bg-[#ee4d2d] text-white hover:bg-[#d73f21]">
                                                                         Sincronizar
                                                                     </button>
@@ -1539,6 +1622,165 @@ export default function ShopeePage() {
             )}
 
             {/* ── Tab: Pedidos ── */}
+            {tab === 'bulk' && (
+                <div className="space-y-4">
+                    {!isConnected && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-amber-800 text-sm">
+                            <AlertCircle className="w-5 h-5 shrink-0" />
+                            Conecte sua loja Shopee na aba <strong>Configurações</strong> antes de enviar em massa.
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {[
+                            { label: 'Não sincronizados', value: bulkCandidates.length },
+                            { label: 'Prontos na lista', value: bulkReadyCount },
+                            { label: 'Selecionados', value: bulkSelectedCount },
+                        ].map(s => (
+                            <div key={s.label} className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm">
+                                <p className="text-xs text-slate-500">{s.label}</p>
+                                <p className="text-2xl font-bold text-slate-800 mt-0.5">{s.value}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    value={bulkSearchQ}
+                                    onChange={e => setBulkSearchQ(e.target.value)}
+                                    placeholder="Buscar produto não sincronizado por nome ou SKU..."
+                                    className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
+                                />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    onClick={() => selectBulkReadyProducts(bulkFiltered)}
+                                    disabled={!isConnected || loadingProducts || bulkFiltered.length === 0}
+                                    className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                >
+                                    Selecionar prontos
+                                </button>
+                                <button
+                                    onClick={() => setBulkSelectedIds([])}
+                                    disabled={bulkSelectedCount === 0}
+                                    className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                >
+                                    Limpar seleção
+                                </button>
+                                <button
+                                    onClick={startBulkAssistedSync}
+                                    disabled={!isConnected || loadingProducts || bulkSelectedCount === 0}
+                                    className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#ee4d2d] text-white hover:bg-[#d73f21] transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    <Upload className="w-4 h-4" />
+                                    Iniciar envio assistido
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-orange-50 border-b border-orange-100 text-sm text-orange-900">
+                            O envio em massa abre a revisão da Shopee em sequência. Você confirma cada produto, e ao concluir o sistema chama o próximo do lote.
+                        </div>
+
+                        {loadingProducts ? (
+                            <div className="flex items-center justify-center py-16">
+                                <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+                            </div>
+                        ) : bulkFiltered.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                <Package className="w-10 h-10 mb-2 opacity-30" />
+                                <p className="text-sm">Nenhum produto pendente encontrado</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                        <tr>
+                                            <th className="w-12 px-4 py-3" />
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600">Produto</th>
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600">Preço</th>
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600">Estoque</th>
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600">Mídia</th>
+                                            <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {bulkFiltered.map(p => {
+                                            const hasImage = (p.images?.length || 0) > 0;
+                                            const isSelected = bulkSelectedSet.has(p.product_id);
+                                            return (
+                                                <tr key={p.product_id} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            onChange={() => toggleBulkProductSelection(p.product_id)}
+                                                            className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-3">
+                                                            {p.images?.[0] ? (
+                                                                <img src={p.images[0]} alt={p.name} className="w-10 h-10 rounded-lg object-contain bg-slate-100 shrink-0" />
+                                                            ) : (
+                                                                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                                                                    <Package className="w-5 h-5 text-slate-300" />
+                                                                </div>
+                                                            )}
+                                                            <div className="min-w-0">
+                                                                <p className="font-medium text-slate-800 whitespace-normal break-words">{p.name}</p>
+                                                                <p className="text-xs text-slate-400 font-mono">{p.sku || '—'}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-700">
+                                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((p.price_retail || 0) / 100)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-700">{p.stock_quantity ?? 0}</td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-2 text-xs">
+                                                            <span className={`px-2 py-1 rounded-lg ${hasImage ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                                {hasImage ? `${p.images?.length} imagem(ns)` : 'sem imagem'}
+                                                            </span>
+                                                            {p.video_url && <span className="px-2 py-1 rounded-lg bg-blue-100 text-blue-700">vídeo</span>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {hasImage ? (
+                                                            <span className="text-xs font-semibold text-green-700">Pronto</span>
+                                                        ) : (
+                                                            <span className="text-xs font-semibold text-amber-700">Revisar mídia</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {bulkActiveProduct && (
+                        <>
+                            <div className="fixed left-1/2 top-4 z-[80] -translate-x-1/2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-lg">
+                                Envio em massa {bulkCurrentPosition || 1}/{bulkQueueIds.length}
+                            </div>
+                            <ShopeeSyncModal
+                                product={bulkActiveProduct}
+                                company={company}
+                                historicalProducts={products}
+                                onClose={closeBulkAssistedSync}
+                                onSuccess={handleBulkModalSuccess}
+                            />
+                        </>
+                    )}
+                </div>
+            )}
+
             {tab === 'orders' && (
                 <ShopeeOrdersTab isConnected={isConnected} initialStatusFilter={requestedOrderStatus} />
             )}
