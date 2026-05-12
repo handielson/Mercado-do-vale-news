@@ -1,0 +1,272 @@
+import type { ShopeeTemplate, ShopeeTemplateInput } from '../types/shopee-template';
+import { getCompanyId } from './companyContext';
+import { supabase } from './supabase';
+
+const CACHE_KEY = 'shopee_templates_cache_v1';
+
+function nowIso(): string {
+    return new Date().toISOString();
+}
+
+function makeId(): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+        return crypto.randomUUID();
+    }
+
+    return `template-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+export const DEFAULT_SHOPEE_TEMPLATES: ShopeeTemplate[] = [
+    {
+        id: 'phone_case',
+        name: 'Capa de celular',
+        active: true,
+        priority: 100,
+        rules: {
+            nameIncludes: ['capa', 'capinha', 'case'],
+            skuIncludes: ['capa', 'case'],
+        },
+        titleTemplate: 'Capa compativel com {modelo} Cor:{cor}',
+        descriptionTemplate: '{nome}\n\nProduto compativel. Confira o modelo antes da compra.',
+        shopeeCategoryId: 100490,
+        shopeeCategoryName: 'Capas',
+        attributeDefaults: {
+            100121: '3 Months',
+            100134: 'TPU',
+            100370: 'Supplier Warranty',
+        },
+        priceMode: 'product',
+        stockMode: 'product',
+        dimensionMode: 'product',
+        gtinMode: 'no_gtin',
+        dangerousTerms: [
+            {
+                id: 'phone-case-iphone',
+                term: 'Capa para iPhone',
+                replacement: 'Capa compativel com iPhone',
+                level: 'warning',
+                active: true,
+                note: 'Evita expressao que costuma derrubar anuncio.',
+            },
+            {
+                id: 'generic-original',
+                term: 'Original',
+                replacement: '',
+                level: 'block',
+                active: true,
+                note: 'Use somente se houver autorizacao e comprovacao da marca.',
+            },
+            {
+                id: 'generic-oficial',
+                term: 'Oficial',
+                replacement: '',
+                level: 'block',
+                active: true,
+                note: 'Termo sensivel para marketplace.',
+            },
+        ],
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+    },
+];
+
+function mapFromRow(row: any): ShopeeTemplate {
+    return {
+        id: row.id,
+        name: row.name,
+        active: Boolean(row.active),
+        priority: Number(row.priority || 0),
+        rules: row.rules || {},
+        titleTemplate: row.title_template || '',
+        descriptionTemplate: row.description_template || '',
+        shopeeCategoryId: row.shopee_category_id ?? null,
+        shopeeCategoryName: row.shopee_category_name ?? null,
+        attributeDefaults: row.attribute_defaults || {},
+        priceMode: row.price_mode || 'product',
+        fixedPrice: row.fixed_price ?? null,
+        pricePercent: row.price_percent ?? null,
+        stockMode: row.stock_mode || 'product',
+        fixedStock: row.fixed_stock ?? null,
+        dimensionMode: row.dimension_mode || 'product',
+        weightKg: row.weight_kg ?? null,
+        packageLength: row.package_length ?? null,
+        packageWidth: row.package_width ?? null,
+        packageHeight: row.package_height ?? null,
+        gtinMode: row.gtin_mode || 'product',
+        dangerousTerms: Array.isArray(row.dangerous_terms) ? row.dangerous_terms : [],
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+    };
+}
+
+function mapToRow(input: ShopeeTemplateInput, companyId?: string | null): Record<string, any> {
+    return {
+        ...(companyId ? { company_id: companyId } : {}),
+        name: input.name,
+        active: input.active,
+        priority: input.priority,
+        rules: input.rules || {},
+        title_template: input.titleTemplate || '',
+        description_template: input.descriptionTemplate || '',
+        shopee_category_id: input.shopeeCategoryId || null,
+        shopee_category_name: input.shopeeCategoryName || null,
+        attribute_defaults: input.attributeDefaults || {},
+        price_mode: input.priceMode || 'product',
+        fixed_price: input.fixedPrice || null,
+        price_percent: input.pricePercent || null,
+        stock_mode: input.stockMode || 'product',
+        fixed_stock: input.fixedStock ?? null,
+        dimension_mode: input.dimensionMode || 'product',
+        weight_kg: input.weightKg || null,
+        package_length: input.packageLength || null,
+        package_width: input.packageWidth || null,
+        package_height: input.packageHeight || null,
+        gtin_mode: input.gtinMode || 'product',
+        dangerous_terms: input.dangerousTerms || [],
+        updated_at: nowIso(),
+    };
+}
+
+function loadFallback(): ShopeeTemplate[] {
+    try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return DEFAULT_SHOPEE_TEMPLATES;
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : DEFAULT_SHOPEE_TEMPLATES;
+    } catch {
+        return DEFAULT_SHOPEE_TEMPLATES;
+    }
+}
+
+function saveFallback(templates: ShopeeTemplate[]): void {
+    try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(templates));
+    } catch {
+        // localStorage can be unavailable or full.
+    }
+}
+
+async function list(): Promise<ShopeeTemplate[]> {
+    try {
+        const companyId = await getCompanyId().catch(() => null);
+        let query = supabase
+            .from('shopee_templates')
+            .select('*')
+            .order('priority', { ascending: false })
+            .order('name', { ascending: true });
+
+        if (companyId) {
+            query = query.eq('company_id', companyId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const templates = (data || []).map(mapFromRow);
+        if (templates.length > 0) {
+            saveFallback(templates);
+            return templates;
+        }
+
+        return seedDefaultsIfEmpty();
+    } catch (error) {
+        console.warn('[shopeeTemplateService] using fallback templates:', error);
+        return loadFallback();
+    }
+}
+
+async function create(input: ShopeeTemplateInput): Promise<ShopeeTemplate> {
+    const companyId = await getCompanyId().catch(() => null);
+    const fallbackTemplate: ShopeeTemplate = {
+        ...input,
+        id: input.id || makeId(),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+    };
+
+    try {
+        const { data, error } = await supabase
+            .from('shopee_templates')
+            .insert(mapToRow(input, companyId))
+            .select('*')
+            .single();
+
+        if (error) throw error;
+        return mapFromRow(data);
+    } catch (error) {
+        const templates = [...loadFallback(), fallbackTemplate];
+        saveFallback(templates);
+        return fallbackTemplate;
+    }
+}
+
+async function update(id: string, input: ShopeeTemplateInput): Promise<ShopeeTemplate> {
+    const companyId = await getCompanyId().catch(() => null);
+    const fallbackTemplate: ShopeeTemplate = {
+        ...input,
+        id,
+        updatedAt: nowIso(),
+    };
+
+    try {
+        let query = supabase
+            .from('shopee_templates')
+            .update(mapToRow(input, companyId))
+            .eq('id', id)
+            .select('*')
+            .single();
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return mapFromRow(data);
+    } catch (error) {
+        const templates = loadFallback().map((template) => template.id === id ? fallbackTemplate : template);
+        saveFallback(templates);
+        return fallbackTemplate;
+    }
+}
+
+async function remove(id: string): Promise<void> {
+    try {
+        const { error } = await supabase
+            .from('shopee_templates')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    } catch (error) {
+        // Fallback below keeps local cache in sync even when table is missing.
+    }
+
+    saveFallback(loadFallback().filter((template) => template.id !== id));
+}
+
+async function seedDefaultsIfEmpty(): Promise<ShopeeTemplate[]> {
+    const existing = loadFallback();
+    if (existing.length > 0 && existing !== DEFAULT_SHOPEE_TEMPLATES) return existing;
+
+    saveFallback(DEFAULT_SHOPEE_TEMPLATES);
+
+    try {
+        const companyId = await getCompanyId().catch(() => null);
+        if (!companyId) return DEFAULT_SHOPEE_TEMPLATES;
+
+        for (const template of DEFAULT_SHOPEE_TEMPLATES) {
+            await supabase
+                .from('shopee_templates')
+                .upsert(mapToRow(template, companyId), { onConflict: 'id' });
+        }
+    } catch {
+        // SQL may not have been applied yet.
+    }
+
+    return DEFAULT_SHOPEE_TEMPLATES;
+}
+
+export const shopeeTemplateService = {
+    list,
+    create,
+    update,
+    remove,
+    seedDefaultsIfEmpty,
+};

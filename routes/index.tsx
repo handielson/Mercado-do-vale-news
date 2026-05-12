@@ -124,6 +124,7 @@ const MarketingPage = lazy(() => import('../pages/admin/settings/MarketingPage')
 const SalesPage = lazy(() => import('../pages/admin/sales/SalesPage'));
 const BlingPage = lazy(() => import('../pages/admin/settings/BlingPage'));
 const ShopeePage = lazy(() => import('../pages/admin/settings/ShopeePage'));
+const ShopeeTemplatesPage = lazy(() => import('../pages/admin/settings/ShopeeTemplatesPage'));
 const CheckoutPage = lazy(() => import('../pages/store/CheckoutPage'));
 const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
 const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
@@ -535,6 +536,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ShopeePage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/shopee/templates",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ShopeeTemplatesPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

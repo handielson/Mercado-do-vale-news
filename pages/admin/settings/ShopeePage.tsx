@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
     Store, Save, ExternalLink, RefreshCw, Key, ShieldCheck, AlertCircle,
     Package, Search, ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
@@ -36,6 +36,13 @@ import {
     findShopeeTemplateCategory,
     resolveShopeeFieldTemplate,
 } from './shopeeFieldTemplates.js';
+import { shopeeTemplateService } from '../../../services/shopeeTemplateService';
+import {
+    analyzeShopeeTitleSafety,
+    applyShopeeTemplateToProduct,
+    resolveBestShopeeTemplate,
+} from '../../../services/shopeeTemplateEngine';
+import type { ShopeeTemplate } from '../../../types/shopee-template';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ShopeeProduct {
@@ -1005,11 +1012,25 @@ export default function ShopeePage() {
                     <p className="text-slate-500 mt-1">Gerencie sua loja na Shopee Open Platform</p>
                 </div>
                 {tab === 'config' && (
-                    <button onClick={handleSave} disabled={saving}
-                        className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-orange-600 transition-colors disabled:opacity-50 shadow-sm">
-                        {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-5 h-5" />}
-                        Salvar Chaves
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <Link to="/admin/settings/shopee/templates"
+                            className="bg-white text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors shadow-sm">
+                            <Tag className="w-5 h-5 text-orange-500" />
+                            Templates
+                        </Link>
+                        <button onClick={handleSave} disabled={saving}
+                            className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-orange-600 transition-colors disabled:opacity-50 shadow-sm">
+                            {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-5 h-5" />}
+                            Salvar Chaves
+                        </button>
+                    </div>
+                )}
+                {tab !== 'config' && (
+                    <Link to="/admin/settings/shopee/templates"
+                        className="bg-white text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-50 transition-colors shadow-sm">
+                        <Tag className="w-5 h-5 text-orange-500" />
+                        Templates
+                    </Link>
                 )}
             </div>
 
@@ -1563,10 +1584,64 @@ export function ShopeeSyncModal({
     const [syncDebugEntries, setSyncDebugEntries] = useState<SyncDebugEntry[]>([]);
     const descriptionDirtyRef = useRef(false);
     const stockDirtyRef = useRef(false);
+    const titleDirtyRef = useRef(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
     const templateAutoAppliedRef = useRef(false);
     const activeFieldTemplate = useMemo(() => resolveShopeeFieldTemplate(product), [product]);
+    const [shopeeTemplates, setShopeeTemplates] = useState<ShopeeTemplate[]>([]);
+    const [selectedTemplateId, setSelectedTemplateId] = useState('');
+    const [suggestedTemplateId, setSuggestedTemplateId] = useState('');
+    const selectedShopeeTemplate = useMemo(
+        () => shopeeTemplates.find((template) => template.id === selectedTemplateId) || null,
+        [selectedTemplateId, shopeeTemplates]
+    );
+    const titleSafety = useMemo(
+        () => analyzeShopeeTitleSafety(itemName, selectedShopeeTemplate?.dangerousTerms || []),
+        [itemName, selectedShopeeTemplate]
+    );
+
+    const findTemplateCategoryNode = useCallback((categoryId?: number | null) => {
+        if (!categoryId) return null;
+        const stack = [...allCatTree];
+        while (stack.length > 0) {
+            const current = stack.shift();
+            if (Number(current?.category_id) === Number(categoryId)) return current;
+            stack.push(...getCategoryChildren(current));
+        }
+        return null;
+    }, [allCatTree]);
+
+    const applyTemplate = useCallback((template: ShopeeTemplate, options: { force?: boolean } = {}) => {
+        const applied = applyShopeeTemplateToProduct(product, template);
+
+        if (applied.title && (options.force || !titleDirtyRef.current)) {
+            setItemName(applied.title.slice(0, 120));
+        }
+
+        if (applied.description && (options.force || !descriptionDirtyRef.current)) {
+            setItemDescription(applied.description);
+        }
+
+        if (applied.price) {
+            setShopeePrice(applied.price);
+        }
+
+        if (applied.stock !== null && applied.stock !== undefined && (options.force || !stockDirtyRef.current)) {
+            setShopeeStock(applied.stock);
+        }
+
+        if (applied.gtinMode === 'no_gtin') {
+            setGtinMode('no_gtin');
+            setGtinInput('');
+        } else if (applied.gtinMode === 'blank') {
+            setGtinMode('code');
+            setGtinInput('');
+        }
+
+        setAttrValues((current) => ({ ...current, ...applied.attributeValues }));
+
+    }, [product]);
 
     // Carrega toda a árvore de categorias ao abrir o modal
     useEffect(() => {
@@ -1577,6 +1652,29 @@ export function ShopeeSyncModal({
             .catch(() => toast.error('Erro ao carregar categorias.'))
             .finally(() => setLoadingCats(false));
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        shopeeTemplateService.list()
+            .then((templates) => {
+                if (cancelled) return;
+                setShopeeTemplates(templates);
+                const suggested = resolveBestShopeeTemplate(product, templates);
+                if (suggested) {
+                    setSuggestedTemplateId(suggested.id);
+                    setSelectedTemplateId(suggested.id);
+                    applyTemplate(suggested);
+                }
+            })
+            .catch((error) => {
+                console.warn('[Shopee Sync] Failed to load templates:', error);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [applyTemplate, product]);
 
     useEffect(() => {
         const blingId = Number(product.bling_id);
@@ -1730,8 +1828,10 @@ export function ShopeeSyncModal({
             const normalizedAttributes = normalizeShopeeAttributes(data);
             setAttributes(normalizedAttributes);
             const templateValues = buildShopeeTemplateAttributeValues(normalizedAttributes, product, activeFieldTemplate);
-            if (Object.keys(templateValues).length > 0) {
-                setAttrValues(templateValues);
+            const selectedTemplateValues = selectedShopeeTemplate?.attributeDefaults || {};
+            const mergedTemplateValues = { ...templateValues, ...selectedTemplateValues };
+            if (Object.keys(mergedTemplateValues).length > 0) {
+                setAttrValues(mergedTemplateValues);
             }
             const brandData = await brandRes.json();
             if (brandData.error && brandData.error !== '') {
@@ -1752,15 +1852,25 @@ export function ShopeeSyncModal({
     };
 
     useEffect(() => {
+        if (!selectedShopeeTemplate?.shopeeCategoryId || allCatTree.length === 0) return;
+        if (selectedCat && Number(selectedCat.category_id) === Number(selectedShopeeTemplate.shopeeCategoryId)) return;
+
+        const templateCategory = findTemplateCategoryNode(selectedShopeeTemplate.shopeeCategoryId);
+        if (templateCategory) {
+            selectCategory(templateCategory);
+        }
+    }, [allCatTree, findTemplateCategoryNode, selectedCat, selectedShopeeTemplate]);
+
+    useEffect(() => {
         if (templateAutoAppliedRef.current) return;
-        if (selectedCat || !activeFieldTemplate || allCatTree.length === 0) return;
+        if (selectedShopeeTemplate || selectedCat || !activeFieldTemplate || allCatTree.length === 0) return;
 
         const templateCategory = findShopeeTemplateCategory(allCatTree, activeFieldTemplate);
         if (!templateCategory) return;
 
         templateAutoAppliedRef.current = true;
         selectCategory(templateCategory);
-    }, [activeFieldTemplate, allCatTree, selectedCat]);
+    }, [activeFieldTemplate, allCatTree, selectedCat, selectedShopeeTemplate]);
 
     const collectShopeeBrandInfo = async () => {
         const selectedBrand = brandOptions.find((brand) => String(brand.brand_id) === String(selectedBrandId));
@@ -2128,6 +2238,11 @@ export function ShopeeSyncModal({
     };
 
     const handleSync = async () => {
+        if (titleSafety.hasBlocks) {
+            toast.error('Corrija os termos bloqueados no nome final da Shopee antes de publicar.');
+            return;
+        }
+
         if (!selectedCat?.category_id) {
             toast.error('Selecione uma categoria antes de publicar.');
             setStep(1);
@@ -2311,6 +2426,89 @@ export function ShopeeSyncModal({
                             {i < 2 && <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />}
                         </React.Fragment>
                     ))}
+                </div>
+
+                <div className="px-6 py-4 border-b border-slate-100 bg-orange-50/40 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 md:items-end">
+                        <label>
+                            <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Template da Shopee</span>
+                            <select
+                                value={selectedTemplateId}
+                                onChange={(event) => {
+                                    const nextId = event.target.value;
+                                    setSelectedTemplateId(nextId);
+                                    const template = shopeeTemplates.find((entry) => entry.id === nextId);
+                                    if (template) applyTemplate(template, { force: true });
+                                }}
+                                className="w-full rounded-lg border border-orange-100 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-orange-200 outline-none"
+                            >
+                                <option value="">Sem template</option>
+                                {shopeeTemplates.map((template) => (
+                                    <option key={template.id} value={template.id}>
+                                        {template.name}{template.id === suggestedTemplateId ? ' (sugerido)' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <div className="flex gap-2">
+                            <Link
+                                to="/admin/settings/shopee/templates"
+                                target="_blank"
+                                className="inline-flex items-center justify-center rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"
+                            >
+                                Editar templates
+                            </Link>
+                            <button
+                                type="button"
+                                disabled={!selectedShopeeTemplate}
+                                onClick={() => selectedShopeeTemplate && applyTemplate(selectedShopeeTemplate, { force: true })}
+                                className="inline-flex items-center justify-center rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                            >
+                                Aplicar template
+                            </button>
+                        </div>
+                    </div>
+
+                    <label className="block">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Nome final na Shopee</span>
+                        <input
+                            value={itemName}
+                            maxLength={120}
+                            onChange={(event) => {
+                                titleDirtyRef.current = true;
+                                setItemName(event.target.value);
+                            }}
+                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 ${
+                                titleSafety.hasBlocks
+                                    ? 'border-red-300 focus:ring-red-100'
+                                    : titleSafety.hasWarnings
+                                        ? 'border-amber-300 focus:ring-amber-100'
+                                        : 'border-orange-100 focus:ring-orange-200'
+                            }`}
+                        />
+                    </label>
+
+                    {titleSafety.matches.length > 0 && (
+                        <div className={`rounded-lg border px-3 py-2 text-sm ${titleSafety.hasBlocks ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                <span>
+                                    {titleSafety.hasBlocks ? 'Corrija os termos bloqueados antes de publicar.' : 'O titulo tem termos sensiveis. Revise antes de publicar.'}
+                                </span>
+                                {titleSafety.suggestedTitle && titleSafety.suggestedTitle !== itemName && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            titleDirtyRef.current = true;
+                                            setItemName(titleSafety.suggestedTitle.slice(0, 120));
+                                        }}
+                                        className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                    >
+                                        Aplicar titulo sugerido
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-6 space-y-4">

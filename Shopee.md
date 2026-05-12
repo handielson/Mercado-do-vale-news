@@ -451,3 +451,184 @@ Fluxo atual:
 6. Vercel gera deploy de producao automaticamente.
 7. Confirmar deploy `Ready` com Vercel.
 
+## Feature planejada: pagina de templates da Shopee
+
+### Objetivo
+
+Criar uma pagina de templates da Shopee para montar cadastros completos antes da exportacao. O operador podera criar, editar e aplicar templates por tipo de produto, com sugestao automatica e escolha manual antes de enviar para a Shopee.
+
+### Escopo
+
+- Criar a pagina **Configuracoes > Shopee > Templates**.
+- Permitir templates completos para preencher:
+  - nome final do anuncio na Shopee;
+  - descricao;
+  - categoria Shopee;
+  - atributos da categoria;
+  - preco;
+  - estoque;
+  - peso e dimensoes;
+  - GTIN quando aplicavel.
+- Sugerir automaticamente um template com base em categoria, nome, SKU, marca e modelo do produto.
+- Permitir trocar o template manualmente no modal de envio.
+- Permitir editar o nome final do produto antes de enviar.
+- Alertar sobre palavras ou frases perigosas que podem derrubar o anuncio.
+- Gerar um titulo sugerido seguro, editavel antes da publicacao.
+
+### Fluxo de uso
+
+1. O usuario acessa **Configuracoes > Shopee > Templates**.
+2. Cria ou edita um template, por exemplo:
+   - Capa de celular;
+   - Pelicula;
+   - Carregador;
+   - Cabo;
+   - Fone.
+3. Define regras de aplicacao automatica, como:
+   - categoria local;
+   - palavras no nome;
+   - palavras no SKU;
+   - marca;
+   - modelo.
+4. Define o titulo sugerido para a Shopee usando variaveis, por exemplo:
+   - `Capa compativel com {modelo} Cor:{cor}`;
+   - `Pelicula compativel com {modelo}`.
+5. Define descricao, categoria Shopee, atributos e padroes de preco/estoque/logistica.
+6. Ao enviar um produto para a Shopee, o modal sugere o melhor template.
+7. O usuario pode trocar o template, revisar alertas, editar o titulo final e publicar.
+
+### Nome seguro para Shopee
+
+O nome interno do produto nao deve ser enviado obrigatoriamente igual para a Shopee. O modal de envio tera um campo separado chamado **Nome final na Shopee**.
+
+Esse campo deve:
+
+- iniciar com o titulo sugerido pelo template;
+- permitir edicao manual antes de publicar;
+- mostrar alertas quando houver frases perigosas;
+- permitir aplicar uma sugestao segura.
+
+Exemplo:
+
+- evitar: `Capa para iPhone`;
+- sugerir: `Capa compativel com iPhone`.
+
+Esse exemplo vale para iPhone, mas o sistema deve permitir cadastrar regras para outras marcas e expressoes sensiveis.
+
+### Regras de termos perigosos
+
+A pagina de templates tera uma area para regras de palavras/frases perigosas.
+
+Cada regra tera:
+
+- texto detectado;
+- sugestao de substituicao;
+- nivel: aviso ou bloqueio;
+- observacao opcional.
+
+Exemplos:
+
+- `Capa para iPhone` -> `Capa compativel com iPhone`;
+- `Carregador Apple` -> `Carregador compativel`;
+- `Original Samsung` -> alerta forte ou bloqueio;
+- `Oficial` -> alerta ou bloqueio.
+
+No modal de envio:
+
+- aviso mostra destaque amarelo;
+- bloqueio mostra destaque vermelho e impede publicar ate corrigir;
+- o usuario pode aplicar a sugestao com um clique.
+
+### Variaveis do template
+
+Os campos de titulo e descricao podem usar variaveis do produto:
+
+- `{produto}`;
+- `{nome}`;
+- `{sku}`;
+- `{marca}`;
+- `{modelo}`;
+- `{cor}`;
+- `{ram}`;
+- `{armazenamento}`;
+- `{categoria}`;
+- `{descricao}`;
+- `{preco}`;
+- `{estoque}`.
+
+Quando uma variavel nao existir no produto, ela deve ficar vazia e o texto final deve ser limpo para remover espacos duplicados.
+
+### Dados do template
+
+Cada template deve armazenar:
+
+- nome do template;
+- status ativo/inativo;
+- prioridade para sugestao automatica;
+- regras de aplicacao;
+- titulo sugerido;
+- descricao sugerida;
+- categoria Shopee padrao;
+- atributos Shopee padrao;
+- modo de preco:
+  - usar preco do produto;
+  - aplicar valor fixo;
+  - aplicar percentual sobre preco do produto.
+- modo de estoque:
+  - usar estoque do produto;
+  - aplicar valor fixo.
+- peso e dimensoes:
+  - usar dados do produto;
+  - aplicar valores padrao.
+- GTIN:
+  - usar EAN do produto;
+  - enviar `SEM GTIN`;
+  - deixar em branco.
+
+### Integracao com o modal de envio
+
+O modal atual de sincronizacao da Shopee deve ganhar:
+
+- seletor de template no inicio do fluxo;
+- indicacao de template sugerido automaticamente;
+- botao para aplicar template;
+- campo **Nome final na Shopee** editavel;
+- painel de alertas de termos perigosos;
+- botao para aplicar titulo sugerido;
+- preservacao dos passos atuais:
+  - categoria;
+  - dados;
+  - confirmar.
+
+O template nao deve substituir edicoes manuais depois que o usuario alterar um campo. Se o usuario trocar o template manualmente, o sistema pode perguntar/aplicar novamente os campos do novo template.
+
+### Abordagem recomendada
+
+Implementar **Template + Titulo Sugerido + Regras de Substituicao**.
+
+Motivo:
+
+- reduz risco de anuncio derrubado por termos sensiveis;
+- economiza tempo no cadastro;
+- mantem revisao manual antes de publicar;
+- permite ajustar regras sem mexer no codigo.
+
+### Primeira versao
+
+A primeira versao deve entregar:
+
+- CRUD de templates;
+- CRUD simples de regras perigosas dentro da pagina;
+- sugestao automatica de template;
+- selecao manual no modal;
+- titulo sugerido e editavel;
+- alertas de termos perigosos;
+- aplicacao do template em titulo, descricao, categoria e atributos;
+- testes cobrindo resolucao de template, variaveis e termos perigosos.
+
+### Fora da primeira versao
+
+- IA gerando templates automaticamente.
+- Sincronizacao automatica em massa para varios produtos.
+- Aprendizado automatico com anuncios derrubados.
+- Importacao de templates direto da Shopee.
