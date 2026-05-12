@@ -444,6 +444,11 @@ export const PublicProductPage: React.FC = () => {
 
     // Descrições salvas via admin podem ser texto puro (com \n) — vira bloco único
     // sob dangerouslySetInnerHTML. Converte para HTML quando não vier marcado.
+    // Cabeçalhos conhecidos ganham negrito + margem extra para "pular linha".
+    const KNOWN_SECTION_HEADERS = [
+        'Características do Produto',
+        'Conteúdo da embalagem',
+    ];
     const normalizeRichText = (raw: string): string => {
         if (/<\/?(p|div|br|h[1-6]|ul|ol|li|table|img|span|strong|em)\b/i.test(raw)) {
             return raw;
@@ -452,9 +457,27 @@ export const PublicProductPage: React.FC = () => {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
-        return raw
+        const HDR_OPEN = String.fromCharCode(1);
+        const HDR_CLOSE = String.fromCharCode(2);
+        const escapedHeaders = KNOWN_SECTION_HEADERS
+            .map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .join('|');
+        const headerPattern = new RegExp(`\\s*(${escapedHeaders})\\s*`, 'gi');
+        const withMarkers = raw.replace(headerPattern, `\n\n${HDR_OPEN}$1${HDR_CLOSE}\n`);
+        return withMarkers
             .split(/\r?\n\s*\r?\n+/)
-            .map(p => `<p>${escape(p).replace(/\r?\n/g, '<br>')}</p>`)
+            .map(p => p.trim())
+            .filter(Boolean)
+            .map(p => {
+                const isHeader = p.startsWith(HDR_OPEN);
+                const body = escape(p)
+                    .replace(new RegExp(HDR_OPEN, 'g'), '<strong>')
+                    .replace(new RegExp(HDR_CLOSE, 'g'), '</strong>')
+                    .replace(/\r?\n/g, '<br>');
+                return isHeader
+                    ? `<p style="margin-top:1.5em">${body}</p>`
+                    : `<p>${body}</p>`;
+            })
             .join('');
     };
 
