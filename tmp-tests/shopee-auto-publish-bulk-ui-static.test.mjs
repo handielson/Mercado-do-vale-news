@@ -13,6 +13,11 @@ assert.match(page, /Selecionar automaticos/, 'bulk page should select only autom
 assert.match(page, /bulkRequiredAttributesByCategoryId/, 'bulk page should cache required Shopee attributes by category');
 assert.match(page, /action=attributes&category_id=\$\{categoryId\}/, 'bulk page should fetch Shopee attributes for template categories');
 assert.match(page, /logistics_channel_list/, 'bulk page should validate enabled logistics before automatic publish');
+assert.match(page, /isBulkUpdateCandidate/, 'bulk page should detect items that already have a Shopee item id');
+assert.match(page, /Atualiza(?:ção|cao|Ã§Ã£o) pronta/, 'bulk page should label already-sent items as update-ready');
+assert.match(page, /Revisar atualiza(?:ção|cao|Ã§Ã£o)/, 'bulk page should label blocked already-sent items as update review');
+assert.match(page, /Item ja enviado: sera atualizado na Shopee\./, 'bulk page should explain that linked items will be updated');
+assert.match(page, /bg-sky-50\/50/, 'bulk update rows should use a distinct blue layout');
 assert.match(docs, /Pre-validacao para envio automatico/, 'Shopee docs should document the automatic prevalidation phase');
 
 console.log('shopee auto publish bulk UI static checks passed');

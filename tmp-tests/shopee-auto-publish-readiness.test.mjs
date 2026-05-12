@@ -53,6 +53,26 @@ assert.equal(ready.template?.id, 'phone_case');
 assert.deepEqual(ready.blockers, []);
 assert.ok(ready.warnings.some((issue) => issue.code === 'fallback_dimensions'), 'safe fallback dimensions should be visible as a warning');
 
+const productWithJsonDimensions = evaluateShopeeAutoPublishReadiness({
+  ...readyProduct,
+  dimensions: JSON.stringify({ depth_cm: 18, width_cm: 9, height_cm: 4 }),
+}, [template]);
+assert.equal(productWithJsonDimensions.status, 'ready');
+assert.ok(
+  !productWithJsonDimensions.warnings.some((issue) => issue.code === 'fallback_dimensions'),
+  'JSON dimensions from VPS should count as registered dimensions'
+);
+
+const productWithAlternativeDimensions = evaluateShopeeAutoPublishReadiness({
+  ...readyProduct,
+  dimensions: { comprimento: 18, largura: 9, altura: 4 },
+}, [template]);
+assert.equal(productWithAlternativeDimensions.status, 'ready');
+assert.ok(
+  !productWithAlternativeDimensions.warnings.some((issue) => issue.code === 'fallback_dimensions'),
+  'alternative dimension keys should count as registered dimensions'
+);
+
 const missingImage = evaluateShopeeAutoPublishReadiness({ ...readyProduct, images: [] }, [template]);
 assert.equal(missingImage.status, 'review');
 assert.ok(missingImage.blockers.some((issue) => issue.code === 'missing_image'));

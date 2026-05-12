@@ -23,7 +23,14 @@ export interface ShopeeAutoPublishProduct {
     width_cm?: number | null;
     height_cm?: number | null;
     depth_cm?: number | null;
-  } | null;
+    width?: number | null;
+    height?: number | null;
+    depth?: number | null;
+    largura?: number | null;
+    altura?: number | null;
+    comprimento?: number | null;
+    profundidade?: number | null;
+  } | string | null;
   weight_kg?: number | null;
   shipping_weight?: number | null;
   shipping_length?: number | null;
@@ -74,6 +81,27 @@ function numberValue(value: unknown): number {
   return Number.isFinite(number) ? number : 0;
 }
 
+function parseDimensionObject(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function dimensionValue(dimensions: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const value = numberValue(dimensions[key]);
+    if (value > 0) return value;
+  }
+  return 0;
+}
+
 function hasPositiveDimension(product: ShopeeAutoPublishProduct, template: ShopeeTemplate | null): boolean {
   if (template?.dimensionMode === 'fixed') {
     return numberValue(template.weightKg) > 0
@@ -82,14 +110,16 @@ function hasPositiveDimension(product: ShopeeAutoPublishProduct, template: Shope
       && numberValue(template.packageHeight) > 0;
   }
 
+  const dimensions = parseDimensionObject(product.dimensions);
+
   return numberValue(product.weight_kg) > 0
     || numberValue(product.shipping_weight) > 0
-    || numberValue(product.dimensions?.depth_cm) > 0
     || numberValue(product.shipping_length) > 0
-    || numberValue(product.dimensions?.width_cm) > 0
     || numberValue(product.shipping_width) > 0
-    || numberValue(product.dimensions?.height_cm) > 0
-    || numberValue(product.shipping_height) > 0;
+    || numberValue(product.shipping_height) > 0
+    || dimensionValue(dimensions, ['depth_cm', 'depth', 'length_cm', 'length', 'comprimento', 'profundidade']) > 0
+    || dimensionValue(dimensions, ['width_cm', 'width', 'largura']) > 0
+    || dimensionValue(dimensions, ['height_cm', 'height', 'altura']) > 0;
 }
 
 function issue(code: string, message: string, level: ShopeeAutoPublishIssueLevel = 'blocker'): ShopeeAutoPublishIssue {

@@ -99,7 +99,7 @@ export interface ShopeeProduct {
         width_cm?: number;
         height_cm?: number;
         depth_cm?: number;
-    };
+    } | string | null;
     shopee_item_id?: number | null;
 }
 
@@ -133,7 +133,7 @@ export interface LocalProduct {
         width_cm?: number;
         height_cm?: number;
         depth_cm?: number;
-    };
+    } | string | null;
     shopee_item_id?: number | null;
 }
 
@@ -197,6 +197,28 @@ type ShopeeBrandOption = {
 // ─── Helper ───────────────────────────────────────────────────────────────────
 const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+
+function normalizePositiveId(value: unknown): number | null {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeProductDimensions(value: unknown): LocalProduct['dimensions'] {
+    if (!value) return null;
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+        } catch {
+            return null;
+        }
+    }
+    return typeof value === 'object' && !Array.isArray(value) ? value as LocalProduct['dimensions'] : null;
+}
+
+function isBulkUpdateCandidate(product: Pick<ShopeeProduct, 'shopee_item_id'>): boolean {
+    return Boolean(normalizePositiveId(product.shopee_item_id));
+}
 
 function normalizeLookupText(value: unknown): string {
     return String(value || '')
@@ -660,7 +682,7 @@ function toLocalProduct(p: ShopeeProduct): LocalProduct {
         shipping_length: p.shipping_length,
         shipping_width: p.shipping_width,
         shipping_height: p.shipping_height,
-        dimensions: p.dimensions,
+        dimensions: normalizeProductDimensions(p.dimensions),
         ncm: p.ncm || '',
         shopee_item_id: p.shopee_item_id || null,
     };
@@ -691,7 +713,7 @@ function toLocalProductFromVpsProduct(p: any, shopeeItemId?: number | null): Loc
         shipping_length: p.shipping_length,
         shipping_width: p.shipping_width,
         shipping_height: p.shipping_height,
-        dimensions: p.dimensions,
+        dimensions: normalizeProductDimensions(p.dimensions),
         ncm: p.ncm || '',
         shopee_item_id: shopeeItemId || null,
     };
@@ -776,15 +798,16 @@ export default function ShopeePage() {
 
             const merged: ShopeeProduct[] = (localProds || []).map((p: any) => {
                 const sr = syncMap.get(String(p.id)) as any;
+                const existingShopeeItemId = normalizePositiveId(sr?.shopee_item_id) || normalizePositiveId(p.shopee_item_id);
                 
                 return {
                     id: sr?.id || p.id,
                     product_id: String(p.id),
-                    shopee_item_id: sr?.shopee_item_id || null,
+                    shopee_item_id: existingShopeeItemId,
                     shopee_category_id: sr?.shopee_category_id || null,
                     shopee_category_name: sr?.shopee_category_name || null,
                     shopee_price: sr?.shopee_price || null,
-                    status: sr?.status || 'not_synced',
+                    status: sr?.status || (existingShopeeItemId ? 'active' : 'not_synced'),
                     last_synced_at: sr?.last_synced_at || null,
                     name: p.name,
                     sku: p.sku,
@@ -808,7 +831,7 @@ export default function ShopeePage() {
                     shipping_length: p.shipping_length,
                     shipping_width: p.shipping_width,
                     shipping_height: p.shipping_height,
-                    dimensions: p.dimensions,
+                    dimensions: normalizeProductDimensions(p.dimensions),
                     ncm: p.ncm,
                 };
             });
@@ -1304,9 +1327,12 @@ export default function ShopeePage() {
         notSynced: products.filter(p => p.status === 'not_synced').length,
     };
 
-    const bulkCandidates = products.filter(p => p.status === 'not_synced');
+    const bulkCandidates = products.filter(p => p.status === 'not_synced' || isBulkUpdateCandidate(p));
     const bulkReadiness = bulkCandidates.map((product) =>
-        evaluateShopeeAutoPublishReadiness(product, bulkShopeeTemplates, {
+        evaluateShopeeAutoPublishReadiness({
+            ...product,
+            status: isBulkUpdateCandidate(product) ? 'not_synced' : product.status,
+        }, bulkShopeeTemplates, {
             requiredAttributesByCategoryId: bulkRequiredAttributesByCategoryId,
             hasEnabledLogisticsChannel: bulkHasEnabledLogisticsChannel,
         })
@@ -1967,13 +1993,19 @@ export default function ShopeePage() {
                                         {bulkFiltered.map(p => {
                                             const hasImage = (p.images?.length || 0) > 0;
                                             const isSelected = bulkSelectedSet.has(p.product_id);
+                                            const isUpdate = isBulkUpdateCandidate(p);
                                             const readiness = bulkReadinessById.get(p.product_id);
                                             const reasons = [
+                                                ...(isUpdate ? [{
+                                                    level: 'warning' as const,
+                                                    code: 'update_existing_item',
+                                                    message: 'Item ja enviado: sera atualizado na Shopee.',
+                                                }] : []),
                                                 ...(readiness?.blockers || []),
                                                 ...(readiness?.warnings || []),
                                             ].slice(0, 3);
                                             return (
-                                                <tr key={p.product_id} className="hover:bg-slate-50/50 transition-colors">
+                                                <tr key={p.product_id} className={`${isUpdate ? 'bg-sky-50/50 hover:bg-sky-50 border-l-4 border-sky-400' : 'hover:bg-slate-50/50'} transition-colors`}>
                                                     <td className="px-4 py-3">
                                                         <input
                                                             type="checkbox"
@@ -2011,9 +2043,13 @@ export default function ShopeePage() {
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {readiness?.status === 'ready' ? (
-                                                            <span className="text-xs font-semibold text-green-700">Automatico pronto</span>
+                                                            <span className={`text-xs font-semibold ${isUpdate ? 'text-sky-700' : 'text-green-700'}`}>
+                                                                {isUpdate ? 'Atualização pronta' : 'Automatico pronto'}
+                                                            </span>
                                                         ) : (
-                                                            <span className="text-xs font-semibold text-amber-700">Revisar mídia</span>
+                                                            <span className={`text-xs font-semibold ${isUpdate ? 'text-blue-700' : 'text-amber-700'}`}>
+                                                                {isUpdate ? 'Revisar atualização' : 'Revisar mídia'}
+                                                            </span>
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3">
@@ -2022,7 +2058,7 @@ export default function ShopeePage() {
                                                         ) : (
                                                             <div className="space-y-1">
                                                                 {reasons.map(reason => (
-                                                                    <p key={`${p.product_id}-${reason.code}`} className={`text-xs ${reason.level === 'blocker' ? 'text-red-700' : 'text-amber-700'}`}>
+                                                                    <p key={`${p.product_id}-${reason.code}`} className={`text-xs ${reason.level === 'blocker' ? 'text-red-700' : reason.code === 'update_existing_item' ? 'text-sky-700' : 'text-amber-700'}`}>
                                                                         {reason.message}
                                                                     </p>
                                                                 ))}
@@ -2119,9 +2155,31 @@ export function ShopeeSyncModal({
     const gtinValue = (product.eans || []).find((ean) => typeof ean === 'string' && ean.trim()) || '';
     const initialGtinMode = gtinValue && isNoGtinValue(gtinValue) ? 'no_gtin' : 'code';
     const initialGtinInput = initialGtinMode === 'code' ? gtinValue.trim() : '';
-    const packageLength = Number(product.dimensions?.depth_cm ?? product.shipping_length ?? 0) || 0;
-    const packageWidth = Number(product.dimensions?.width_cm ?? product.shipping_width ?? 0) || 0;
-    const packageHeight = Number(product.dimensions?.height_cm ?? product.shipping_height ?? 0) || 0;
+    const normalizedDimensions = normalizeProductDimensions(product.dimensions) as Record<string, any> | null;
+    const packageLength = Number(
+        normalizedDimensions?.depth_cm ??
+        normalizedDimensions?.depth ??
+        normalizedDimensions?.length_cm ??
+        normalizedDimensions?.length ??
+        normalizedDimensions?.comprimento ??
+        normalizedDimensions?.profundidade ??
+        product.shipping_length ??
+        0
+    ) || 0;
+    const packageWidth = Number(
+        normalizedDimensions?.width_cm ??
+        normalizedDimensions?.width ??
+        normalizedDimensions?.largura ??
+        product.shipping_width ??
+        0
+    ) || 0;
+    const packageHeight = Number(
+        normalizedDimensions?.height_cm ??
+        normalizedDimensions?.height ??
+        normalizedDimensions?.altura ??
+        product.shipping_height ??
+        0
+    ) || 0;
     const packageDimension = {
         package_length: Math.max(1, Math.round(packageLength || 20)),
         package_width: Math.max(1, Math.round(packageWidth || 15)),
@@ -2250,9 +2308,9 @@ export function ShopeeSyncModal({
 
                 setVpsVariationGroup({
                     id: String(parentId),
-                    parent: toLocalProductFromVpsProduct(parentProduct),
+                    parent: toLocalProductFromVpsProduct(parentProduct, normalizePositiveId(parentProduct?.shopee_item_id)),
                     children: children.map((child: any) =>
-                        toLocalProductFromVpsProduct(child, itemIdByProductId.get(String(child.id)) || null)
+                        toLocalProductFromVpsProduct(child, itemIdByProductId.get(String(child.id)) || normalizePositiveId(child.shopee_item_id))
                     ),
                 });
             } catch (error) {
@@ -3380,6 +3438,7 @@ export function ShopeeSyncModal({
                     imageIdsByProductId: variationImageIdsByProductId,
                 })
                 : null;
+            const existingProductItemId = normalizePositiveId(product.shopee_item_id);
 
             const finalPayload = variationPayloadParts
                 ? {
@@ -3419,10 +3478,15 @@ export function ShopeeSyncModal({
                         tier_variation: variationPayloadParts.tier_variation,
                         model_list: variationModelListForPublish,
                     }, parsedStock)
-                : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
+                : existingProductItemId
+                    ? await postShopeeDebug('update_item', {
+                        ...finalPayload,
+                        item_id: existingProductItemId,
+                    }, 'update_item:existing_item')
+                    : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
 
             // Save to Supabase
-            const shopeeItemId = existingVariationItemId || data.response?.item_id;
+            const shopeeItemId = existingVariationItemId || existingProductItemId || data.response?.item_id;
             const videoUploadIdsForPostPublish = data?.omitted_video_upload_id ? [] : videoUploadIdList;
             let publishedModelList: any[] = [];
             let shouldKeepDebugOpen = false;
@@ -3521,7 +3585,7 @@ export function ShopeeSyncModal({
                 }
             }
 
-            toast.success('Produto publicado na Shopee! 🎉');
+            toast.success(existingProductItemId ? 'Produto atualizado na Shopee!' : 'Produto publicado na Shopee! 🎉');
             if (videoUploadSkipped) {
                 toast.info('Produto publicado sem vídeo porque o backend atual ainda não suporta upload_video.');
             }
