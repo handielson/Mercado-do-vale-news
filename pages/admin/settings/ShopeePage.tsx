@@ -2195,11 +2195,21 @@ export function ShopeeSyncModal({
         [selectedVariationGroup, variationDimensions]
     );
     const existingVariationItemId = useMemo(
-        () => findExistingShopeeItemIdForGroup(
-            availableVariationGroups.flatMap((group) => [group.parent, ...group.children]),
-            product
-        ),
-        [availableVariationGroups, product]
+        () => {
+            if (rawSelectedVariationGroup) {
+                const selectedGroupItemId = findExistingShopeeItemIdForGroup(
+                    [rawSelectedVariationGroup.parent, ...rawSelectedVariationGroup.children],
+                    product
+                );
+                if (selectedGroupItemId) return selectedGroupItemId;
+            }
+
+            return findExistingShopeeItemIdForGroup(
+                availableVariationGroups.flatMap((group) => [group.parent, ...group.children]),
+                product
+            );
+        },
+        [availableVariationGroups, product, rawSelectedVariationGroup]
     );
 
     useEffect(() => {
@@ -2822,6 +2832,37 @@ export function ShopeeSyncModal({
     const normalizeShopeeDuplicateLookup = (value: unknown) =>
         String(value ?? '').trim().toLowerCase();
 
+    const isShopeeVideoDispatcherError = (message: unknown) =>
+        /mms error|get video dispatcher info fail|video dispatcher|242400101/i.test(String(message ?? ''));
+
+    const getShopeeSavedVideoCount = (item: any) => {
+        const videoInfo = item?.video_info;
+        if (Array.isArray(videoInfo)) return videoInfo.length;
+        if (Array.isArray(videoInfo?.video_list)) return videoInfo.video_list.length;
+        if (Array.isArray(videoInfo?.video_id_list)) return videoInfo.video_id_list.length;
+        return videoInfo?.video_id ? 1 : 0;
+    };
+
+    const mergeExistingShopeeModelIds = (
+        modelList: any[],
+        existingModelList: any[],
+    ) => {
+        const existingBySku = new Map<string, any>();
+        for (const model of Array.isArray(existingModelList) ? existingModelList : []) {
+            const sku = normalizeShopeeDuplicateLookup(model?.model_sku).toUpperCase();
+            if (sku && !existingBySku.has(sku)) existingBySku.set(sku, model);
+        }
+
+        return modelList.map((model) => {
+            const sku = normalizeShopeeDuplicateLookup(model?.model_sku).toUpperCase();
+            const existing = sku ? existingBySku.get(sku) : null;
+            const modelId = Number(existing?.model_id);
+            return Number.isFinite(modelId) && modelId > 0
+                ? { ...model, model_id: modelId }
+                : model;
+        });
+    };
+
     const findExistingShopeeItemForDuplicate = async (payload: Record<string, any>) => {
         const targetSku = normalizeShopeeDuplicateLookup(payload.item_sku);
         const targetName = normalizeShopeeDuplicateLookup(payload.item_name);
@@ -2950,6 +2991,42 @@ export function ShopeeSyncModal({
                     message: error?.message || error,
                 });
 
+                if (isShopeeVideoDispatcherError(error?.message) && Array.isArray(payload.video_upload_id) && payload.video_upload_id.length > 0) {
+                    const retryPayload = { ...payload };
+                    delete retryPayload.video_upload_id;
+                    pushSyncDebug('add_item:video_dispatcher_retry_without_video', {
+                        variant: variant.key,
+                        label: variant.label,
+                        removed_video_upload_id: payload.video_upload_id,
+                        message: error?.message || error,
+                    });
+
+                    try {
+                        const data = await postShopeeDebug('add_item', retryPayload, `add_item:${variant.key}:without_video`);
+                        pushSyncDebug('add_item:variant_success', {
+                            variant: `${variant.key}:without_video`,
+                            label: `${variant.label} sem video`,
+                        });
+                        return {
+                            ...data,
+                            omitted_video_upload_id: true,
+                        };
+                    } catch (retryError: any) {
+                        lastError = retryError;
+                        pushSyncDebug('add_item:variant_error', {
+                            variant: `${variant.key}:without_video`,
+                            label: `${variant.label} sem video`,
+                            message: retryError?.message || retryError,
+                        });
+
+                        if (!isShopeeSellerStockConstraintError(retryError?.message)) {
+                            throw retryError;
+                        }
+
+                        continue;
+                    }
+                }
+
                 if (!isShopeeSellerStockConstraintError(error?.message)) {
                     throw error;
                 }
@@ -3006,6 +3083,39 @@ export function ShopeeSyncModal({
 
         if (!Number.isFinite(itemId) || itemId <= 0) {
             throw new Error('Shopee criou o item base, mas nao retornou item_id para inicializar as variacoes.');
+        }
+
+        if (createdItem?.reused_duplicate_item) {
+            const modelListData = await getShopeeDebug('get_model_list', 'duplicate_variation:model_list_before_update', {
+                item_id: itemId,
+            });
+            const existingModelList = modelListData?.response?.model || modelListData?.response?.model_list || [];
+            if (Array.isArray(existingModelList) && existingModelList.length > 0) {
+                const modelListForUpdate = mergeExistingShopeeModelIds(variationPayloadParts.model_list, existingModelList);
+                pushSyncDebug('duplicate_variation:update_existing_models', {
+                    item_id: itemId,
+                    existing_model_count: existingModelList.length,
+                    requested_skus: variationPayloadParts.model_list.map((model: any) => model.model_sku),
+                    matched_skus: modelListForUpdate
+                        .filter((model: any) => Number(model?.model_id) > 0)
+                        .map((model: any) => model.model_sku),
+                });
+
+                const updateData = await postShopeeDebug('update_model', {
+                    item_id: itemId,
+                    tier_variation: variationPayloadParts.tier_variation,
+                    model_list: modelListForUpdate,
+                }, 'duplicate_variation:update_model');
+
+                return {
+                    ...createdItem,
+                    response: {
+                        ...(createdItem?.response || {}),
+                        item_id: itemId,
+                        update_model: updateData?.response || updateData,
+                    },
+                };
+            }
         }
 
         const initData = await postShopeeDebug('init_tier_variation', {
@@ -3067,6 +3177,7 @@ export function ShopeeSyncModal({
             const imageIdList: string[] = [];
             const videoUploadIdList: string[] = [];
             let videoUploadSkipped = false;
+            let videoAlreadyPresentOnShopee = false;
             const expectedVideoCandidateCount = availableVideos.filter((video) =>
                 Boolean(video.video_id || video.video_url || (video.data_url && video.data_url.startsWith('data:video/')))
             ).length;
@@ -3179,35 +3290,63 @@ export function ShopeeSyncModal({
                 });
             }
 
-            for (const video of availableVideos) {
-                if (video.video_id) {
-                    videoUploadIdList.push(String(video.video_id));
-                    continue;
-                }
-
-                const resolvedVideoDataUrl = video.data_url?.startsWith('data:video/')
-                    ? video.data_url
-                    : '';
-                if (!video.video_url && !resolvedVideoDataUrl) continue;
-
+            if (expectedVideoCandidateCount > 0 && existingVariationItemId) {
                 try {
-                    const videoUploadPayload = {
-                        ...(video.video_url ? { video_url: video.video_url } : { video_data_url: resolvedVideoDataUrl }),
-                        file_name: video.file_name || 'video.mp4',
-                    };
-                    const uploadData = await postShopeeDebug('upload_video', videoUploadPayload);
-                    const uploadedId = uploadData?.response?.video_upload_id || uploadData?.response?.video_id;
-                    if (!uploadedId) {
-                        throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de video');
-                    }
-                    videoUploadIdList.push(String(uploadedId));
+                    const existingVideoData = await getShopeeDebug('get_item_base_info', 'video_precheck:existing_item', {
+                        item_id_list: existingVariationItemId,
+                    });
+                    const existingItem = existingVideoData?.response?.item_list?.[0] || null;
+                    const existingVideoCount = getShopeeSavedVideoCount(existingItem);
+                    videoAlreadyPresentOnShopee = existingVideoCount > 0;
+                    pushSyncDebug('video_precheck:existing_item_summary', {
+                        item_id: existingVariationItemId,
+                        saved_video_count: existingVideoCount,
+                        will_upload_video: !videoAlreadyPresentOnShopee,
+                    });
                 } catch (error: any) {
-                    if (isUnsupportedVideoUploadMessage(error?.message)) {
-                        videoUploadSkipped = true;
-                        pushSyncDebug('upload_video:skipped', 'Backend atual sem suporte a upload_video. Vamos publicar sem video.');
-                        break;
+                    pushSyncDebug('video_precheck:existing_item_error', {
+                        item_id: existingVariationItemId,
+                        message: error?.message || String(error),
+                    });
+                }
+            }
+
+            if (videoAlreadyPresentOnShopee) {
+                pushSyncDebug('upload_video:skipped_existing_video', {
+                    item_id: existingVariationItemId,
+                    reason: 'Item Shopee ja possui video salvo.',
+                });
+            } else {
+                for (const video of availableVideos) {
+                    if (video.video_id) {
+                        videoUploadIdList.push(String(video.video_id));
+                        continue;
                     }
-                    throw error;
+
+                    const resolvedVideoDataUrl = video.data_url?.startsWith('data:video/')
+                        ? video.data_url
+                        : '';
+                    if (!video.video_url && !resolvedVideoDataUrl) continue;
+
+                    try {
+                        const videoUploadPayload = {
+                            ...(video.video_url ? { video_url: video.video_url } : { video_data_url: resolvedVideoDataUrl }),
+                            file_name: video.file_name || 'video.mp4',
+                        };
+                        const uploadData = await postShopeeDebug('upload_video', videoUploadPayload);
+                        const uploadedId = uploadData?.response?.video_upload_id || uploadData?.response?.video_id;
+                        if (!uploadedId) {
+                            throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de video');
+                        }
+                        videoUploadIdList.push(String(uploadedId));
+                    } catch (error: any) {
+                        if (isUnsupportedVideoUploadMessage(error?.message)) {
+                            videoUploadSkipped = true;
+                            pushSyncDebug('upload_video:skipped', 'Backend atual sem suporte a upload_video. Vamos publicar sem video.');
+                            break;
+                        }
+                        throw error;
+                    }
                 }
             }
 
@@ -3250,18 +3389,41 @@ export function ShopeeSyncModal({
                     model_list: variationPayloadParts.model_list,
                 }
                 : basePayload;
+            const existingVariationModelData = variationPayloadParts && existingVariationItemId
+                ? await getShopeeDebug('get_model_list', 'existing_variation:model_list_before_update', {
+                    item_id: existingVariationItemId,
+                })
+                : null;
+            const existingVariationModelList = existingVariationModelData?.response?.model || existingVariationModelData?.response?.model_list || [];
+            const variationModelListForPublish = variationPayloadParts && existingVariationItemId
+                ? mergeExistingShopeeModelIds(variationPayloadParts.model_list, existingVariationModelList)
+                : variationPayloadParts?.model_list || [];
+            if (variationPayloadParts && existingVariationItemId) {
+                pushSyncDebug('existing_variation:model_id_merge', {
+                    item_id: existingVariationItemId,
+                    existing_model_count: Array.isArray(existingVariationModelList) ? existingVariationModelList.length : 0,
+                    requested_skus: variationPayloadParts.model_list.map((model: any) => model.model_sku),
+                    matched_skus: variationModelListForPublish
+                        .filter((model: any) => Number(model?.model_id) > 0)
+                        .map((model: any) => model.model_sku),
+                });
+            }
             const data = variationPayloadParts
                 ? existingVariationItemId
                     ? await postShopeeDebug('update_model', {
                         item_id: existingVariationItemId,
                         tier_variation: variationPayloadParts.tier_variation,
-                        model_list: variationPayloadParts.model_list,
+                        model_list: variationModelListForPublish,
                     }, 'add_item:existing_variation')
-                    : await publishShopeeVariationItem(basePayload, finalPayload, variationPayloadParts, parsedStock)
+                    : await publishShopeeVariationItem(basePayload, finalPayload, {
+                        tier_variation: variationPayloadParts.tier_variation,
+                        model_list: variationModelListForPublish,
+                    }, parsedStock)
                 : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
 
             // Save to Supabase
             const shopeeItemId = existingVariationItemId || data.response?.item_id;
+            const videoUploadIdsForPostPublish = data?.omitted_video_upload_id ? [] : videoUploadIdList;
             let publishedModelList: any[] = [];
             let shouldKeepDebugOpen = false;
             if (shopeeItemId) {
@@ -3271,23 +3433,21 @@ export function ShopeeSyncModal({
                     });
                     const savedItem = verification?.response?.item_list?.[0] || null;
                     const savedVideoInfo = savedItem?.video_info;
-                    const savedVideoCount = Array.isArray(savedVideoInfo)
-                        ? savedVideoInfo.length
-                        : Array.isArray(savedVideoInfo?.video_list)
-                            ? savedVideoInfo.video_list.length
-                            : 0;
+                    const savedVideoCount = getShopeeSavedVideoCount(savedItem);
                     const expectedBrandId = Number(brandInfo?.brand_id || 0);
                     const savedBrandId = Number(savedItem?.brand?.brand_id || 0);
                     shouldKeepDebugOpen =
                         (expectedBrandId > 0 && savedBrandId !== expectedBrandId) ||
-                        (expectedVideoCandidateCount > 0 && savedVideoCount === 0) ||
+                        (expectedVideoCandidateCount > 0 && !videoAlreadyPresentOnShopee && savedVideoCount === 0) ||
                         videoUploadSkipped;
                     pushSyncDebug('post_publish:summary', {
                         item_id: shopeeItemId,
                         expected_brand: brandInfo,
                         saved_brand: savedItem?.brand || null,
                         expected_video_candidates: expectedVideoCandidateCount,
-                        expected_video_upload_ids: videoUploadIdList,
+                        expected_video_upload_ids: videoUploadIdsForPostPublish,
+                        video_already_present_on_shopee: videoAlreadyPresentOnShopee,
+                        omitted_video_upload_id: Boolean(data?.omitted_video_upload_id),
                         saved_video_count: savedVideoCount,
                     });
 
@@ -3298,10 +3458,10 @@ export function ShopeeSyncModal({
                         publishedModelList = modelListData?.response?.model || modelListData?.response?.model_list || [];
                     }
 
-                    if (expectedVideoCandidateCount > 0 && videoUploadIdList.length > 0 && savedVideoCount === 0) {
+                    if (expectedVideoCandidateCount > 0 && videoUploadIdsForPostPublish.length > 0 && savedVideoCount === 0) {
                         const attachData = await postShopeeDebug('update_item', {
                             item_id: shopeeItemId,
-                            video_upload_id: videoUploadIdList,
+                            video_upload_id: videoUploadIdsForPostPublish,
                         }, 'post_publish:attach_video');
                         pushSyncDebug('post_publish:attach_video_summary', attachData);
 
@@ -3310,11 +3470,7 @@ export function ShopeeSyncModal({
                         });
                         const recheckedItem = afterAttach?.response?.item_list?.[0] || null;
                         const recheckedVideoInfo = recheckedItem?.video_info;
-                        const recheckedVideoCount = Array.isArray(recheckedVideoInfo)
-                            ? recheckedVideoInfo.length
-                            : Array.isArray(recheckedVideoInfo?.video_list)
-                                ? recheckedVideoInfo.video_list.length
-                                : 0;
+                        const recheckedVideoCount = getShopeeSavedVideoCount(recheckedItem);
                         shouldKeepDebugOpen = recheckedVideoCount === 0;
                         pushSyncDebug('post_publish:video_recheck_summary', {
                             saved_video_count: recheckedVideoCount,

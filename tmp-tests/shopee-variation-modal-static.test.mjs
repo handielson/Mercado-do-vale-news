@@ -20,7 +20,7 @@ assert.doesNotMatch(page, /missingSupabaseProducts|supaProds|supaMap/, 'Shopee p
 assert.match(page, /getProductsByParentId/, 'Shopee modal should fetch missing variation siblings from VPS');
 assert.doesNotMatch(page, /seller_stock:\s*undefined/, 'variation add_item payload must not send a null seller_stock field');
 assert.match(page, /postShopeeDebug\('add_item',\s*variationPayload,\s*'add_item:variation'\)/, 'variation add_item should first send variation payload directly');
-assert.match(page, /publishShopeeVariationItem\(basePayload,\s*finalPayload,\s*variationPayloadParts,\s*parsedStock\)/, 'variation add_item should use the variation publish fallback wrapper');
+assert.match(page, /publishShopeeVariationItem\(basePayload,\s*finalPayload,\s*\{[\s\S]*model_list: variationModelListForPublish,[\s\S]*\},\s*parsedStock\)/, 'variation add_item should use the variation publish fallback wrapper with prepared model list');
 assert.doesNotMatch(page, /publishShopeeItemWithStockFallback\(finalPayload, variationTotalStock\)/, 'variation add_item must not add simple-item stock fallback fields');
 assert.match(page, /variation_image:skipped/, 'variation image download failures should be logged as skipped instead of aborting publish');
 assert.match(page, /continue;/, 'variation image download failures should continue publishing without optional option image');
@@ -33,6 +33,13 @@ assert.match(page, /rawSelectedVariationGroup\.children\.filter\(\(child\) => al
 assert.match(page, /findExistingShopeeItemForDuplicate/, 'variation fallback should recover from duplicate base items');
 assert.match(page, /duplicate_lookup:match/, 'duplicate recovery should log the reused Shopee item');
 assert.match(page, /add_item:variation_fallback_duplicate_reused/, 'variation fallback should reuse duplicate items before init_tier_variation');
+assert.match(page, /isShopeeVideoDispatcherError/, 'add_item should detect Shopee MMS video dispatcher failures');
+assert.match(page, /add_item:video_dispatcher_retry_without_video/, 'add_item should retry without video when Shopee MMS validation times out');
+assert.match(page, /delete retryPayload\.video_upload_id/, 'video dispatcher retry should remove video_upload_id from add_item payload');
+assert.match(page, /omitted_video_upload_id/, 'post-publish video attach should know when video was intentionally omitted');
+assert.match(page, /video_precheck:existing_item/, 'variation publish should inspect existing Shopee item video before uploading');
+assert.match(page, /upload_video:skipped_existing_video/, 'variation publish should skip video upload when Shopee item already has video');
+assert.match(page, /videoAlreadyPresentOnShopee/, 'post-publish verification should account for videos already saved on Shopee');
 assert.match(page, /init_tier_variation/, 'seller_stock-constrained variation add_item should initialize variations after base item fallback');
 assert.match(page, /add_item:variation_fallback_base/, 'variation fallback should log base item creation before initializing variations');
 assert.match(api, /action === 'init_tier_variation'/, 'API must expose init_tier_variation action');
