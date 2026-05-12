@@ -680,6 +680,19 @@ Produtos com qualquer alerta continuam indo para revisao manual.
 
 ## Variacoes no mesmo anuncio Shopee
 
+### Primeira entrega: variacoes manuais
+
+A primeira versao sera manual e assistida.
+
+- o operador escolhe explicitamente publicar como anuncio com variacoes;
+- o sistema sugere grupos baseados em `parent_id`;
+- cada filho vira um item de `model_list`;
+- a primeira dimensao suportada e `Cor`, com suporte tambem a `Modelo`, `Tamanho`, `RAM` e `Armazenamento`;
+- cada variacao precisa ter SKU, preco e estoque validos;
+- imagem propria por cor e recomendada, mas a imagem principal do anuncio continua obrigatoria;
+- o vinculo `shopee_products` sera salvo para o pai e para cada filho usando o mesmo `item_id`;
+- envio em massa continua publicando somente produtos simples ate existir pre-validacao de variacoes.
+
 ### Como deve funcionar
 
 Variacoes devem ser usadas quando varios produtos locais representam o mesmo anuncio com opcoes diferentes, por exemplo:

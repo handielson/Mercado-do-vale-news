@@ -43,6 +43,13 @@ import {
     resolveBestShopeeTemplate,
 } from '../../../services/shopeeTemplateEngine';
 import type { ShopeeTemplate } from '../../../types/shopee-template';
+import {
+    buildShopeeVariationModels,
+    detectShopeeVariationDimensions,
+    groupShopeeVariationCandidates,
+    validateShopeeVariationGroup,
+} from '../../../services/shopeeVariationEngine';
+import type { ShopeeVariationGroup } from '../../../types/shopee-variation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ShopeeProduct {
@@ -69,6 +76,9 @@ export interface ShopeeProduct {
     video_url?: string | null;
     stock_quantity?: number;
     track_inventory?: boolean;
+    parent_id?: string | null;
+    is_parent?: boolean | number | null;
+    specs?: Record<string, any> | null;
     eans?: string[];
     weight_kg?: number;
     shipping_weight?: number;
@@ -98,6 +108,9 @@ export interface LocalProduct {
     video_url?: string | null;
     stock_quantity?: number;
     track_inventory?: boolean;
+    parent_id?: string | null;
+    is_parent?: boolean | number | null;
+    specs?: Record<string, any> | null;
     eans?: string[];
     weight_kg?: number;
     shipping_weight?: number;
@@ -623,6 +636,9 @@ function toLocalProduct(p: ShopeeProduct): LocalProduct {
         video_url: p.video_url ?? null,
         stock_quantity: p.stock_quantity || 0,
         track_inventory: p.track_inventory !== false,
+        parent_id: p.parent_id ?? null,
+        is_parent: p.is_parent ?? null,
+        specs: p.specs || {},
         eans: p.eans || [],
         weight_kg: p.weight_kg,
         shipping_weight: p.shipping_weight,
@@ -698,7 +714,7 @@ export default function ShopeePage() {
         setLoadingProducts(true);
         try {
             // Fetch products from VPS (source of truth for catalog), bypassing 5-min cache to ensure Bling cost is fresh
-            const localProds = await vpsApiService.getProducts({ limit: 500, status: 'all', noCache: true });
+            const localProds = await vpsApiService.getProducts({ limit: 5000, status: 'all', noCache: true });
 
             // Fetch Shopee sync records from Supabase (integration metadata)
             const { data: shopeeRecords } = await supabase
@@ -749,6 +765,9 @@ export default function ShopeePage() {
                     video_url: sp?.video_url ?? p.video_url ?? null,
                     stock_quantity: Number(p.stock_quantity ?? 0) || 0,
                     track_inventory: p.track_inventory !== false,
+                    parent_id: sp?.parent_id ?? p.parent_id ?? null,
+                    is_parent: p.is_parent ?? null,
+                    specs: p.specs || {},
                     eans: Array.isArray(p.eans) ? p.eans : (p.ean ? [p.ean] : []),
                     weight_kg: p.weight_kg,
                     shipping_weight: p.shipping_weight,
@@ -943,6 +962,7 @@ export default function ShopeePage() {
                 status: 'active',
                 last_synced_at: new Date().toISOString(),
             }, { onConflict: 'product_id' });
+
             toast.success(`Produto vinculado ao Item Shopee #${itemId}!`);
             setLinkingProductId(null);
             setLinkInput('');
@@ -1158,6 +1178,11 @@ export default function ShopeePage() {
                 : item
         ));
     };
+
+    const variationGroups = useMemo(
+        () => groupShopeeVariationCandidates(products.map((product) => toLocalProduct(product))),
+        [products]
+    );
 
     if (loading) return (
         <div className="flex justify-center items-center h-64">
@@ -1670,6 +1695,7 @@ export default function ShopeePage() {
                             product={syncModal}
                             company={company}
                             historicalProducts={products}
+                            variationGroups={variationGroups}
                             onClose={() => setSyncModal(null)}
                             onSuccess={() => { setSyncModal(null); loadProducts(); }}
                         />
@@ -1889,6 +1915,7 @@ export default function ShopeePage() {
                                 product={bulkActiveProduct}
                                 company={company}
                                 historicalProducts={products}
+                                variationGroups={variationGroups}
                                 onClose={closeBulkAssistedSync}
                                 onSuccess={handleBulkModalSuccess}
                                 onError={handleBulkModalError}
@@ -1917,8 +1944,8 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 export function ShopeeSyncModal({
-    product, company, historicalProducts, onClose, onSuccess, onError
-}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; onClose: () => void; onSuccess: () => void; onError?: (message: string) => void }) {
+    product, company, historicalProducts, variationGroups, onClose, onSuccess, onError
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; onClose: () => void; onSuccess: () => void; onError?: (message: string) => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
     const [allCatTree, setAllCatTree] = useState<any[]>([]);
@@ -1932,6 +1959,8 @@ export function ShopeeSyncModal({
     const [selectedBrandId, setSelectedBrandId] = useState('');
     const [loadingBrands, setLoadingBrands] = useState(false);
     const [syncing, setSyncing] = useState(false);
+    const [publishWithVariations, setPublishWithVariations] = useState(false);
+    const [selectedVariationGroupId, setSelectedVariationGroupId] = useState('');
 
     const initialDefaults = resolveShopeeSyncDefaults(product);
     const defaultDescription = initialDefaults.description;
@@ -1999,6 +2028,18 @@ export function ShopeeSyncModal({
     const titleSafety = useMemo(
         () => analyzeShopeeTitleSafety(itemName, selectedShopeeTemplate?.dangerousTerms || []),
         [itemName, selectedShopeeTemplate]
+    );
+    const selectedVariationGroup = useMemo(
+        () => (variationGroups || []).find((group) => group.id === selectedVariationGroupId) || null,
+        [selectedVariationGroupId, variationGroups]
+    );
+    const variationDimensions = useMemo(
+        () => selectedVariationGroup ? detectShopeeVariationDimensions(selectedVariationGroup) : [],
+        [selectedVariationGroup]
+    );
+    const variationValidation = useMemo(
+        () => selectedVariationGroup ? validateShopeeVariationGroup(selectedVariationGroup, variationDimensions) : null,
+        [selectedVariationGroup, variationDimensions]
     );
 
     const findTemplateCategoryNode = useCallback((categoryId?: number | null) => {
@@ -2075,6 +2116,16 @@ export function ShopeeSyncModal({
             cancelled = true;
         };
     }, [applyTemplate, product]);
+
+    useEffect(() => {
+        const groups = variationGroups || [];
+        const matching = groups.find((group) =>
+            group.parent.id === product.id ||
+            group.children.some((child) => child.id === product.id)
+        );
+        if (!matching) return;
+        setSelectedVariationGroupId(matching.id);
+    }, [product.id, variationGroups]);
 
     useEffect(() => {
         const blingId = Number(product.bling_id);
@@ -2646,6 +2697,13 @@ export function ShopeeSyncModal({
             return;
         }
 
+        if (publishWithVariations) {
+            if (!selectedVariationGroup || !variationValidation?.ok) {
+                toast.error('Revise o grupo de variacoes antes de publicar.');
+                return;
+            }
+        }
+
         if (!selectedCat?.category_id) {
             toast.error('Selecione uma categoria antes de publicar.');
             setStep(1);
@@ -2733,6 +2791,28 @@ export function ShopeeSyncModal({
                 throw new Error('O produto precisa ter pelo menos 1 imagem valida para publicar.');
             }
 
+            const variationImageIdsByProductId: Record<string, string> = {};
+            if (publishWithVariations && selectedVariationGroup) {
+                for (const child of selectedVariationGroup.children) {
+                    const firstImage = Array.isArray(child.images) ? child.images[0] : '';
+                    if (!firstImage) continue;
+                    if (typeof firstImage === 'string' && firstImage.startsWith('sg-')) {
+                        variationImageIdsByProductId[child.id] = firstImage;
+                        continue;
+                    }
+                    const resolvedImageDataUrl = typeof firstImage === 'string'
+                        ? await readRemoteUrlAsDataUrl(firstImage)
+                        : '';
+                    if (!resolvedImageDataUrl) continue;
+                    const uploadData = await postShopeeDebug('upload_image', {
+                        image_data_url: resolvedImageDataUrl,
+                        file_name: `${child.sku || child.id}.jpg`,
+                    }, `upload_image:variation:${child.sku || child.id}`);
+                    const uploadedId = uploadData?.response?.image_info?.image_id || uploadData?.response?.image_id;
+                    if (uploadedId) variationImageIdsByProductId[child.id] = String(uploadedId);
+                }
+            }
+
             for (const video of availableVideos) {
                 if (video.video_id) {
                     videoUploadIdList.push(String(video.video_id));
@@ -2790,7 +2870,25 @@ export function ShopeeSyncModal({
                 condition: 'NEW',
             };
 
-            const data = await publishShopeeItemWithStockFallback(basePayload, parsedStock);
+            const variationPayloadParts = publishWithVariations && selectedVariationGroup
+                ? buildShopeeVariationModels(selectedVariationGroup, variationDimensions, {
+                    imageIdsByProductId: variationImageIdsByProductId,
+                })
+                : null;
+
+            const finalPayload = variationPayloadParts
+                ? {
+                    ...basePayload,
+                    item_sku: undefined,
+                    seller_stock: undefined,
+                    tier_variation: variationPayloadParts.tier_variation,
+                    model_list: variationPayloadParts.model_list,
+                }
+                : basePayload;
+
+            const data = variationPayloadParts
+                ? await postShopeeDebug('add_item', finalPayload, 'add_item:variation')
+                : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
 
             // Save to Supabase
             const shopeeItemId = data.response?.item_id;
@@ -2869,6 +2967,20 @@ export function ShopeeSyncModal({
                 last_synced_at: new Date().toISOString(),
             }, { onConflict: 'product_id' });
 
+            if (publishWithVariations && selectedVariationGroup) {
+                for (const child of selectedVariationGroup.children) {
+                    await supabase.from('shopee_products').upsert({
+                        product_id: child.id,
+                        shopee_item_id: shopeeItemId,
+                        shopee_category_id: selectedCat.category_id,
+                        shopee_category_name: selectedCat.display_category_name,
+                        shopee_price: Math.round(Number(child.price_retail || 0)),
+                        status: 'active',
+                        last_synced_at: new Date().toISOString(),
+                    }, { onConflict: 'product_id' });
+                }
+            }
+
             toast.success('Produto publicado na Shopee! 🎉');
             if (videoUploadSkipped) {
                 toast.info('Produto publicado sem vídeo porque o backend atual ainda não suporta upload_video.');
@@ -2915,6 +3027,54 @@ export function ShopeeSyncModal({
                 </div>
 
                 <div className="px-6 py-4 border-b border-slate-100 bg-orange-50/40 space-y-3">
+                    {(variationGroups || []).length > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                    <p className="text-sm font-bold text-slate-800">Variações Shopee</p>
+                                    <p className="text-xs text-slate-500">Use quando vários produtos locais devem virar um único anúncio com opções.</p>
+                                </div>
+                                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={publishWithVariations}
+                                        onChange={(event) => setPublishWithVariations(event.target.checked)}
+                                        className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                                    />
+                                    Publicar como anuncio com variacoes
+                                </label>
+                            </div>
+                            {publishWithVariations && (
+                                <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                                    <select
+                                        value={selectedVariationGroupId}
+                                        onChange={(event) => setSelectedVariationGroupId(event.target.value)}
+                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                    >
+                                        <option value="">Selecione um grupo de variacoes...</option>
+                                        {(variationGroups || []).map((group) => (
+                                            <option key={group.id} value={group.id}>
+                                                {group.parent.name} ({group.children.length} variacoes)
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <span className={`rounded-lg px-3 py-2 text-xs font-bold ${variationValidation?.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                        {variationValidation?.ok ? 'Pronto para variacoes' : 'Revisao necessaria'}
+                                    </span>
+                                </div>
+                            )}
+                            {publishWithVariations && variationValidation && (variationValidation.blockers.length > 0 || variationValidation.warnings.length > 0) && (
+                                <div className="space-y-1 text-xs">
+                                    {variationValidation.blockers.map((issue, index) => (
+                                        <p key={`blocker-${index}`} className="text-red-700">{issue.message}</p>
+                                    ))}
+                                    {variationValidation.warnings.map((issue, index) => (
+                                        <p key={`warning-${index}`} className="text-amber-700">{issue.message}</p>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-3 md:items-end">
                         <label>
                             <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Template da Shopee</span>
