@@ -610,7 +610,7 @@ function extractVariacaoFromName(nome: string): string | undefined {
 /** Mapeia TODOS os campos disponíveis do Bling para o banco — sem condicional.
  *  O campo `_color_id` é auxiliar (não vai para a tabela products).
  */
-function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string, modelId?: string, marginWholesale: number = 0, marginReseller: number = 0): Record<string, any> {
+function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>, categoryId: string, modelId?: string, marginWholesale: number = 0, marginReseller: number = 0, modelDescription?: string | null): Record<string, any> {
     // variacaoNome vem da API quando o produto é uma variação explícita;
     // se não vier, tenta extrair padrões CHAVE:VALOR do próprio nome
     const variacaoNome: string | undefined =
@@ -662,7 +662,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         ean: item.gtin || null,
         alternative_eans: item.gtin ? [item.gtin] : [],
         brand: typeof item.marca === 'object' ? item.marca?.nome || null : item.marca || null,
-        description: item.descricao || item.descricaoComplementar || item.descricaoCurta || null,
+        description: item.descricao || item.descricaoComplementar || item.descricaoCurta || modelDescription || null,
         status: item.situacao === 'A' ? 'active' : 'inactive',
         // Categoria
         category_id: resolveCategoryId(item.categoria?.id, categoryId),
@@ -1322,17 +1322,19 @@ export async function importBlingProducts(
         throw new Error('Falha ao inserir produto após fallback de colunas.'); // row never returned — caller handles the throw
     };
 
-    // Resolve brand and model name for use as fallback values
+    // Resolve brand, model name e description (fallback quando Bling não traz)
     let modelBrandName: string | null = null;
     let modelName: string | null = null;
+    let modelDescription: string | null = null;
     if (modelId) {
         const { data: modelData } = await supabase
             .from('models')
-            .select('name, brand_id, brands(name)')
+            .select('name, description, brand_id, brands(name)')
             .eq('id', modelId)
             .maybeSingle();
         modelBrandName = (modelData?.brands as any)?.name || null;
         modelName = modelData?.name || null;
+        modelDescription = (modelData as any)?.description || null;
     }
 
     // Caches for auto-create mode to avoid duplicate db lookups/inserts
@@ -1375,7 +1377,7 @@ export async function importBlingProducts(
                 stock_quantity: detail.stock_quantity ?? item.stock_quantity,
             } : item;
 
-            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId, marginWholesale, marginReseller);
+            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId, marginWholesale, marginReseller, modelDescription);
 
             // Se o mapeamento local estiver desatualizado (categoria removida/trocada), cai para a categoria padrão.
             if (!row.category_id || !validVpsCategoryIds.has(row.category_id)) {
