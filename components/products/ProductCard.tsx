@@ -166,9 +166,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
     const [isPreparingShopeeModal, setIsPreparingShopeeModal] = useState(false);
     const [shopeeCompany, setShopeeCompany] = useState<Company | null>(null);
+    const [shopeeModalProductSource, setShopeeModalProductSource] = useState<Product & Record<string, any>>(product as Product & Record<string, any>);
 
     const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
-    const shopeeModalProduct = mapProductToShopeeLocalProduct(product as Product & Record<string, any>) as LocalProduct;
+    const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
 
     // Check video: prioridade para video_url salvo no banco; fallback resiliente por SKU
@@ -317,7 +318,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     useEffect(() => {
         setCurrentStatus(product.status);
         setCurrentStock(product.stock_quantity);
-    }, [product.status, product.stock_quantity]);
+        setShopeeModalProductSource(product as Product & Record<string, any>);
+    }, [product]);
 
     useEffect(() => {
         const parsed = Number(product.shopee_item_id);
@@ -445,6 +447,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             }
 
             await ensureShopeeCompany();
+            const hydratedProduct = await vpsApiService.getProductById(product.id, true);
+            setShopeeModalProductSource({
+                ...(product as Product & Record<string, any>),
+                ...(hydratedProduct || {}),
+            });
             setIsShopeeModalOpen(true);
         } catch (error) {
             console.error('[ProductCard] Erro ao preparar modal Shopee:', error);

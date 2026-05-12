@@ -36,19 +36,36 @@ function getProductSpec(product: Record<string, any>, keys: string[]): string {
     return '';
 }
 
+function extractProductModelFromName(name: string): string {
+    const normalized = String(name || '').trim();
+    if (!normalized) return '';
+
+    const match = normalized.match(/\b(?:para|compativel com|compatível com)\s+(.+?)(?:\s+cor\s*:|\s+cor\s+-|\s+-\s*cor\b|$)/i);
+    return match?.[1]?.trim().replace(/\s{2,}/g, ' ') || '';
+}
+
+function extractProductColorFromName(name: string): string {
+    const normalized = String(name || '').trim();
+    if (!normalized) return '';
+
+    const match = normalized.match(/\bcor\s*:?\s*([^,\n\r;|]+)/i);
+    return match?.[1]?.trim().replace(/\s{2,}/g, ' ') || '';
+}
+
 function buildTemplateVariables(product: Record<string, any>): Record<string, string> {
     const priceCents = Number(product?.price_retail ?? product?.price ?? 0);
     const price = Number.isFinite(priceCents) && priceCents > 0
         ? (priceCents / 100).toFixed(2)
         : '';
+    const productName = String(product?.name || '').trim();
 
     return {
-        produto: String(product?.name || '').trim(),
-        nome: String(product?.name || '').trim(),
+        produto: productName,
+        nome: productName,
         sku: String(product?.sku || '').trim(),
         marca: String(product?.brand || '').trim(),
-        modelo: String(product?.model || product?.model_name || '').trim(),
-        cor: getProductSpec(product, ['color', 'cor']),
+        modelo: String(product?.model || product?.model_name || '').trim() || extractProductModelFromName(productName),
+        cor: getProductSpec(product, ['color', 'cor']) || extractProductColorFromName(productName),
         ram: getProductSpec(product, ['ram']),
         armazenamento: getProductSpec(product, ['storage', 'armazenamento']),
         categoria: String(product?.category_slug || product?.category_name || product?.category || '').trim(),

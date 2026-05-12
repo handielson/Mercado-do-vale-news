@@ -5611,7 +5611,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
     : 'images';
 
   const cols = compact
-    ? `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
+    ? `id, model_id, category_id, brand, name, sku, ean, alternative_eans, description,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
        is_combo, combo_discount_type, combo_discount_value,
@@ -5621,7 +5621,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        ${imgCol},
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
        slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
-    : `id, model_id, category_id, brand, name, sku, ean, alternative_eans,
+    : `id, model_id, category_id, brand, name, sku, ean, alternative_eans, description,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
        is_combo, combo_discount_type, combo_discount_value,

@@ -19,7 +19,7 @@ function mapVpsProduct(row: any): Product {
         brand: row.brand || undefined,
         name: row.name,
         sku: row.sku || '',
-        description: undefined,
+        description: row.description || undefined,
         eans: Array.isArray(row.alternative_eans) && row.alternative_eans.length
             ? row.alternative_eans
             : (row.ean ? [row.ean] : []),

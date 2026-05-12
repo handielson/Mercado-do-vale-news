@@ -104,4 +104,14 @@ assert.equal(applied.stock, 2);
 assert.equal(applied.gtinMode, 'no_gtin');
 assert.deepEqual(applied.attributeValues, { '100134': 'TPU' });
 
+const appliedFromNameOnly = applyShopeeTemplateToProduct({
+  id: 'p2',
+  name: 'Capa de Silicone para Redmi Note 14 4G Cor:Marrom',
+  sku: 'CSRN144GMARR',
+  specs: {},
+  price_retail: 1999,
+  stock_quantity: 1,
+}, templates[1]);
+assert.equal(appliedFromNameOnly.title, 'Capa compativel com Redmi Note 14 4G Cor:Marrom');
+
 console.log('shopee template engine tests passed');
