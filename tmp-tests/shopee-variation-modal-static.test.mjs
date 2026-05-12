@@ -18,8 +18,8 @@ assert.match(page, /Selecione grupo/, 'variation status should be neutral when n
 assert.doesNotMatch(page, /missingSupabaseProducts|supaProds|supaMap/, 'Shopee page should not use Supabase as a catalog fallback for variation groups');
 assert.match(page, /getProductsByParentId/, 'Shopee modal should fetch missing variation siblings from VPS');
 assert.doesNotMatch(page, /seller_stock:\s*undefined/, 'variation add_item payload must not send a null seller_stock field');
-assert.match(page, /variationTotalStock/, 'variation add_item should calculate top-level stock from model stocks');
-assert.match(page, /publishShopeeItemWithStockFallback\(finalPayload, variationTotalStock\)/, 'variation add_item should reuse Shopee stock fallback');
+assert.match(page, /postShopeeDebug\('add_item',\s*finalPayload,\s*'add_item:variation'\)/, 'variation add_item should send variation payload directly');
+assert.doesNotMatch(page, /publishShopeeItemWithStockFallback\(finalPayload, variationTotalStock\)/, 'variation add_item must not add simple-item stock fallback fields');
 assert.match(docs, /Primeira entrega: variacoes manuais/, 'Shopee docs should document the first manual variation delivery');
 
 console.log('shopee variation modal static checks passed');
