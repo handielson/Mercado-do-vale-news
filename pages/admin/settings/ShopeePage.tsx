@@ -1622,6 +1622,7 @@ export function ShopeeSyncModal({
     );
     const [mediaBusy, setMediaBusy] = useState(false);
     const [syncDebugEntries, setSyncDebugEntries] = useState<SyncDebugEntry[]>([]);
+    const syncDebugEntriesRef = useRef<SyncDebugEntry[]>([]);
     const descriptionDirtyRef = useRef(false);
     const stockDirtyRef = useRef(false);
     const titleDirtyRef = useRef(false);
@@ -2045,13 +2046,15 @@ export function ShopeeSyncModal({
             }
         })();
 
+        const entry = {
+            stage,
+            timestamp: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
+            payload: serialized.slice(0, 4000),
+        };
+        syncDebugEntriesRef.current = [...syncDebugEntriesRef.current, entry];
         setSyncDebugEntries((prev) => [
             ...prev,
-            {
-                stage,
-                timestamp: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
-                payload: serialized.slice(0, 4000),
-            },
+            entry,
         ]);
     };
 
@@ -2305,6 +2308,7 @@ export function ShopeeSyncModal({
         setSyncing(true);
         setMediaBusy(true);
         setSyncDebugEntries([]);
+        syncDebugEntriesRef.current = [];
         try {
             const attributeList = buildAttributePayload();
             const cleanItemName = (itemName.trim() || product.name || '').slice(0, 120);
@@ -2421,6 +2425,46 @@ export function ShopeeSyncModal({
 
             // Save to Supabase
             const shopeeItemId = data.response?.item_id;
+            let shouldKeepDebugOpen = false;
+            if (shopeeItemId) {
+                try {
+                    const verification = await getShopeeDebug('get_item_base_info', 'post_publish:verification', {
+                        item_id_list: shopeeItemId,
+                    });
+                    const savedItem = verification?.response?.item_list?.[0] || null;
+                    const savedVideoInfo = savedItem?.video_info;
+                    const savedVideoCount = Array.isArray(savedVideoInfo)
+                        ? savedVideoInfo.length
+                        : Array.isArray(savedVideoInfo?.video_list)
+                            ? savedVideoInfo.video_list.length
+                            : 0;
+                    const expectedBrandId = Number(brandInfo?.brand_id || 0);
+                    const savedBrandId = Number(savedItem?.brand?.brand_id || 0);
+                    const expectedVideoCount = videoUploadIdList.length;
+                    shouldKeepDebugOpen =
+                        (expectedBrandId > 0 && savedBrandId !== expectedBrandId) ||
+                        (expectedVideoCount > 0 && savedVideoCount === 0);
+                    pushSyncDebug('post_publish:summary', {
+                        item_id: shopeeItemId,
+                        expected_brand: brandInfo,
+                        saved_brand: savedItem?.brand || null,
+                        expected_video_upload_ids: videoUploadIdList,
+                        saved_video_count: savedVideoCount,
+                    });
+                } catch (verifyError: any) {
+                    pushSyncDebug('post_publish:verification_error', verifyError?.message || verifyError);
+                    shouldKeepDebugOpen = true;
+                }
+            }
+
+            try {
+                window.localStorage.setItem(
+                    'shopee:lastSyncDebug',
+                    syncDebugEntriesRef.current.map((entry) => `[${entry.timestamp}] ${entry.stage}\n${entry.payload}`).join('\n\n')
+                );
+            } catch {
+                // Best-effort debug recovery only.
+            }
             await supabase.from('shopee_products').upsert({
                 product_id: product.id,
                 shopee_item_id: shopeeItemId,
@@ -2434,6 +2478,10 @@ export function ShopeeSyncModal({
             toast.success('Produto publicado na Shopee! 🎉');
             if (videoUploadSkipped) {
                 toast.info('Produto publicado sem vídeo porque o backend atual ainda não suporta upload_video.');
+            }
+            if (shouldKeepDebugOpen) {
+                toast.warning('A Shopee publicou, mas nao confirmou marca/video. Mantive o debug aberto para copiar.');
+                return;
             }
             onSuccess();
         } catch (e: any) {

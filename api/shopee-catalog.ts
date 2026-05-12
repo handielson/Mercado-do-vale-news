@@ -240,12 +240,11 @@ export default async function handler(req: any, res: any) {
 
             const pageSizeRaw = Number(req.query.page_size ?? 100);
             const pageSize = Number.isFinite(pageSizeRaw) ? Math.max(1, Math.min(100, pageSizeRaw)) : 100;
-            const offsetRaw = Number(req.query.offset ?? 0);
-            const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
+            const offset = String(req.query.offset ?? '0').trim() || '0';
             const brandName = String(req.query.brand_name || '').trim();
             const targetBrand = normalizeLookupText(brandName);
 
-            const fetchBrandPage = (nextOffset: number) => {
+            const fetchBrandPage = (nextOffset: string) => {
                 const params = new URLSearchParams({
                     category_id: String(categoryId),
                     status: String(req.query.status ?? 1),
@@ -261,8 +260,10 @@ export default async function handler(req: any, res: any) {
             }
 
             const collected: any[] = [];
-            let nextOffset = 0;
-            for (let attempt = 0; attempt < 20; attempt += 1) {
+            let nextOffset = offset;
+            const seenOffsets = new Set<string>();
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+                seenOffsets.add(nextOffset);
                 const data = await fetchBrandPage(nextOffset);
                 if (data?.error && data.error !== '') return res.status(200).json(data);
 
@@ -288,7 +289,9 @@ export default async function handler(req: any, res: any) {
 
                 const hasNext = data?.response?.has_next_page === true || pageBrands.length >= pageSize;
                 if (!hasNext) break;
-                nextOffset += pageSize;
+                const apiNextOffset = firstString(data?.response?.next_offset, data?.response?.next);
+                if (!apiNextOffset || seenOffsets.has(apiNextOffset)) break;
+                nextOffset = apiNextOffset;
             }
 
             return res.status(200).json({

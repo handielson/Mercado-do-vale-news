@@ -107,6 +107,12 @@ assert.match(
 );
 
 assert.match(
+  apiSource,
+  /firstString\(data\?\.response\?\.next_offset,\s*data\?\.response\?\.next\)/,
+  'Shopee brand list proxy must follow Shopee next_offset cursor instead of numeric pagination'
+);
+
+assert.match(
   source,
   /video\.video_url \? \{ video_url: video\.video_url \} : \{ video_data_url: resolvedVideoDataUrl \}/,
   'Shopee add_item must send remote videos as video_url so the backend downloads and uploads them'
