@@ -124,6 +124,24 @@ assert.match(
   'Shopee add_item must send uploaded videos through video_upload_id, as expected by the product API'
 );
 
+assert.match(
+  source,
+  /expectedVideoCandidateCount = availableVideos\.filter/,
+  'Shopee sync must treat any visible modal video as an expected video, even before upload ids exist'
+);
+
+assert.match(
+  source,
+  /expectedVideoCandidateCount > 0 && savedVideoCount === 0/,
+  'Shopee sync must keep debug open when a visible modal video is not saved by Shopee'
+);
+
+assert.match(
+  source,
+  /video_upload_id:\s*videoUploadIdList[\s\S]*post_publish:attach_video/,
+  'Shopee sync must try to attach uploaded videos after publish if add_item did not persist them'
+);
+
 assert.doesNotMatch(
   source,
   /video_info:\s*\{\s*video_id_list:\s*videoIdList\s*\}/,

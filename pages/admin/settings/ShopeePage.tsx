@@ -2317,6 +2317,9 @@ export function ShopeeSyncModal({
             const imageIdList: string[] = [];
             const videoUploadIdList: string[] = [];
             let videoUploadSkipped = false;
+            const expectedVideoCandidateCount = availableVideos.filter((video) =>
+                Boolean(video.video_id || video.video_url || (video.data_url && video.data_url.startsWith('data:video/')))
+            ).length;
             const weightValue = Number(defaultWeightKg.toFixed(3));
             const cleanGtin = gtinInput.trim();
             const gtinPayloadValue = gtinMode === 'no_gtin'
@@ -2334,6 +2337,13 @@ export function ShopeeSyncModal({
                 selected_brand_id: selectedBrandId || null,
                 product_brand: product.brand || null,
                 inferred_brand: inferShopeeBrandName(product) || null,
+                video_candidates_count: expectedVideoCandidateCount,
+                video_candidates: availableVideos.map((video) => ({
+                    has_video_id: Boolean(video.video_id),
+                    has_video_url: Boolean(video.video_url),
+                    has_data_url: Boolean(video.data_url),
+                    file_name: video.file_name || null,
+                })),
                 item_sku: cleanItemSku || null,
                 gtin_mode: gtinMode,
                 gtin_value: gtinPayloadValue || null,
@@ -2440,17 +2450,42 @@ export function ShopeeSyncModal({
                             : 0;
                     const expectedBrandId = Number(brandInfo?.brand_id || 0);
                     const savedBrandId = Number(savedItem?.brand?.brand_id || 0);
-                    const expectedVideoCount = videoUploadIdList.length;
                     shouldKeepDebugOpen =
                         (expectedBrandId > 0 && savedBrandId !== expectedBrandId) ||
-                        (expectedVideoCount > 0 && savedVideoCount === 0);
+                        (expectedVideoCandidateCount > 0 && savedVideoCount === 0) ||
+                        videoUploadSkipped;
                     pushSyncDebug('post_publish:summary', {
                         item_id: shopeeItemId,
                         expected_brand: brandInfo,
                         saved_brand: savedItem?.brand || null,
+                        expected_video_candidates: expectedVideoCandidateCount,
                         expected_video_upload_ids: videoUploadIdList,
                         saved_video_count: savedVideoCount,
                     });
+
+                    if (expectedVideoCandidateCount > 0 && videoUploadIdList.length > 0 && savedVideoCount === 0) {
+                        const attachData = await postShopeeDebug('update_item', {
+                            item_id: shopeeItemId,
+                            video_upload_id: videoUploadIdList,
+                        }, 'post_publish:attach_video');
+                        pushSyncDebug('post_publish:attach_video_summary', attachData);
+
+                        const afterAttach = await getShopeeDebug('get_item_base_info', 'post_publish:video_recheck', {
+                            item_id_list: shopeeItemId,
+                        });
+                        const recheckedItem = afterAttach?.response?.item_list?.[0] || null;
+                        const recheckedVideoInfo = recheckedItem?.video_info;
+                        const recheckedVideoCount = Array.isArray(recheckedVideoInfo)
+                            ? recheckedVideoInfo.length
+                            : Array.isArray(recheckedVideoInfo?.video_list)
+                                ? recheckedVideoInfo.video_list.length
+                                : 0;
+                        shouldKeepDebugOpen = recheckedVideoCount === 0;
+                        pushSyncDebug('post_publish:video_recheck_summary', {
+                            saved_video_count: recheckedVideoCount,
+                            video_info: recheckedVideoInfo || null,
+                        });
+                    }
                 } catch (verifyError: any) {
                     pushSyncDebug('post_publish:verification_error', verifyError?.message || verifyError);
                     shouldKeepDebugOpen = true;
