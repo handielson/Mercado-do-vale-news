@@ -88,6 +88,12 @@ assert.match(
   'Shopee add_item must send remote videos as video_url so the backend downloads and uploads them'
 );
 
+assert.match(
+  apiSource,
+  /typeof v === 'number' && Number\.isFinite\(v\)/,
+  'Shopee video upload must accept numeric video_id/video_upload_id responses'
+);
+
 assert.doesNotMatch(
   source,
   /logistics_info: \[\{ logistic_id: 80031, enabled: true \}\]/,

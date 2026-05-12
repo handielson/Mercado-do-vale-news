@@ -14,6 +14,7 @@ const sampleProduct = {
   model: 'iPhone 13',
   category_id: 'cases',
   category_slug: 'capas',
+  description: 'Descricao original do anuncio local.\n\nCom detalhes ja revisados.',
   specs: {
     color: 'Vermelho',
     ram: '4GB',
@@ -98,7 +99,7 @@ assert.equal(resolveBestShopeeTemplate(sampleProduct, templates)?.id, 'phone_cas
 
 const applied = applyShopeeTemplateToProduct(sampleProduct, templates[1]);
 assert.equal(applied.title, 'Capa compativel com iPhone 13 Cor:Vermelho');
-assert.equal(applied.description, 'Capa para Iphone 13 Cor:Vermelho\nProduto compativel.');
+assert.equal(applied.description, 'Descricao original do anuncio local.\n\nCom detalhes ja revisados.');
 assert.equal(applied.stock, 2);
 assert.equal(applied.gtinMode, 'no_gtin');
 assert.deepEqual(applied.attributeValues, { '100134': 'TPU' });

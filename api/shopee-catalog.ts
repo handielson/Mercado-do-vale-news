@@ -34,6 +34,7 @@ type Creds = {
 function firstString(...values: any[]): string {
     for (const v of values) {
         if (typeof v === 'string' && v.trim()) return v.trim();
+        if (typeof v === 'number' && Number.isFinite(v)) return String(v);
     }
     return '';
 }

@@ -157,7 +157,8 @@ function resolveTemplateStock(product: Record<string, any>, template: ShopeeTemp
 
 export function applyShopeeTemplateToProduct(product: Record<string, any>, template: ShopeeTemplate): ShopeeTemplateApplyResult {
     const title = renderShopeeTemplateText(template.titleTemplate || product?.name || '', product);
-    const description = renderShopeeTemplateText(template.descriptionTemplate || product?.description || '', product);
+    const description = String(product?.description || '').trim()
+        || renderShopeeTemplateText(template.descriptionTemplate || '', product);
 
     return {
         templateId: template.id,
