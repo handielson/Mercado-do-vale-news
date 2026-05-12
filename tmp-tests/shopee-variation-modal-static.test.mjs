@@ -30,6 +30,9 @@ assert.doesNotMatch(page, /const firstImage = Array\.isArray\(child\.images\) \?
 assert.match(page, /variationProductIds=\{bulkQueueIds\}/, 'bulk variation publish should scope models to the selected bulk queue');
 assert.match(page, /rawSelectedVariationGroup/, 'Shopee modal should keep the raw group separate from the publish-scoped group');
 assert.match(page, /rawSelectedVariationGroup\.children\.filter\(\(child\) => allowedIds\.has\(child\.id\)\)/, 'variation publish should exclude unselected group children from model_list');
+assert.match(page, /findExistingShopeeItemForDuplicate/, 'variation fallback should recover from duplicate base items');
+assert.match(page, /duplicate_lookup:match/, 'duplicate recovery should log the reused Shopee item');
+assert.match(page, /add_item:variation_fallback_duplicate_reused/, 'variation fallback should reuse duplicate items before init_tier_variation');
 assert.match(page, /init_tier_variation/, 'seller_stock-constrained variation add_item should initialize variations after base item fallback');
 assert.match(page, /add_item:variation_fallback_base/, 'variation fallback should log base item creation before initializing variations');
 assert.match(api, /action === 'init_tier_variation'/, 'API must expose init_tier_variation action');

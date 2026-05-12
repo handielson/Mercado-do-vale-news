@@ -2819,6 +2819,53 @@ export function ShopeeSyncModal({
         return resolved;
     };
 
+    const normalizeShopeeDuplicateLookup = (value: unknown) =>
+        String(value ?? '').trim().toLowerCase();
+
+    const findExistingShopeeItemForDuplicate = async (payload: Record<string, any>) => {
+        const targetSku = normalizeShopeeDuplicateLookup(payload.item_sku);
+        const targetName = normalizeShopeeDuplicateLookup(payload.item_name);
+
+        for (const item_status of ['NORMAL', 'UNLIST']) {
+            try {
+                const catalog = await getShopeeDebug('get_full_catalog', `duplicate_lookup:${item_status}`, {
+                    item_status,
+                    page_size: 100,
+                });
+                const items = catalog?.response?.item_list || [];
+                const match = Array.isArray(items)
+                    ? items.find((item: any) => {
+                        const itemSku = normalizeShopeeDuplicateLookup(item?.item_sku);
+                        const itemName = normalizeShopeeDuplicateLookup(item?.item_name);
+                        return (targetSku && itemSku === targetSku) || (targetName && itemName === targetName);
+                    })
+                    : null;
+
+                if (match?.item_id) {
+                    pushSyncDebug('duplicate_lookup:match', {
+                        item_status,
+                        item_id: match.item_id,
+                        item_sku: match.item_sku || null,
+                        item_name: match.item_name || null,
+                        has_model: match.has_model ?? null,
+                    });
+                    return match;
+                }
+            } catch (error: any) {
+                pushSyncDebug('duplicate_lookup:error', {
+                    item_status,
+                    message: error?.message || String(error),
+                });
+            }
+        }
+
+        pushSyncDebug('duplicate_lookup:not_found', {
+            item_sku: payload.item_sku || null,
+            item_name: payload.item_name || null,
+        });
+        return null;
+    };
+
     const collectShopeeLogisticInfo = async () => {
         try {
             const data = await getShopeeDebug('logistics_channel_list', 'logistics_context:channel_list');
@@ -2931,7 +2978,26 @@ export function ShopeeSyncModal({
             });
         }
 
-        const createdItem = await publishShopeeItemWithStockFallback(basePayload, parsedStockValue);
+        let createdItem: any = null;
+        try {
+            createdItem = await publishShopeeItemWithStockFallback(basePayload, parsedStockValue);
+        } catch (error: any) {
+            const message = String(error?.message || error || '');
+            if (!/duplicate|duplicad/i.test(message)) throw error;
+
+            const existingItem = await findExistingShopeeItemForDuplicate(basePayload);
+            if (!existingItem?.item_id) throw error;
+
+            createdItem = {
+                response: existingItem,
+                reused_duplicate_item: true,
+            };
+            pushSyncDebug('add_item:variation_fallback_duplicate_reused', {
+                item_id: existingItem.item_id,
+                item_sku: existingItem.item_sku || null,
+                item_name: existingItem.item_name || null,
+            });
+        }
         const itemId = Number(createdItem?.response?.item_id);
         pushSyncDebug('add_item:variation_fallback_base', {
             item_id: Number.isFinite(itemId) && itemId > 0 ? itemId : null,
