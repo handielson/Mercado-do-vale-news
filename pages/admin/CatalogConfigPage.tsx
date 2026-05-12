@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Eye, Palette, Search, Share2, Save, Loader2, Layers, ArrowLeft } from 'lucide-react';
+import { Settings, Eye, Palette, Search, Share2, Save, Loader2, Layers, ArrowLeft, FileText } from 'lucide-react';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { SectionsTab } from '@/components/admin/SectionsTab';
+import { PdpSectionHeadersPanel } from '@/components/settings/PdpSectionHeadersPanel';
 import { categoryService } from '@/services/categories';
 
-type TabType = 'display' | 'categories' | 'appearance' | 'seo' | 'sharing' | 'sections';
+type TabType = 'display' | 'categories' | 'appearance' | 'seo' | 'sharing' | 'sections' | 'description';
 
 function sanitizeCatalogSettingsForSave(settings: CatalogSettings): Partial<CatalogSettings> {
     const sanitized = { ...settings } as Record<string, unknown>;
@@ -79,6 +80,7 @@ export default function CatalogConfigPage() {
         { id: 'sections' as TabType, label: 'Seções', icon: Layers },
         { id: 'appearance' as TabType, label: 'Aparência', icon: Palette },
         { id: 'seo' as TabType, label: 'SEO', icon: Search },
+        { id: 'description' as TabType, label: 'Descrição', icon: FileText },
         { id: 'sharing' as TabType, label: 'Compartilhamento', icon: Share2 },
     ];
 
@@ -244,6 +246,9 @@ export default function CatalogConfigPage() {
                             )}
                             {activeTab === 'seo' && (
                                 <SEOTab settings={settings} updateSetting={updateSetting} />
+                            )}
+                            {activeTab === 'description' && (
+                                <PdpSectionHeadersPanel />
                             )}
                             {activeTab === 'sharing' && (
                                 <SharingTab settings={settings} updateSetting={updateSetting} />
