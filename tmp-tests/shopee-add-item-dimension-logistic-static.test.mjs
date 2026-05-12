@@ -77,6 +77,24 @@ assert.match(
 );
 
 assert.match(
+  source,
+  /function inferShopeeBrandName/,
+  'Shopee sync must infer marketplace brand when the local brand is generic'
+);
+
+assert.match(
+  source,
+  /brand_name:\s*inferredBrandName/,
+  'Shopee brand list search must use the inferred marketplace brand'
+);
+
+assert.match(
+  source,
+  /findShopeeBrandOption\(nextBrandOptions,\s*inferredBrandName\)/,
+  'Shopee brand selection must match the inferred marketplace brand against the official brand list'
+);
+
+assert.match(
   apiSource,
   /action === 'brand_list'[\s\S]*\/api\/v2\/product\/get_brand_list/,
   'Shopee catalog proxy must expose product/get_brand_list'
@@ -86,6 +104,18 @@ assert.match(
   source,
   /video\.video_url \? \{ video_url: video\.video_url \} : \{ video_data_url: resolvedVideoDataUrl \}/,
   'Shopee add_item must send remote videos as video_url so the backend downloads and uploads them'
+);
+
+assert.match(
+  source,
+  /video_upload_id:\s*videoUploadIdList/,
+  'Shopee add_item must send uploaded videos through video_upload_id, as expected by the product API'
+);
+
+assert.doesNotMatch(
+  source,
+  /video_info:\s*\{\s*video_id_list:\s*videoIdList\s*\}/,
+  'Shopee add_item must not send uploaded videos as video_info.video_id_list'
 );
 
 assert.match(

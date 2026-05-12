@@ -539,6 +539,13 @@ export default async function handler(req: any, res: any) {
                 return res.status(200).json(upload);
             }
 
+            const uploadId = firstString(
+                upload?.response?.video_upload_id,
+                upload?.response?.video_upload_id_list?.[0],
+                upload?.response?.upload_id,
+                upload?.response?.upload_id_list?.[0],
+            );
+
             const directVideoId = firstString(
                 upload?.response?.video_id,
                 upload?.response?.video_info?.video_id,
@@ -547,15 +554,15 @@ export default async function handler(req: any, res: any) {
             );
 
             if (directVideoId) {
-                return res.status(200).json({ error: '', message: '', response: { video_id: directVideoId } });
+                return res.status(200).json({
+                    error: '',
+                    message: '',
+                    response: {
+                        video_id: directVideoId,
+                        ...(uploadId ? { video_upload_id: uploadId } : {}),
+                    },
+                });
             }
-
-            const uploadId = firstString(
-                upload?.response?.video_upload_id,
-                upload?.response?.video_upload_id_list?.[0],
-                upload?.response?.upload_id,
-                upload?.response?.upload_id_list?.[0],
-            );
 
             if (!uploadId) {
                 return res.status(200).json({
@@ -578,7 +585,14 @@ export default async function handler(req: any, res: any) {
                 );
 
                 if (resolvedVideoId) {
-                    return res.status(200).json({ error: '', message: '', response: { video_id: resolvedVideoId } });
+                    return res.status(200).json({
+                        error: '',
+                        message: '',
+                        response: {
+                            video_id: resolvedVideoId,
+                            video_upload_id: uploadId,
+                        },
+                    });
                 }
 
                 if (result?.error && result.error !== '') {

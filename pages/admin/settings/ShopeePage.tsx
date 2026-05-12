@@ -307,6 +307,46 @@ function findShopeeBrandOption(options: ShopeeBrandOption[], brandName: string |
     ) || null;
 }
 
+function inferShopeeBrandName(product: Partial<LocalProduct> & Record<string, any>): string {
+    const explicitBrand = String(product?.brand || '').trim();
+    const genericBrands = new Set([
+        'generica',
+        'generico',
+        'generic',
+        'sem marca',
+        'no brand',
+        'nobrand',
+        'marca livre',
+    ]);
+
+    if (explicitBrand && !genericBrands.has(normalizeLookupText(explicitBrand))) {
+        return explicitBrand;
+    }
+
+    const source = normalizeLookupText([
+        product?.name,
+        product?.sku,
+        product?.category_slug,
+    ].filter(Boolean).join(' '));
+
+    const rules = [
+        { brand: 'Xiaomi', terms: ['xiaomi', 'redmi', 'poco'] },
+        { brand: 'Apple', terms: ['apple', 'iphone', 'ipad', 'macbook'] },
+        { brand: 'Samsung', terms: ['samsung', 'galaxy'] },
+        { brand: 'Motorola', terms: ['motorola', 'moto g', 'moto e', 'moto edge'] },
+        { brand: 'Realme', terms: ['realme'] },
+        { brand: 'Oppo', terms: ['oppo'] },
+        { brand: 'Vivo', terms: ['vivo'] },
+        { brand: 'Huawei', terms: ['huawei', 'honor'] },
+        { brand: 'LG', terms: ['lg'] },
+        { brand: 'Nokia', terms: ['nokia'] },
+        { brand: 'Asus', terms: ['asus', 'zenfone', 'rog phone'] },
+    ];
+
+    const matched = rules.find((rule) => rule.terms.some((term) => source.includes(term)));
+    return matched?.brand || explicitBrand;
+}
+
 function hasFilledAttributeValue(value: string | string[] | undefined): boolean {
     if (Array.isArray(value)) {
         return value.some((entry) => String(entry || '').trim().length > 0);
@@ -1812,10 +1852,11 @@ export function ShopeeSyncModal({
         setBrandOptions([]);
         setSelectedBrandId('');
         try {
+            const inferredBrandName = inferShopeeBrandName(product);
             const brandParams = new URLSearchParams({
                 action: 'brand_list',
                 category_id: String(cat.category_id),
-                brand_name: product.brand || '',
+                brand_name: inferredBrandName,
             });
             const [attrRes, brandRes] = await Promise.all([
                 fetch(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`),
@@ -1839,7 +1880,7 @@ export function ShopeeSyncModal({
             } else {
                 const nextBrandOptions = normalizeShopeeBrandOptions(brandData);
                 setBrandOptions(nextBrandOptions);
-                const matchedBrand = findShopeeBrandOption(nextBrandOptions, product.brand);
+                const matchedBrand = findShopeeBrandOption(nextBrandOptions, inferredBrandName);
                 if (matchedBrand) {
                     setSelectedBrandId(String(matchedBrand.brand_id));
                 }
@@ -1883,7 +1924,7 @@ export function ShopeeSyncModal({
 
         return {
             brand_id: 0,
-            original_brand_name: (product.brand || 'NoBrand').trim() || 'NoBrand',
+            original_brand_name: (inferShopeeBrandName(product) || 'NoBrand').trim() || 'NoBrand',
         };
     };
 
@@ -2205,7 +2246,7 @@ export function ShopeeSyncModal({
                 variant: variant.key,
                 payload_keys: Object.keys(payload),
                 image_count: Array.isArray(payload?.image?.image_id_list) ? payload.image.image_id_list.length : 0,
-                video_count: Array.isArray(payload?.video_info?.video_id_list) ? payload.video_info.video_id_list.length : 0,
+                video_count: Array.isArray(payload?.video_upload_id) ? payload.video_upload_id.length : 0,
                 attribute_ids: Array.isArray(payload.attribute_list) ? payload.attribute_list.map((attr: any) => attr.attribute_id) : [],
                 brand: payload.brand,
                 logistic_info: payload.logistic_info,
@@ -2270,7 +2311,7 @@ export function ShopeeSyncModal({
             const cleanItemSku = String(product.sku || '').trim().slice(0, 100);
             const cleanDescription = (normalizeShopeeDescription(itemDescription) || cleanItemName).slice(0, 3000);
             const imageIdList: string[] = [];
-            const videoIdList: string[] = [];
+            const videoUploadIdList: string[] = [];
             let videoUploadSkipped = false;
             const weightValue = Number(defaultWeightKg.toFixed(3));
             const cleanGtin = gtinInput.trim();
@@ -2288,6 +2329,7 @@ export function ShopeeSyncModal({
                 filled_attributes_count: attributeList.length,
                 selected_brand_id: selectedBrandId || null,
                 product_brand: product.brand || null,
+                inferred_brand: inferShopeeBrandName(product) || null,
                 item_sku: cleanItemSku || null,
                 gtin_mode: gtinMode,
                 gtin_value: gtinPayloadValue || null,
@@ -2320,7 +2362,7 @@ export function ShopeeSyncModal({
 
             for (const video of availableVideos) {
                 if (video.video_id) {
-                    videoIdList.push(String(video.video_id));
+                    videoUploadIdList.push(String(video.video_id));
                     continue;
                 }
 
@@ -2335,11 +2377,11 @@ export function ShopeeSyncModal({
                         file_name: video.file_name || 'video.mp4',
                     };
                     const uploadData = await postShopeeDebug('upload_video', videoUploadPayload);
-                    const uploadedId = uploadData?.response?.video_id;
+                    const uploadedId = uploadData?.response?.video_upload_id || uploadData?.response?.video_id;
                     if (!uploadedId) {
                         throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de video');
                     }
-                    videoIdList.push(String(uploadedId));
+                    videoUploadIdList.push(String(uploadedId));
                 } catch (error: any) {
                     if (isUnsupportedVideoUploadMessage(error?.message)) {
                         videoUploadSkipped = true;
@@ -2363,7 +2405,7 @@ export function ShopeeSyncModal({
                 image: {
                     image_id_list: imageIdList
                 },
-                ...(videoIdList.length > 0 ? { video_info: { video_id_list: videoIdList } } : {}),
+                ...(videoUploadIdList.length > 0 ? { video_upload_id: videoUploadIdList } : {}),
                 weight: weightValue,
                 dimension: packageDimension,
                 brand: brandInfo,
@@ -3250,10 +3292,10 @@ function ExpandedItemPanel({
             }
             payload.image = { image_id_list: imageIdList };
 
-            const videoIdList: string[] = [];
+            const videoUploadIdList: string[] = [];
             for (const video of mediaVideos) {
                 if (video.video_id) {
-                    videoIdList.push(video.video_id);
+                    videoUploadIdList.push(video.video_id);
                     continue;
                 }
 
@@ -3271,13 +3313,13 @@ function ExpandedItemPanel({
                     }),
                 });
                 const uploadData = await uploadRes.json();
-                const uploadedId = uploadData?.response?.video_id;
+                const uploadedId = uploadData?.response?.video_upload_id || uploadData?.response?.video_id;
                 if (!uploadedId) {
                     throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de vídeo');
                 }
-                videoIdList.push(String(uploadedId));
+                videoUploadIdList.push(String(uploadedId));
             }
-            payload.video_info = { video_id_list: videoIdList };
+            payload.video_upload_id = videoUploadIdList;
 
             const promises: Promise<any>[] = [
                 fetch('/api/shopee-catalog?action=update_item', {
