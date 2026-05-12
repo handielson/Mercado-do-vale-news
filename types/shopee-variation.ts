@@ -5,6 +5,8 @@ export interface ShopeeVariationProduct {
   name: string;
   sku?: string | null;
   parent_id?: string | null;
+  bling_id?: number | string | null;
+  bling_parent_id?: number | string | null;
   is_parent?: boolean | number | null;
   price_retail?: number | null;
   stock_quantity?: number | null;

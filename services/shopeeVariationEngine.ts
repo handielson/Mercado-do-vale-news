@@ -42,10 +42,15 @@ function firstEan(product: ShopeeVariationProduct): string {
 
 export function groupShopeeVariationCandidates(products: ShopeeVariationProduct[]): ShopeeVariationGroup[] {
   const byId = new Map(products.map((product) => [product.id, product]));
+  const idByBlingId = new Map(
+    products
+      .map((product) => [text(product.bling_id), product.id] as const)
+      .filter(([blingId]) => Boolean(blingId))
+  );
   const childrenByParent = new Map<string, ShopeeVariationProduct[]>();
 
   for (const product of products) {
-    const parentId = text(product.parent_id);
+    const parentId = text(product.parent_id) || idByBlingId.get(text(product.bling_parent_id)) || '';
     if (!parentId) continue;
     const current = childrenByParent.get(parentId) || [];
     current.push(product);

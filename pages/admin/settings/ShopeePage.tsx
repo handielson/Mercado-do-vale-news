@@ -82,6 +82,7 @@ export interface ShopeeProduct {
     description?: string;
     brand?: string;
     bling_id?: number | string | null;
+    bling_parent_id?: number | string | null;
     video_url?: string | null;
     stock_quantity?: number;
     track_inventory?: boolean;
@@ -115,6 +116,7 @@ export interface LocalProduct {
     description?: string;
     brand?: string;
     bling_id?: number | string | null;
+    bling_parent_id?: number | string | null;
     video_url?: string | null;
     stock_quantity?: number;
     track_inventory?: boolean;
@@ -645,6 +647,7 @@ function toLocalProduct(p: ShopeeProduct): LocalProduct {
         description: p.description || '',
         brand: p.brand || '',
         bling_id: p.bling_id ?? null,
+        bling_parent_id: p.bling_parent_id ?? null,
         video_url: p.video_url ?? null,
         stock_quantity: p.stock_quantity || 0,
         track_inventory: p.track_inventory !== false,
@@ -675,6 +678,7 @@ function toLocalProductFromVpsProduct(p: any, shopeeItemId?: number | null): Loc
         description: p.description || '',
         brand: p.brand || '',
         bling_id: p.bling_id ?? null,
+        bling_parent_id: p.bling_parent_id ?? null,
         video_url: p.video_url ?? null,
         stock_quantity: Number(p.stock_quantity ?? 0) || 0,
         track_inventory: p.track_inventory !== false,
@@ -791,6 +795,7 @@ export default function ShopeePage() {
                     description: p.description,
                     brand: p.brand,
                     bling_id: p.bling_id ?? null,
+                    bling_parent_id: p.bling_parent_id ?? null,
                     video_url: p.video_url ?? null,
                     stock_quantity: Number(p.stock_quantity ?? 0) || 0,
                     track_inventory: p.track_inventory !== false,

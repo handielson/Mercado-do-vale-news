@@ -47,6 +47,46 @@ assert.equal(groups.length, 1);
 assert.equal(groups[0].parent.id, 'parent');
 assert.deepEqual(groups[0].children.map((child) => child.sku), ['CAPA-RN13-RED', 'CAPA-RN13-BLUE']);
 
+const blingLinkedGroups = groupShopeeVariationCandidates([
+  {
+    id: 'rn10-parent',
+    name: 'Capa de Silicone para Redmi Note 10 Pro',
+    sku: 'CCSRN10PRO',
+    bling_id: '16064267539',
+    parent_id: null,
+    is_parent: true,
+    price_retail: 1490,
+    stock_quantity: 0,
+    images: ['https://cdn.test/rn10.jpg'],
+    specs: {},
+  },
+  {
+    id: 'rn10-green',
+    name: 'Capa de Silicone para Redmi Note 10 Pro Cor:Verde',
+    sku: 'RN10PROV',
+    bling_parent_id: '16064267539',
+    parent_id: null,
+    price_retail: 1490,
+    stock_quantity: 1,
+    images: ['https://cdn.test/rn10-green.jpg'],
+    specs: { color: 'Verde' },
+  },
+  {
+    id: 'rn10-yellow',
+    name: 'Capa de Silicone para Redmi Note 10 Pro Cor:Amarelo',
+    sku: 'RN10PROAMA',
+    bling_parent_id: '16064267539',
+    parent_id: null,
+    price_retail: 1490,
+    stock_quantity: 1,
+    images: ['https://cdn.test/rn10-yellow.jpg'],
+    specs: { color: 'Amarelo' },
+  },
+]);
+assert.equal(blingLinkedGroups.length, 1);
+assert.equal(blingLinkedGroups[0].parent.id, 'rn10-parent');
+assert.deepEqual(blingLinkedGroups[0].children.map((child) => child.sku), ['RN10PROV', 'RN10PROAMA']);
+
 const dimensions = detectShopeeVariationDimensions(groups[0]);
 assert.deepEqual(dimensions, [{ name: 'Cor', key: 'color', options: ['Vermelho', 'Azul'] }]);
 
