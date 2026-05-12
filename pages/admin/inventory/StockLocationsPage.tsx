@@ -71,6 +71,8 @@ export function StockLocationsPage() {
   const [transferNotes, setTransferNotes] = useState('');
   const [transferSaving, setTransferSaving] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
+  const [quickTransferDepositId, setQuickTransferDepositId] = useState('');
+  const [quickTransferLocationId, setQuickTransferLocationId] = useState('');
 
   useEffect(() => {
     loadData();
@@ -269,7 +271,8 @@ export function StockLocationsPage() {
       setProductLoading(true);
       setProductError(null);
 
-      await loadProductDistribution(product.id);
+      const distribution = await loadProductDistribution(product.id);
+      setQuickTransferDestinationDefaults(distribution);
     } catch (error) {
       setProductDistribution([]);
       setProductError('Não foi possível carregar a distribuição deste produto. Confira se a migration já foi aplicada.');
@@ -320,15 +323,37 @@ export function StockLocationsPage() {
     return productDistribution.find((item) => item.location_id === locationId);
   };
 
-  const openTransferModal = () => {
+  const setQuickTransferDestinationDefaults = (distribution: ProductStockLocation[]) => {
     const sourceDistribution =
+      distribution.find((item) => item.quantity - item.reserved_quantity > 0) ||
+      distribution[0];
+    const targetLocation =
+      locations.find((location) => location.id !== sourceDistribution?.location_id) ||
+      locations[0];
+
+    setQuickTransferDepositId(targetLocation?.deposit_id || '');
+    setQuickTransferLocationId(targetLocation?.id || '');
+  };
+
+  const handleQuickTransferDepositChange = (depositId: string) => {
+    const firstLocation = locations.find((location) => location.deposit_id === depositId);
+
+    setQuickTransferDepositId(depositId);
+    setQuickTransferLocationId(firstLocation?.id || '');
+  };
+
+  const openTransferModal = (preferredTargetLocationId = '') => {
+    const sourceDistribution =
+      productDistribution.find((item) => item.location_id !== preferredTargetLocationId && item.quantity - item.reserved_quantity > 0) ||
       productDistribution.find((item) => item.quantity - item.reserved_quantity > 0) ||
       productDistribution[0];
     const sourceDepositId = sourceDistribution?.deposit_id || deposits.find((deposit) => deposit.is_default)?.id || deposits[0]?.id || '';
     const sourceLocation = locations.find((location) => location.id === sourceDistribution?.location_id) ||
       locations.find((location) => location.deposit_id === sourceDepositId);
-    const targetDepositId = deposits.find((deposit) => deposit.id !== sourceDepositId)?.id || sourceDepositId;
-    const targetLocation = locations.find((location) => location.deposit_id === targetDepositId && location.id !== sourceLocation?.id) ||
+    const preferredTargetLocation = locations.find((location) => location.id === preferredTargetLocationId && location.id !== sourceLocation?.id);
+    const targetDepositId = preferredTargetLocation?.deposit_id || deposits.find((deposit) => deposit.id !== sourceDepositId)?.id || sourceDepositId;
+    const targetLocation = preferredTargetLocation ||
+      locations.find((location) => location.deposit_id === targetDepositId && location.id !== sourceLocation?.id) ||
       locations.find((location) => location.id !== sourceLocation?.id);
     const available = sourceDistribution ? sourceDistribution.quantity - sourceDistribution.reserved_quantity : 0;
 
@@ -341,6 +366,10 @@ export function StockLocationsPage() {
     setTransferNotes('');
     setTransferError(null);
     setTransferOpen(true);
+  };
+
+  const openQuickTransferModal = () => {
+    openTransferModal(quickTransferLocationId);
   };
 
   const closeTransferModal = () => {
@@ -494,6 +523,7 @@ export function StockLocationsPage() {
   const adjustmentLocations = locations.filter((location) => location.deposit_id === adjustmentDepositId);
   const transferFromLocations = locations.filter((location) => location.deposit_id === transferFromDepositId);
   const transferToLocations = locations.filter((location) => location.deposit_id === transferToDepositId);
+  const quickTransferLocations = locations.filter((location) => location.deposit_id === quickTransferDepositId);
   const transferSourceDistribution = getDistributionByLocation(transferFromLocationId);
   const transferSourceAvailable = transferSourceDistribution
     ? transferSourceDistribution.quantity - transferSourceDistribution.reserved_quantity
@@ -507,7 +537,7 @@ export function StockLocationsPage() {
     const quantity = Number(transferQuantity);
 
     if (!transferFromDepositId || !transferFromLocationId || !transferToDepositId || !transferToLocationId) {
-      setTransferError('Selecione origem e destino da transferencia.');
+      setTransferError('Selecione origem e destino da transferência.');
       return;
     }
 
@@ -522,12 +552,7 @@ export function StockLocationsPage() {
     }
 
     if (quantity > transferSourceAvailable) {
-      setTransferError('A quantidade transferida nao pode exceder a quantidade disponivel na origem.');
-      return;
-    }
-
-    if (!transferReason.trim()) {
-      setTransferError('Informe o motivo da transferencia.');
+      setTransferError('A quantidade transferida não pode exceder a quantidade disponível na origem.');
       return;
     }
 
@@ -542,7 +567,7 @@ export function StockLocationsPage() {
         to_deposit_id: transferToDepositId,
         to_location_id: transferToLocationId,
         quantity,
-        reason: transferReason,
+        reason: transferReason.trim() || 'Transferência interna',
         notes: transferNotes,
       });
 
@@ -589,7 +614,7 @@ export function StockLocationsPage() {
           <div>
             <h2 className="text-sm font-bold text-amber-900">Operacao controlada</h2>
             <p className="mt-1 text-sm text-amber-800">
-              Entradas, ajustes e transferencias usam RPC com motivo obrigatorio e historico auditavel por local.
+              Entradas e ajustes usam motivo obrigatório. Transferências podem usar motivo padrão e seguem com histórico auditável por local.
             </p>
           </div>
         </div>
@@ -829,7 +854,7 @@ export function StockLocationsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={openTransferModal}
+                  onClick={() => openTransferModal()}
                   disabled={deposits.length === 0 || locations.length < 2 || productDistribution.length === 0}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 >
@@ -843,6 +868,50 @@ export function StockLocationsPage() {
                   className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   Ajustar saldo
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-blue-100 bg-white p-3">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Destino rápido</p>
+                  <p className="mt-1 text-xs text-slate-500">Escolha para onde esse produto deve ir e abra a transferência já preenchida.</p>
+                </div>
+                <label className="block min-w-[190px]">
+                  <span className="text-xs font-semibold text-slate-600">Depósito</span>
+                  <select
+                    value={quickTransferDepositId}
+                    onChange={(event) => handleQuickTransferDepositChange(event.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">Selecione</option>
+                    {deposits.map((deposit) => (
+                      <option key={deposit.id} value={deposit.id}>{deposit.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block min-w-[190px]">
+                  <span className="text-xs font-semibold text-slate-600">Local</span>
+                  <select
+                    value={quickTransferLocationId}
+                    onChange={(event) => setQuickTransferLocationId(event.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">Selecione</option>
+                    {quickTransferLocations.map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={openQuickTransferModal}
+                  disabled={!quickTransferLocationId || productDistribution.length === 0}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  <ArrowRightLeft size={16} />
+                  Transferir para este local
                 </button>
               </div>
             </div>
@@ -1304,7 +1373,7 @@ export function StockLocationsPage() {
               </label>
 
               <label className="block">
-                <span className="text-sm font-semibold text-slate-700">Observacoes</span>
+                <span className="text-sm font-semibold text-slate-700">Observações</span>
                 <textarea
                   value={entryNotes}
                   onChange={(event) => setEntryNotes(event.target.value)}
@@ -1368,7 +1437,7 @@ export function StockLocationsPage() {
                   <h3 className="text-sm font-bold text-slate-900">Origem</h3>
                   <div className="mt-3 space-y-3">
                     <label className="block">
-                      <span className="text-sm font-semibold text-slate-700">DepÃ³sito</span>
+                      <span className="text-sm font-semibold text-slate-700">Depósito</span>
                       <select
                         value={transferFromDepositId}
                         onChange={(event) => handleTransferFromDepositChange(event.target.value)}
@@ -1398,7 +1467,7 @@ export function StockLocationsPage() {
                     </label>
 
                     <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                      Saldo disponÃ­vel na origem: <strong className="text-slate-900">{transferSourceAvailable}</strong>
+                      Saldo disponível na origem: <strong className="text-slate-900">{transferSourceAvailable}</strong>
                     </p>
                   </div>
                 </div>
@@ -1407,7 +1476,7 @@ export function StockLocationsPage() {
                   <h3 className="text-sm font-bold text-slate-900">Destino</h3>
                   <div className="mt-3 space-y-3">
                     <label className="block">
-                      <span className="text-sm font-semibold text-slate-700">DepÃ³sito</span>
+                      <span className="text-sm font-semibold text-slate-700">Depósito</span>
                       <select
                         value={transferToDepositId}
                         onChange={(event) => handleTransferToDepositChange(event.target.value)}
@@ -1453,19 +1522,18 @@ export function StockLocationsPage() {
               </label>
 
               <label className="block">
-                <span className="text-sm font-semibold text-slate-700">Motivo da transferencia</span>
+                <span className="text-sm font-semibold text-slate-700">Motivo da transferência <span className="font-normal text-slate-400">(opcional)</span></span>
                 <input
                   type="text"
                   value={transferReason}
                   onChange={(event) => setTransferReason(event.target.value)}
-                  placeholder="Ex.: reposicao de prateleira, envio para deposito, organizacao interna"
+                  placeholder="Ex.: reposição de prateleira, envio para depósito, organização interna"
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  required
                 />
               </label>
 
               <label className="block">
-                <span className="text-sm font-semibold text-slate-700">ObservaÃ§Ãµes</span>
+                <span className="text-sm font-semibold text-slate-700">Observações</span>
                 <textarea
                   value={transferNotes}
                   onChange={(event) => setTransferNotes(event.target.value)}
@@ -1489,7 +1557,7 @@ export function StockLocationsPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {transferSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Salvar transferencia
+                Salvar transferência
               </button>
             </div>
           </form>

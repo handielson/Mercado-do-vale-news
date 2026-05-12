@@ -304,11 +304,7 @@ class StockLocationService {
     const quantity = Number(input.quantity);
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      throw new Error('Informe uma quantidade valida para a transferencia.');
-    }
-
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo da transferencia.');
+      throw new Error('Informe uma quantidade válida para a transferência.');
     }
 
     if (input.from_location_id === input.to_location_id) {
@@ -325,7 +321,7 @@ class StockLocationService {
         to_deposit_id: input.to_deposit_id,
         to_location_id: input.to_location_id,
         transfer_quantity: quantity,
-        transfer_reason: input.reason.trim(),
+        transfer_reason: input.reason.trim() || 'Transferência interna',
         transfer_notes: input.notes?.trim() || null,
         actor_id: user.data.user?.id || null,
       });

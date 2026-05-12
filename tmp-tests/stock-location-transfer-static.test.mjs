@@ -39,16 +39,19 @@ assertIncludes(service, 'from_location_id: input.from_location_id', 'transfer so
 assertIncludes(service, 'to_deposit_id: input.to_deposit_id', 'transfer target deposit payload');
 assertIncludes(service, 'to_location_id: input.to_location_id', 'transfer target location payload');
 assertIncludes(service, 'transfer_quantity: quantity', 'transfer quantity payload');
-assertIncludes(service, 'transfer_reason: input.reason.trim()', 'transfer reason payload');
+assertIncludes(service, "transfer_reason: input.reason.trim() || 'Transferência interna'", 'transfer reason fallback payload');
 
 assertIncludes(page, 'Transferir estoque', 'transfer button/modal label');
 assertIncludes(page, 'transferStockLocation', 'page calls transfer service');
-assertIncludes(page, 'transferReason', 'page requires reason');
+assertIncludes(page, 'Motivo da transferência', 'page shows optional transfer reason');
+assert(!page.includes("setTransferError('Informe o motivo da transferencia.')"), 'transfer reason should not be required in the modal');
+assertIncludes(page, 'Destino rápido', 'selected product should expose quick transfer destination controls');
+assertIncludes(page, 'Transferir para este local', 'selected product should open transfer prefilled by destination');
 assertIncludes(page, 'Origem', 'source section label');
 assertIncludes(page, 'Destino', 'target section label');
-assertIncludes(page, 'Saldo disponÃ­vel na origem', 'available source label');
+assertIncludes(page, 'Saldo disponível na origem', 'available source label');
 assertIncludes(page, 'origem e destino precisam ser diferentes', 'same location validation');
-assertIncludes(page, 'quantidade disponivel na origem', 'available quantity validation');
+assertIncludes(page, 'quantidade disponível na origem', 'available quantity validation');
 assertIncludes(page, 'stockLocationService.listMovements({ limit: 20 }).then(setMovements)', 'page reloads movements after transfer');
 
 assertIncludes(plan, '- [x] Criar modal de transferencia.', 'plan marks transfer modal done');
