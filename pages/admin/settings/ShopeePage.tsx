@@ -3093,11 +3093,16 @@ export function ShopeeSyncModal({
                 ? {
                     ...basePayload,
                     item_sku: undefined,
-                    seller_stock: undefined,
                     tier_variation: variationPayloadParts.tier_variation,
                     model_list: variationPayloadParts.model_list,
                 }
                 : basePayload;
+            const variationTotalStock = variationPayloadParts
+                ? variationPayloadParts.model_list.reduce((total, model) => {
+                    const modelStocks = Array.isArray(model?.seller_stock) ? model.seller_stock : [];
+                    return total + modelStocks.reduce((sum, entry) => sum + Math.max(0, Math.trunc(Number(entry?.stock ?? 0) || 0)), 0);
+                }, 0)
+                : parsedStock;
 
             const data = variationPayloadParts
                 ? existingVariationItemId
@@ -3106,7 +3111,7 @@ export function ShopeeSyncModal({
                         tier_variation: variationPayloadParts.tier_variation,
                         model_list: variationPayloadParts.model_list,
                     }, 'add_item:existing_variation')
-                    : await postShopeeDebug('add_item', finalPayload, 'add_item:variation')
+                    : await publishShopeeItemWithStockFallback(finalPayload, variationTotalStock)
                 : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
 
             // Save to Supabase
