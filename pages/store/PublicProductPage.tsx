@@ -471,13 +471,26 @@ export const PublicProductPage: React.FC = () => {
     // Limpa HTML "sujo" vindo do Bling/admin: parágrafos vazios (com &nbsp;,
     // NBSP ou só whitespace) e sequências de <br> que viram linhas em branco.
     const cleanRichHtml = (html: string): string => {
-        return html
+        let result = html
             // <p>&nbsp;</p>, <p> </p>, <p><br></p>, <p> </p> etc — parágrafo vazio
             .replace(/<p\b[^>]*>(?:\s|&nbsp;|&#160;| |Â |<br\s*\/?\s*>)*<\/p>/gi, '')
             // 3+ <br> consecutivos viram apenas 2 (= 1 linha em branco)
             .replace(/(?:<br\s*\/?\s*>\s*){3,}/gi, '<br><br>')
             // múltiplas quebras de linha cruas entre tags viram só uma
             .replace(/(\r?\n\s*){3,}/g, '\n\n');
+
+        // Aplica a regra de cabeçalhos conhecidos também em descrições HTML:
+        // quando a frase aparece sozinha dentro de <p>, vira <strong> com
+        // margem extra. Necessário pra descrições do Bling em HTML.
+        const cleanHeaders = sectionHeaders.filter(h => h && h.trim());
+        if (cleanHeaders.length > 0) {
+            for (const h of cleanHeaders) {
+                const escaped = h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const pattern = new RegExp(`<p\\b[^>]*>\\s*(${escaped})\\s*<\\/p>`, 'gi');
+                result = result.replace(pattern, '<p style="margin-top:1.5em"><strong>$1</strong></p>');
+            }
+        }
+        return result;
     };
 
     const normalizeRichText = (raw: string): string => {
