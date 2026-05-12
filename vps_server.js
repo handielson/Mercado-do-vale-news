@@ -5990,6 +5990,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
   await pool.query(
     `UPDATE products SET
       name=?, slug=?, sku=?, ean=?, alternative_eans=?,
+      description=?, technical_specifications=?,
       price_retail=?, price_wholesale=?, price_cost=?, price_reseller=?,
       price_promo=?, promo_start=?, promo_end=?,
       stock_quantity=?, status=?, category_id=?, brand=?, model_id=?,
@@ -6004,6 +6005,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
     [
       p.name, p.slug || null, p.sku || null,
       p.ean || null, jsonStr(p.alternative_eans),
+      p.description ?? null, p.technical_specifications ?? null,
       p.price_retail || null, p.price_wholesale || null,
       p.price_cost || null, p.price_reseller || null,
       p.price_promo || null, p.promo_start || null, p.promo_end || null,
