@@ -59,6 +59,19 @@ export interface FieldPresetInput {
   config: Record<string, string>;
 }
 
+export interface PdpSectionHeader {
+  id: string;
+  phrase: string;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PdpSectionHeaderInput {
+  phrase: string;
+  sort_order?: number;
+}
+
 class VpsApiService {
   private cache = new Map<string, CacheEntry<unknown>>();
   private videoCheckCache = new Map<string, CacheEntry<{ exists: boolean; url?: string } | null>>();
@@ -187,6 +200,51 @@ class VpsApiService {
   async deleteFieldPreset(id: string): Promise<boolean> {
     try {
       const res = await fetch(proxyUrl(`/field-presets/${id}`, 'DELETE'), {
+        method: 'DELETE',
+        headers: await this.authHeaders(),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      return res.ok;
+    } catch { return false; }
+  }
+
+  // ── PDP Section Headers ────────────────────────────────────────────────
+
+  async getPdpSectionHeaders(): Promise<PdpSectionHeader[] | null> {
+    return this.fetchSafe<PdpSectionHeader[]>('/pdp-section-headers');
+  }
+
+  async createPdpSectionHeader(data: PdpSectionHeaderInput): Promise<PdpSectionHeader | { error: string } | null> {
+    try {
+      const res = await fetch(proxyUrl('/pdp-section-headers', 'POST'), {
+        method: 'POST',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return { error: json.error || `Erro ${res.status}` };
+      return json;
+    } catch (err: any) { return { error: err?.message || 'Erro de rede' }; }
+  }
+
+  async updatePdpSectionHeader(id: string, data: Partial<PdpSectionHeaderInput>): Promise<{ ok: true } | { error: string }> {
+    try {
+      const res = await fetch(proxyUrl(`/pdp-section-headers/${id}`, 'PUT'), {
+        method: 'PUT',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return { error: json.error || `Erro ${res.status}` };
+      return { ok: true };
+    } catch (err: any) { return { error: err?.message || 'Erro de rede' }; }
+  }
+
+  async deletePdpSectionHeader(id: string): Promise<boolean> {
+    try {
+      const res = await fetch(proxyUrl(`/pdp-section-headers/${id}`, 'DELETE'), {
         method: 'DELETE',
         headers: await this.authHeaders(),
         signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),

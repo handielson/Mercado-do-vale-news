@@ -6848,6 +6848,75 @@ fastify.get('/catalog-settings', async (req, reply) => {
   return rows[0] || null;
 });
 
+// ─── PDP Section Headers ───────────────────────────────────────────────────
+// Lista de frases que viram cabeçalhos com quebra de parágrafo + negrito na PDP.
+fastify.get('/pdp-section-headers', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT id, phrase, sort_order, created_at, updated_at
+     FROM pdp_section_headers
+     ORDER BY sort_order ASC, phrase ASC`
+  );
+  reply.header('Cache-Control', 'public, max-age=300, s-maxage=600');
+  return rows;
+});
+
+fastify.post('/pdp-section-headers', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { phrase, sort_order } = req.body || {};
+  const trimmed = typeof phrase === 'string' ? phrase.trim() : '';
+  if (!trimmed) return reply.code(400).send({ error: 'phrase required' });
+  if (trimmed.length > 255) return reply.code(400).send({ error: 'phrase too long (max 255)' });
+  const id = require('crypto').randomUUID();
+  const order = Number.isFinite(Number(sort_order)) ? Number(sort_order) : 0;
+  try {
+    await pool.query(
+      `INSERT INTO pdp_section_headers (id, phrase, sort_order) VALUES (?, ?, ?)`,
+      [id, trimmed, order]
+    );
+    return { id, phrase: trimmed, sort_order: order };
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return reply.code(409).send({ error: 'phrase já existe' });
+    }
+    throw err;
+  }
+});
+
+fastify.put('/pdp-section-headers/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { phrase, sort_order } = req.body || {};
+  const updates = [];
+  const values = [];
+  if (phrase !== undefined) {
+    const trimmed = typeof phrase === 'string' ? phrase.trim() : '';
+    if (!trimmed) return reply.code(400).send({ error: 'phrase vazia' });
+    if (trimmed.length > 255) return reply.code(400).send({ error: 'phrase too long (max 255)' });
+    updates.push('phrase = ?'); values.push(trimmed);
+  }
+  if (sort_order !== undefined && Number.isFinite(Number(sort_order))) {
+    updates.push('sort_order = ?'); values.push(Number(sort_order));
+  }
+  if (updates.length === 0) return reply.code(400).send({ error: 'nothing to update' });
+  values.push(req.params.id);
+  try {
+    const [result] = await pool.query(
+      `UPDATE pdp_section_headers SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+    if (!result.affectedRows) return reply.code(404).send({ error: 'not found' });
+    return { ok: true };
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return reply.code(409).send({ error: 'phrase já existe' });
+    }
+    throw err;
+  }
+});
+
+fastify.delete('/pdp-section-headers/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [result] = await pool.query('DELETE FROM pdp_section_headers WHERE id = ?', [req.params.id]);
+  if (!result.affectedRows) return reply.code(404).send({ error: 'not found' });
+  return { ok: true };
+});
+
 // ─── VPS Status ─────────────────────────────────────────────────────────────
 fastify.get('/status', async (req, reply) => {
   const t0 = Date.now();
@@ -8409,6 +8478,26 @@ async function runMigrations() {
   // Stock sync de units é feito em app-level (helper syncProductStock chamado pelos
   // endpoints /units). Trigger MySQL exige privilégio SUPER que o usuário não tem
   // (ER_BINLOG_CREATE_ROUTINE_NEED_SUPER quando binlog está ativo).
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdp_section_headers (
+      id CHAR(36) PRIMARY KEY,
+      phrase VARCHAR(255) NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_phrase (phrase)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  // Seed com cabeçalhos que já estavam hardcoded — só insere se a tabela estiver vazia.
+  const [pdpHdrCount] = await pool.query('SELECT COUNT(*) AS c FROM pdp_section_headers');
+  if (Number(pdpHdrCount[0]?.c || 0) === 0) {
+    await pool.query(
+      `INSERT INTO pdp_section_headers (id, phrase, sort_order) VALUES (UUID(), ?, ?), (UUID(), ?, ?)`,
+      ['Características do Produto', 10, 'Conteúdo da embalagem', 20]
+    );
+  }
+  console.log('[migration] pdp_section_headers table: OK');
 }
 
 // Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.

@@ -62,6 +62,12 @@ export const PublicProductPage: React.FC = () => {
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
     // Dicionário de chaves para nomes amigáveis baseados nos campos customizados do BD
     const [customFieldNames, setCustomFieldNames] = useState<Record<string, string>>({});
+    // Frases que viram cabeçalho com negrito + linha em branco no render da descrição.
+    // Carregadas da VPS; fallback hardcoded mantém a UX caso a chamada falhe.
+    const [sectionHeaders, setSectionHeaders] = useState<string[]>([
+        'Características do Produto',
+        'Conteúdo da embalagem',
+    ]);
 
     // Resolved video URL: prioridade video_url → HEAD check automático por SKU
     const [effectiveVideoUrl, setEffectiveVideoUrl] = useState<string | null>(null);
@@ -120,6 +126,13 @@ export const PublicProductPage: React.FC = () => {
         getCashbackSettings().then(setCashbackSettings).catch(console.error);
         publicCompanySettingsService.get().then(setCompanySettings).catch(console.error);
         paymentFeesService.list().then(setPaymentFees).catch(console.error);
+        vpsApiService.getPdpSectionHeaders()
+            .then(rows => {
+                if (Array.isArray(rows) && rows.length > 0) {
+                    setSectionHeaders(rows.map(r => r.phrase).filter(Boolean));
+                }
+            })
+            .catch(console.error);
         catalogConfigService
             .getSettings(customer?.user_id)
             .then((settings) => setCatalogTheme({
@@ -444,11 +457,7 @@ export const PublicProductPage: React.FC = () => {
 
     // Descrições salvas via admin podem ser texto puro (com \n) — vira bloco único
     // sob dangerouslySetInnerHTML. Converte para HTML quando não vier marcado.
-    // Cabeçalhos conhecidos ganham negrito + margem extra para "pular linha".
-    const KNOWN_SECTION_HEADERS = [
-        'Características do Produto',
-        'Conteúdo da embalagem',
-    ];
+    // Cabeçalhos vindos da VPS ganham negrito + margem extra para "pular linha".
     const normalizeRichText = (raw: string): string => {
         if (/<\/?(p|div|br|h[1-6]|ul|ol|li|table|img|span|strong|em)\b/i.test(raw)) {
             return raw;
@@ -459,11 +468,15 @@ export const PublicProductPage: React.FC = () => {
             .replace(/>/g, '&gt;');
         const HDR_OPEN = String.fromCharCode(1);
         const HDR_CLOSE = String.fromCharCode(2);
-        const escapedHeaders = KNOWN_SECTION_HEADERS
-            .map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-            .join('|');
-        const headerPattern = new RegExp(`\\s*(${escapedHeaders})\\s*`, 'gi');
-        const withMarkers = raw.replace(headerPattern, `\n\n${HDR_OPEN}$1${HDR_CLOSE}\n`);
+        const cleanHeaders = sectionHeaders.filter(h => h && h.trim());
+        let withMarkers = raw;
+        if (cleanHeaders.length > 0) {
+            const escapedHeaders = cleanHeaders
+                .map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+                .join('|');
+            const headerPattern = new RegExp(`\\s*(${escapedHeaders})\\s*`, 'gi');
+            withMarkers = raw.replace(headerPattern, `\n\n${HDR_OPEN}$1${HDR_CLOSE}\n`);
+        }
         return withMarkers
             .split(/\r?\n\s*\r?\n+/)
             .map(p => p.trim())

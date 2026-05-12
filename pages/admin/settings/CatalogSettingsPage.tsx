@@ -5,6 +5,7 @@ import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
 import toast from 'react-hot-toast';
+import { PdpSectionHeadersPanel } from '@/components/settings/PdpSectionHeadersPanel';
 
 function sanitizeCatalogSettingsForSave(settings: CatalogSettings): Partial<CatalogSettings> {
     const sanitized = { ...settings } as Record<string, unknown>;
@@ -144,6 +145,9 @@ export const CatalogSettingsPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Cabeçalhos da Descrição do Produto */}
+            <PdpSectionHeadersPanel />
 
             {/* Informações Gerais */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
