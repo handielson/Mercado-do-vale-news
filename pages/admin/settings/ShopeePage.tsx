@@ -113,6 +113,15 @@ export interface LocalProduct {
 
 type Tab = 'config' | 'products' | 'bulk' | 'orders' | 'finance' | 'printers';
 type Filter = 'all' | 'synced' | 'not_synced' | 'inactive';
+type BulkRunItemStatus = 'queued' | 'active' | 'published' | 'skipped' | 'failed';
+
+type BulkRunItem = {
+    productId: string;
+    name: string;
+    sku?: string;
+    status: BulkRunItemStatus;
+    message?: string;
+};
 
 type EditableImage = {
     image_id?: string;
@@ -650,6 +659,7 @@ export default function ShopeePage() {
     const [bulkQueueIds, setBulkQueueIds] = useState<string[]>([]);
     const [bulkCompletedIds, setBulkCompletedIds] = useState<string[]>([]);
     const [bulkActiveProduct, setBulkActiveProduct] = useState<LocalProduct | null>(null);
+    const [bulkRunItems, setBulkRunItems] = useState<BulkRunItem[]>([]);
     const [editingPrice, setEditingPrice] = useState<Record<string, number>>({});
     const [linkingProductId, setLinkingProductId] = useState<string | null>(null);
     const [linkInput, setLinkInput] = useState('');
@@ -1074,6 +1084,12 @@ export default function ShopeePage() {
 
         setBulkQueueIds(queue.map(p => p.product_id));
         setBulkCompletedIds([]);
+        setBulkRunItems(queue.map((p, index) => ({
+            productId: p.product_id,
+            name: p.name || 'Produto sem nome',
+            sku: p.sku,
+            status: index === 0 ? 'active' : 'queued',
+        })));
         setBulkActiveProduct(toLocalProduct(queue[0]));
     };
 
@@ -1083,27 +1099,64 @@ export default function ShopeePage() {
         setBulkCompletedIds([]);
     };
 
-    const handleBulkModalSuccess = () => {
-        const currentId = bulkActiveProduct?.id;
-        const completed = currentId ? [...bulkCompletedIds, currentId] : bulkCompletedIds;
-        setBulkCompletedIds(completed);
-        if (currentId) {
+    const advanceBulkRun = (currentId: string | undefined, status: BulkRunItemStatus, message?: string) => {
+        if (!currentId) return;
+
+        const nextCompletedIds = status === 'published'
+            ? [...bulkCompletedIds, currentId]
+            : bulkCompletedIds;
+        if (status === 'published') {
+            setBulkCompletedIds(nextCompletedIds);
             setBulkSelectedIds(prev => prev.filter(id => id !== currentId));
         }
 
-        const nextId = bulkQueueIds.find(id => id !== currentId && !completed.includes(id));
+        const terminalIds = new Set(
+            bulkRunItems
+                .filter(item => item.status === 'published' || item.status === 'skipped')
+                .map(item => item.productId)
+        );
+        terminalIds.add(currentId);
+        nextCompletedIds.forEach(id => terminalIds.add(id));
+
+        const nextId = bulkQueueIds.find(id => id !== currentId && !terminalIds.has(id));
+        setBulkRunItems(prev => prev.map(item => {
+            if (item.productId === currentId) return { ...item, status, message };
+            if (item.productId === nextId) return { ...item, status: 'active', message: undefined };
+            return item;
+        }));
+
         const nextProduct = nextId ? products.find(p => p.product_id === nextId) : null;
         loadProducts();
 
         if (nextProduct) {
             setBulkActiveProduct(toLocalProduct(nextProduct));
-            toast.success('Produto enviado. Abrindo o proximo do lote.');
+            if (status === 'published') {
+                toast.success('Produto enviado. Abrindo o proximo do lote.');
+            }
             return;
         }
 
         setBulkActiveProduct(null);
         setBulkQueueIds([]);
-        toast.success(`Envio em massa finalizado: ${completed.length} produto(s) enviados.`);
+        toast.success(`Envio em massa finalizado: ${nextCompletedIds.length} produto(s) enviados.`);
+    };
+
+    const handleBulkModalSuccess = () => {
+        advanceBulkRun(bulkActiveProduct?.id, 'published');
+    };
+
+    const skipBulkActiveProduct = () => {
+        advanceBulkRun(bulkActiveProduct?.id, 'skipped', 'Pulou este produto durante a revisao.');
+    };
+
+    const handleBulkModalError = (message: string) => {
+        const currentId = bulkActiveProduct?.id;
+        if (!currentId) return;
+        setBulkRunItems(prev => prev.map(item =>
+            item.productId === currentId
+                ? { ...item, status: 'failed', message }
+                : item
+        ));
     };
 
     if (loading) return (
@@ -1143,6 +1196,9 @@ export default function ShopeePage() {
     const bulkReadyCount = bulkFiltered.filter(p => (p.images?.length || 0) > 0).length;
     const bulkSelectedCount = bulkSelectedIds.length;
     const bulkCurrentPosition = bulkActiveProduct ? bulkQueueIds.findIndex(id => id === bulkActiveProduct.id) + 1 : 0;
+    const bulkPublishedCount = bulkRunItems.filter(item => item.status === 'published').length;
+    const bulkSkippedCount = bulkRunItems.filter(item => item.status === 'skipped').length;
+    const bulkFailedCount = bulkRunItems.filter(item => item.status === 'failed').length;
 
     return (
         <div className="animate-in fade-in duration-500 max-w-5xl mx-auto space-y-6">
@@ -1644,6 +1700,59 @@ export default function ShopeePage() {
                         ))}
                     </div>
 
+                    {bulkRunItems.length > 0 && (
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="p-4 border-b border-slate-100 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800">Histórico do lote</h2>
+                                    <p className="text-xs text-slate-500">Acompanhe o que foi publicado, pulado ou falhou durante a sequencia atual.</p>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                    <div className="rounded-xl bg-green-50 px-3 py-2 text-green-700">
+                                        <p className="font-bold text-base">{bulkPublishedCount}</p>
+                                        <p>Publicados</p>
+                                    </div>
+                                    <div className="rounded-xl bg-slate-50 px-3 py-2 text-slate-700">
+                                        <p className="font-bold text-base">{bulkSkippedCount}</p>
+                                        <p>Pulados</p>
+                                    </div>
+                                    <div className="rounded-xl bg-red-50 px-3 py-2 text-red-700">
+                                        <p className="font-bold text-base">{bulkFailedCount}</p>
+                                        <p>Falhas</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {bulkRunItems.map(item => {
+                                    const tone =
+                                        item.status === 'published' ? 'bg-green-100 text-green-700' :
+                                        item.status === 'skipped' ? 'bg-slate-100 text-slate-700' :
+                                        item.status === 'failed' ? 'bg-red-100 text-red-700' :
+                                        item.status === 'active' ? 'bg-orange-100 text-orange-700' :
+                                        'bg-slate-100 text-slate-500';
+                                    const label =
+                                        item.status === 'published' ? 'Publicado' :
+                                        item.status === 'skipped' ? 'Pulado' :
+                                        item.status === 'failed' ? 'Falhou' :
+                                        item.status === 'active' ? 'Em revisao' :
+                                        'Na fila';
+                                    return (
+                                        <div key={item.productId} className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                                            <div className="min-w-0">
+                                                <p className="font-medium text-slate-800 whitespace-normal break-words">{item.name}</p>
+                                                <p className="text-xs text-slate-400 font-mono">{item.sku || 'sem SKU'}</p>
+                                                {item.message && <p className="mt-1 text-xs text-slate-500">{item.message}</p>}
+                                            </div>
+                                            <span className={`w-fit rounded-lg px-2.5 py-1 text-xs font-semibold ${tone}`}>
+                                                {label}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                         <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
                             <div className="relative flex-1">
@@ -1766,8 +1875,15 @@ export default function ShopeePage() {
 
                     {bulkActiveProduct && (
                         <>
-                            <div className="fixed left-1/2 top-4 z-[80] -translate-x-1/2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-lg">
-                                Envio em massa {bulkCurrentPosition || 1}/{bulkQueueIds.length}
+                            <div className="fixed left-1/2 top-4 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-lg">
+                                <span>Envio em massa {bulkCurrentPosition || 1}/{bulkQueueIds.length}</span>
+                                <button
+                                    type="button"
+                                    onClick={skipBulkActiveProduct}
+                                    className="rounded-full bg-white/10 px-2 py-1 text-white transition-colors hover:bg-white/20"
+                                >
+                                    Pular
+                                </button>
                             </div>
                             <ShopeeSyncModal
                                 product={bulkActiveProduct}
@@ -1775,6 +1891,7 @@ export default function ShopeePage() {
                                 historicalProducts={products}
                                 onClose={closeBulkAssistedSync}
                                 onSuccess={handleBulkModalSuccess}
+                                onError={handleBulkModalError}
                             />
                         </>
                     )}
@@ -1800,8 +1917,8 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 export function ShopeeSyncModal({
-    product, company, historicalProducts, onClose, onSuccess
-}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; onClose: () => void; onSuccess: () => void }) {
+    product, company, historicalProducts, onClose, onSuccess, onError
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; onClose: () => void; onSuccess: () => void; onError?: (message: string) => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
     const [allCatTree, setAllCatTree] = useState<any[]>([]);
@@ -2763,7 +2880,9 @@ export function ShopeeSyncModal({
             onSuccess();
         } catch (e: any) {
             pushSyncDebug('sync:error', e?.message || e);
-            toast.error(e?.message || 'Erro ao sincronizar produto.');
+            const errorMessage = e?.message || 'Erro ao sincronizar produto.';
+            onError?.(errorMessage);
+            toast.error(errorMessage);
         } finally {
             setMediaBusy(false);
             setSyncing(false);

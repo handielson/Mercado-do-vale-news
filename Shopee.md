@@ -660,6 +660,8 @@ Motivo dessa abordagem:
 - O envio usa o mesmo `ShopeeSyncModal` do produto individual.
 - Depois de cada sucesso, o sistema recarrega os vinculos da Shopee.
 - O primeiro lote nao agrupa variacoes no mesmo anuncio.
+- A tela mostra um historico do lote com o resultado de cada item: publicado, pulado ou falhou.
+- Quando um produto falha no modal, ele fica marcado no historico e o operador pode corrigir/repetir ou pular para o proximo.
 
 ### Entrega futura: envio automatico
 
