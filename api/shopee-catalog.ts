@@ -252,6 +252,7 @@ export default async function handler(req: any, res: any) {
                     offset: String(nextOffset),
                     page_size: String(pageSize),
                 });
+                if (brandName) params.set('brand_name', brandName);
                 return shopeeGet('/api/v2/product/get_brand_list', creds, `&${params}`);
             };
 
@@ -575,7 +576,11 @@ export default async function handler(req: any, res: any) {
             const maxAttempts = 12;
             for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
                 await new Promise(resolve => setTimeout(resolve, 2000));
-                const result = await shopeePost('/api/v2/media_space/get_video_upload_result', creds, { video_upload_id: uploadId });
+                const result = await shopeeGet(
+                    '/api/v2/media_space/get_video_upload_result',
+                    creds,
+                    `&${new URLSearchParams({ video_upload_id: uploadId }).toString()}`,
+                );
 
                 const resolvedVideoId = firstString(
                     result?.response?.video_id,

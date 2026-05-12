@@ -101,6 +101,12 @@ assert.match(
 );
 
 assert.match(
+  apiSource,
+  /if \(brandName\) params\.set\('brand_name', brandName\);/,
+  'Shopee brand list proxy must pass brand_name to Shopee so searchable brands like Xiaomi are returned'
+);
+
+assert.match(
   source,
   /video\.video_url \? \{ video_url: video\.video_url \} : \{ video_data_url: resolvedVideoDataUrl \}/,
   'Shopee add_item must send remote videos as video_url so the backend downloads and uploads them'
@@ -122,6 +128,12 @@ assert.match(
   apiSource,
   /typeof v === 'number' && Number\.isFinite\(v\)/,
   'Shopee video upload must accept numeric video_id/video_upload_id responses'
+);
+
+assert.match(
+  apiSource,
+  /shopeeGet\([\s\S]*'\/api\/v2\/media_space\/get_video_upload_result'[\s\S]*video_upload_id/,
+  'Shopee video upload result must be polled with the media_space get endpoint and video_upload_id'
 );
 
 assert.doesNotMatch(
