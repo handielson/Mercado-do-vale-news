@@ -1,10 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Copy, Plus, Save, ShieldAlert, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Copy, Loader2, Plus, Save, ShieldAlert, Sparkles, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { categoryService } from '../../../services/categories';
 import { analyzeShopeeTitleSafety, applyShopeeTemplateToProduct } from '../../../services/shopeeTemplateEngine';
 import { DEFAULT_SHOPEE_TEMPLATES, shopeeTemplateService } from '../../../services/shopeeTemplateService';
+import type { Category } from '../../../types/category';
 import type { ShopeeDangerousTermRule, ShopeeTemplate } from '../../../types/shopee-template';
+
+type ShopeeTemplateAttributeOption = {
+    value_id: number;
+    label: string;
+    raw_name: string;
+    original_value_name: string;
+};
+
+type ShopeeTemplateAttributeField = {
+    attribute_id: number;
+    label: string;
+    mandatory: boolean;
+    input_kind: 'select' | 'multiselect' | 'text';
+    attribute_value_list: ShopeeTemplateAttributeOption[];
+};
 
 const emptyTemplate = (): ShopeeTemplate => ({
     id: `draft-${Date.now()}`,
@@ -49,15 +66,6 @@ function listToCsv(value?: string[]): string {
     return (value || []).join(', ');
 }
 
-function parseAttributeDefaults(value: string): Record<string, string | string[]> {
-    try {
-        const parsed = JSON.parse(value || '{}');
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-        return {};
-    }
-}
-
 function makeDangerousRule(): ShopeeDangerousTermRule {
     return {
         id: `rule-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -68,13 +76,84 @@ function makeDangerousRule(): ShopeeDangerousTermRule {
     };
 }
 
+function translateShopeeText(entity: any, fallbackKeys: string[] = []): string {
+    if (Array.isArray(entity?.multi_lang)) {
+        const localized = entity.multi_lang.find((entry: any) => {
+            const language = String(entry?.language || '').toLowerCase();
+            return language === 'pt-br' || language === 'pt_br' || language.startsWith('pt');
+        });
+        if (typeof localized?.value === 'string' && localized.value.trim()) {
+            return localized.value.trim();
+        }
+    }
+
+    for (const key of fallbackKeys) {
+        const value = entity?.[key];
+        if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+
+    return '';
+}
+
+function extractShopeeAttributeTree(data: any): any[] {
+    if (Array.isArray(data?.response?.attribute_list)) return data.response.attribute_list;
+    if (Array.isArray(data?.response?.attribute_tree)) return data.response.attribute_tree;
+    if (Array.isArray(data?.response?.list)) {
+        const entryWithTree = data.response.list.find((entry: any) => Array.isArray(entry?.attribute_tree));
+        if (entryWithTree?.attribute_tree) return entryWithTree.attribute_tree;
+    }
+    return [];
+}
+
+function normalizeShopeeTemplateAttributes(data: any): ShopeeTemplateAttributeField[] {
+    return extractShopeeAttributeTree(data)
+        .map((attr: any) => {
+            const rawInputType = attr?.input_type ?? attr?.attribute_type ?? '';
+            const inputTypeText = String(rawInputType).toUpperCase();
+            const options = Array.isArray(attr?.attribute_value_list)
+                ? attr.attribute_value_list
+                    .map((option: any) => {
+                        const label =
+                            translateShopeeText(option, ['display_attribute_value', 'display_value_name', 'name', 'original_value_name']) ||
+                            String(option?.value_id || '').trim();
+                        return {
+                            value_id: Number(option?.value_id) || 0,
+                            label,
+                            raw_name: String(option?.name || option?.display_attribute_value || label).trim(),
+                            original_value_name: String(option?.original_value_name || option?.name || option?.display_attribute_value || label).trim(),
+                        };
+                    })
+                    .filter((option: ShopeeTemplateAttributeOption) => option.label)
+                : [];
+
+            const allowsMultiple =
+                inputTypeText.includes('MULTIPLE') ||
+                attr?.multiple_select === true ||
+                attr?.is_multiple === true ||
+                attr?.multiple_enter === true;
+
+            return {
+                attribute_id: Number(attr?.attribute_id) || 0,
+                label:
+                    translateShopeeText(attr, ['display_attribute_name', 'name', 'original_attribute_name']) ||
+                    `Atributo ${attr?.attribute_id || ''}`.trim(),
+                mandatory: Boolean(attr?.mandatory ?? attr?.is_mandatory),
+                input_kind: options.length > 0 ? (allowsMultiple ? 'multiselect' : 'select') : 'text',
+                attribute_value_list: options,
+            } satisfies ShopeeTemplateAttributeField;
+        })
+        .filter((attr: ShopeeTemplateAttributeField) => Number.isFinite(attr.attribute_id) && attr.attribute_id > 0);
+}
+
 export default function ShopeeTemplatesPage() {
     const [templates, setTemplates] = useState<ShopeeTemplate[]>([]);
     const [selectedId, setSelectedId] = useState('');
     const [draft, setDraft] = useState<ShopeeTemplate>(emptyTemplate());
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [attributeJson, setAttributeJson] = useState('{}');
+    const [localCategories, setLocalCategories] = useState<Category[]>([]);
+    const [shopeeAttributes, setShopeeAttributes] = useState<ShopeeTemplateAttributeField[]>([]);
+    const [loadingShopeeAttributes, setLoadingShopeeAttributes] = useState(false);
 
     const selectedTemplate = useMemo(
         () => templates.find((template) => template.id === selectedId) || null,
@@ -93,7 +172,6 @@ export default function ShopeeTemplatesPage() {
             const first = nextTemplates[0] || emptyTemplate();
             setSelectedId(first.id);
             setDraft(first);
-            setAttributeJson(JSON.stringify(first.attributeDefaults || {}, null, 2));
         } catch (error) {
             console.error('[ShopeeTemplatesPage] load error:', error);
             toast.error('Nao foi possivel carregar templates da Shopee.');
@@ -107,10 +185,49 @@ export default function ShopeeTemplatesPage() {
     }, []);
 
     useEffect(() => {
+        categoryService.list()
+            .then(setLocalCategories)
+            .catch((error) => {
+                console.warn('[ShopeeTemplatesPage] categories load error:', error);
+                toast.error('Nao foi possivel carregar categorias locais.');
+            });
+    }, []);
+
+    useEffect(() => {
         if (!selectedTemplate) return;
         setDraft(selectedTemplate);
-        setAttributeJson(JSON.stringify(selectedTemplate.attributeDefaults || {}, null, 2));
     }, [selectedTemplate]);
+
+    useEffect(() => {
+        if (!draft.shopeeCategoryId) {
+            setShopeeAttributes([]);
+            return;
+        }
+
+        let cancelled = false;
+        setLoadingShopeeAttributes(true);
+
+        fetch(`/api/shopee-catalog?action=attributes&category_id=${draft.shopeeCategoryId}`)
+            .then((response) => response.json())
+            .then((data) => {
+                if (cancelled) return;
+                setShopeeAttributes(normalizeShopeeTemplateAttributes(data));
+            })
+            .catch((error) => {
+                if (!cancelled) {
+                    console.error('[ShopeeTemplatesPage] attributes load error:', error);
+                    toast.error('Nao foi possivel carregar os campos da categoria Shopee.');
+                    setShopeeAttributes([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLoadingShopeeAttributes(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [draft.shopeeCategoryId]);
 
     const updateDraft = (updates: Partial<ShopeeTemplate>) => {
         setDraft((current) => ({ ...current, ...updates }));
@@ -121,7 +238,6 @@ export default function ShopeeTemplatesPage() {
         setTemplates((current) => [next, ...current]);
         setSelectedId(next.id);
         setDraft(next);
-        setAttributeJson('{}');
     };
 
     const handleSave = async () => {
@@ -129,7 +245,6 @@ export default function ShopeeTemplatesPage() {
         try {
             const payload = {
                 ...draft,
-                attributeDefaults: parseAttributeDefaults(attributeJson),
             };
 
             const isDraft = String(draft.id).startsWith('draft-');
@@ -162,7 +277,6 @@ export default function ShopeeTemplatesPage() {
         const next = remaining[0] || emptyTemplate();
         setSelectedId(next.id);
         setDraft(next);
-        setAttributeJson(JSON.stringify(next.attributeDefaults || {}, null, 2));
         toast.success('Template removido.');
     };
 
@@ -170,6 +284,67 @@ export default function ShopeeTemplatesPage() {
         updateDraft({
             dangerousTerms: draft.dangerousTerms.map((rule) => rule.id === id ? { ...rule, ...updates } : rule),
         });
+    };
+
+    const updateAttributeDefault = (attributeId: number, value: string | string[]) => {
+        const key = String(attributeId);
+        updateDraft({
+            attributeDefaults: {
+                ...draft.attributeDefaults,
+                [key]: value,
+            },
+        });
+    };
+
+    const renderShopeeAttributeField = (attr: ShopeeTemplateAttributeField) => {
+        const key = String(attr.attribute_id);
+        const currentValue = draft.attributeDefaults[key];
+
+        if (attr.input_kind === 'multiselect') {
+            return (
+                <select
+                    multiple
+                    value={Array.isArray(currentValue) ? currentValue : []}
+                    onChange={(event) => {
+                        const values = Array.from(event.currentTarget.selectedOptions).map((option) => option.value);
+                        updateAttributeDefault(attr.attribute_id, values);
+                    }}
+                    className="min-h-[112px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                    {attr.attribute_value_list.map((option) => (
+                        <option key={`${attr.attribute_id}-${option.value_id}-${option.raw_name}`} value={option.raw_name || option.label}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+            );
+        }
+
+        if (attr.input_kind === 'select') {
+            return (
+                <select
+                    value={Array.isArray(currentValue) ? currentValue[0] || '' : currentValue || ''}
+                    onChange={(event) => updateAttributeDefault(attr.attribute_id, event.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                    <option value="">Selecione...</option>
+                    {attr.attribute_value_list.map((option) => (
+                        <option key={`${attr.attribute_id}-${option.value_id}-${option.raw_name}`} value={option.raw_name || option.label}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+            );
+        }
+
+        return (
+            <input
+                value={Array.isArray(currentValue) ? currentValue[0] || '' : currentValue || ''}
+                onChange={(event) => updateAttributeDefault(attr.attribute_id, event.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                placeholder={attr.label}
+            />
+        );
     };
 
     return (
@@ -255,7 +430,18 @@ export default function ShopeeTemplatesPage() {
                             </label>
                             <label>
                                 <span className="text-xs font-semibold uppercase text-slate-500">Categoria local</span>
-                                <input value={draft.rules.categoryId || ''} onChange={(event) => updateDraft({ rules: { ...draft.rules, categoryId: event.target.value || undefined } })} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="ID da categoria local" />
+                                <select
+                                    value={draft.rules.categoryId || ''}
+                                    onChange={(event) => updateDraft({ rules: { ...draft.rules, categoryId: event.target.value || undefined } })}
+                                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                >
+                                    <option value="">Todas as categorias</option>
+                                    {localCategories.map((category) => (
+                                        <option key={category.id} value={category.id}>
+                                            {category.name}
+                                        </option>
+                                    ))}
+                                </select>
                             </label>
                         </div>
                     </section>
@@ -286,10 +472,43 @@ export default function ShopeeTemplatesPage() {
                                 <input value={draft.shopeeCategoryName || ''} onChange={(event) => updateDraft({ shopeeCategoryName: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
                             </label>
                         </div>
-                        <label className="mt-4 block">
-                            <span className="text-xs font-semibold uppercase text-slate-500">Atributos padrao em JSON</span>
-                            <textarea value={attributeJson} onChange={(event) => setAttributeJson(event.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs" />
-                        </label>
+                        <div className="mt-5 border-t border-slate-100 pt-5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-800">Todos os campos da categoria</h3>
+                                    <p className="text-xs text-slate-500">Preencha aqui os valores padrao que este template aplicara no envio para a Shopee.</p>
+                                </div>
+                                {loadingShopeeAttributes && (
+                                    <span className="inline-flex items-center gap-2 text-xs font-semibold text-orange-600">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        Carregando campos
+                                    </span>
+                                )}
+                            </div>
+
+                            {!draft.shopeeCategoryId ? (
+                                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                    Informe o ID da categoria Shopee para carregar todos os campos dessa categoria.
+                                </div>
+                            ) : !loadingShopeeAttributes && shopeeAttributes.length === 0 ? (
+                                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                    Nenhum campo retornado para esta categoria ou a conexao com a Shopee nao respondeu.
+                                </div>
+                            ) : (
+                                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    {shopeeAttributes.map((attr) => (
+                                        <label key={attr.attribute_id} className="block">
+                                            <span className="mb-1 block text-xs font-semibold text-slate-700">
+                                                {attr.label}
+                                                {attr.mandatory && <span className="ml-1 text-red-500">*</span>}
+                                                <span className="ml-2 font-mono text-[10px] text-slate-400">#{attr.attribute_id}</span>
+                                            </span>
+                                            {renderShopeeAttributeField(attr)}
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </section>
 
                     <section className="rounded-lg border border-slate-200 bg-white p-5">
