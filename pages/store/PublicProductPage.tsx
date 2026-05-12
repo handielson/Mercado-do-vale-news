@@ -217,8 +217,18 @@ export const PublicProductPage: React.FC = () => {
 
                 // Busca marca/descrição do modelo no Supabase como fallback quando a VPS não envia.
                 // Modelo guarda uma descrição padrão herdada por todos os produtos do mesmo modelo.
+                // Trata descrições obviamente inválidas ('0', '<p>0</p>', muito curtas) como
+                // ausentes — defensivo contra dados-lixo que surgem em alguns paths de save.
+                const isMeaningfulDesc = (s: unknown): boolean => {
+                    if (!s || typeof s !== 'string') return false;
+                    const text = s.replace(/<[^>]+>/g, '').trim();
+                    if (text.length < 5) return false;
+                    if (/^[0-9\s]+$/.test(text)) return false;
+                    return true;
+                };
                 const needsBrand = !data.brand && data.model_id;
-                const needsDescription = !data.description && data.model_id;
+                const needsDescription = !isMeaningfulDesc(data.description) && data.model_id;
+                if (!isMeaningfulDesc(data.description)) data.description = null;
                 if (needsBrand || needsDescription) {
                     try {
                         const { data: modelData } = await supabase

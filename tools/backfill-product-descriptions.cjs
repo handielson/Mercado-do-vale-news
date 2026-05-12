@@ -28,7 +28,19 @@ if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('Supabase env ausente'); pro
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const isEmpty = (s) => !s || typeof s !== 'string' || !s.trim();
+// Considera "vazio" tanto null/whitespace quanto valores claramente inválidos
+// que aparecem no banco como artefatos (ex.: '0', '<p>0</p>', strings < 5 chars).
+const isEmpty = (s) => {
+    if (!s || typeof s !== 'string') return true;
+    const trimmed = s.trim();
+    if (!trimmed) return true;
+    // Strip tags HTML simples pra avaliar o conteúdo textual
+    const text = trimmed.replace(/<[^>]+>/g, '').trim();
+    if (!text) return true;
+    if (text.length < 5) return true;       // descrição absurdamente curta
+    if (/^[0-9\s]+$/.test(text)) return true; // só dígitos/espaços
+    return false;
+};
 
 async function fetchAllProducts() {
   // Endpoint /products aceita limit=2000 no histórico; pagina caso precise.
