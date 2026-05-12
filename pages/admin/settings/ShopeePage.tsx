@@ -2904,6 +2904,52 @@ export function ShopeeSyncModal({
         throw lastError || new Error('Falha ao publicar produto na Shopee.');
     };
 
+    const publishShopeeVariationItem = async (
+        basePayload: Record<string, any>,
+        variationPayload: Record<string, any>,
+        variationPayloadParts: { tier_variation: any[]; model_list: any[] },
+        parsedStockValue: number,
+    ) => {
+        try {
+            return await postShopeeDebug('add_item', variationPayload, 'add_item:variation');
+        } catch (error: any) {
+            if (!isShopeeSellerStockConstraintError(error?.message)) {
+                throw error;
+            }
+
+            pushSyncDebug('add_item:variation_direct_error', {
+                message: error?.message || error,
+                fallback: 'create base item then init_tier_variation',
+            });
+        }
+
+        const createdItem = await publishShopeeItemWithStockFallback(basePayload, parsedStockValue);
+        const itemId = Number(createdItem?.response?.item_id);
+        pushSyncDebug('add_item:variation_fallback_base', {
+            item_id: Number.isFinite(itemId) && itemId > 0 ? itemId : null,
+            response: createdItem?.response || null,
+        });
+
+        if (!Number.isFinite(itemId) || itemId <= 0) {
+            throw new Error('Shopee criou o item base, mas nao retornou item_id para inicializar as variacoes.');
+        }
+
+        const initData = await postShopeeDebug('init_tier_variation', {
+            item_id: itemId,
+            tier_variation: variationPayloadParts.tier_variation,
+            model: variationPayloadParts.model_list,
+        }, 'init_tier_variation');
+
+        return {
+            ...createdItem,
+            response: {
+                ...(createdItem?.response || {}),
+                item_id: itemId,
+                init_tier_variation: initData?.response || initData,
+            },
+        };
+    };
+
     const handleSync = async () => {
         if (titleSafety.hasBlocks) {
             toast.error('Corrija os termos bloqueados no nome final da Shopee antes de publicar.');
@@ -3114,7 +3160,7 @@ export function ShopeeSyncModal({
                         tier_variation: variationPayloadParts.tier_variation,
                         model_list: variationPayloadParts.model_list,
                     }, 'add_item:existing_variation')
-                    : await postShopeeDebug('add_item', finalPayload, 'add_item:variation')
+                    : await publishShopeeVariationItem(basePayload, finalPayload, variationPayloadParts, parsedStock)
                 : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
 
             // Save to Supabase
