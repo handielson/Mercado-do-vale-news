@@ -160,3 +160,45 @@
     height: 0 !important;
     display: none !important;
 }
+
+/*
+ * Descrição rica do produto na PDP — restaura cabeçalhos, listas e ênfase
+ * que o preflight do Tailwind neutraliza. Sem dep de @tailwindcss/typography.
+ */
+.pdp-rich-description h1,
+.pdp-rich-description h2,
+.pdp-rich-description h3,
+.pdp-rich-description h4 {
+    color: #0f172a;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+}
+.pdp-rich-description h1 { font-size: 1.5rem; }
+.pdp-rich-description h2 { font-size: 1.25rem; }
+.pdp-rich-description h3 { font-size: 1.125rem; }
+.pdp-rich-description h4 { font-size: 1rem; }
+.pdp-rich-description h1:first-child,
+.pdp-rich-description h2:first-child,
+.pdp-rich-description h3:first-child,
+.pdp-rich-description h4:first-child {
+    margin-top: 0;
+}
+.pdp-rich-description p { margin: 0.75em 0; }
+.pdp-rich-description ul,
+.pdp-rich-description ol {
+    margin: 0.75em 0;
+    padding-left: 1.5rem;
+}
+.pdp-rich-description ul { list-style: disc; }
+.pdp-rich-description ol { list-style: decimal; }
+.pdp-rich-description li { margin: 0.25em 0; }
+.pdp-rich-description strong,
+.pdp-rich-description b { font-weight: 700; color: #0f172a; }
+.pdp-rich-description em,
+.pdp-rich-description i { font-style: italic; }
+.pdp-rich-description a {
+    color: #2563eb;
+    text-decoration: underline;
+}

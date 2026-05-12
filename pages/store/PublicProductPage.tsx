@@ -458,9 +458,21 @@ export const PublicProductPage: React.FC = () => {
     // Descrições salvas via admin podem ser texto puro (com \n) — vira bloco único
     // sob dangerouslySetInnerHTML. Converte para HTML quando não vier marcado.
     // Cabeçalhos vindos da VPS ganham negrito + margem extra para "pular linha".
+    // Limpa HTML "sujo" vindo do Bling/admin: parágrafos vazios (com &nbsp;,
+    // NBSP ou só whitespace) e sequências de <br> que viram linhas em branco.
+    const cleanRichHtml = (html: string): string => {
+        return html
+            // <p>&nbsp;</p>, <p> </p>, <p><br></p>, <p> </p> etc — parágrafo vazio
+            .replace(/<p\b[^>]*>(?:\s|&nbsp;|&#160;| |Â |<br\s*\/?\s*>)*<\/p>/gi, '')
+            // 3+ <br> consecutivos viram apenas 2 (= 1 linha em branco)
+            .replace(/(?:<br\s*\/?\s*>\s*){3,}/gi, '<br><br>')
+            // múltiplas quebras de linha cruas entre tags viram só uma
+            .replace(/(\r?\n\s*){3,}/g, '\n\n');
+    };
+
     const normalizeRichText = (raw: string): string => {
         if (/<\/?(p|div|br|h[1-6]|ul|ol|li|table|img|span|strong|em)\b/i.test(raw)) {
-            return raw;
+            return cleanRichHtml(raw);
         }
         const escape = (s: string) => s
             .replace(/&/g, '&amp;')
@@ -1357,7 +1369,7 @@ export const PublicProductPage: React.FC = () => {
                                     Descrição do Produto
                                 </h3>
                                 <div
-                                    className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed"
+                                    className="pdp-rich-description max-w-none text-slate-700 leading-relaxed"
                                     dangerouslySetInnerHTML={{ __html: resolvedDescription }}
                                 />
                             </div>
@@ -1370,7 +1382,7 @@ export const PublicProductPage: React.FC = () => {
                                     Ficha Técnica
                                 </h3>
                                 <div
-                                    className="prose prose-slate prose-sm max-w-none text-slate-600 leading-relaxed"
+                                    className="pdp-rich-description max-w-none text-slate-700 leading-relaxed"
                                     dangerouslySetInnerHTML={{ __html: resolvedTechnicalSpecifications }}
                                 />
                             </div>
