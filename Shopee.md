@@ -678,6 +678,219 @@ Depois que o envio assistido estiver estavel, podemos criar um modo automatico p
 
 Produtos com qualquer alerta continuam indo para revisao manual.
 
+### Pre-validacao para envio automatico
+
+A primeira fase do envio automatico foi entregue como diagnostico operacional. Ela **nao publica sem modal ainda**.
+
+Na aba **Envio em massa**, o sistema separa os produtos pendentes em:
+
+- **Prontos para automatico**;
+- **Precisam revisao**.
+
+Tambem foram adicionados:
+
+- contadores separados para produtos prontos e produtos que precisam revisao;
+- filtro de lista por:
+  - `Todos`;
+  - `Prontos para automatico`;
+  - `Precisam revisao`;
+- botao **Selecionar automaticos**, que seleciona apenas os produtos aprovados na pre-validacao;
+- coluna **Motivos**, mostrando bloqueios e avisos por produto;
+- validacao dos atributos obrigatorios reais da categoria quando a Shopee retorna esses dados;
+- validacao de existencia de canal logistico habilitado antes de considerar o produto pronto;
+- documentacao desta fase no proprio `Shopee.md`;
+- cobertura de teste para o motor de validacao e para a integracao visual da aba de envio em massa.
+
+Arquivos envolvidos:
+
+| Area | Arquivo |
+| --- | --- |
+| Motor de pre-validacao | `services/shopeeAutoPublishReadiness.ts` |
+| UI da aba Envio em massa | `pages/admin/settings/ShopeePage.tsx` |
+| Teste do motor | `tmp-tests/shopee-auto-publish-readiness.test.mjs` |
+| Teste estatico da UI | `tmp-tests/shopee-auto-publish-bulk-ui-static.test.mjs` |
+| Documentacao operacional | `Shopee.md` |
+
+Um produto so entra como pronto quando:
+
+- ainda nao esta sincronizado;
+- tem template Shopee automatico compativel;
+- o template tem categoria Shopee;
+- o SKU esta preenchido;
+- existe imagem principal;
+- preco e estoque sao validos;
+- o titulo final e o nome de origem nao contem termo bloqueado.
+
+Bloqueios fazem o produto cair em **Precisa revisao**.
+
+Bloqueios atuais:
+
+| Codigo interno | Motivo exibido | Como resolver |
+| --- | --- | --- |
+| `already_synced` | Produto ja tem vinculo com a Shopee. | Nao entra no envio automatico; revisar na aba Produtos. |
+| `missing_template` | Sem template automatico compativel. | Criar/ajustar template da categoria ou regras de aplicacao. |
+| `missing_sku` | SKU nao preenchido. | Corrigir SKU no cadastro local. |
+| `missing_image` | Sem imagem principal. | Adicionar imagem ao produto. |
+| `invalid_price` | Preco invalido. | Corrigir preco de venda ou regra de preco do template. |
+| `invalid_stock` | Estoque precisa ser maior que zero. | Corrigir estoque local ou regra de estoque do template. |
+| `missing_category` | Template sem categoria Shopee. | Definir categoria Shopee no template. |
+| `blocked_title_term` | Titulo contem termo bloqueado. | Ajustar nome/titulo ou regra perigosa no template. |
+| `missing_required_attribute` | Atributo obrigatorio ausente. | Completar os atributos padrao do template. |
+| `missing_logistics_channel` | Nenhum canal logistico habilitado para a loja. | Ativar canal logistico na Shopee ou revisar a integracao. |
+
+Avisos nao bloqueantes aparecem em **Motivos**, mas ainda permitem classificar o produto como pronto. Exemplos:
+
+- template sem atributos padrao;
+- uso de dimensoes seguras padrao;
+- ausencia de GTIN quando o template deixa o campo em branco.
+
+Avisos atuais:
+
+| Codigo interno | Motivo exibido | Observacao |
+| --- | --- | --- |
+| `missing_attribute_defaults` | Template sem atributos padrao. | Pode publicar se a categoria nao exigir atributos extras, mas e melhor completar o template. |
+| `warning_title_term` | Titulo contem termo sensivel. | Nao bloqueia, mas merece revisao se aparecer com frequencia. |
+| `fallback_dimensions` | Usara dimensoes seguras padrao no envio. | O fluxo atual usa fallback de pacote para evitar erro da Shopee. |
+| `missing_gtin` | Sem GTIN/EAN; revise se o produto permite SEM GTIN. | Importante para categorias que exigem codigo de barras. |
+| `logistics_not_checked` | Logistica ainda nao validada. | Aparece quando a consulta de canais ainda nao retornou ou falhou. |
+
+### Como interpretar os resultados
+
+Use a pre-validacao como triagem antes de publicar:
+
+- se muitos produtos aparecem como **Sem template automatico compativel**, o gargalo esta nos templates;
+- se muitos aparecem como **Template sem categoria Shopee**, falta completar os templates existentes;
+- se muitos aparecem como **Sem imagem principal**, o gargalo esta no cadastro/midia;
+- se muitos aparecem com **Titulo contem termo bloqueado**, as regras de titulo seguro precisam ser aplicadas antes do envio;
+- se aparecem apenas avisos, o produto esta apto para a proxima fase do automatico, mas o operador ainda deve confirmar se a categoria aceita esses defaults.
+
+Essa fase prepara o botao futuro de publicacao automatica, mas mantem o fluxo atual assistido para evitar subir anuncios errados em escala.
+
+### O que ainda falta para publicar automaticamente
+
+O botao **Publicar automaticos** ainda nao foi implementado. A proxima fase deve usar apenas produtos com status **Prontos para automatico**.
+
+Fluxo recomendado:
+
+1. O usuario abre **Shopee > Envio em massa**.
+2. Filtra por **Prontos para automatico**.
+3. Clica em **Publicar automaticos**.
+4. O sistema monta o payload usando o mesmo caminho do modal:
+   - template aplicado;
+   - titulo final;
+   - descricao;
+   - categoria Shopee;
+   - atributos padrao;
+   - preco;
+   - estoque;
+   - GTIN/EAN ou `SEM GTIN`;
+   - peso e dimensoes;
+   - imagens;
+   - video quando compativel;
+   - logistica habilitada.
+5. O sistema publica um produto por vez.
+6. Cada item do lote recebe status:
+   - `Publicado`;
+   - `Falhou`;
+   - `Pulado`;
+   - `Aguardando`.
+7. O lote continua mesmo se um produto falhar.
+8. No final, a tela mostra um resumo com publicados, falhas e pendentes.
+
+Regras de seguranca para essa fase:
+
+- nao publicar produto que nao esteja **Pronto para automatico**;
+- nao publicar variacoes automaticamente ainda;
+- nao publicar produto com bloqueio de titulo;
+- nao publicar produto sem imagem principal;
+- nao publicar produto sem categoria Shopee;
+- nao publicar produto sem SKU;
+- registrar erro bruto da Shopee para diagnostico;
+- manter o operador no controle com um botao explicito, sem agendamento automatico.
+
+### Melhorias pendentes antes ou junto do botao automatico
+
+#### Validacao real de atributos obrigatorios
+
+A pre-validacao agora busca atributos das categorias usadas pelos templates por `action=attributes` e bloqueia o automatico quando um atributo obrigatorio retornado pela Shopee nao esta nos `attributeDefaults` do template.
+
+Fluxo atual:
+
+1. Para cada categoria usada no lote, buscar atributos via `action=attributes`.
+2. Criar cache por categoria para nao repetir chamadas.
+3. Comparar atributos obrigatorios com `attributeDefaults` do template.
+4. Marcar como bloqueio quando faltar atributo obrigatorio.
+5. Mostrar o nome do atributo ausente em **Motivos**.
+
+#### Validacao de logistica antes do automatico
+
+A pre-validacao agora consulta `action=logistics_channel_list` e bloqueia o automatico quando nao encontra canal habilitado.
+
+Fluxo atual:
+
+1. Buscar `action=logistics_channel_list`.
+2. Confirmar que existe pelo menos um canal habilitado.
+3. Bloquear publicacao automatica quando nao houver canal.
+4. Mostrar motivo claro: `Nenhum canal logistico habilitado para a loja`.
+
+#### Validacao de video
+
+Video nao deve bloquear a publicacao automatica inicialmente.
+
+Regra recomendada:
+
+- se o video for valido, enviar;
+- se falhar com erro nao critico, publicar sem video e registrar aviso;
+- se a categoria exigir video futuramente, transformar em bloqueio por categoria.
+
+#### Decisao sobre avisos
+
+Hoje avisos nao bloqueiam. Antes de liberar o botao automatico, decidir se alguns avisos devem virar bloqueio.
+
+Sugestao conservadora:
+
+- `fallback_dimensions`: manter como aviso;
+- `missing_attribute_defaults`: transformar em bloqueio quando a Shopee confirmar atributo obrigatorio ausente;
+- `missing_gtin`: manter como aviso apenas quando o template usa `SEM GTIN`; bloquear quando o template exige GTIN real;
+- `warning_title_term`: manter como aviso, mas revisar regras de substituicao.
+
+#### Relatorio de lote
+
+O automatico deve gerar um historico mais completo que o envio assistido:
+
+- produto;
+- SKU;
+- template aplicado;
+- item_id retornado pela Shopee;
+- status final;
+- erro resumido;
+- erro bruto para diagnostico;
+- horario da tentativa.
+
+Esse historico pode comecar apenas em estado de tela. Depois pode ser salvo em tabela se virar rotina operacional.
+
+#### Retentativa controlada
+
+Nao implementar retry amplo no primeiro botao automatico.
+
+Primeira regra recomendada:
+
+- erro de validacao da Shopee: nao repetir;
+- erro de rede temporario: permitir repetir manualmente;
+- erro de token: tentar renovar token uma vez e retomar;
+- erro de imagem/video: registrar e continuar com o proximo.
+
+### Fora da proxima fase
+
+Manter fora do primeiro botao automatico:
+
+- envio automatico de variacoes;
+- agendamento para publicar sem operador;
+- IA criando templates sozinha;
+- alteracao automatica de produtos ja publicados;
+- republicacao ou conversao de anuncio simples para anuncio com variacao;
+- alteracao automatica de preco/estoque em anuncios ja existentes.
+
 ## Variacoes no mesmo anuncio Shopee
 
 ### Primeira entrega: variacoes manuais
@@ -691,6 +904,7 @@ A primeira versao sera manual e assistida.
 - cada variacao precisa ter SKU, preco e estoque validos;
 - imagem propria por cor e recomendada, mas a imagem principal do anuncio continua obrigatoria;
 - o vinculo `shopee_products` sera salvo para o pai e para cada filho usando o mesmo `item_id`;
+- cada filho tambem deve guardar o `model_id` da variacao retornado pela Shopee, para permitir atualizar estoque/preco da variacao correta depois;
 - envio em massa continua publicando somente produtos simples ate existir pre-validacao de variacoes.
 
 ### Como deve funcionar
@@ -708,6 +922,68 @@ Na Shopee, esse fluxo nao deve criar varios anuncios separados. Deve criar um it
 - estoque proprio;
 - imagem propria quando aplicavel;
 - GTIN/EAN proprio quando existir.
+
+### Cor nova em anuncio existente
+
+Quando chegar uma cor nova de um produto/familia que ja possui anuncio na Shopee, o sistema nao deve criar outro anuncio separado.
+
+Regra operacional:
+
+1. O produto novo entra no cadastro local com o mesmo agrupamento dos irmaos, preferencialmente pelo `parent_id`.
+2. Antes de publicar, o sistema verifica se algum irmao ja possui vinculo em `shopee_products.shopee_item_id`.
+3. Se existir `shopee_item_id`, o fluxo correto passa a ser **Adicionar variacao ao anuncio existente**.
+4. O sistema busca o `model_list` atual da Shopee para esse `item_id`.
+5. O sistema monta a lista de variacoes com as variacoes ja existentes + a nova cor.
+6. A Shopee deve ser atualizada preservando o mesmo `item_id`.
+7. Depois da atualizacao, o sistema consulta novamente o `model_list` e vincula o produto novo ao `model_id` retornado pela Shopee.
+
+Resultado esperado:
+
+| Produto local | Cor | `shopee_item_id` | `shopee_model_id` |
+| --- | --- | --- | --- |
+| Capa Redmi Note 13 Preto | Preto | `123456` | `9001` |
+| Capa Redmi Note 13 Azul | Azul | `123456` | `9002` |
+| Capa Redmi Note 13 Rosa | Rosa | `123456` | `9003` |
+
+O `shopee_item_id` identifica o anuncio. O `shopee_model_id` identifica a variacao dentro do anuncio.
+
+### Vinculo local x Shopee para variacoes
+
+A tabela `shopee_products` hoje vincula `product_id` local ao `shopee_item_id`. Para variacoes, esse vinculo precisa ser mais especifico.
+
+Campos recomendados para evoluir a tabela:
+
+```sql
+ALTER TABLE shopee_products
+ADD COLUMN IF NOT EXISTS shopee_model_id bigint,
+ADD COLUMN IF NOT EXISTS shopee_model_sku text,
+ADD COLUMN IF NOT EXISTS shopee_model_name text,
+ADD COLUMN IF NOT EXISTS shopee_tier_index jsonb;
+```
+
+Chave de vinculo recomendada:
+
+- primaria: `model_sku` da Shopee igual ao `sku` do produto local;
+- fallback: selecao manual pelo operador quando SKU estiver ausente, duplicado ou divergente.
+
+Fluxo de vinculacao apos publicar ou atualizar variacoes:
+
+1. Chamar `get_model_list` para o `shopee_item_id`.
+2. Para cada produto local do grupo, procurar um modelo Shopee com `model_sku` igual ao SKU local.
+3. Gravar em `shopee_products`:
+   - `product_id`;
+   - `shopee_item_id`;
+   - `shopee_model_id`;
+   - `shopee_model_sku`;
+   - `shopee_tier_index`;
+   - `status = active`;
+   - `last_synced_at`.
+4. Se nao houver match confiavel por SKU, marcar como vinculo pendente e pedir revisao manual.
+
+Essa regra evita dois problemas:
+
+- publicar uma cor nova como anuncio duplicado;
+- atualizar estoque/preco no `model_id` errado dentro do mesmo anuncio.
 
 ### Regra de agrupamento local
 

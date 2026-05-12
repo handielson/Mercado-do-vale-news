@@ -422,6 +422,10 @@ export default async function handler(req: any, res: any) {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
             return res.status(200).json(await shopeePost('/api/v2/product/update_stock', creds, req.body));
         }
+        if (action === 'update_model') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+            return res.status(200).json(await shopeePost('/api/v2/product/update_model', creds, req.body));
+        }
         if (action === 'update_item_status') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
             return res.status(200).json(await shopeePost('/api/v2/product/update_item_status', creds, req.body));
