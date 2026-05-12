@@ -74,6 +74,35 @@ function transformFromDB(row: any): Product {
     };
 }
 
+async function enrichProductsWithShopeeLinks(rows: any[]): Promise<any[]> {
+    if (rows.length === 0) return rows;
+
+    try {
+        const { data, error } = await supabase
+            .from('shopee_products')
+            .select('product_id, shopee_item_id')
+            .not('shopee_item_id', 'is', null);
+
+        if (error) throw error;
+
+        const shopeeItemByProductId = new Map(
+            (data || [])
+                .map((row: any) => [String(row.product_id), Number(row.shopee_item_id)] as const)
+                .filter(([, itemId]) => Number.isFinite(itemId) && itemId > 0)
+        );
+
+        if (shopeeItemByProductId.size === 0) return rows;
+
+        return rows.map((row) => ({
+            ...row,
+            shopee_item_id: shopeeItemByProductId.get(String(row.id)) ?? row.shopee_item_id,
+        }));
+    } catch (error) {
+        console.warn('[products.list] Falha ao carregar vinculos da Shopee:', error);
+        return rows;
+    }
+}
+
 // ─── READ ──────────────────────────────────────────────────────────────────
 
 async function list(): Promise<Product[]> {
@@ -112,7 +141,8 @@ async function list(): Promise<Product[]> {
         if (page.length < pageSize) break;
     }
 
-    return rows.map(transformFromDB);
+    const enrichedRows = await enrichProductsWithShopeeLinks(rows);
+    return enrichedRows.map(transformFromDB);
 }
 
 async function getById(id: string): Promise<Product | null> {
