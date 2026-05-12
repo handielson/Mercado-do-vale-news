@@ -4,6 +4,7 @@ import { Product } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
 import { productService } from '../services/products';
 import { vpsApiService } from '../services/vpsApiService';
+import { supabase } from '../services/supabase';
 import { ProductFiltersState } from '../components/products/ProductFilters';
 import { prefetchModelImages } from '../services/modelImageCache';
 import { filterAdminProducts, mergeProductsById } from './adminProductFilters';
@@ -46,6 +47,7 @@ function mapVpsProduct(row: any): Product {
         is_parent: Number(row.is_parent) === 1,
         bling_id: row.bling_id || undefined,
         bling_parent_id: row.bling_parent_id || undefined,
+        shopee_item_id: row.shopee_item_id || undefined,
         video_url: row.video_url || undefined,
         price_promo: row.price_promo ?? undefined,
         promo_start: row.promo_start || undefined,
@@ -56,6 +58,35 @@ function mapVpsProduct(row: any): Product {
         created: row.created_at,
         updated: row.updated_at,
     };
+}
+
+async function enrichProductsWithShopeeLinks(products: Product[]): Promise<Product[]> {
+    if (products.length === 0) return products;
+
+    try {
+        const { data, error } = await supabase
+            .from('shopee_products')
+            .select('product_id, shopee_item_id')
+            .not('shopee_item_id', 'is', null);
+
+        if (error) throw error;
+
+        const shopeeItemByProductId = new Map(
+            (data || [])
+                .map((row: any) => [String(row.product_id), Number(row.shopee_item_id)] as const)
+                .filter(([, itemId]) => Number.isFinite(itemId) && itemId > 0)
+        );
+
+        if (shopeeItemByProductId.size === 0) return products;
+
+        return products.map((product) => ({
+            ...product,
+            shopee_item_id: shopeeItemByProductId.get(String(product.id)) ?? product.shopee_item_id,
+        }));
+    } catch (error) {
+        console.warn('[useProducts] Falha ao carregar vinculos da Shopee:', error);
+        return products;
+    }
 }
 
 const CACHE_KEY = 'admin_products_cache';
@@ -138,7 +169,7 @@ export const useProducts = () => {
             let data: Product[];
             const vpsData = await vpsApiService.getProducts({ status: 'all', limit: 2000 });
             if (vpsData) {
-                data = vpsData.map(mapVpsProduct);
+                data = await enrichProductsWithShopeeLinks(vpsData.map(mapVpsProduct));
                 console.log(`[useProducts] VPS: ${data.length} produtos`);
             } else {
                 console.warn('[useProducts] VPS indisponível — usando Supabase');
@@ -230,9 +261,9 @@ export const useProducts = () => {
                 ? vpsApiService.getProducts({ sku: term, status: 'all', limit: 5, noCache: true })
                 : Promise.resolve(null),
         ])
-            .then(([searchRows, skuRows]) => {
+            .then(async ([searchRows, skuRows]) => {
                 if (requestId !== searchRequestSeq.current) return;
-                const remoteProducts = [...(searchRows || []), ...(skuRows || [])].map(mapVpsProduct);
+                const remoteProducts = await enrichProductsWithShopeeLinks([...(searchRows || []), ...(skuRows || [])].map(mapVpsProduct));
                 if (remoteProducts.length === 0) return;
 
                 setProducts(current => {
