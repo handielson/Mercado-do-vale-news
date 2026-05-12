@@ -111,17 +111,26 @@ export function buildShopeeVariationModels(
   dimensions: ShopeeVariationDimension[],
   context: ShopeeVariationBuildContext,
 ): ShopeeVariationPayloadParts {
-  const tier_variation = dimensions.map((dimension) => ({
-    name: dimension.name,
-    option_list: dimension.options.map((option) => {
-      const child = group.children.find((product) => readSpec(product, dimension.key) === option);
-      const imageId = child ? context.imageIdsByProductId[child.id] : '';
-      return {
-        option,
-        ...(dimension.key === 'color' && imageId ? { image: { image_id: imageId } } : {}),
-      };
-    }),
-  }));
+  const tier_variation = dimensions.map((dimension) => {
+    const optionChildren = dimension.options.map((option) =>
+      group.children.find((product) => readSpec(product, dimension.key) === option)
+    );
+    const hasCompleteOptionImages =
+      dimension.key === 'color' &&
+      optionChildren.every((child) => child && context.imageIdsByProductId[child.id]);
+
+    return {
+      name: dimension.name,
+      option_list: dimension.options.map((option, index) => {
+        const child = optionChildren[index];
+        const imageId = child ? context.imageIdsByProductId[child.id] : '';
+        return {
+          option,
+          ...(hasCompleteOptionImages && imageId ? { image: { image_id: imageId } } : {}),
+        };
+      }),
+    };
+  });
 
   const model_list = group.children.map((child) => {
     const tierIndex = dimensions.map((dimension) => Math.max(0, dimension.options.indexOf(readSpec(child, dimension.key))));

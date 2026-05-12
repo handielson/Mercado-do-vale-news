@@ -24,6 +24,12 @@ assert.match(page, /publishShopeeVariationItem\(basePayload,\s*finalPayload,\s*v
 assert.doesNotMatch(page, /publishShopeeItemWithStockFallback\(finalPayload, variationTotalStock\)/, 'variation add_item must not add simple-item stock fallback fields');
 assert.match(page, /variation_image:skipped/, 'variation image download failures should be logged as skipped instead of aborting publish');
 assert.match(page, /continue;/, 'variation image download failures should continue publishing without optional option image');
+assert.match(page, /variation_image:missing/, 'variation publish should log which option product has no usable image');
+assert.match(page, /variation_image:coverage/, 'variation publish should log option image coverage before building Shopee models');
+assert.doesNotMatch(page, /const firstImage = Array\.isArray\(child\.images\) \? child\.images\[0\]/, 'variation image upload should not only inspect the first image slot');
+assert.match(page, /variationProductIds=\{bulkQueueIds\}/, 'bulk variation publish should scope models to the selected bulk queue');
+assert.match(page, /rawSelectedVariationGroup/, 'Shopee modal should keep the raw group separate from the publish-scoped group');
+assert.match(page, /rawSelectedVariationGroup\.children\.filter\(\(child\) => allowedIds\.has\(child\.id\)\)/, 'variation publish should exclude unselected group children from model_list');
 assert.match(page, /init_tier_variation/, 'seller_stock-constrained variation add_item should initialize variations after base item fallback');
 assert.match(page, /add_item:variation_fallback_base/, 'variation fallback should log base item creation before initializing variations');
 assert.match(api, /action === 'init_tier_variation'/, 'API must expose init_tier_variation action');

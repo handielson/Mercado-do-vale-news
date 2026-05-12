@@ -109,6 +109,20 @@ assert.deepEqual(payloadParts.tier_variation, [
   },
 ]);
 
+const partialImagePayloadParts = buildShopeeVariationModels(groups[0], dimensions, {
+  imageIdsByProductId: { red: 'sg-red' },
+});
+
+assert.deepEqual(partialImagePayloadParts.tier_variation, [
+  {
+    name: 'Cor',
+    option_list: [
+      { option: 'Vermelho' },
+      { option: 'Azul' },
+    ],
+  },
+]);
+
 assert.deepEqual(payloadParts.model_list, [
   {
     tier_index: [0],

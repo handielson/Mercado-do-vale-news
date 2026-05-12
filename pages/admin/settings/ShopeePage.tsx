@@ -2055,6 +2055,7 @@ export default function ShopeePage() {
                                 company={company}
                                 historicalProducts={products}
                                 variationGroups={variationGroups}
+                                variationProductIds={bulkQueueIds}
                                 onClose={closeBulkAssistedSync}
                                 onSuccess={handleBulkModalSuccess}
                                 onError={handleBulkModalError}
@@ -2083,8 +2084,8 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 export function ShopeeSyncModal({
-    product, company, historicalProducts, variationGroups, onClose, onSuccess, onError
-}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; onClose: () => void; onSuccess: () => void; onError?: (message: string) => void }) {
+    product, company, historicalProducts, variationGroups, variationProductIds, onClose, onSuccess, onError
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; variationProductIds?: string[]; onClose: () => void; onSuccess: () => void; onError?: (message: string) => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
     const [allCatTree, setAllCatTree] = useState<any[]>([]);
@@ -2174,10 +2175,17 @@ export function ShopeeSyncModal({
         if (!vpsVariationGroup || groups.some((group) => group.id === vpsVariationGroup.id)) return groups;
         return [...groups, vpsVariationGroup];
     }, [variationGroups, vpsVariationGroup]);
-    const selectedVariationGroup = useMemo(
+    const rawSelectedVariationGroup = useMemo(
         () => availableVariationGroups.find((group) => group.id === selectedVariationGroupId) || null,
         [availableVariationGroups, selectedVariationGroupId]
     );
+    const selectedVariationGroup = useMemo(() => {
+        if (!rawSelectedVariationGroup || !variationProductIds?.length) return rawSelectedVariationGroup;
+        const allowedIds = new Set(variationProductIds.map(String));
+        const children = rawSelectedVariationGroup.children.filter((child) => allowedIds.has(child.id));
+        if (children.length < 2) return rawSelectedVariationGroup;
+        return { ...rawSelectedVariationGroup, children };
+    }, [rawSelectedVariationGroup, variationProductIds]);
     const variationDimensions = useMemo(
         () => selectedVariationGroup ? detectShopeeVariationDimensions(selectedVariationGroup) : [],
         [selectedVariationGroup]
@@ -3053,8 +3061,20 @@ export function ShopeeSyncModal({
             const variationImageIdsByProductId: Record<string, string> = {};
             if (publishWithVariations && selectedVariationGroup) {
                 for (const child of selectedVariationGroup.children) {
-                    const firstImage = Array.isArray(child.images) ? child.images[0] : '';
-                    if (!firstImage) continue;
+                    const firstImage = Array.isArray(child.images)
+                        ? child.images
+                            .map((image) => (typeof image === 'string' ? image.trim() : ''))
+                            .find(Boolean) || ''
+                        : '';
+                    if (!firstImage) {
+                        pushSyncDebug('variation_image:missing', {
+                            product_id: child.id,
+                            sku: child.sku || null,
+                            name: child.name || null,
+                            image_count: Array.isArray(child.images) ? child.images.length : 0,
+                        });
+                        continue;
+                    }
                     if (typeof firstImage === 'string' && firstImage.startsWith('sg-')) {
                         variationImageIdsByProductId[child.id] = firstImage;
                         continue;
@@ -3080,6 +3100,17 @@ export function ShopeeSyncModal({
                         continue;
                     }
                 }
+                pushSyncDebug('variation_image:coverage', {
+                    uploaded_count: Object.keys(variationImageIdsByProductId).length,
+                    child_count: selectedVariationGroup.children.length,
+                    missing: selectedVariationGroup.children
+                        .filter((child) => !variationImageIdsByProductId[child.id])
+                        .map((child) => ({
+                            product_id: child.id,
+                            sku: child.sku || null,
+                            name: child.name || null,
+                        })),
+                });
             }
 
             for (const video of availableVideos) {
