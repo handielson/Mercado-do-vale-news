@@ -8,6 +8,8 @@ const layout = readFileSync('layouts/AdminLayout.tsx', 'utf8');
 assert.ok(page.includes('stockLocationService'), 'page should use stockLocationService');
 assert.ok(page.includes('listDeposits'), 'page should load deposits');
 assert.ok(page.includes('listLocations'), 'page should load locations');
+assert.ok(page.includes('createDeposit'), 'page should create deposits');
+assert.ok(page.includes('createLocation'), 'page should create internal locations');
 assert.ok(page.includes('getStockDivergences'), 'page should show divergence data');
 assert.ok(page.includes('searchProducts'), 'page should search products');
 assert.ok(page.includes('getProductStockDistribution'), 'page should load selected product distribution');
@@ -20,10 +22,16 @@ assert.ok(page.includes('Entrada de estoque'), 'page should expose audited stock
 assert.ok(page.includes('addStockLocation'), 'page should use stock entry service');
 assert.ok(page.includes('Estrutura ainda não aplicada'), 'page should explain missing database structure');
 assert.ok(page.includes('Promise.all'), 'page should load read-only data together');
+assert.ok(page.includes('Novo dep'), 'page should expose deposit creation');
+assert.ok(page.includes('Novo local'), 'page should expose internal location creation');
 assert.ok(page.includes('Ajustar saldo'), 'page should expose manual adjustment now');
 assert.ok(page.includes('adjustStockLocation'), 'page should use audited adjustment service');
 assert.ok(page.includes('Transferir estoque'), 'page should expose audited transfer now');
 assert.ok(page.includes('transferStockLocation'), 'page should use transfer service');
+assert.ok(page.includes('submitDeposit'), 'page should submit deposit creation');
+assert.ok(page.includes('submitLocation'), 'page should submit location creation');
+assert.ok(page.includes('setDepositOpen(true)'), 'page should open deposit modal');
+assert.ok(page.includes('setLocationOpen(true)'), 'page should open location modal');
 assert.ok(!page.includes('recordMovement('), 'page should not create stock movements yet');
 
 assert.ok(routes.includes('StockLocationsPage'), 'route should lazy-load StockLocationsPage');

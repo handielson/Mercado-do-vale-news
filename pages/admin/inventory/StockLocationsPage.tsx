@@ -20,6 +20,23 @@ export function StockLocationsPage() {
   const [movements, setMovements] = useState<StockLocationMovement[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [depositName, setDepositName] = useState('');
+  const [depositCode, setDepositCode] = useState('');
+  const [depositType, setDepositType] = useState<StockDeposit['type']>('warehouse');
+  const [depositCep, setDepositCep] = useState('');
+  const [depositAddress, setDepositAddress] = useState('');
+  const [depositDefault, setDepositDefault] = useState(false);
+  const [depositSaving, setDepositSaving] = useState(false);
+  const [depositError, setDepositError] = useState<string | null>(null);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [locationDepositId, setLocationDepositId] = useState('');
+  const [locationName, setLocationName] = useState('');
+  const [locationCode, setLocationCode] = useState('');
+  const [locationDescription, setLocationDescription] = useState('');
+  const [locationDefault, setLocationDefault] = useState(false);
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedDepositId, setSelectedDepositId] = useState<string>('all');
   const [productSearch, setProductSearch] = useState('');
@@ -104,6 +121,112 @@ export function StockLocationsPage() {
       setLoadError('Estrutura ainda não aplicada. Execute a migration multi-depósitos antes de usar a conferência com dados reais.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openDepositModal = () => {
+    setDepositName('');
+    setDepositCode('');
+    setDepositType('warehouse');
+    setDepositCep('');
+    setDepositAddress('');
+    setDepositDefault(deposits.length === 0);
+    setDepositError(null);
+    setDepositOpen(true);
+  };
+
+  const closeDepositModal = () => {
+    if (depositSaving) return;
+    setDepositOpen(false);
+  };
+
+  const openLocationModal = (depositId = selectedDepositId) => {
+    const fallbackDepositId = deposits.find((deposit) => deposit.is_default)?.id || deposits[0]?.id || '';
+
+    setLocationDepositId(depositId === 'all' ? fallbackDepositId : depositId);
+    setLocationName('');
+    setLocationCode('');
+    setLocationDescription('');
+    setLocationDefault(false);
+    setLocationError(null);
+    setLocationOpen(true);
+  };
+
+  const closeLocationModal = () => {
+    if (locationSaving) return;
+    setLocationOpen(false);
+  };
+
+  const submitDeposit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!depositName.trim()) {
+      setDepositError('Informe o nome do deposito.');
+      return;
+    }
+
+    try {
+      setDepositSaving(true);
+      setDepositError(null);
+
+      const createdDeposit = await stockLocationService.createDeposit({
+        name: depositName,
+        code: depositCode,
+        type: depositType,
+        cep: depositCep,
+        address: depositAddress,
+        is_default: depositDefault,
+      });
+
+      const [depositData, locationData] = await Promise.all([
+        stockLocationService.listDeposits(),
+        stockLocationService.listLocations(),
+      ]);
+
+      setDeposits(depositData);
+      setLocations(locationData);
+      setSelectedDepositId(createdDeposit.id);
+      setDepositOpen(false);
+    } catch (error) {
+      setDepositError(error instanceof Error ? error.message : 'Nao foi possivel criar o deposito.');
+    } finally {
+      setDepositSaving(false);
+    }
+  };
+
+  const submitLocation = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!locationDepositId) {
+      setLocationError('Selecione o deposito.');
+      return;
+    }
+
+    if (!locationName.trim()) {
+      setLocationError('Informe o nome do local.');
+      return;
+    }
+
+    try {
+      setLocationSaving(true);
+      setLocationError(null);
+
+      await stockLocationService.createLocation({
+        deposit_id: locationDepositId,
+        name: locationName,
+        code: locationCode,
+        description: locationDescription,
+        is_default: locationDefault,
+      });
+
+      const locationData = await stockLocationService.listLocations();
+      setLocations(locationData);
+      setSelectedDepositId(locationDepositId);
+      setLocationOpen(false);
+    } catch (error) {
+      setLocationError(error instanceof Error ? error.message : 'Nao foi possivel criar o local.');
+    } finally {
+      setLocationSaving(false);
     }
   };
 
@@ -493,8 +616,20 @@ export function StockLocationsPage() {
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_1fr]">
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5">
-            <h2 className="text-lg font-bold text-slate-900">Depósitos</h2>
-            <p className="mt-1 text-sm text-slate-500">Pontos físicos de armazenamento cadastrados pela migration.</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Depósitos</h2>
+                <p className="mt-1 text-sm text-slate-500">Pontos físicos de armazenamento cadastrados pela migration.</p>
+              </div>
+              <button
+                type="button"
+                onClick={openDepositModal}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                <Plus size={16} />
+                Novo deposito
+              </button>
+            </div>
           </div>
 
           <div className="divide-y divide-slate-100">
@@ -538,6 +673,15 @@ export function StockLocationsPage() {
                 <p className="mt-1 text-sm text-slate-500">Prateleiras, balcões, caixas e posições dentro dos depósitos.</p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => openLocationModal()}
+                  disabled={deposits.length === 0}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  <Plus size={16} />
+                  Novo local
+                </button>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
@@ -841,6 +985,238 @@ export function StockLocationsPage() {
           </div>
         )}
       </section>
+
+      {depositOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <form
+            onSubmit={submitDeposit}
+            className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Novo deposito</h2>
+                <p className="mt-1 text-sm text-slate-500">Cadastre uma loja, galpao ou ponto fisico de estoque.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDepositModal}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100"
+                aria-label="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              {depositError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {depositError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Nome</span>
+                  <input
+                    type="text"
+                    value={depositName}
+                    onChange={(event) => setDepositName(event.target.value)}
+                    placeholder="Ex.: Loja Centro"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    required
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Codigo</span>
+                  <input
+                    type="text"
+                    value={depositCode}
+                    onChange={(event) => setDepositCode(event.target.value)}
+                    placeholder="Automatico se vazio"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm uppercase outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-700">Tipo</span>
+                <select
+                  value={depositType}
+                  onChange={(event) => setDepositType(event.target.value as StockDeposit['type'])}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="store">Loja</option>
+                  <option value="warehouse">Deposito</option>
+                  <option value="support">Suporte</option>
+                  <option value="transit">Transito</option>
+                  <option value="other">Outro</option>
+                </select>
+              </label>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">CEP</span>
+                  <input
+                    type="text"
+                    value={depositCep}
+                    onChange={(event) => setDepositCep(event.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Endereco</span>
+                  <input
+                    type="text"
+                    value={depositAddress}
+                    onChange={(event) => setDepositAddress(event.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              </div>
+
+              <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={depositDefault}
+                  onChange={(event) => setDepositDefault(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                Usar como deposito padrao
+              </label>
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeDepositModal}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={depositSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {depositSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Salvar deposito
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {locationOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <form
+            onSubmit={submitLocation}
+            className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Novo local</h2>
+                <p className="mt-1 text-sm text-slate-500">Cadastre prateleira, balcao, caixa ou posicao interna.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeLocationModal}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100"
+                aria-label="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              {locationError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {locationError}
+                </div>
+              )}
+
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-700">Deposito</span>
+                <select
+                  value={locationDepositId}
+                  onChange={(event) => setLocationDepositId(event.target.value)}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {deposits.map((deposit) => (
+                    <option key={deposit.id} value={deposit.id}>{deposit.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Nome</span>
+                  <input
+                    type="text"
+                    value={locationName}
+                    onChange={(event) => setLocationName(event.target.value)}
+                    placeholder="Ex.: Prateleira 1"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    required
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Codigo</span>
+                  <input
+                    type="text"
+                    value={locationCode}
+                    onChange={(event) => setLocationCode(event.target.value)}
+                    placeholder="Automatico se vazio"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm uppercase outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-700">Descricao</span>
+                <textarea
+                  value={locationDescription}
+                  onChange={(event) => setLocationDescription(event.target.value)}
+                  rows={3}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+
+              <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={locationDefault}
+                  onChange={(event) => setLocationDefault(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                Usar como local padrao deste deposito
+              </label>
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeLocationModal}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={locationSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {locationSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Salvar local
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {entryOpen && selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">

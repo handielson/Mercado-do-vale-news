@@ -3,6 +3,7 @@ import { getCompanyId } from './companyContext';
 import {
   ProductStockLocation,
   StockDeposit,
+  StockDepositInput,
   StockLocation,
   StockLocationAdjustmentInput,
   StockLocationDivergence,
@@ -22,7 +23,18 @@ import {
   StockLocationOrderRestoreResult,
   StockLocationSaleRestoreInput,
   StockLocationSaleRestoreResult,
+  StockLocationInput,
 } from '../types/stock-location';
+
+function normalizeLocationCode(value: string): string {
+  return value
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toUpperCase();
+}
 
 class StockLocationService {
   async listDeposits(): Promise<StockDeposit[]> {
@@ -38,6 +50,43 @@ class StockLocationService {
     }
 
     return (data || []) as StockDeposit[];
+  }
+
+  async createDeposit(input: StockDepositInput): Promise<StockDeposit> {
+    const companyId = await getCompanyId();
+    const name = input.name.trim();
+    const code = normalizeLocationCode(input.code || input.name);
+
+    if (!name) {
+      throw new Error('Informe o nome do deposito.');
+    }
+
+    if (!code) {
+      throw new Error('Informe um codigo valido para o deposito.');
+    }
+
+    const payload = {
+      company_id: companyId,
+      name,
+      code,
+      type: input.type || 'warehouse',
+      cep: input.cep?.trim() || null,
+      address: input.address?.trim() || null,
+      is_default: Boolean(input.is_default),
+      is_active: true,
+    };
+
+    const { data, error } = await supabase
+      .from('stock_deposits')
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data as StockDeposit;
   }
 
   async listLocations(depositId?: string): Promise<StockLocation[]> {
@@ -59,6 +108,46 @@ class StockLocationService {
     }
 
     return (data || []) as StockLocation[];
+  }
+
+  async createLocation(input: StockLocationInput): Promise<StockLocation> {
+    const companyId = await getCompanyId();
+    const name = input.name.trim();
+    const code = normalizeLocationCode(input.code || input.name);
+
+    if (!input.deposit_id) {
+      throw new Error('Selecione o deposito do local.');
+    }
+
+    if (!name) {
+      throw new Error('Informe o nome do local.');
+    }
+
+    if (!code) {
+      throw new Error('Informe um codigo valido para o local.');
+    }
+
+    const payload = {
+      company_id: companyId,
+      deposit_id: input.deposit_id,
+      name,
+      code,
+      description: input.description?.trim() || null,
+      is_default: Boolean(input.is_default),
+      is_active: true,
+    };
+
+    const { data, error } = await supabase
+      .from('stock_locations')
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data as StockLocation;
   }
 
   async getProductStockDistribution(productId: string): Promise<ProductStockLocation[]> {
