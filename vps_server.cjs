@@ -232,6 +232,19 @@ async function requireSyncKeyOrAdmin(request, reply) {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const jsonStr = (v) => v == null ? null : (typeof v === 'string' ? v : JSON.stringify(v));
 const optionalBool = (v) => v == null ? null : (v ? 1 : 0);
+
+// Rejeita descrições obviamente inválidas que aparecem em alguns paths de save
+// (ex.: '0', '<p>0</p>', strings só com dígitos/espaços, <5 chars úteis).
+// Retorna null para essas; preserva o valor caso seja descrição real.
+function sanitizeDescription(v) {
+  if (v == null) return null;
+  if (typeof v !== 'string') return null;
+  const text = v.replace(/<[^>]+>/g, '').trim();
+  if (!text) return null;
+  if (text.length < 5) return null;
+  if (/^[0-9\s]+$/.test(text)) return null;
+  return v;
+}
 const boolInt = (v) => v ? 1 : 0;
 
 function normalizeAutoresponderSender(value) {
@@ -5904,7 +5917,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           updated_at=CURRENT_TIMESTAMP`,
         [
           p.id, p.name, p.slug || null, p.sku || null,
-          p.ean || null, jsonStr(p.alternative_eans), p.description || null,
+          p.ean || null, jsonStr(p.alternative_eans), sanitizeDescription(p.description),
           p.price_retail ?? null, p.price_wholesale ?? null,
           p.price_cost ?? null, p.price_reseller ?? null,
           p.price_promo ?? null, p.promo_start || null, p.promo_end || null,
@@ -6005,7 +6018,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
     [
       p.name, p.slug || null, p.sku || null,
       p.ean || null, jsonStr(p.alternative_eans),
-      p.description ?? null, p.technical_specifications ?? null,
+      sanitizeDescription(p.description), sanitizeDescription(p.technical_specifications),
       p.price_retail || null, p.price_wholesale || null,
       p.price_cost || null, p.price_reseller || null,
       p.price_promo || null, p.promo_start || null, p.promo_end || null,
@@ -6050,7 +6063,7 @@ fastify.patch('/products/description', { preHandler: requireSyncKey }, async (re
   if (!sku) return reply.code(400).send({ error: 'sku required' });
   const [result] = await pool.query(
     'UPDATE products SET description=?, technical_specifications=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
-    [description ?? null, technical_specifications ?? null, sku]
+    [sanitizeDescription(description), sanitizeDescription(technical_specifications), sku]
   );
   return { ok: true, affectedRows: result.affectedRows };
 });
@@ -6327,7 +6340,7 @@ fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
         id, p.name, p.slug || null, p.sku || null, 1, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
         p.status || 'active', p.track_inventory ? 1 : 0, jsonStr(p.images), p.category_id || null, p.brand || null,
-        p.description || null, jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0
+        sanitizeDescription(p.description), jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0
       ]
     );
 
@@ -6367,7 +6380,7 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
         p.name, p.slug || null, p.sku || null, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
         p.status || 'active', jsonStr(p.images), p.category_id || null, p.brand || null,
-        p.description || null, jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0,
+        sanitizeDescription(p.description), jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0,
         comboId
       ]
     );
