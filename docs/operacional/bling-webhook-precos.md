@@ -14,7 +14,7 @@ Documento operacional para diagnostico de alteracoes de valor vindas do Bling.
 Quando o Bling envia `product.updated` com `data.preco`, o webhook converte o valor em reais para centavos e atualiza:
 
 - `products.price_retail` no Supabase, filtrando pelo `bling_id`.
-- `products.price_retail` na VPS, chamando `PATCH /products/prices-stock` com `sku` e `price_retail`.
+- `products.price_retail` na VPS, chamando `PATCH /products/prices-stock` com o contrato em lote `{ "products": [{ "sku": "...", "price_retail": 1499 }] }`.
 
 Exemplo:
 

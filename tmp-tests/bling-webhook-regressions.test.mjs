@@ -51,8 +51,8 @@ assert.match(
 
 assert.match(
   webhookSource,
-  /patchVps\('\/products\/prices-stock',\s*\{\s*sku:\s*resolvedSku,\s*\.\.\.updates\s*\}\)/,
-  'product.updated price changes must sync to the VPS commercial fields endpoint',
+  /patchVps\('\/products\/prices-stock',\s*\{\s*products:\s*\[\s*\{\s*sku:\s*resolvedSku,\s*\.\.\.updates\s*\}\s*\]\s*\}\)/,
+  'product.updated price changes must sync to the VPS commercial fields endpoint using the products array contract',
 );
 
 console.log('bling-webhook regression guard ok');

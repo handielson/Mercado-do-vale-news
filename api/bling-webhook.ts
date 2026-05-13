@@ -301,7 +301,7 @@ export default async function handler(req: any, res: any) {
                 ? await patchVps('/products/name', { sku: resolvedSku, name: updates.name })
                 : true;
             const vpsPriceUpdated = updates.price_retail !== undefined
-                ? await patchVps('/products/prices-stock', { sku: resolvedSku, ...updates })
+                ? await patchVps('/products/prices-stock', { products: [{ sku: resolvedSku, ...updates }] })
                 : true;
             const vpsUpdated = vpsNameUpdated && vpsPriceUpdated;
 
