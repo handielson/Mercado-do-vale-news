@@ -30,7 +30,7 @@ function centsToReais(value: unknown): number {
 
 function readSpec(product: ShopeeVariationProduct, key: ShopeeVariationDimensionKey): string {
   const specs = product.specs || {};
-  if (key === 'color') return text(specs.color || specs.cor);
+  if (key === 'color') return text(specs.color || specs.cor || colorFromName(product.name));
   if (key === 'storage') return text(specs.storage || specs.armazenamento);
   return text(specs[key]);
 }

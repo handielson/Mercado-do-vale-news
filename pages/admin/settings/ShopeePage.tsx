@@ -2010,9 +2010,9 @@ export default function ShopeePage() {
                     )}
 
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
-                            <div className="flex flex-1 flex-col gap-2 lg:flex-row">
-                                <div className="relative flex-1">
+                        <div className="p-4 border-b border-slate-100 grid grid-cols-1 xl:grid-cols-[minmax(360px,1fr)_auto] gap-3 xl:items-center">
+                            <div className="flex min-w-0 flex-col gap-2 md:flex-row">
+                                <div className="relative min-w-[320px] flex-1">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input
                                     value={bulkSearchQ}
@@ -2024,14 +2024,14 @@ export default function ShopeePage() {
                                 <select
                                     value={bulkAutoFilter}
                                     onChange={e => setBulkAutoFilter(e.target.value as BulkAutoFilter)}
-                                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-orange-500"
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-orange-500 md:w-64"
                                 >
                                     <option value="all">Todos</option>
                                     <option value="ready">Prontos para automatico</option>
                                     <option value="review">Precisam revisao</option>
                                 </select>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                                 <button
                                     onClick={() => selectBulkVisibleProducts(bulkFiltered)}
                                     disabled={!isConnected || loadingProducts || bulkFiltered.length === 0}

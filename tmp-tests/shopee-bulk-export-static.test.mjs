@@ -12,6 +12,8 @@ assert.match(page, /const startBulkAssistedSync = \(\) =>/, 'Bulk export must st
 assert.match(page, /const handleBulkModalSuccess = \(publishedProductIds\?: string\[\]\) =>/, 'Bulk export must advance after a successful publish');
 assert.match(page, /selectBulkVisibleProducts/, 'Bulk export must provide a select-all-visible action');
 assert.match(page, /Selecionar todos/, 'Bulk export UI must expose a Selecionar todos button');
+assert.match(page, /grid-cols-1 xl:grid-cols-\[minmax\(360px,1fr\)_auto\]/, 'Bulk toolbar must let search use its own row before wide desktop');
+assert.match(page, /min-w-\[320px\]/, 'Bulk search field must keep enough width for full search text');
 assert.match(page, /<ShopeeSyncModal[\s\S]*product=\{bulkActiveProduct\}[\s\S]*onSuccess=\{handleBulkModalSuccess\}/, 'Bulk export must reuse the validated Shopee sync modal');
 assert.match(page, /products\.filter\(p => p\.status === 'not_synced'\)/, 'Bulk export must only list unsynced products');
 

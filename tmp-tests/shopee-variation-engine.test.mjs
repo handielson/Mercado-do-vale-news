@@ -139,6 +139,43 @@ assert.equal(suggestedGroup.id, 'rn14-azul');
 assert.equal(suggestedGroup.parent.id, 'rn14-azul');
 assert.deepEqual(suggestedGroup.children.map((child) => child.sku), ['CSRN145GAZL', 'CSRN145GROX', 'CSRN145GSAL']);
 
+const groupReloadedFromVpsWithoutColorSpecs = {
+  id: 'redmi13-azul-claro',
+  parent: {
+    id: 'redmi13-azul-claro',
+    name: 'Capa de Silicone para Redmi 13 4G | Poco M6 4G Cor:Azul Claro',
+    sku: 'CSR134GAZC',
+    price_retail: 1499,
+    stock_quantity: 1,
+    images: ['https://cdn.test/redmi13-azul-claro.jpg'],
+    specs: {},
+  },
+  children: [
+    {
+      id: 'redmi13-azul-claro',
+      name: 'Capa de Silicone para Redmi 13 4G | Poco M6 4G Cor:Azul Claro',
+      sku: 'CSR134GAZC',
+      price_retail: 1499,
+      stock_quantity: 1,
+      images: ['https://cdn.test/redmi13-azul-claro.jpg'],
+      specs: {},
+    },
+    {
+      id: 'redmi13-rosa-magenta',
+      name: 'Capa de Silicone para Redmi 13 4G | Poco M6 4G Cor:Rosa Magenta',
+      sku: 'CSR134GRSMGN',
+      price_retail: 1499,
+      stock_quantity: 1,
+      images: ['https://cdn.test/redmi13-rosa-magenta.jpg'],
+      specs: {},
+    },
+  ],
+};
+
+const inferredDimensions = detectShopeeVariationDimensions(groupReloadedFromVpsWithoutColorSpecs);
+assert.deepEqual(inferredDimensions, [{ name: 'Cor', key: 'color', options: ['Azul Claro', 'Rosa Magenta'] }]);
+assert.equal(validateShopeeVariationGroup(groupReloadedFromVpsWithoutColorSpecs, inferredDimensions).ok, true);
+
 const dimensions = detectShopeeVariationDimensions(groups[0]);
 assert.deepEqual(dimensions, [{ name: 'Cor', key: 'color', options: ['Vermelho', 'Azul'] }]);
 
