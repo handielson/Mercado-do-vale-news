@@ -81,64 +81,6 @@ function numberValue(value: unknown): number {
   return Number.isFinite(number) ? number : 0;
 }
 
-function parseDimensionObject(value: unknown): Record<string, unknown> {
-  if (!value) return {};
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-    } catch {
-      return {};
-    }
-  }
-  return typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function dimensionValue(dimensions: Record<string, unknown>, keys: string[]): number {
-  for (const key of keys) {
-    const value = numberValue(dimensions[key]);
-    if (value > 0) return value;
-  }
-  return 0;
-}
-
-function specsValue(specs: Record<string, unknown>, keys: string[]): number {
-  const nestedDimensions = parseDimensionObject(specs.dimensions);
-  for (const key of keys) {
-    const direct = numberValue(specs[key]);
-    if (direct > 0) return direct;
-
-    const nested = numberValue(nestedDimensions[key]);
-    if (nested > 0) return nested;
-  }
-  return 0;
-}
-
-function hasPositiveDimension(product: ShopeeAutoPublishProduct, template: ShopeeTemplate | null): boolean {
-  if (template?.dimensionMode === 'fixed') {
-    return numberValue(template.weightKg) > 0
-      && numberValue(template.packageLength) > 0
-      && numberValue(template.packageWidth) > 0
-      && numberValue(template.packageHeight) > 0;
-  }
-
-  const dimensions = parseDimensionObject(product.dimensions);
-  const specs = parseDimensionObject(product.specs);
-
-  return numberValue(product.weight_kg) > 0
-    || numberValue(product.shipping_weight) > 0
-    || specsValue(specs, ['weight_kg', 'shipping_weight', 'dimensions.weight_kg', 'dimensions.shipping_weight']) > 0
-    || numberValue(product.shipping_length) > 0
-    || numberValue(product.shipping_width) > 0
-    || numberValue(product.shipping_height) > 0
-    || dimensionValue(dimensions, ['depth_cm', 'depth', 'length_cm', 'length', 'comprimento', 'profundidade']) > 0
-    || dimensionValue(dimensions, ['width_cm', 'width', 'largura']) > 0
-    || dimensionValue(dimensions, ['height_cm', 'height', 'altura']) > 0
-    || specsValue(specs, ['dimensions.depth_cm', 'dimensions.depth', 'dimensions.length_cm', 'dimensions.length', 'dimensions.comprimento', 'dimensions.profundidade', 'depth_cm', 'depth', 'length_cm', 'length', 'comprimento', 'profundidade']) > 0
-    || specsValue(specs, ['dimensions.width_cm', 'dimensions.width', 'dimensions.largura', 'width_cm', 'width', 'largura']) > 0
-    || specsValue(specs, ['dimensions.height_cm', 'dimensions.height', 'dimensions.altura', 'height_cm', 'height', 'altura']) > 0;
-}
-
 function issue(code: string, message: string, level: ShopeeAutoPublishIssueLevel = 'blocker'): ShopeeAutoPublishIssue {
   return { code, message, level };
 }
@@ -213,10 +155,6 @@ export function evaluateShopeeAutoPublishReadiness(
     } else if (safety.hasWarnings || sourceSafety.hasWarnings) {
       warnings.push(issue('warning_title_term', 'Titulo contem termo sensivel.', 'warning'));
     }
-  }
-
-  if (!hasPositiveDimension(product, template)) {
-    warnings.push(issue('fallback_dimensions', 'Usara dimensoes seguras padrao no envio.', 'warning'));
   }
 
   if (applied?.gtinMode === 'blank' && (!Array.isArray(product.eans) || product.eans.filter(Boolean).length === 0)) {

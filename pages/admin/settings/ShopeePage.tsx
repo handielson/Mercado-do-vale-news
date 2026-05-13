@@ -2234,12 +2234,16 @@ export function ShopeeSyncModal({
     const initialDefaults = resolveShopeeSyncDefaults(product);
     const defaultDescription = initialDefaults.description;
     const defaultStock = initialDefaults.stock;
+    const [blingPhysicalDefaults, setBlingPhysicalDefaults] = useState<{ weightKg?: number; dimensions?: LocalProduct['dimensions'] } | null>(null);
     const defaultWeightKg = (() => {
         const directWeight = Number(product.weight_kg);
         if (Number.isFinite(directWeight) && directWeight > 0) return directWeight;
 
         const shippingWeight = Number(product.shipping_weight);
         if (Number.isFinite(shippingWeight) && shippingWeight > 0) return shippingWeight / 1000;
+
+        const blingWeight = Number(blingPhysicalDefaults?.weightKg);
+        if (Number.isFinite(blingWeight) && blingWeight > 0) return blingWeight;
 
         return 0.3;
     })();
@@ -2248,6 +2252,7 @@ export function ShopeeSyncModal({
     const initialGtinMode = gtinValue && isNoGtinValue(gtinValue) ? 'no_gtin' : 'code';
     const initialGtinInput = initialGtinMode === 'code' ? gtinValue.trim() : '';
     const normalizedDimensions = normalizeProductDimensions(product.dimensions) as Record<string, any> | null;
+    const blingDimensions = normalizeProductDimensions(blingPhysicalDefaults?.dimensions) as Record<string, any> | null;
     const specsPackageLength = readPositiveSpecValue(product.specs, ['dimensions.depth_cm', 'dimensions.depth', 'dimensions.length_cm', 'dimensions.length', 'dimensions.comprimento', 'dimensions.profundidade', 'depth_cm', 'depth', 'length_cm', 'length', 'comprimento', 'profundidade']);
     const specsPackageWidth = readPositiveSpecValue(product.specs, ['dimensions.width_cm', 'dimensions.width', 'dimensions.largura', 'width_cm', 'width', 'largura']);
     const specsPackageHeight = readPositiveSpecValue(product.specs, ['dimensions.height_cm', 'dimensions.height', 'dimensions.altura', 'height_cm', 'height', 'altura']);
@@ -2259,19 +2264,37 @@ export function ShopeeSyncModal({
         normalizedDimensions?.comprimento ??
         normalizedDimensions?.profundidade ??
         0
-    ) || specsPackageLength || Number(product.shipping_length ?? 0) || 0;
+    ) || specsPackageLength || Number(product.shipping_length ?? 0) || Number(
+        blingDimensions?.depth_cm ??
+        blingDimensions?.depth ??
+        blingDimensions?.length_cm ??
+        blingDimensions?.length ??
+        blingDimensions?.comprimento ??
+        blingDimensions?.profundidade ??
+        0
+    ) || 0;
     const packageWidth = Number(
         normalizedDimensions?.width_cm ??
         normalizedDimensions?.width ??
         normalizedDimensions?.largura ??
         0
-    ) || specsPackageWidth || Number(product.shipping_width ?? 0) || 0;
+    ) || specsPackageWidth || Number(product.shipping_width ?? 0) || Number(
+        blingDimensions?.width_cm ??
+        blingDimensions?.width ??
+        blingDimensions?.largura ??
+        0
+    ) || 0;
     const packageHeight = Number(
         normalizedDimensions?.height_cm ??
         normalizedDimensions?.height ??
         normalizedDimensions?.altura ??
         0
-    ) || specsPackageHeight || Number(product.shipping_height ?? 0) || 0;
+    ) || specsPackageHeight || Number(product.shipping_height ?? 0) || Number(
+        blingDimensions?.height_cm ??
+        blingDimensions?.height ??
+        blingDimensions?.altura ??
+        0
+    ) || 0;
     const packageDimension = {
         package_length: Math.max(1, Math.round(packageLength || 20)),
         package_width: Math.max(1, Math.round(packageWidth || 15)),
@@ -2504,7 +2527,9 @@ export function ShopeeSyncModal({
 
     useEffect(() => {
         const blingId = Number(product.bling_id);
-        const shouldRefreshFromBling = !product.description || Number(product.stock_quantity ?? 0) <= 0;
+        const hasProductWeight = Number(product.weight_kg) > 0 || Number(product.shipping_weight) > 0;
+        const hasProductDimensions = packageLength > 0 && packageWidth > 0 && packageHeight > 0;
+        const shouldRefreshFromBling = !product.description || Number(product.stock_quantity ?? 0) <= 0 || !hasProductWeight || !hasProductDimensions;
         if (!shouldRefreshFromBling) return;
         if (!Number.isFinite(blingId) || blingId <= 0) return;
 
@@ -2525,6 +2550,13 @@ export function ShopeeSyncModal({
                 if (!stockDirtyRef.current) {
                     setShopeeStock(resolved.stock);
                 }
+
+                if (resolved.weightKg || resolved.dimensions) {
+                    setBlingPhysicalDefaults({
+                        weightKg: resolved.weightKg,
+                        dimensions: resolved.dimensions,
+                    });
+                }
             } catch (error) {
                 console.error('[Shopee Sync] Failed to load Bling defaults:', error);
             }
@@ -2535,7 +2567,7 @@ export function ShopeeSyncModal({
         return () => {
             cancelled = true;
         };
-    }, [product]);
+    }, [packageHeight, packageLength, packageWidth, product]);
 
     // Nível atual da árvore
     const currentCatLevel: any[] = catBreadcrumb.length === 0

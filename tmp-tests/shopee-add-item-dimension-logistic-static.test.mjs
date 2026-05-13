@@ -42,6 +42,18 @@ assert.match(
 
 assert.match(
   source,
+  /setBlingPhysicalDefaults\(\{\s*weightKg: resolved\.weightKg,\s*dimensions: resolved\.dimensions,\s*\}\)/,
+  'Shopee modal must keep physical dimensions loaded from Bling detail'
+);
+
+assert.match(
+  source,
+  /blingDimensions\?\.depth_cm[\s\S]*blingDimensions\?\.width_cm[\s\S]*blingDimensions\?\.height_cm/,
+  'Shopee package dimensions must use Bling dimensions before falling back to safe defaults'
+);
+
+assert.match(
+  source,
   /const \[gtinMode, setGtinMode\] = useState<'code' \| 'no_gtin'>\(initialGtinMode\);/,
   'Shopee add_item modal must let the seller choose GTIN mode'
 );
@@ -132,7 +144,7 @@ assert.match(
 
 assert.match(
   source,
-  /expectedVideoCandidateCount > 0 && savedVideoCount === 0/,
+  /expectedVideoCandidateCount > 0 && !videoAlreadyPresentOnShopee && savedVideoCount === 0/,
   'Shopee sync must keep debug open when a visible modal video is not saved by Shopee'
 );
 

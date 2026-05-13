@@ -210,7 +210,13 @@ Origem dos valores:
 - `product.dimensions.depth_cm`, `shipping_length`, fallback `20`;
 - `product.dimensions.width_cm`, `shipping_width`, fallback `15`;
 - `product.dimensions.height_cm`, `shipping_height`, fallback `10`;
-- peso em `weight_kg`, `shipping_weight`, fallback `0.3`.
+- detalhe do Bling via `product-detail`, quando o cadastro local nao tem peso/dimensoes:
+  - `pesoBruto`;
+  - `dimensoes.largura`;
+  - `dimensoes.altura`;
+  - `dimensoes.profundidade`;
+  - alias tolerante `aspec`, `aspecto` ou `aspectos`, caso algum payload venha com esse nome;
+- peso em `weight_kg`, `shipping_weight`, `pesoBruto` do Bling, fallback `0.3`.
 
 Sempre envia minimo `1` cm para cada dimensao.
 
@@ -741,8 +747,11 @@ Bloqueios atuais:
 Avisos nao bloqueantes aparecem em **Motivos**, mas ainda permitem classificar o produto como pronto. Exemplos:
 
 - template sem atributos padrao;
-- uso de dimensoes seguras padrao;
 - ausencia de GTIN quando o template deixa o campo em branco.
+
+Observacao: dimensoes seguras padrao ja fazem parte do fluxo corrigido de envio e nao devem aparecer como motivo na pre-validacao. O fallback continua sendo aplicado no payload para evitar erro da Shopee quando o cadastro local nao tem dimensoes.
+
+Quando o produto tem dimensoes cadastradas no Bling, o modal de envio busca o detalhe do Bling e usa essas medidas antes de recorrer ao fallback seguro.
 
 Avisos atuais:
 
@@ -750,7 +759,6 @@ Avisos atuais:
 | --- | --- | --- |
 | `missing_attribute_defaults` | Template sem atributos padrao. | Pode publicar se a categoria nao exigir atributos extras, mas e melhor completar o template. |
 | `warning_title_term` | Titulo contem termo sensivel. | Nao bloqueia, mas merece revisao se aparecer com frequencia. |
-| `fallback_dimensions` | Usara dimensoes seguras padrao no envio. | O fluxo atual usa fallback de pacote para evitar erro da Shopee. |
 | `missing_gtin` | Sem GTIN/EAN; revise se o produto permite SEM GTIN. | Importante para categorias que exigem codigo de barras. |
 | `logistics_not_checked` | Logistica ainda nao validada. | Aparece quando a consulta de canais ainda nao retornou ou falhou. |
 
@@ -849,7 +857,6 @@ Hoje avisos nao bloqueiam. Antes de liberar o botao automatico, decidir se algun
 
 Sugestao conservadora:
 
-- `fallback_dimensions`: manter como aviso;
 - `missing_attribute_defaults`: transformar em bloqueio quando a Shopee confirmar atributo obrigatorio ausente;
 - `missing_gtin`: manter como aviso apenas quando o template usa `SEM GTIN`; bloquear quando o template exige GTIN real;
 - `warning_title_term`: manter como aviso, mas revisar regras de substituicao.

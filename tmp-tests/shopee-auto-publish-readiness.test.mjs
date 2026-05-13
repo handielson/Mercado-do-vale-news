@@ -51,7 +51,10 @@ const ready = evaluateShopeeAutoPublishReadiness(readyProduct, [template]);
 assert.equal(ready.status, 'ready');
 assert.equal(ready.template?.id, 'phone_case');
 assert.deepEqual(ready.blockers, []);
-assert.ok(ready.warnings.some((issue) => issue.code === 'fallback_dimensions'), 'safe fallback dimensions should be visible as a warning');
+assert.ok(
+  !ready.warnings.some((issue) => issue.code === 'fallback_dimensions'),
+  'safe fallback dimensions are expected publish behavior and should not appear as a readiness warning'
+);
 
 const productWithJsonDimensions = evaluateShopeeAutoPublishReadiness({
   ...readyProduct,
