@@ -665,7 +665,8 @@ Motivo dessa abordagem:
 - Produtos sem imagem podem aparecer na lista, mas devem ser sinalizados como pendentes de revisao de midia.
 - O envio usa o mesmo `ShopeeSyncModal` do produto individual.
 - Depois de cada sucesso, o sistema recarrega os vinculos da Shopee.
-- O primeiro lote nao agrupa variacoes no mesmo anuncio.
+- O envio assistido pode publicar variacoes no mesmo anuncio quando o modal encontra ou cria um grupo de variacoes.
+- O botao **Selecionar todos** marca todos os produtos visiveis no filtro atual; **Selecionar automaticos** continua marcando apenas os prontos para automatico.
 - A tela mostra um historico do lote com o resultado de cada item: publicado, pulado ou falhou.
 - Quando um produto falha no modal, ele fica marcado no historico e o operador pode corrigir/repetir ou pular para o proximo.
 
@@ -906,6 +907,9 @@ A primeira versao sera manual e assistida.
 
 - o operador escolhe explicitamente publicar como anuncio com variacoes;
 - o sistema sugere grupos baseados em `parent_id`;
+- se nao houver grupo, o modal pode sugerir um grupo pelo nome base do produto, como `Capa de Silicone para Redmi Note 14 5G`, agrupando as opcoes `Cor:*`;
+- ao confirmar **Criar grupo de variacoes**, o sistema grava o relacionamento na VPS pelo endpoint `PATCH /products/variation-group`, atualizando apenas `parent_id`;
+- quando todos os itens sao variacoes vendaveis e nao existe pai separado, um produto vira a ancora do grupo na VPS, mas continua entrando no `model_list` como variacao;
 - cada filho vira um item de `model_list`;
 - a primeira dimensao suportada e `Cor`, com suporte tambem a `Modelo`, `Tamanho`, `RAM` e `Armazenamento`;
 - cada variacao precisa ter SKU, preco e estoque validos;

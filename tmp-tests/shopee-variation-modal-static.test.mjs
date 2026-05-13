@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 const page = readFileSync('pages/admin/settings/ShopeePage.tsx', 'utf8');
 const api = readFileSync('api/shopee-catalog.ts', 'utf8');
 const docs = readFileSync('Shopee.md', 'utf8');
+const vpsService = readFileSync('services/vpsApiService.ts', 'utf8');
+const vpsServer = readFileSync('vps_server.cjs', 'utf8');
+const vpsServerJs = readFileSync('vps_server.js', 'utf8');
 
 assert.match(page, /shopeeVariationEngine/, 'Shopee page should import the variation engine');
 assert.match(page, /variationGroups/, 'Shopee page should discover selectable variation groups');
@@ -16,6 +19,14 @@ assert.match(page, /setPublishWithVariations\(true\)/, 'matching variation group
 assert.match(page, /setPublishWithVariations\(false\)/, 'products without a matching variation group should keep variation publish off');
 assert.match(page, /setSelectedVariationGroupId\(''\)/, 'products without a matching variation group should clear variation group selection');
 assert.match(page, /Selecione grupo/, 'variation status should be neutral when no group is selected');
+assert.match(page, /Criar grupo de variacoes/, 'UI must let the operator create a missing variation group');
+assert.match(page, /suggestShopeeVariationGroupByName/, 'Shopee modal must suggest missing groups from matching product names');
+assert.match(page, /persistSuggestedVariationGroup/, 'Shopee modal must persist newly created groups in the VPS');
+assert.match(page, /updateProductVariationGroup\(\s*suggestedVariationGroup\.parent\.id/, 'new variation groups must be saved through VPS parent_id');
+assert.match(vpsService, /\/products\/variation-group/, 'VPS service must call the variation-group endpoint');
+assert.match(vpsServer, /fastify\.patch\('\/products\/variation-group'/, 'VPS must expose a focused variation-group endpoint');
+assert.match(vpsServer, /UPDATE products SET parent_id=\?/, 'VPS variation endpoint must persist child parent_id without full product overwrite');
+assert.match(vpsServerJs, /fastify\.patch\('\/products\/variation-group'/, 'deployed VPS server file must expose the variation-group endpoint');
 assert.doesNotMatch(page, /missingSupabaseProducts|supaProds|supaMap/, 'Shopee page should not use Supabase as a catalog fallback for variation groups');
 assert.match(page, /getProductsByParentId/, 'Shopee modal should fetch missing variation siblings from VPS');
 assert.doesNotMatch(page, /seller_stock:\s*undefined/, 'variation add_item payload must not send a null seller_stock field');

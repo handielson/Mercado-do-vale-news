@@ -6169,6 +6169,55 @@ fastify.delete('/product-categories/:product_id/:category_id', { preHandler: req
   return { ok: true };
 });
 
+// Cria/atualiza grupo de variacoes gravando apenas o parent_id dos produtos.
+fastify.patch('/products/variation-group', { preHandler: requireSyncKey }, async (req, reply) => {
+  const parentId = String(req.body?.parent_id || '').trim();
+  const childIds = Array.isArray(req.body?.child_ids)
+    ? Array.from(new Set(req.body.child_ids.map(id => String(id || '').trim()).filter(Boolean)))
+    : [];
+
+  if (!parentId || childIds.length < 2 || !childIds.includes(parentId)) {
+    return reply.code(400).send({ ok: false, error: 'parent_id and child_ids including parent are required' });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [parentRows] = await conn.query('SELECT id FROM products WHERE id=? LIMIT 1', [parentId]);
+    if (!Array.isArray(parentRows) || parentRows.length === 0) {
+      await conn.rollback();
+      return reply.code(404).send({ ok: false, error: 'parent product not found' });
+    }
+
+    const childrenToLink = childIds.filter(id => id !== parentId);
+    let updated = 0;
+
+    const [parentResult] = await conn.query(
+      'UPDATE products SET parent_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+      [parentId]
+    );
+    updated += parentResult.affectedRows || 0;
+
+    if (childrenToLink.length > 0) {
+      const placeholders = childrenToLink.map(() => '?').join(',');
+      const [childResult] = await conn.query(
+        `UPDATE products SET parent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id IN (${placeholders})`,
+        [parentId, ...childrenToLink]
+      );
+      updated += childResult.affectedRows || 0;
+    }
+
+    await conn.commit();
+    return { ok: true, parent_id: parentId, child_ids: childIds, updated };
+  } catch (err) {
+    await conn.rollback();
+    req.log.error({ err }, 'products variation group update failed');
+    return reply.code(500).send({ ok: false, error: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
 // PATCH /products/:id/category — move produto para outra categoria principal
 fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (req, reply) => {
   const { category_id } = req.body || {};

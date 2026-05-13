@@ -35,6 +35,41 @@ function readSpec(product: ShopeeVariationProduct, key: ShopeeVariationDimension
   return text(specs[key]);
 }
 
+function normalizeName(value: unknown): string {
+  return text(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function variationNameBase(value: unknown): string {
+  return normalizeName(value)
+    .replace(/\bcor\s+[a-z0-9 ]+$/i, '')
+    .replace(/\bcores?\s+[a-z0-9 ]+$/i, '')
+    .trim();
+}
+
+function colorFromName(value: unknown): string {
+  const raw = text(value);
+  const match = raw.match(/\bCor\s*:?\s*([^\-|/]+)$/i);
+  return text(match?.[1]);
+}
+
+function withInferredColor(product: ShopeeVariationProduct): ShopeeVariationProduct {
+  if (readSpec(product, 'color')) return product;
+  const inferredColor = colorFromName(product.name);
+  if (!inferredColor) return product;
+  return {
+    ...product,
+    specs: {
+      ...(product.specs || {}),
+      color: inferredColor,
+    },
+  };
+}
+
 function firstEan(product: ShopeeVariationProduct): string {
   const eans = Array.isArray(product.eans) ? product.eans : [];
   return text(eans.find((ean) => text(ean)));
@@ -68,6 +103,29 @@ export function groupShopeeVariationCandidates(products: ShopeeVariationProduct[
       };
     })
     .filter((group): group is ShopeeVariationGroup => Boolean(group));
+}
+
+export function suggestShopeeVariationGroupByName(
+  product: ShopeeVariationProduct,
+  products: ShopeeVariationProduct[],
+): ShopeeVariationGroup | null {
+  const targetBase = variationNameBase(product.name);
+  if (!targetBase) return null;
+
+  const matches = products
+    .map(withInferredColor)
+    .filter((candidate) => variationNameBase(candidate.name) === targetBase);
+
+  const uniqueById = Array.from(new Map(matches.map((candidate) => [candidate.id, candidate])).values());
+  const colorCount = new Set(uniqueById.map((candidate) => readSpec(candidate, 'color')).filter(Boolean)).size;
+  if (uniqueById.length < 2 || colorCount < 2) return null;
+
+  const parent = uniqueById.find((candidate) => candidate.id === product.id) || uniqueById[0];
+  return {
+    id: parent.id,
+    parent,
+    children: uniqueById,
+  };
 }
 
 export function detectShopeeVariationDimensions(group: ShopeeVariationGroup): ShopeeVariationDimension[] {

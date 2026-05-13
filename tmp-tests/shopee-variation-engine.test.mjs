@@ -3,6 +3,7 @@ import {
   buildShopeeVariationModels,
   detectShopeeVariationDimensions,
   groupShopeeVariationCandidates,
+  suggestShopeeVariationGroupByName,
   validateShopeeVariationGroup,
 } from '../services/shopeeVariationEngine.ts';
 
@@ -86,6 +87,57 @@ const blingLinkedGroups = groupShopeeVariationCandidates([
 assert.equal(blingLinkedGroups.length, 1);
 assert.equal(blingLinkedGroups[0].parent.id, 'rn10-parent');
 assert.deepEqual(blingLinkedGroups[0].children.map((child) => child.sku), ['RN10PROV', 'RN10PROAMA']);
+
+const suggestedGroup = suggestShopeeVariationGroupByName({
+  id: 'rn14-azul',
+  name: 'Capa de Silicone para Redmi Note 14 5G Cor:Azul',
+  sku: 'CSRN145GAZL',
+  price_retail: 1490,
+  stock_quantity: 1,
+  images: ['https://cdn.test/rn14-azul.jpg'],
+  specs: { color: 'Azul' },
+}, [
+  {
+    id: 'rn14-azul',
+    name: 'Capa de Silicone para Redmi Note 14 5G Cor:Azul',
+    sku: 'CSRN145GAZL',
+    price_retail: 1490,
+    stock_quantity: 1,
+    images: ['https://cdn.test/rn14-azul.jpg'],
+    specs: { color: 'Azul' },
+  },
+  {
+    id: 'rn14-roxo',
+    name: 'Capa de Silicone para Redmi Note 14 5G Cor:Roxo',
+    sku: 'CSRN145GROX',
+    price_retail: 1490,
+    stock_quantity: 1,
+    images: ['https://cdn.test/rn14-roxo.jpg'],
+    specs: { color: 'Roxo' },
+  },
+  {
+    id: 'rn14-salmao',
+    name: 'Capa de Silicone para Redmi Note 14 5G Cor:Salmão',
+    sku: 'CSRN145GSAL',
+    price_retail: 1490,
+    stock_quantity: 1,
+    images: ['https://cdn.test/rn14-salmao.jpg'],
+    specs: { color: 'Salmão' },
+  },
+  {
+    id: 'other',
+    name: 'Cabo USB-C 1m',
+    sku: 'CABO1M',
+    price_retail: 990,
+    stock_quantity: 1,
+    images: ['https://cdn.test/cabo.jpg'],
+    specs: {},
+  },
+]);
+assert.ok(suggestedGroup, 'missing Shopee variation groups should be suggested from the product name base');
+assert.equal(suggestedGroup.id, 'rn14-azul');
+assert.equal(suggestedGroup.parent.id, 'rn14-azul');
+assert.deepEqual(suggestedGroup.children.map((child) => child.sku), ['CSRN145GAZL', 'CSRN145GROX', 'CSRN145GSAL']);
 
 const dimensions = detectShopeeVariationDimensions(groups[0]);
 assert.deepEqual(dimensions, [{ name: 'Cor', key: 'color', options: ['Vermelho', 'Azul'] }]);

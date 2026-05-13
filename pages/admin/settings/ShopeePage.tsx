@@ -52,6 +52,7 @@ import {
     buildShopeeVariationModels,
     detectShopeeVariationDimensions,
     groupShopeeVariationCandidates,
+    suggestShopeeVariationGroupByName,
     validateShopeeVariationGroup,
 } from '../../../services/shopeeVariationEngine';
 import {
@@ -747,6 +748,11 @@ function toLocalProductFromVpsProduct(p: any, shopeeItemId?: number | null): Loc
     };
 }
 
+function productLooksLikeVariationOption(product: LocalProduct): boolean {
+    const specs = product.specs || {};
+    return Boolean(specs.color || specs.cor || /\bCor\s*:/i.test(product.name));
+}
+
 export default function ShopeePage() {
     const [searchParams] = useSearchParams();
     const requestedTab = searchParams.get('tab');
@@ -1231,6 +1237,16 @@ export default function ShopeePage() {
         setBulkSelectedIds(readyIds);
         if (readyIds.length === 0) {
             toast.info('Nenhum produto pronto para automatico nesta lista.');
+        }
+    };
+
+    const selectBulkVisibleProducts = (items: ShopeeProduct[]) => {
+        const visibleIds = items
+            .filter(p => hasBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)))
+            .map(p => p.product_id);
+        setBulkSelectedIds(Array.from(new Set(visibleIds)));
+        if (visibleIds.length === 0) {
+            toast.info('Nenhum produto selecionavel nesta lista.');
         }
     };
 
@@ -2017,6 +2033,13 @@ export default function ShopeePage() {
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <button
+                                    onClick={() => selectBulkVisibleProducts(bulkFiltered)}
+                                    disabled={!isConnected || loadingProducts || bulkFiltered.length === 0}
+                                    className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                >
+                                    Selecionar todos
+                                </button>
+                                <button
                                     onClick={() => selectBulkReadyProducts(bulkFiltered)}
                                     disabled={!isConnected || loadingProducts || bulkFiltered.length === 0}
                                     className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
@@ -2230,6 +2253,7 @@ export function ShopeeSyncModal({
     const [publishWithVariations, setPublishWithVariations] = useState(false);
     const [selectedVariationGroupId, setSelectedVariationGroupId] = useState('');
     const [vpsVariationGroup, setVpsVariationGroup] = useState<ShopeeVariationGroup | null>(null);
+    const [persistingVariationGroup, setPersistingVariationGroup] = useState(false);
 
     const initialDefaults = resolveShopeeSyncDefaults(product);
     const defaultDescription = initialDefaults.description;
@@ -2348,6 +2372,18 @@ export function ShopeeSyncModal({
         if (!vpsVariationGroup || groups.some((group) => group.id === vpsVariationGroup.id)) return groups;
         return [...groups, vpsVariationGroup];
     }, [variationGroups, vpsVariationGroup]);
+    const suggestedVariationGroup = useMemo(() => {
+        const alreadyGrouped = availableVariationGroups.some((group) =>
+            group.parent.id === product.id ||
+            group.children.some((child) => child.id === product.id)
+        );
+        if (alreadyGrouped) return null;
+
+        return suggestShopeeVariationGroupByName(
+            product,
+            historicalProducts.map((candidate) => toLocalProduct(candidate))
+        );
+    }, [availableVariationGroups, historicalProducts, product]);
     const rawSelectedVariationGroup = useMemo(
         () => availableVariationGroups.find((group) => group.id === selectedVariationGroupId) || null,
         [availableVariationGroups, selectedVariationGroupId]
@@ -2415,12 +2451,18 @@ export function ShopeeSyncModal({
                     Number(record.shopee_item_id) || null,
                 ]));
 
+                const parentLocalProduct = toLocalProductFromVpsProduct(parentProduct, normalizePositiveId(parentProduct?.shopee_item_id));
+                const childProducts = children.map((child: any) =>
+                    toLocalProductFromVpsProduct(child, itemIdByProductId.get(String(child.id)) || normalizePositiveId(child.shopee_item_id))
+                );
+                const groupChildren = productLooksLikeVariationOption(parentLocalProduct)
+                    ? [parentLocalProduct, ...childProducts.filter((child) => child.id !== parentLocalProduct.id)]
+                    : childProducts;
+
                 setVpsVariationGroup({
                     id: String(parentId),
-                    parent: toLocalProductFromVpsProduct(parentProduct, normalizePositiveId(parentProduct?.shopee_item_id)),
-                    children: children.map((child: any) =>
-                        toLocalProductFromVpsProduct(child, itemIdByProductId.get(String(child.id)) || normalizePositiveId(child.shopee_item_id))
-                    ),
+                    parent: parentLocalProduct,
+                    children: groupChildren,
                 });
             } catch (error) {
                 console.warn('[Shopee Sync] Failed to load VPS variation group:', error);
@@ -2524,6 +2566,31 @@ export function ShopeeSyncModal({
         setSelectedVariationGroupId(matching.id);
         setPublishWithVariations(true);
     }, [availableVariationGroups, product.id]);
+
+    const persistSuggestedVariationGroup = useCallback(async () => {
+        if (!suggestedVariationGroup || persistingVariationGroup) return;
+
+        setPersistingVariationGroup(true);
+        try {
+            const result = await vpsApiService.updateProductVariationGroup(
+                suggestedVariationGroup.parent.id,
+                suggestedVariationGroup.children.map((child) => child.id)
+            );
+
+            if (!result.ok) {
+                throw new Error('Falha ao gravar grupo de variacoes na VPS.');
+            }
+
+            setVpsVariationGroup(suggestedVariationGroup);
+            setSelectedVariationGroupId(suggestedVariationGroup.id);
+            setPublishWithVariations(true);
+            toast.success(`Grupo criado com ${suggestedVariationGroup.children.length} variacoes.`);
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao criar grupo de variacoes.');
+        } finally {
+            setPersistingVariationGroup(false);
+        }
+    }, [persistingVariationGroup, suggestedVariationGroup]);
 
     useEffect(() => {
         const blingId = Number(product.bling_id);
@@ -3756,7 +3823,7 @@ export function ShopeeSyncModal({
                 </div>
 
                 <div className="px-6 py-4 border-b border-slate-100 bg-orange-50/40 space-y-3">
-                    {availableVariationGroups.length > 0 && (
+                    {(availableVariationGroups.length > 0 || suggestedVariationGroup) && (
                         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                                 <div>
@@ -3773,6 +3840,24 @@ export function ShopeeSyncModal({
                                     Publicar como anuncio com variacoes
                                 </label>
                             </div>
+                            {suggestedVariationGroup && !rawSelectedVariationGroup && (
+                                <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-3 text-sm text-orange-900">
+                                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                        <div>
+                                            <p className="font-bold">Grupo sugerido: {suggestedVariationGroup.parent.name}</p>
+                                            <p className="text-xs">{suggestedVariationGroup.children.length} variacoes encontradas pelo nome base.</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={persistSuggestedVariationGroup}
+                                            disabled={persistingVariationGroup}
+                                            className="inline-flex items-center justify-center rounded-lg bg-[#ee4d2d] px-3 py-2 text-xs font-bold text-white hover:bg-[#d73f21] disabled:opacity-50"
+                                        >
+                                            {persistingVariationGroup ? 'Criando...' : 'Criar grupo de variacoes'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                             {publishWithVariations && (
                                 <div className="grid gap-3 md:grid-cols-[1fr_auto]">
                                     <select

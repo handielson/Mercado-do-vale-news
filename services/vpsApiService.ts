@@ -338,6 +338,26 @@ class VpsApiService {
     return this.fetchSafe<any[]>(`/products?parent_id=${encodeURIComponent(parentId)}&status=all&limit=500`, true);
   }
 
+  async updateProductVariationGroup(parentId: string, childIds: string[]): Promise<{ ok: boolean; updated: number }> {
+    const uniqueChildIds = Array.from(new Set(childIds.filter(Boolean)));
+    if (!parentId || uniqueChildIds.length < 2) return { ok: false, updated: 0 };
+    this.invalidateProductCache();
+    this.cache.delete(`/products/${parentId}`);
+    try {
+      const res = await fetch(proxyUrl('/products/variation-group', 'PATCH'), {
+        method: 'PATCH',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ parent_id: parentId, child_ids: uniqueChildIds }),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return { ok: false, updated: 0 };
+      return await res.json();
+    } catch (err) {
+      console.warn('[vpsApiService] updateProductVariationGroup error:', err);
+      return { ok: false, updated: 0 };
+    }
+  }
+
   /** Cria ou upserta um produto na VPS MySQL */
   async createProduct(data: any): Promise<{ upserted: number; errors: any[] }> {
     this.invalidateProductCache();
