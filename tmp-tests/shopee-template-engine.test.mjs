@@ -124,4 +124,15 @@ const appliedIphoneFromNameOnly = applyShopeeTemplateToProduct({
 }, templates[1]);
 assert.equal(appliedIphoneFromNameOnly.title, 'Capa compativel com Iphone 15 Pro Max');
 
+const appliedIphoneLongerNameModel = applyShopeeTemplateToProduct({
+  id: 'p4',
+  name: 'Capa Case transparente IPhone 13 Pro Max com MagSafe Magnetica',
+  sku: 'CCTI13PMMM',
+  model: 'IPhone 13',
+  specs: {},
+  price_retail: 4999,
+  stock_quantity: 2,
+}, templates[1]);
+assert.equal(appliedIphoneLongerNameModel.title, 'Capa compativel com IPhone 13 Pro Max');
+
 console.log('shopee template engine tests passed');

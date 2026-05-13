@@ -68,6 +68,21 @@ function extractProductColorFromName(name: string): string {
     return match?.[1]?.trim().replace(/\s{2,}/g, ' ') || '';
 }
 
+function resolveProductModel(product: Record<string, any>, productName: string): string {
+    const directModel = String(product?.model || product?.model_name || '').trim();
+    const extractedModel = extractProductModelFromName(productName);
+    if (!directModel) return extractedModel;
+    if (!extractedModel) return directModel;
+
+    const normalizedDirect = normalizeText(directModel);
+    const normalizedExtracted = normalizeText(extractedModel);
+    if (normalizedExtracted.startsWith(normalizedDirect) && extractedModel.length > directModel.length) {
+        return extractedModel;
+    }
+
+    return directModel;
+}
+
 function buildTemplateVariables(product: Record<string, any>): Record<string, string> {
     const priceCents = Number(product?.price_retail ?? product?.price ?? 0);
     const price = Number.isFinite(priceCents) && priceCents > 0
@@ -80,7 +95,7 @@ function buildTemplateVariables(product: Record<string, any>): Record<string, st
         nome: productName,
         sku: String(product?.sku || '').trim(),
         marca: String(product?.brand || '').trim(),
-        modelo: String(product?.model || product?.model_name || '').trim() || extractProductModelFromName(productName),
+        modelo: resolveProductModel(product, productName),
         cor: getProductSpec(product, ['color', 'cor']) || extractProductColorFromName(productName),
         ram: getProductSpec(product, ['ram']),
         armazenamento: getProductSpec(product, ['storage', 'armazenamento']),
