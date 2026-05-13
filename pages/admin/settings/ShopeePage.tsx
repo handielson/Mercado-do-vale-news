@@ -155,6 +155,12 @@ type BulkRunItem = {
     message?: string;
 };
 
+type ShopeeBulkAutoPreset = {
+    templateId?: string;
+    categoryId: number;
+    categoryName?: string;
+};
+
 type EditableImage = {
     image_id?: string;
     image_url?: string;
@@ -850,6 +856,7 @@ export default function ShopeePage() {
     const [bulkRequiredAttributesByCategoryId, setBulkRequiredAttributesByCategoryId] = useState<Record<string, ShopeeAttributeField[]>>({});
     const [bulkHasEnabledLogisticsChannel, setBulkHasEnabledLogisticsChannel] = useState<boolean | null>(null);
     const [bulkAutoFilter, setBulkAutoFilter] = useState<BulkAutoFilter>('all');
+    const [bulkAutoPreset, setBulkAutoPreset] = useState<ShopeeBulkAutoPreset | null>(null);
     const [editingPrice, setEditingPrice] = useState<Record<string, number>>({});
     const [linkingProductId, setLinkingProductId] = useState<string | null>(null);
     const [linkInput, setLinkInput] = useState('');
@@ -1385,6 +1392,7 @@ export default function ShopeePage() {
 
         setBulkQueueIds(queue.map(p => p.product_id));
         setBulkCompletedIds([]);
+        setBulkAutoPreset(null);
         setBulkRunItems(queue.map((p, index) => ({
             productId: p.product_id,
             name: p.name || 'Produto sem nome',
@@ -1398,6 +1406,7 @@ export default function ShopeePage() {
         setBulkActiveProduct(null);
         setBulkQueueIds([]);
         setBulkCompletedIds([]);
+        setBulkAutoPreset(null);
     };
 
     const advanceBulkRun = (
@@ -1451,6 +1460,7 @@ export default function ShopeePage() {
 
         setBulkActiveProduct(null);
         setBulkQueueIds([]);
+        setBulkAutoPreset(null);
         toast.success(`Envio em massa finalizado: ${nextCompletedIds.length} produto(s) enviados.`);
     };
 
@@ -2336,11 +2346,14 @@ export default function ShopeePage() {
                                 </div>
                             </div>
                             <ShopeeSyncModal
+                                key={bulkActiveProduct.id}
                                 product={bulkActiveProduct}
                                 company={company}
                                 historicalProducts={products}
                                 variationGroups={variationGroups}
-                                autoPublish={true}
+                                autoPublish={Boolean(bulkAutoPreset)}
+                                bulkAutoPreset={bulkAutoPreset}
+                                onBulkAutoPresetReady={setBulkAutoPreset}
                                 onClose={closeBulkAssistedSync}
                                 onSuccess={handleBulkModalSuccess}
                                 onError={handleBulkModalError}
@@ -2369,8 +2382,8 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 export function ShopeeSyncModal({
-    product, company, historicalProducts, variationGroups, autoPublish = false, onClose, onSuccess, onError
-}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; autoPublish?: boolean; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
+    product, company, historicalProducts, variationGroups, autoPublish = false, bulkAutoPreset = null, onBulkAutoPresetReady, onClose, onSuccess, onError
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; autoPublish?: boolean; bulkAutoPreset?: ShopeeBulkAutoPreset | null; onBulkAutoPresetReady?: (preset: ShopeeBulkAutoPreset) => void; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
     const [allCatTree, setAllCatTree] = useState<any[]>([]);
@@ -2715,6 +2728,17 @@ export function ShopeeSyncModal({
     }, [reloadShopeeTemplates]);
 
     useEffect(() => {
+        if (!bulkAutoPreset?.templateId || shopeeTemplates.length === 0) return;
+        if (selectedTemplateId === bulkAutoPreset.templateId) return;
+
+        const template = shopeeTemplates.find((candidate) => candidate.id === bulkAutoPreset.templateId);
+        if (!template) return;
+
+        setSelectedTemplateId(template.id);
+        applyTemplate(template, { force: true });
+    }, [applyTemplate, bulkAutoPreset, selectedTemplateId, shopeeTemplates]);
+
+    useEffect(() => {
         const handleTemplatesUpdated = (event: StorageEvent) => {
             if (event.key === 'shopee_templates_updated') {
                 reloadShopeeTemplates();
@@ -2966,12 +2990,23 @@ export function ShopeeSyncModal({
     useEffect(() => {
         if (!selectedShopeeTemplate?.shopeeCategoryId || allCatTree.length === 0) return;
         if (selectedCat && Number(selectedCat.category_id) === Number(selectedShopeeTemplate.shopeeCategoryId)) return;
+        if (bulkAutoPreset?.categoryId && Number(selectedShopeeTemplate.shopeeCategoryId) !== Number(bulkAutoPreset.categoryId)) return;
 
         const templateCategory = findTemplateCategoryNode(selectedShopeeTemplate.shopeeCategoryId);
         if (templateCategory) {
             selectCategory(templateCategory);
         }
-    }, [allCatTree, findTemplateCategoryNode, selectedCat, selectedShopeeTemplate]);
+    }, [allCatTree, bulkAutoPreset, findTemplateCategoryNode, selectedCat, selectedShopeeTemplate]);
+
+    useEffect(() => {
+        if (!bulkAutoPreset?.categoryId || allCatTree.length === 0) return;
+        if (selectedCat && Number(selectedCat.category_id) === Number(bulkAutoPreset.categoryId)) return;
+
+        const presetCategory = findTemplateCategoryNode(bulkAutoPreset.categoryId);
+        if (presetCategory) {
+            selectCategory(presetCategory);
+        }
+    }, [allCatTree, bulkAutoPreset, findTemplateCategoryNode, selectedCat]);
 
     useEffect(() => {
         if (templateAutoAppliedRef.current) return;
@@ -4113,6 +4148,11 @@ export function ShopeeSyncModal({
                 toast.warning('A Shopee publicou, mas nao confirmou marca/video. Mantive o debug aberto para copiar.');
                 return;
             }
+            onBulkAutoPresetReady?.({
+                templateId: selectedTemplateId || undefined,
+                categoryId: Number(selectedCat.category_id),
+                categoryName: getCategoryPathLabel(selectedCat) || selectedCat.display_category_name,
+            });
             const syncedProductIds = publishWithVariations && selectedVariationGroup
                 ? Array.from(new Set([
                     product.id,
@@ -4137,9 +4177,12 @@ export function ShopeeSyncModal({
         if (syncing || mediaBusy || loadingAttrs || loadingBrands || loadingCats) return;
 
         const variationBlocked = publishWithVariations && (!selectedVariationGroup || !variationValidation?.ok);
+        const matchesBulkAutoPreset = !bulkAutoPreset?.categoryId ||
+            Number(selectedCat?.category_id) === Number(bulkAutoPreset.categoryId);
         const canPublish =
             !titleSafety.hasBlocks &&
             !variationBlocked &&
+            matchesBulkAutoPreset &&
             Boolean(selectedCat?.category_id) &&
             missingRequiredAttributes.length === 0 &&
             availableImages.length > 0;
@@ -4158,6 +4201,7 @@ export function ShopeeSyncModal({
         }
     }, [
         autoPublish,
+        bulkAutoPreset,
         syncing,
         mediaBusy,
         loadingAttrs,

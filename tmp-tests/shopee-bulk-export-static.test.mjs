@@ -17,8 +17,11 @@ assert.match(page, /onChange=\{toggleBulkVisibleSelection\}/, 'Bulk table header
 assert.match(page, /grid-cols-1 xl:grid-cols-\[minmax\(360px,1fr\)_auto\]/, 'Bulk toolbar must let search use its own row before wide desktop');
 assert.match(page, /min-w-\[320px\]/, 'Bulk search field must keep enough width for full search text');
 assert.match(page, /<ShopeeSyncModal[\s\S]*product=\{bulkActiveProduct\}[\s\S]*onSuccess=\{handleBulkModalSuccess\}/, 'Bulk export must reuse the validated Shopee sync modal');
-assert.match(page, /<ShopeeSyncModal[\s\S]*autoPublish=\{true\}/, 'Bulk export must auto-publish each ready modal without waiting for a manual click');
-assert.match(page, /autoPublishStartedRef[\s\S]*handleSync\(\)/, 'Shopee modal must trigger the publish handler automatically in bulk mode');
+assert.match(page, /const \[bulkAutoPreset, setBulkAutoPreset\]/, 'Bulk export must remember the first successful template/category preset');
+assert.match(page, /autoPublish=\{Boolean\(bulkAutoPreset\)\}/, 'Bulk export must only auto-publish after the first product establishes a preset');
+assert.match(page, /onBulkAutoPresetReady=\{setBulkAutoPreset\}/, 'Bulk modal must save the successful preset for the remaining queue');
+assert.match(page, /bulkAutoPreset[\s\S]*categoryId[\s\S]*selectCategory/, 'Shopee modal must reuse the preset category for following bulk items');
+assert.match(page, /matchesBulkAutoPreset[\s\S]*handleSync\(\)/, 'Auto publish must only trigger when the current product matches the saved bulk preset');
 assert.match(page, /products\.filter\(p => p\.status === 'not_synced'\)/, 'Bulk export must only list unsynced products');
 
 assert.match(docs, /## Envio em massa Shopee/, 'Shopee docs must document bulk export');
