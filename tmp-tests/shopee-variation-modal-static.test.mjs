@@ -27,9 +27,10 @@ assert.match(page, /continue;/, 'variation image download failures should contin
 assert.match(page, /variation_image:missing/, 'variation publish should log which option product has no usable image');
 assert.match(page, /variation_image:coverage/, 'variation publish should log option image coverage before building Shopee models');
 assert.doesNotMatch(page, /const firstImage = Array\.isArray\(child\.images\) \? child\.images\[0\]/, 'variation image upload should not only inspect the first image slot');
-assert.match(page, /variationProductIds=\{bulkQueueIds\}/, 'bulk variation publish should scope models to the selected bulk queue');
 assert.match(page, /rawSelectedVariationGroup/, 'Shopee modal should keep the raw group separate from the publish-scoped group');
-assert.match(page, /rawSelectedVariationGroup\.children\.filter\(\(child\) => allowedIds\.has\(child\.id\)\)/, 'variation publish should exclude unselected group children from model_list');
+assert.doesNotMatch(page, /rawSelectedVariationGroup\.children\.filter\(\(child\) => allowedIds\.has\(child\.id\)\)/, 'bulk variation publish must not drop siblings outside the current bulk queue');
+assert.match(page, /onSuccess\(syncedProductIds\)/, 'variation publish should report all synced product ids to the bulk runner');
+assert.match(page, /publishedProductIds/, 'bulk runner should advance all product ids synced by a variation publish');
 assert.match(page, /findExistingShopeeItemForDuplicate/, 'variation fallback should recover from duplicate base items');
 assert.match(page, /duplicate_lookup:match/, 'duplicate recovery should log the reused Shopee item');
 assert.match(page, /add_item:variation_fallback_duplicate_reused/, 'variation fallback should reuse duplicate items before init_tier_variation');

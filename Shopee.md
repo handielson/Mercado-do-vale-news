@@ -905,7 +905,8 @@ A primeira versao sera manual e assistida.
 - imagem propria por cor e recomendada, mas a imagem principal do anuncio continua obrigatoria;
 - o vinculo `shopee_products` sera salvo para o pai e para cada filho usando o mesmo `item_id`;
 - cada filho tambem deve guardar o `model_id` da variacao retornado pela Shopee, para permitir atualizar estoque/preco da variacao correta depois;
-- envio em massa continua publicando somente produtos simples ate existir pre-validacao de variacoes.
+- no envio em massa assistido, se um item selecionado pertence a um grupo de variacoes, o modal deve publicar o grupo inteiro de filhos carregado da VPS/lista, nao apenas os IDs presentes na fila do lote;
+- quando o anuncio com variacoes e publicado, a barra do lote deve considerar o pai e todos os filhos desse grupo como concluidos para nao tentar enviar os mesmos filhos de novo.
 
 ### Como deve funcionar
 

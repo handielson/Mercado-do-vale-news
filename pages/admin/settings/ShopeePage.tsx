@@ -1262,15 +1262,23 @@ export default function ShopeePage() {
         setBulkCompletedIds([]);
     };
 
-    const advanceBulkRun = (currentId: string | undefined, status: BulkRunItemStatus, message?: string) => {
+    const advanceBulkRun = (
+        currentId: string | undefined,
+        status: BulkRunItemStatus,
+        message?: string,
+        publishedProductIds?: string[],
+    ) => {
         if (!currentId) return;
 
+        const publishedIds = status === 'published'
+            ? Array.from(new Set([currentId, ...(publishedProductIds || [])].filter(Boolean)))
+            : [];
         const nextCompletedIds = status === 'published'
-            ? [...bulkCompletedIds, currentId]
+            ? Array.from(new Set([...bulkCompletedIds, ...publishedIds]))
             : bulkCompletedIds;
         if (status === 'published') {
             setBulkCompletedIds(nextCompletedIds);
-            setBulkSelectedIds(prev => prev.filter(id => id !== currentId));
+            setBulkSelectedIds(prev => prev.filter(id => !publishedIds.includes(id)));
         }
 
         const terminalIds = new Set(
@@ -1279,10 +1287,14 @@ export default function ShopeePage() {
                 .map(item => item.productId)
         );
         terminalIds.add(currentId);
+        publishedIds.forEach(id => terminalIds.add(id));
         nextCompletedIds.forEach(id => terminalIds.add(id));
 
         const nextId = bulkQueueIds.find(id => id !== currentId && !terminalIds.has(id));
         setBulkRunItems(prev => prev.map(item => {
+            if (status === 'published' && publishedIds.includes(item.productId)) {
+                return { ...item, status: 'published', message };
+            }
             if (item.productId === currentId) return { ...item, status, message };
             if (item.productId === nextId) return { ...item, status: 'active', message: undefined };
             return item;
@@ -1304,8 +1316,8 @@ export default function ShopeePage() {
         toast.success(`Envio em massa finalizado: ${nextCompletedIds.length} produto(s) enviados.`);
     };
 
-    const handleBulkModalSuccess = () => {
-        advanceBulkRun(bulkActiveProduct?.id, 'published');
+    const handleBulkModalSuccess = (publishedProductIds?: string[]) => {
+        advanceBulkRun(bulkActiveProduct?.id, 'published', undefined, publishedProductIds);
     };
 
     const skipBulkActiveProduct = () => {
@@ -2172,7 +2184,6 @@ export default function ShopeePage() {
                                 company={company}
                                 historicalProducts={products}
                                 variationGroups={variationGroups}
-                                variationProductIds={bulkQueueIds}
                                 onClose={closeBulkAssistedSync}
                                 onSuccess={handleBulkModalSuccess}
                                 onError={handleBulkModalError}
@@ -2201,8 +2212,8 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 export function ShopeeSyncModal({
-    product, company, historicalProducts, variationGroups, variationProductIds, onClose, onSuccess, onError
-}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; variationProductIds?: string[]; onClose: () => void; onSuccess: () => void; onError?: (message: string) => void }) {
+    product, company, historicalProducts, variationGroups, onClose, onSuccess, onError
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
     const [allCatTree, setAllCatTree] = useState<any[]>([]);
@@ -2318,13 +2329,7 @@ export function ShopeeSyncModal({
         () => availableVariationGroups.find((group) => group.id === selectedVariationGroupId) || null,
         [availableVariationGroups, selectedVariationGroupId]
     );
-    const selectedVariationGroup = useMemo(() => {
-        if (!rawSelectedVariationGroup || !variationProductIds?.length) return rawSelectedVariationGroup;
-        const allowedIds = new Set(variationProductIds.map(String));
-        const children = rawSelectedVariationGroup.children.filter((child) => allowedIds.has(child.id));
-        if (children.length < 2) return rawSelectedVariationGroup;
-        return { ...rawSelectedVariationGroup, children };
-    }, [rawSelectedVariationGroup, variationProductIds]);
+    const selectedVariationGroup = rawSelectedVariationGroup;
     const variationDimensions = useMemo(
         () => selectedVariationGroup ? detectShopeeVariationDimensions(selectedVariationGroup) : [],
         [selectedVariationGroup]
@@ -3674,7 +3679,14 @@ export function ShopeeSyncModal({
                 toast.warning('A Shopee publicou, mas nao confirmou marca/video. Mantive o debug aberto para copiar.');
                 return;
             }
-            onSuccess();
+            const syncedProductIds = publishWithVariations && selectedVariationGroup
+                ? Array.from(new Set([
+                    product.id,
+                    selectedVariationGroup.parent.id,
+                    ...selectedVariationGroup.children.map((child) => child.id),
+                ]))
+                : [product.id];
+            onSuccess(syncedProductIds);
         } catch (e: any) {
             pushSyncDebug('sync:error', e?.message || e);
             const errorMessage = e?.message || 'Erro ao sincronizar produto.';
