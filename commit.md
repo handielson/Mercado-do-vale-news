@@ -218,6 +218,25 @@ Se houver muitas mudancas paralelas, o modo mais seguro e:
 
 Isso evita quebrar ou incluir sem querer o que ja estava aberto localmente.
 
+### Git e build sempre fora do sandbox
+
+Neste projeto, por estar em pasta sincronizada pelo Synology Drive e por restricoes do sandbox, comandos de Git e build devem ser executados diretamente fora do sandbox com permissao aprovada. Nao perder tempo tentando primeiro dentro do sandbox quando o objetivo for stage, commit, push ou build de verificacao.
+
+Casos ja observados:
+
+- `git add` pode falhar ao criar `.git/index.lock` com `Permission denied`.
+- `npm.cmd run build` pode falhar no sandbox com `Cannot read directory "../../../../..": Access is denied` e `Could not resolve vite.config.ts`.
+
+Conduta correta:
+
+1. para `git status`, `git diff`, `git add`, `git commit`, `git push` e `npm.cmd run build`, usar execucao aprovada fora do sandbox desde o inicio;
+2. nao usar comandos destrutivos para resolver lock/permissao;
+3. manter o escopo do commit isolado por arquivo;
+4. conferir `git status`, `git diff --cached --name-only` e `git diff --cached --stat` antes do commit;
+5. so entao commitar e fazer push conforme este guia.
+
+Em resumo: para Git e build neste projeto, o caminho correto e pedir/usar execucao aprovada fora do sandbox, nao mudar o procedimento de commit nem incluir arquivos extras.
+
 ## Frase curta para eu seguir no futuro
 
 Quando voce pedir para comitar de novo, a regra e:
