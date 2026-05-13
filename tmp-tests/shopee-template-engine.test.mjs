@@ -114,4 +114,14 @@ const appliedFromNameOnly = applyShopeeTemplateToProduct({
 }, templates[1]);
 assert.equal(appliedFromNameOnly.title, 'Capa compativel com Redmi Note 14 4G Cor:Marrom');
 
+const appliedIphoneFromNameOnly = applyShopeeTemplateToProduct({
+  id: 'p3',
+  name: 'Capa Case transparente Iphone 15 Pro Max com MagSafe Magnetica',
+  sku: 'CCTI15PMMM',
+  specs: {},
+  price_retail: 4999,
+  stock_quantity: 2,
+}, templates[1]);
+assert.equal(appliedIphoneFromNameOnly.title, 'Capa compativel com Iphone 15 Pro Max');
+
 console.log('shopee template engine tests passed');

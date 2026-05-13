@@ -17,6 +17,7 @@ function normalizeText(value: unknown): string {
 function cleanRenderedText(value: string): string {
     return value
         .replace(/[ \t]{2,}/g, ' ')
+        .replace(/\bCor\s*:\s*$/i, '')
         .replace(/[ \t]+\n/g, '\n')
         .replace(/\n[ \t]+/g, '\n')
         .replace(/\n{3,}/g, '\n\n')
@@ -41,7 +42,22 @@ function extractProductModelFromName(name: string): string {
     if (!normalized) return '';
 
     const match = normalized.match(/\b(?:para|compativel com|compatível com)\s+(.+?)(?:\s+cor\s*:|\s+cor\s+-|\s+-\s*cor\b|$)/i);
-    return match?.[1]?.trim().replace(/\s{2,}/g, ' ') || '';
+    if (match?.[1]) return match[1].trim().replace(/\s{2,}/g, ' ');
+
+    const modelPatterns = [
+        /\b(iphone\s+\d{1,2}(?:\s+pro)?(?:\s+max)?(?:\s+plus)?(?:\s+mini)?)\b/i,
+        /\b(redmi\s+note\s+\d{1,2}(?:\s+\d+g)?(?:\s+pro)?(?:\s+plus)?)\b/i,
+        /\b(redmi\s+\d{1,2}[a-z]?(?:\s+\d+g)?(?:\s+pro)?(?:\s+plus)?)\b/i,
+        /\b(poco\s+[a-z0-9]+(?:\s+pro)?(?:\s+plus)?)\b/i,
+        /\b(galaxy\s+[a-z]\d{1,2}(?:\s+plus|\s+ultra|\s+fe)?)\b/i,
+    ];
+
+    for (const pattern of modelPatterns) {
+        const modelMatch = normalized.match(pattern);
+        if (modelMatch?.[1]) return modelMatch[1].trim().replace(/\s{2,}/g, ' ');
+    }
+
+    return '';
 }
 
 function extractProductColorFromName(name: string): string {
