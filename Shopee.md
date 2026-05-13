@@ -666,7 +666,7 @@ Motivo dessa abordagem:
 - O envio usa o mesmo `ShopeeSyncModal` do produto individual.
 - Depois de cada sucesso, o sistema recarrega os vinculos da Shopee.
 - O envio assistido pode publicar variacoes no mesmo anuncio quando o modal encontra ou cria um grupo de variacoes.
-- O botao **Selecionar todos** marca todos os produtos visiveis no filtro atual; **Selecionar automaticos** continua marcando apenas os prontos para automatico.
+- O checkbox do cabecalho da tabela marca ou limpa todos os produtos visiveis no filtro atual; **Selecionar automaticos** continua marcando apenas os prontos para automatico.
 - A tela mostra um historico do lote com o resultado de cada item: publicado, pulado ou falhou.
 - Quando um produto falha no modal, ele fica marcado no historico e o operador pode corrigir/repetir ou pular para o proximo.
 

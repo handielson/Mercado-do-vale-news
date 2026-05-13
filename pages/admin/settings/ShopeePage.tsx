@@ -1248,14 +1248,29 @@ export default function ShopeePage() {
         }
     };
 
-    const selectBulkVisibleProducts = (items: ShopeeProduct[]) => {
-        const visibleIds = items
+    const getBulkSelectableProductIds = (items: ShopeeProduct[]) =>
+        items
             .filter(p => hasBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)))
             .map(p => p.product_id);
-        setBulkSelectedIds(Array.from(new Set(visibleIds)));
+
+    const toggleBulkVisibleSelection = () => {
+        const visibleIds = getBulkSelectableProductIds(bulkFiltered);
+
         if (visibleIds.length === 0) {
             toast.info('Nenhum produto selecionavel nesta lista.');
+            return;
         }
+
+        const visibleIdSet = new Set(visibleIds);
+        const selectedVisibleCount = visibleIds.filter(id => bulkSelectedIds.includes(id)).length;
+        const shouldClearVisible = selectedVisibleCount === visibleIds.length;
+
+        setBulkSelectedIds(prev => {
+            if (shouldClearVisible) {
+                return prev.filter(id => !visibleIdSet.has(id));
+            }
+            return Array.from(new Set([...prev, ...visibleIds]));
+        });
     };
 
     const startBulkAssistedSync = () => {
@@ -1418,6 +1433,8 @@ export default function ShopeePage() {
     const bulkSelectedSet = new Set(bulkSelectedIds);
     const bulkReadyCount = bulkFiltered.filter(p => bulkReadinessById.get(p.product_id)?.status === 'ready').length;
     const bulkSelectedCount = bulkSelectedIds.length;
+    const bulkSelectableVisibleIds = getBulkSelectableProductIds(bulkFiltered);
+    const bulkAllVisibleSelected = bulkSelectableVisibleIds.length > 0 && bulkSelectableVisibleIds.every(id => bulkSelectedSet.has(id));
     const bulkCurrentPosition = bulkActiveProduct ? bulkQueueIds.findIndex(id => id === bulkActiveProduct.id) + 1 : 0;
     const bulkPublishedCount = bulkRunItems.filter(item => item.status === 'published').length;
     const bulkSkippedCount = bulkRunItems.filter(item => item.status === 'skipped').length;
@@ -2041,13 +2058,6 @@ export default function ShopeePage() {
                             </div>
                             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                                 <button
-                                    onClick={() => selectBulkVisibleProducts(bulkFiltered)}
-                                    disabled={!isConnected || loadingProducts || bulkFiltered.length === 0}
-                                    className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
-                                >
-                                    Selecionar todos
-                                </button>
-                                <button
                                     onClick={() => selectBulkReadyProducts(bulkFiltered)}
                                     disabled={!isConnected || loadingProducts || bulkFiltered.length === 0}
                                     className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50"
@@ -2090,7 +2100,16 @@ export default function ShopeePage() {
                                 <table className="w-full text-sm">
                                     <thead className="bg-slate-50 border-b border-slate-100">
                                         <tr>
-                                            <th className="w-12 px-4 py-3" />
+                                            <th className="w-12 px-4 py-3 text-left">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={bulkAllVisibleSelected}
+                                                    onChange={toggleBulkVisibleSelection}
+                                                    disabled={!isConnected || loadingProducts || bulkSelectableVisibleIds.length === 0}
+                                                    aria-label={bulkAllVisibleSelected ? 'Limpar selecao visivel' : 'Selecionar todos os itens visiveis'}
+                                                    className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 disabled:opacity-50"
+                                                />
+                                            </th>
                                             <th className="text-left px-4 py-3 font-semibold text-slate-600">Produto</th>
                                             <th className="text-left px-4 py-3 font-semibold text-slate-600">Preço</th>
                                             <th className="text-left px-4 py-3 font-semibold text-slate-600">Estoque</th>
