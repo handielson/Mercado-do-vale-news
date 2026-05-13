@@ -1421,7 +1421,7 @@ export default function ShopeePage() {
 
         const terminalIds = new Set(
             bulkRunItems
-                .filter(item => item.status === 'published' || item.status === 'skipped')
+                .filter(item => item.status === 'published' || item.status === 'skipped' || item.status === 'failed')
                 .map(item => item.productId)
         );
         terminalIds.add(currentId);
@@ -1463,13 +1463,7 @@ export default function ShopeePage() {
     };
 
     const handleBulkModalError = (message: string) => {
-        const currentId = bulkActiveProduct?.id;
-        if (!currentId) return;
-        setBulkRunItems(prev => prev.map(item =>
-            item.productId === currentId
-                ? { ...item, status: 'failed', message }
-                : item
-        ));
+        advanceBulkRun(bulkActiveProduct?.id, 'failed', message);
     };
 
     const variationGroups = useMemo(
@@ -2346,6 +2340,7 @@ export default function ShopeePage() {
                                 company={company}
                                 historicalProducts={products}
                                 variationGroups={variationGroups}
+                                autoPublish={true}
                                 onClose={closeBulkAssistedSync}
                                 onSuccess={handleBulkModalSuccess}
                                 onError={handleBulkModalError}
@@ -2374,8 +2369,8 @@ export default function ShopeePage() {
 
 // ─── Sync Modal ───────────────────────────────────────────────────────────────
 export function ShopeeSyncModal({
-    product, company, historicalProducts, variationGroups, onClose, onSuccess, onError
-}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
+    product, company, historicalProducts, variationGroups, autoPublish = false, onClose, onSuccess, onError
+}: { product: LocalProduct; company: Company | null; historicalProducts: ShopeeProduct[]; variationGroups?: ShopeeVariationGroup[]; autoPublish?: boolean; onClose: () => void; onSuccess: (publishedProductIds?: string[]) => void; onError?: (message: string) => void }) {
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [catSearch, setCatSearch] = useState('');
     const [allCatTree, setAllCatTree] = useState<any[]>([]);
@@ -2494,6 +2489,8 @@ export function ShopeeSyncModal({
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
     const templateAutoAppliedRef = useRef(false);
+    const autoPublishAdvancedRef = useRef(false);
+    const autoPublishStartedRef = useRef(false);
     const activeFieldTemplate = useMemo(() => resolveShopeeFieldTemplate(product), [product]);
     const [shopeeTemplates, setShopeeTemplates] = useState<ShopeeTemplate[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -4134,6 +4131,47 @@ export function ShopeeSyncModal({
             setSyncing(false);
         }
     };
+
+    useEffect(() => {
+        if (!autoPublish) return;
+        if (syncing || mediaBusy || loadingAttrs || loadingBrands || loadingCats) return;
+
+        const variationBlocked = publishWithVariations && (!selectedVariationGroup || !variationValidation?.ok);
+        const canPublish =
+            !titleSafety.hasBlocks &&
+            !variationBlocked &&
+            Boolean(selectedCat?.category_id) &&
+            missingRequiredAttributes.length === 0 &&
+            availableImages.length > 0;
+
+        if (!canPublish) return;
+
+        if (step === 2 && !autoPublishAdvancedRef.current) {
+            autoPublishAdvancedRef.current = true;
+            setStep(3);
+            return;
+        }
+
+        if (step === 3 && !autoPublishStartedRef.current) {
+            autoPublishStartedRef.current = true;
+            handleSync();
+        }
+    }, [
+        autoPublish,
+        syncing,
+        mediaBusy,
+        loadingAttrs,
+        loadingBrands,
+        loadingCats,
+        publishWithVariations,
+        selectedVariationGroup,
+        variationValidation,
+        titleSafety.hasBlocks,
+        selectedCat,
+        missingRequiredAttributes.length,
+        availableImages.length,
+        step,
+    ]);
 
     return (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
