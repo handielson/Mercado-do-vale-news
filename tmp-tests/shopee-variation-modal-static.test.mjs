@@ -19,6 +19,9 @@ assert.match(page, /setPublishWithVariations\(true\)/, 'matching variation group
 assert.match(page, /setPublishWithVariations\(false\)/, 'products without a matching variation group should keep variation publish off');
 assert.match(page, /setSelectedVariationGroupId\(''\)/, 'products without a matching variation group should clear variation group selection');
 assert.match(page, /Selecione grupo/, 'variation status should be neutral when no group is selected');
+assert.match(page, /reloadShopeeTemplates/, 'Shopee modal should expose a reusable template reload function');
+assert.match(page, /shopee_templates_updated/, 'Shopee modal should listen for template updates from the templates tab');
+assert.match(page, /document\.visibilityState === 'visible'/, 'Shopee modal should refresh templates when the tab becomes visible again');
 assert.match(page, /Criar grupo de variacoes/, 'UI must let the operator create a missing variation group');
 assert.match(page, /suggestShopeeVariationGroupByName/, 'Shopee modal must suggest missing groups from matching product names');
 assert.match(page, /persistSuggestedVariationGroup/, 'Shopee modal must persist newly created groups in the VPS');
@@ -33,6 +36,8 @@ assert.doesNotMatch(page, /seller_stock:\s*undefined/, 'variation add_item paylo
 assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*variationPayload,\s*'add_item:variation',[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'variation add_item should retry transient Shopee GTIN rate limits');
 assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*payload,\s*`add_item:\$\{variant\.key\}`,[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'simple add_item should retry transient Shopee GTIN rate limits');
 assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*retryPayload,\s*`add_item:\$\{variant\.key\}:without_video`,[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'video fallback add_item should also retry transient Shopee GTIN rate limits');
+assert.match(page, /isShopeeAttributeValidationError/, 'add_item should detect Shopee category attribute validation failures');
+assert.match(page, /add_item:attribute_retry_without_optional_custom_values/, 'add_item should retry without optional custom-value attributes after Shopee attribute validation failures');
 assert.match(page, /publishShopeeVariationItem\(basePayload,\s*finalPayload,\s*\{[\s\S]*model_list: variationModelListForPublish,[\s\S]*\},\s*parsedStock\)/, 'variation add_item should use the variation publish fallback wrapper with prepared model list');
 assert.doesNotMatch(page, /publishShopeeItemWithStockFallback\(finalPayload, variationTotalStock\)/, 'variation add_item must not add simple-item stock fallback fields');
 assert.match(page, /variation_image:skipped/, 'variation image download failures should be logged as skipped instead of aborting publish');

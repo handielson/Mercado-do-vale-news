@@ -75,6 +75,48 @@ function templateToRuleInputs(template: ShopeeTemplate) {
     };
 }
 
+type LocalCategoryOption = Category & { depth: number };
+
+const SHOPEE_TEMPLATES_UPDATED_KEY = 'shopee_templates_updated';
+
+function notifyShopeeTemplatesUpdated(): void {
+    try {
+        localStorage.setItem(SHOPEE_TEMPLATES_UPDATED_KEY, String(Date.now()));
+    } catch {
+        // Cross-tab notification is best-effort only.
+    }
+}
+
+function buildLocalCategoryGroups(categories: Category[]) {
+    const byParent = new Map<string, Category[]>();
+    const byId = new Map(categories.map((category) => [category.id, category]));
+
+    categories.forEach((category) => {
+        const parentId = category.parent_id && byId.has(category.parent_id) ? category.parent_id : '';
+        const current = byParent.get(parentId) || [];
+        current.push(category);
+        byParent.set(parentId, current);
+    });
+
+    byParent.forEach((children) => {
+        children.sort((a, b) => {
+            const orderDiff = (a.sort_order ?? 9999) - (b.sort_order ?? 9999);
+            return orderDiff || a.name.localeCompare(b.name, 'pt-BR');
+        });
+    });
+
+    const collectChildren = (parentId: string, depth = 1): LocalCategoryOption[] =>
+        (byParent.get(parentId) || []).flatMap((category) => [
+            { ...category, depth },
+            ...collectChildren(category.id, depth + 1),
+        ]);
+
+    return (byParent.get('') || []).map((category) => ({
+        category,
+        children: collectChildren(category.id),
+    }));
+}
+
 function makeDangerousRule(): ShopeeDangerousTermRule {
     return {
         id: `rule-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -181,6 +223,7 @@ export default function ShopeeTemplatesPage() {
             : [],
         [shopeeCategorySearch, shopeeCategoryTree]
     );
+    const localCategoryGroups = useMemo(() => buildLocalCategoryGroups(localCategories), [localCategories]);
 
     const loadTemplates = async () => {
         setLoading(true);
@@ -326,6 +369,7 @@ export default function ShopeeTemplatesPage() {
             });
             setSelectedId(saved.id);
             setDraft(saved);
+            notifyShopeeTemplatesUpdated();
             toast.success('Template da Shopee salvo.');
         } catch (error) {
             console.error('[ShopeeTemplatesPage] save error:', error);
@@ -345,6 +389,7 @@ export default function ShopeeTemplatesPage() {
         const next = remaining[0] || emptyTemplate();
         setSelectedId(next.id);
         setDraft(next);
+        notifyShopeeTemplatesUpdated();
         toast.success('Template removido.');
     };
 
@@ -504,10 +549,20 @@ export default function ShopeeTemplatesPage() {
                                     className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                                 >
                                     <option value="">Todas as categorias</option>
-                                    {localCategories.map((category) => (
-                                        <option key={category.id} value={category.id}>
-                                            {category.name}
-                                        </option>
+                                    {localCategoryGroups.map((group) => (
+                                        group.children.length > 0 ? (
+                                            <optgroup key={group.category.id} label={group.category.name}>
+                                                {group.children.map((category) => (
+                                                    <option key={category.id} value={category.id}>
+                                                        {`${'  '.repeat(Math.max(0, category.depth - 1))}${category.name}`}
+                                                    </option>
+                                                ))}
+                                            </optgroup>
+                                        ) : (
+                                            <option key={group.category.id} value={group.category.id}>
+                                                {group.category.name}
+                                            </option>
+                                        )
                                     ))}
                                 </select>
                             </label>

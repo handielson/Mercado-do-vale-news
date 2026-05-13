@@ -421,6 +421,39 @@ function findShopeeBrandOption(options: ShopeeBrandOption[], brandName: string |
     ) || null;
 }
 
+function isShopeeAttributeValidationError(message: unknown): boolean {
+    const normalized = String(message || '').toLowerCase();
+    return normalized.includes('attribute info is invalid') ||
+        normalized.includes('classification.attribute') ||
+        normalized.includes('correct attribute value');
+}
+
+function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attributes: ShopeeAttributeField[]) {
+    const mandatoryAttributeIds = new Set(
+        (attributes || [])
+            .filter((attr) => attr.mandatory)
+            .map((attr) => Number(attr.attribute_id))
+    );
+    const attributeList = Array.isArray(payload.attribute_list) ? payload.attribute_list : [];
+    const removedAttributes: any[] = [];
+    const keptAttributes = attributeList.filter((attr: any) => {
+        const attributeId = Number(attr?.attribute_id);
+        const values = Array.isArray(attr?.attribute_value_list) ? attr.attribute_value_list : [];
+        const hasCustomValue = values.some((value: any) => Number(value?.value_id || 0) === 0);
+        if (!hasCustomValue || mandatoryAttributeIds.has(attributeId)) return true;
+        removedAttributes.push(attr);
+        return false;
+    });
+
+    return {
+        payload: {
+            ...payload,
+            attribute_list: keptAttributes,
+        },
+        removedAttributes,
+    };
+}
+
 function inferShopeeBrandName(product: Partial<LocalProduct> & Record<string, any>): string {
     const explicitBrand = String(product?.brand || '').trim();
     const genericBrands = new Set([
@@ -2658,28 +2691,55 @@ export function ShopeeSyncModal({
             .finally(() => setLoadingCats(false));
     }, []);
 
-    useEffect(() => {
-        let cancelled = false;
+    const reloadShopeeTemplates = useCallback(async (options: { applySuggestion?: boolean } = {}) => {
+        try {
+            const templates = await shopeeTemplateService.list();
+            setShopeeTemplates(templates);
 
-        shopeeTemplateService.list()
-            .then((templates) => {
-                if (cancelled) return;
-                setShopeeTemplates(templates);
-                const suggested = resolveBestShopeeTemplate(product, templates);
-                if (suggested) {
-                    setSuggestedTemplateId(suggested.id);
-                    setSelectedTemplateId(suggested.id);
-                    applyTemplate(suggested);
-                }
-            })
-            .catch((error) => {
-                console.warn('[Shopee Sync] Failed to load templates:', error);
+            const suggested = resolveBestShopeeTemplate(product, templates);
+            setSuggestedTemplateId(suggested?.id || '');
+
+            setSelectedTemplateId((current) => {
+                if (current && templates.some((template) => template.id === current)) return current;
+                if (options.applySuggestion && suggested) return suggested.id;
+                return '';
             });
 
-        return () => {
-            cancelled = true;
-        };
+            if (options.applySuggestion && suggested) {
+                applyTemplate(suggested);
+            }
+        } catch (error) {
+            console.warn('[Shopee Sync] Failed to load templates:', error);
+        }
     }, [applyTemplate, product]);
+
+    useEffect(() => {
+        reloadShopeeTemplates({ applySuggestion: true });
+    }, [reloadShopeeTemplates]);
+
+    useEffect(() => {
+        const handleTemplatesUpdated = (event: StorageEvent) => {
+            if (event.key === 'shopee_templates_updated') {
+                reloadShopeeTemplates();
+            }
+        };
+        const handleFocus = () => reloadShopeeTemplates();
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                reloadShopeeTemplates();
+            }
+        };
+
+        window.addEventListener('storage', handleTemplatesUpdated);
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('storage', handleTemplatesUpdated);
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [reloadShopeeTemplates]);
 
     useEffect(() => {
         const groups = availableVariationGroups;
@@ -3382,6 +3442,44 @@ export function ShopeeSyncModal({
                     message: error?.message || error,
                 });
 
+                if (isShopeeAttributeValidationError(error?.message || error)) {
+                    const sanitized = pruneOptionalCustomAttributePayload(payload, attributes);
+                    if (sanitized.removedAttributes.length > 0) {
+                        pushSyncDebug('add_item:attribute_retry_without_optional_custom_values', {
+                            variant: variant.key,
+                            label: variant.label,
+                            removed_attribute_ids: sanitized.removedAttributes.map((attr: any) => attr.attribute_id),
+                            message: error?.message || error,
+                        });
+
+                        try {
+                            const data = await postShopeeDebugWithRetry('add_item', sanitized.payload, `add_item:${variant.key}:without_optional_custom_attributes`, {
+                                retries: 2,
+                                delaysMs: [5000, 12000],
+                                shouldRetry: (error) => isShopeeGtinValidationRateLimitError(error?.message || error),
+                            });
+                            pushSyncDebug('add_item:variant_success', {
+                                variant: `${variant.key}:without_optional_custom_attributes`,
+                                label: `${variant.label} sem atributos opcionais customizados`,
+                            });
+                            return data;
+                        } catch (retryError: any) {
+                            lastError = retryError;
+                            pushSyncDebug('add_item:variant_error', {
+                                variant: `${variant.key}:without_optional_custom_attributes`,
+                                label: `${variant.label} sem atributos opcionais customizados`,
+                                message: retryError?.message || retryError,
+                            });
+
+                            if (!isShopeeSellerStockConstraintError(retryError?.message)) {
+                                throw retryError;
+                            }
+
+                            continue;
+                        }
+                    }
+                }
+
                 if (isShopeeVideoDispatcherError(error?.message) && Array.isArray(payload.video_upload_id) && payload.video_upload_id.length > 0) {
                     const retryPayload = { ...payload };
                     delete retryPayload.video_upload_id;
@@ -3444,6 +3542,22 @@ export function ShopeeSyncModal({
                 shouldRetry: (error) => isShopeeGtinValidationRateLimitError(error?.message || error),
             });
         } catch (error: any) {
+            if (isShopeeAttributeValidationError(error?.message || error)) {
+                const sanitized = pruneOptionalCustomAttributePayload(variationPayload, attributes);
+                if (sanitized.removedAttributes.length > 0) {
+                    pushSyncDebug('add_item:attribute_retry_without_optional_custom_values', {
+                        variant: 'variation',
+                        removed_attribute_ids: sanitized.removedAttributes.map((attr: any) => attr.attribute_id),
+                        message: error?.message || error,
+                    });
+                    return await postShopeeDebugWithRetry('add_item', sanitized.payload, 'add_item:variation:without_optional_custom_attributes', {
+                        retries: 2,
+                        delaysMs: [5000, 12000],
+                        shouldRetry: (error) => isShopeeGtinValidationRateLimitError(error?.message || error),
+                    });
+                }
+            }
+
             if (!isShopeeSellerStockConstraintError(error?.message)) {
                 throw error;
             }

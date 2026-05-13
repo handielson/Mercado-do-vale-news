@@ -17,6 +17,13 @@ assert.match(pageSource, /categoryService\.list/, 'page should load local catego
 assert.match(pageSource, /ruleInputs/, 'rule CSV inputs should keep their raw text while editing');
 assert.match(pageSource, /updateRuleInput/, 'rule CSV inputs should parse text without removing the typed comma from the field');
 assert.doesNotMatch(pageSource, /value=\{listToCsv\(draft\.rules\.nameIncludes\)\}/, 'name rule input should not re-render from parsed array on each keypress');
+assert.match(pageSource, /buildLocalCategoryGroups/, 'local categories should be grouped by parent category');
+assert.match(pageSource, /localCategoryGroups/, 'local category selector should use grouped category data');
+assert.match(pageSource, /<optgroup\s+key=\{group\.category\.id\}/, 'local category selector should render parent categories as option groups');
+assert.match(pageSource, /category\.parent_id/, 'local category grouping should use parent_id relationships');
+assert.doesNotMatch(pageSource, /localCategories\.map\(\(category\)\s*=>\s*\(/, 'local category selector should not render a flat category list');
+assert.match(pageSource, /notifyShopeeTemplatesUpdated/, 'template page should notify other tabs after saving or deleting templates');
+assert.match(pageSource, /shopee_templates_updated/, 'template update notification should use the shared storage event key');
 assert.match(pageSource, /searchShopeeCategories/, 'page should search Shopee categories by name');
 assert.match(pageSource, /buildCategoryTree/, 'page should load Shopee category tree for category search');
 assert.match(pageSource, /action=categories/, 'page should fetch Shopee categories for template selection');
