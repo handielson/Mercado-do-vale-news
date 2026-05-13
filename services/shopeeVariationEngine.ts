@@ -220,13 +220,14 @@ export function buildShopeeVariationModels(
 
   const model_list = group.children.map((child) => {
     const tierIndex = dimensions.map((dimension) => Math.max(0, dimension.options.indexOf(readSpec(child, dimension.key))));
-    const gtin = firstEan(child);
+    const gtin = firstEan(child) || 'SEM GTIN';
     return {
       tier_index: tierIndex,
       model_sku: text(child.sku),
       original_price: centsToReais(child.price_retail),
       seller_stock: [{ stock: Math.max(0, Math.trunc(Number(context.stockByProductId?.[child.id] ?? child.stock_quantity ?? 0) || 0)) }],
-      ...(gtin ? { gtin_code: gtin, tax_info: { gtin } } : {}),
+      gtin_code: gtin,
+      tax_info: { gtin },
     };
   });
 
