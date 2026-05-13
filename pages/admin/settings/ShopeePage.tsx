@@ -668,6 +668,13 @@ function isUnsupportedVideoUploadMessage(message: unknown): boolean {
     return normalized.includes('upload_video') && normalized.includes('nao suporta');
 }
 
+function isShopeeGtinValidationRateLimitError(message: unknown): boolean {
+    const normalized = String(message || '').toLowerCase();
+    return normalized.includes('rate limited') ||
+        normalized.includes('validate_model_gtin') ||
+        normalized.includes('1692500000');
+}
+
 function isNoGtinValue(value: string): boolean {
     const normalized = String(value || '')
         .normalize('NFD')
@@ -2987,6 +2994,41 @@ export function ShopeeSyncModal({
         return data;
     };
 
+    const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+    const postShopeeDebugWithRetry = async (
+        action: string,
+        body: Record<string, any>,
+        debugLabel: string = action,
+        options: { retries?: number; delaysMs?: number[]; shouldRetry?: (error: any) => boolean } = {},
+    ) => {
+        const retries = Math.max(0, options.retries ?? 2);
+        const delaysMs = options.delaysMs || [4000, 9000];
+        const shouldRetry = options.shouldRetry || (() => false);
+        let lastError: any = null;
+
+        for (let attempt = 0; attempt <= retries; attempt += 1) {
+            try {
+                return await postShopeeDebug(action, body, attempt === 0 ? debugLabel : `${debugLabel}:attempt_${attempt + 1}`);
+            } catch (error: any) {
+                lastError = error;
+                const canRetry = attempt < retries && shouldRetry(error);
+                if (!canRetry) throw error;
+
+                const delayMs = delaysMs[Math.min(attempt, delaysMs.length - 1)] || 4000;
+                pushSyncDebug(`${debugLabel}:retry`, {
+                    attempt: attempt + 1,
+                    next_attempt: attempt + 2,
+                    delay_ms: delayMs,
+                    message: error?.message || error,
+                });
+                await wait(delayMs);
+            }
+        }
+
+        throw lastError;
+    };
+
     const getShopeeDebug = async (action: string, debugLabel: string = action, queryParams?: Record<string, any>) => {
         const searchParams = new URLSearchParams({ action });
         Object.entries(queryParams || {}).forEach(([key, value]) => {
@@ -3362,11 +3404,15 @@ export function ShopeeSyncModal({
             }
         }
 
-        const initData = await postShopeeDebug('init_tier_variation', {
+        const initData = await postShopeeDebugWithRetry('init_tier_variation', {
             item_id: itemId,
             tier_variation: variationPayloadParts.tier_variation,
             model: variationPayloadParts.model_list,
-        }, 'init_tier_variation');
+        }, 'init_tier_variation', {
+            retries: 2,
+            delaysMs: [5000, 12000],
+            shouldRetry: (error) => isShopeeGtinValidationRateLimitError(error?.message || error),
+        });
 
         return {
             ...createdItem,

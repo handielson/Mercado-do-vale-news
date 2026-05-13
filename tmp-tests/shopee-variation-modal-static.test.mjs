@@ -54,6 +54,9 @@ assert.match(page, /upload_video:skipped_existing_video/, 'variation publish sho
 assert.match(page, /videoAlreadyPresentOnShopee/, 'post-publish verification should account for videos already saved on Shopee');
 assert.match(page, /init_tier_variation/, 'seller_stock-constrained variation add_item should initialize variations after base item fallback');
 assert.match(page, /add_item:variation_fallback_base/, 'variation fallback should log base item creation before initializing variations');
+assert.match(page, /isShopeeGtinValidationRateLimitError/, 'variation init should detect Shopee GTIN validation rate limits');
+assert.match(page, /postShopeeDebugWithRetry\('init_tier_variation'/, 'variation init should retry transient Shopee GTIN rate limits');
+assert.match(page, /debugLabel\}:retry/, 'variation init retry attempts should be logged');
 assert.match(api, /action === 'init_tier_variation'/, 'API must expose init_tier_variation action');
 assert.match(api, /\/api\/v2\/product\/init_tier_variation/, 'API must call Shopee init_tier_variation endpoint');
 assert.match(docs, /Primeira entrega: variacoes manuais/, 'Shopee docs should document the first manual variation delivery');
