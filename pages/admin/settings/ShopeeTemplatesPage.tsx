@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Copy, Loader2, Plus, Save, ShieldAlert, Sparkles, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Copy, Loader2, Plus, Save, Search, ShieldAlert, Sparkles, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { categoryService } from '../../../services/categories';
@@ -7,6 +7,7 @@ import { analyzeShopeeTitleSafety, applyShopeeTemplateToProduct } from '../../..
 import { DEFAULT_SHOPEE_TEMPLATES, shopeeTemplateService } from '../../../services/shopeeTemplateService';
 import type { Category } from '../../../types/category';
 import type { ShopeeDangerousTermRule, ShopeeTemplate } from '../../../types/shopee-template';
+import { buildCategoryTree, getCategoryPathLabel, searchShopeeCategories } from './shopeeCategoryHelpers.js';
 
 type ShopeeTemplateAttributeOption = {
     value_id: number;
@@ -64,6 +65,14 @@ function csvToList(value: string): string[] {
 
 function listToCsv(value?: string[]): string {
     return (value || []).join(', ');
+}
+
+function templateToRuleInputs(template: ShopeeTemplate) {
+    return {
+        nameIncludes: listToCsv(template.rules.nameIncludes),
+        skuIncludes: listToCsv(template.rules.skuIncludes),
+        brandIncludes: listToCsv(template.rules.brandIncludes),
+    };
 }
 
 function makeDangerousRule(): ShopeeDangerousTermRule {
@@ -149,9 +158,13 @@ export default function ShopeeTemplatesPage() {
     const [templates, setTemplates] = useState<ShopeeTemplate[]>([]);
     const [selectedId, setSelectedId] = useState('');
     const [draft, setDraft] = useState<ShopeeTemplate>(emptyTemplate());
+    const [ruleInputs, setRuleInputs] = useState(() => templateToRuleInputs(emptyTemplate()));
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [localCategories, setLocalCategories] = useState<Category[]>([]);
+    const [shopeeCategoryTree, setShopeeCategoryTree] = useState<any[]>([]);
+    const [shopeeCategorySearch, setShopeeCategorySearch] = useState('');
+    const [loadingShopeeCategories, setLoadingShopeeCategories] = useState(false);
     const [shopeeAttributes, setShopeeAttributes] = useState<ShopeeTemplateAttributeField[]>([]);
     const [loadingShopeeAttributes, setLoadingShopeeAttributes] = useState(false);
 
@@ -162,6 +175,12 @@ export default function ShopeeTemplatesPage() {
 
     const preview = useMemo(() => applyShopeeTemplateToProduct(sampleProduct, draft), [draft]);
     const safety = useMemo(() => analyzeShopeeTitleSafety(preview.title, draft.dangerousTerms), [draft.dangerousTerms, preview.title]);
+    const shopeeCategorySearchResults = useMemo(
+        () => shopeeCategorySearch.trim()
+            ? searchShopeeCategories(shopeeCategoryTree, shopeeCategorySearch, 12)
+            : [],
+        [shopeeCategorySearch, shopeeCategoryTree]
+    );
 
     const loadTemplates = async () => {
         setLoading(true);
@@ -172,6 +191,7 @@ export default function ShopeeTemplatesPage() {
             const first = nextTemplates[0] || emptyTemplate();
             setSelectedId(first.id);
             setDraft(first);
+            setRuleInputs(templateToRuleInputs(first));
         } catch (error) {
             console.error('[ShopeeTemplatesPage] load error:', error);
             toast.error('Nao foi possivel carregar templates da Shopee.');
@@ -194,8 +214,35 @@ export default function ShopeeTemplatesPage() {
     }, []);
 
     useEffect(() => {
+        let cancelled = false;
+        setLoadingShopeeCategories(true);
+
+        fetch('/api/shopee-catalog?action=categories')
+            .then((response) => response.json())
+            .then((data) => {
+                if (cancelled) return;
+                setShopeeCategoryTree(buildCategoryTree(data?.response?.category_list || []));
+            })
+            .catch((error) => {
+                if (!cancelled) {
+                    console.error('[ShopeeTemplatesPage] Shopee categories load error:', error);
+                    toast.error('Nao foi possivel carregar categorias da Shopee.');
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLoadingShopeeCategories(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
         if (!selectedTemplate) return;
         setDraft(selectedTemplate);
+        setRuleInputs(templateToRuleInputs(selectedTemplate));
+        setShopeeCategorySearch(selectedTemplate.shopeeCategoryName || '');
     }, [selectedTemplate]);
 
     useEffect(() => {
@@ -233,11 +280,32 @@ export default function ShopeeTemplatesPage() {
         setDraft((current) => ({ ...current, ...updates }));
     };
 
+    const updateRuleInput = (field: 'nameIncludes' | 'skuIncludes' | 'brandIncludes', value: string) => {
+        setRuleInputs((current) => ({ ...current, [field]: value }));
+        setDraft((current) => ({
+            ...current,
+            rules: {
+                ...current.rules,
+                [field]: csvToList(value),
+            },
+        }));
+    };
+
+    const handleSelectShopeeCategory = (category: any) => {
+        updateDraft({
+            shopeeCategoryId: Number(category.category_id) || null,
+            shopeeCategoryName: category.__pathLabel || getCategoryPathLabel(category),
+            attributeDefaults: {},
+        });
+        setShopeeCategorySearch(category.__pathLabel || getCategoryPathLabel(category));
+    };
+
     const handleNew = () => {
         const next = emptyTemplate();
         setTemplates((current) => [next, ...current]);
         setSelectedId(next.id);
         setDraft(next);
+        setRuleInputs(templateToRuleInputs(next));
     };
 
     const handleSave = async () => {
@@ -418,15 +486,15 @@ export default function ShopeeTemplatesPage() {
                         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                             <label>
                                 <span className="text-xs font-semibold uppercase text-slate-500">Palavras no nome</span>
-                                <input value={listToCsv(draft.rules.nameIncludes)} onChange={(event) => updateDraft({ rules: { ...draft.rules, nameIncludes: csvToList(event.target.value) } })} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="capa, capinha, case" />
+                                <input value={ruleInputs.nameIncludes} onChange={(event) => updateRuleInput('nameIncludes', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="capa, capinha, case" />
                             </label>
                             <label>
                                 <span className="text-xs font-semibold uppercase text-slate-500">Palavras no SKU</span>
-                                <input value={listToCsv(draft.rules.skuIncludes)} onChange={(event) => updateDraft({ rules: { ...draft.rules, skuIncludes: csvToList(event.target.value) } })} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="capa, case" />
+                                <input value={ruleInputs.skuIncludes} onChange={(event) => updateRuleInput('skuIncludes', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="capa, case" />
                             </label>
                             <label>
                                 <span className="text-xs font-semibold uppercase text-slate-500">Marcas</span>
-                                <input value={listToCsv(draft.rules.brandIncludes)} onChange={(event) => updateDraft({ rules: { ...draft.rules, brandIncludes: csvToList(event.target.value) } })} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="apple, samsung, xiaomi" />
+                                <input value={ruleInputs.brandIncludes} onChange={(event) => updateRuleInput('brandIncludes', event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="apple, samsung, xiaomi" />
                             </label>
                             <label>
                                 <span className="text-xs font-semibold uppercase text-slate-500">Categoria local</span>
@@ -471,6 +539,44 @@ export default function ShopeeTemplatesPage() {
                                 <span className="text-xs font-semibold uppercase text-slate-500">Nome da categoria</span>
                                 <input value={draft.shopeeCategoryName || ''} onChange={(event) => updateDraft({ shopeeCategoryName: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
                             </label>
+                        </div>
+                        <div className="mt-4">
+                            <label className="block">
+                                <span className="text-xs font-semibold uppercase text-slate-500">Pesquisar categoria Shopee</span>
+                                <div className="relative mt-1">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        value={shopeeCategorySearch}
+                                        onChange={(event) => setShopeeCategorySearch(event.target.value)}
+                                        className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm"
+                                        placeholder="Ex.: Bambu Lab, capa celular, hotend, memoria ram"
+                                    />
+                                </div>
+                            </label>
+                            {loadingShopeeCategories ? (
+                                <div className="mt-2 inline-flex items-center gap-2 text-xs font-semibold text-orange-600">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    Carregando categorias da Shopee
+                                </div>
+                            ) : shopeeCategorySearch.trim() && shopeeCategorySearchResults.length > 0 ? (
+                                <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+                                    {shopeeCategorySearchResults.map((category: any) => (
+                                        <button
+                                            key={category.category_id}
+                                            type="button"
+                                            onClick={() => handleSelectShopeeCategory(category)}
+                                            className="flex w-full items-start justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-orange-50"
+                                        >
+                                            <span className="font-medium text-slate-800">{category.__pathLabel || getCategoryPathLabel(category)}</span>
+                                            <span className="shrink-0 font-mono text-xs text-slate-400">#{category.category_id}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : shopeeCategorySearch.trim() ? (
+                                <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                                    Nenhuma categoria encontrada. Voce ainda pode informar o ID manualmente.
+                                </div>
+                            ) : null}
                         </div>
                         <div className="mt-5 border-t border-slate-100 pt-5">
                             <div className="flex flex-wrap items-center justify-between gap-2">

@@ -3364,7 +3364,11 @@ export function ShopeeSyncModal({
             });
 
             try {
-                const data = await postShopeeDebug('add_item', payload, `add_item:${variant.key}`);
+                const data = await postShopeeDebugWithRetry('add_item', payload, `add_item:${variant.key}`, {
+                    retries: 2,
+                    delaysMs: [5000, 12000],
+                    shouldRetry: (error) => isShopeeGtinValidationRateLimitError(error?.message || error),
+                });
                 pushSyncDebug('add_item:variant_success', {
                     variant: variant.key,
                     label: variant.label,
@@ -3389,7 +3393,11 @@ export function ShopeeSyncModal({
                     });
 
                     try {
-                        const data = await postShopeeDebug('add_item', retryPayload, `add_item:${variant.key}:without_video`);
+                        const data = await postShopeeDebugWithRetry('add_item', retryPayload, `add_item:${variant.key}:without_video`, {
+                            retries: 2,
+                            delaysMs: [5000, 12000],
+                            shouldRetry: (error) => isShopeeGtinValidationRateLimitError(error?.message || error),
+                        });
                         pushSyncDebug('add_item:variant_success', {
                             variant: `${variant.key}:without_video`,
                             label: `${variant.label} sem video`,
@@ -3430,7 +3438,11 @@ export function ShopeeSyncModal({
         parsedStockValue: number,
     ) => {
         try {
-            return await postShopeeDebug('add_item', variationPayload, 'add_item:variation');
+            return await postShopeeDebugWithRetry('add_item', variationPayload, 'add_item:variation', {
+                retries: 2,
+                delaysMs: [5000, 12000],
+                shouldRetry: (error) => isShopeeGtinValidationRateLimitError(error?.message || error),
+            });
         } catch (error: any) {
             if (!isShopeeSellerStockConstraintError(error?.message)) {
                 throw error;

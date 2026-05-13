@@ -30,7 +30,9 @@ assert.match(vpsServerJs, /fastify\.patch\('\/products\/variation-group'/, 'depl
 assert.doesNotMatch(page, /missingSupabaseProducts|supaProds|supaMap/, 'Shopee page should not use Supabase as a catalog fallback for variation groups');
 assert.match(page, /getProductsByParentId/, 'Shopee modal should fetch missing variation siblings from VPS');
 assert.doesNotMatch(page, /seller_stock:\s*undefined/, 'variation add_item payload must not send a null seller_stock field');
-assert.match(page, /postShopeeDebug\('add_item',\s*variationPayload,\s*'add_item:variation'\)/, 'variation add_item should first send variation payload directly');
+assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*variationPayload,\s*'add_item:variation',[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'variation add_item should retry transient Shopee GTIN rate limits');
+assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*payload,\s*`add_item:\$\{variant\.key\}`,[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'simple add_item should retry transient Shopee GTIN rate limits');
+assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*retryPayload,\s*`add_item:\$\{variant\.key\}:without_video`,[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'video fallback add_item should also retry transient Shopee GTIN rate limits');
 assert.match(page, /publishShopeeVariationItem\(basePayload,\s*finalPayload,\s*\{[\s\S]*model_list: variationModelListForPublish,[\s\S]*\},\s*parsedStock\)/, 'variation add_item should use the variation publish fallback wrapper with prepared model list');
 assert.doesNotMatch(page, /publishShopeeItemWithStockFallback\(finalPayload, variationTotalStock\)/, 'variation add_item must not add simple-item stock fallback fields');
 assert.match(page, /variation_image:skipped/, 'variation image download failures should be logged as skipped instead of aborting publish');
