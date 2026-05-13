@@ -14,6 +14,10 @@ assert.match(page, /bulkRequiredAttributesByCategoryId/, 'bulk page should cache
 assert.match(page, /action=attributes&category_id=\$\{categoryId\}/, 'bulk page should fetch Shopee attributes for template categories');
 assert.match(page, /logistics_channel_list/, 'bulk page should validate enabled logistics before automatic publish');
 assert.match(page, /isBulkUpdateCandidate/, 'bulk page should detect items that already have a Shopee item id');
+assert.match(page, /hasBulkPublishStock/, 'bulk page should centralize positive stock filtering');
+assert.match(page, /bulkCandidates = products\.filter\(p => \(p\.status === 'not_synced' \|\| isBulkUpdateCandidate\(p\)\) && hasBulkPublishStock\(p\)\)/, 'bulk page should hide products without stock from publish/update candidates');
+assert.match(page, /bulkSelectedIds[\s\S]*filter[\s\S]*hasBulkPublishStock\(p\)/, 'bulk start should discard stale selected ids for products without stock');
+assert.match(page, /selectBulkReadyProducts[\s\S]*hasBulkPublishStock\(p\)[\s\S]*bulkReadinessById/, 'bulk ready selection should only select products with stock');
 assert.match(page, /Atualiza(?:ção|cao|Ã§Ã£o) pronta/, 'bulk page should label already-sent items as update-ready');
 assert.match(page, /Revisar atualiza(?:ção|cao|Ã§Ã£o)/, 'bulk page should label blocked already-sent items as update review');
 assert.match(page, /Item ja enviado: sera atualizado na Shopee\./, 'bulk page should explain that linked items will be updated');

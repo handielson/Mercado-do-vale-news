@@ -102,6 +102,18 @@ function dimensionValue(dimensions: Record<string, unknown>, keys: string[]): nu
   return 0;
 }
 
+function specsValue(specs: Record<string, unknown>, keys: string[]): number {
+  const nestedDimensions = parseDimensionObject(specs.dimensions);
+  for (const key of keys) {
+    const direct = numberValue(specs[key]);
+    if (direct > 0) return direct;
+
+    const nested = numberValue(nestedDimensions[key]);
+    if (nested > 0) return nested;
+  }
+  return 0;
+}
+
 function hasPositiveDimension(product: ShopeeAutoPublishProduct, template: ShopeeTemplate | null): boolean {
   if (template?.dimensionMode === 'fixed') {
     return numberValue(template.weightKg) > 0
@@ -111,15 +123,20 @@ function hasPositiveDimension(product: ShopeeAutoPublishProduct, template: Shope
   }
 
   const dimensions = parseDimensionObject(product.dimensions);
+  const specs = parseDimensionObject(product.specs);
 
   return numberValue(product.weight_kg) > 0
     || numberValue(product.shipping_weight) > 0
+    || specsValue(specs, ['weight_kg', 'shipping_weight', 'dimensions.weight_kg', 'dimensions.shipping_weight']) > 0
     || numberValue(product.shipping_length) > 0
     || numberValue(product.shipping_width) > 0
     || numberValue(product.shipping_height) > 0
     || dimensionValue(dimensions, ['depth_cm', 'depth', 'length_cm', 'length', 'comprimento', 'profundidade']) > 0
     || dimensionValue(dimensions, ['width_cm', 'width', 'largura']) > 0
-    || dimensionValue(dimensions, ['height_cm', 'height', 'altura']) > 0;
+    || dimensionValue(dimensions, ['height_cm', 'height', 'altura']) > 0
+    || specsValue(specs, ['dimensions.depth_cm', 'dimensions.depth', 'dimensions.length_cm', 'dimensions.length', 'dimensions.comprimento', 'dimensions.profundidade', 'depth_cm', 'depth', 'length_cm', 'length', 'comprimento', 'profundidade']) > 0
+    || specsValue(specs, ['dimensions.width_cm', 'dimensions.width', 'dimensions.largura', 'width_cm', 'width', 'largura']) > 0
+    || specsValue(specs, ['dimensions.height_cm', 'dimensions.height', 'dimensions.altura', 'height_cm', 'height', 'altura']) > 0;
 }
 
 function issue(code: string, message: string, level: ShopeeAutoPublishIssueLevel = 'blocker'): ShopeeAutoPublishIssue {

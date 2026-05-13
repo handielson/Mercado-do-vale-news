@@ -73,6 +73,20 @@ assert.ok(
   'alternative dimension keys should count as registered dimensions'
 );
 
+const productWithFlatSpecDimensions = evaluateShopeeAutoPublishReadiness({
+  ...readyProduct,
+  specs: {
+    'dimensions.depth_cm': 18,
+    'dimensions.width_cm': 9,
+    'dimensions.height_cm': 4,
+  },
+}, [template]);
+assert.equal(productWithFlatSpecDimensions.status, 'ready');
+assert.ok(
+  !productWithFlatSpecDimensions.warnings.some((issue) => issue.code === 'fallback_dimensions'),
+  'flat dimensions stored in specs should count as registered dimensions'
+);
+
 const missingImage = evaluateShopeeAutoPublishReadiness({ ...readyProduct, images: [] }, [template]);
 assert.equal(missingImage.status, 'review');
 assert.ok(missingImage.blockers.some((issue) => issue.code === 'missing_image'));

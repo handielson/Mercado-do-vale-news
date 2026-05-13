@@ -220,6 +220,24 @@ function isBulkUpdateCandidate(product: Pick<ShopeeProduct, 'shopee_item_id'>): 
     return Boolean(normalizePositiveId(product.shopee_item_id));
 }
 
+function hasBulkPublishStock(product: Pick<ShopeeProduct, 'stock_quantity' | 'track_inventory'>): boolean {
+    if (product.track_inventory === false) return true;
+    const stock = Number(product.stock_quantity ?? 0);
+    return Number.isFinite(stock) && stock > 0;
+}
+
+function readPositiveSpecValue(specs: Record<string, any> | null | undefined, keys: string[]): number {
+    const nestedDimensions = normalizeProductDimensions(specs?.dimensions) as Record<string, any> | null;
+    for (const key of keys) {
+        const direct = Number(specs?.[key]);
+        if (Number.isFinite(direct) && direct > 0) return direct;
+
+        const nested = Number(nestedDimensions?.[key]);
+        if (Number.isFinite(nested) && nested > 0) return nested;
+    }
+    return 0;
+}
+
 function normalizeLookupText(value: unknown): string {
     return String(value || '')
         .normalize('NFD')
@@ -253,11 +271,21 @@ function translateShopeeText(entity: any, fallbackKeys: string[] = []): string {
 function normalizeShopeeDescription(value: string | undefined): string {
     if (!value) return '';
     return String(value)
+        .replace(/<p\b[^>]*>(?:\s|&nbsp;|&#160;|\u00a0|<br\s*\/?\s*>)*<\/p>/gi, '')
+        .replace(/&nbsp;|&#160;|\u00a0/gi, ' ')
         .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(?:div|li|h[1-6])>/gi, '\n')
         .replace(/<\/p>/gi, '\n\n')
+        .replace(/<li\b[^>]*>/gi, '- ')
         .replace(/<[^>]+>/g, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;|&apos;/gi, "'")
         .replace(/\r\n/g, '\n')
         .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n[ \t]+/g, '\n')
         .replace(/\n{3,}/g, '\n\n')
         .replace(/[ \t]{2,}/g, ' ')
         .trim();
@@ -1198,7 +1226,7 @@ export default function ShopeePage() {
 
     const selectBulkReadyProducts = (items: ShopeeProduct[]) => {
         const readyIds = items
-            .filter(p => p.status === 'not_synced' && bulkReadinessById.get(p.product_id)?.status === 'ready')
+            .filter(p => hasBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)) && bulkReadinessById.get(p.product_id)?.status === 'ready')
             .map(p => p.product_id);
         setBulkSelectedIds(readyIds);
         if (readyIds.length === 0) {
@@ -1210,10 +1238,10 @@ export default function ShopeePage() {
         const queue = bulkSelectedIds
             .map(id => products.find(p => p.product_id === id))
             .filter((p): p is ShopeeProduct => Boolean(p))
-            .filter(p => p.status === 'not_synced');
+            .filter(p => hasBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)));
 
         if (queue.length === 0) {
-            toast.error('Selecione pelo menos um produto ainda nao sincronizado.');
+            toast.error('Selecione pelo menos um produto para enviar ou atualizar.');
             return;
         }
 
@@ -1327,7 +1355,7 @@ export default function ShopeePage() {
         notSynced: products.filter(p => p.status === 'not_synced').length,
     };
 
-    const bulkCandidates = products.filter(p => p.status === 'not_synced' || isBulkUpdateCandidate(p));
+    const bulkCandidates = products.filter(p => (p.status === 'not_synced' || isBulkUpdateCandidate(p)) && hasBulkPublishStock(p));
     const bulkReadiness = bulkCandidates.map((product) =>
         evaluateShopeeAutoPublishReadiness({
             ...product,
@@ -1358,6 +1386,13 @@ export default function ShopeePage() {
     const bulkPublishedCount = bulkRunItems.filter(item => item.status === 'published').length;
     const bulkSkippedCount = bulkRunItems.filter(item => item.status === 'skipped').length;
     const bulkFailedCount = bulkRunItems.filter(item => item.status === 'failed').length;
+    const bulkTotalCount = bulkRunItems.length;
+    const bulkProcessedCount = bulkPublishedCount + bulkSkippedCount + bulkFailedCount;
+    const bulkPendingCount = Math.max(0, bulkTotalCount - bulkProcessedCount - (bulkActiveProduct ? 1 : 0));
+    const bulkProgressPercent = bulkTotalCount > 0
+        ? Math.min(100, Math.round((bulkProcessedCount / bulkTotalCount) * 100))
+        : 0;
+    const bulkActiveRunItem = bulkRunItems.find(item => item.status === 'active');
 
     return (
         <div className="animate-in fade-in duration-500 max-w-5xl mx-auto space-y-6">
@@ -1883,6 +1918,38 @@ export default function ShopeePage() {
                                     </div>
                                 </div>
                             </div>
+                            <div className="border-b border-slate-100 bg-slate-50/70 p-4">
+                                <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-slate-500">Progresso do envio</p>
+                                        <p className="text-sm font-bold text-slate-800">
+                                            {bulkProcessedCount}/{bulkTotalCount} concluídos
+                                            {bulkActiveRunItem ? ` · agora: ${bulkActiveRunItem.name}` : ''}
+                                        </p>
+                                    </div>
+                                    <div className="text-xs font-semibold text-slate-600">
+                                        {bulkProgressPercent}% · {bulkPendingCount} na fila
+                                    </div>
+                                </div>
+                                <div
+                                    aria-label="Progresso do envio em massa Shopee"
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={bulkProgressPercent}
+                                    role="progressbar"
+                                    className="h-3 w-full overflow-hidden rounded-full bg-slate-200"
+                                >
+                                    <div
+                                        className="h-full rounded-full bg-orange-500 transition-all duration-500"
+                                        style={{ width: `${bulkProgressPercent}%` }}
+                                    />
+                                </div>
+                                <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-500">
+                                    <span>Processados: {bulkProcessedCount}</span>
+                                    <span>Em revisão: {bulkActiveProduct ? 1 : 0}</span>
+                                    <span>Pendentes: {bulkPendingCount}</span>
+                                </div>
+                            </div>
                             <div className="divide-y divide-slate-100">
                                 {bulkRunItems.map(item => {
                                     const tone =
@@ -2076,15 +2143,29 @@ export default function ShopeePage() {
 
                     {bulkActiveProduct && (
                         <>
-                            <div className="fixed left-1/2 top-4 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-lg">
-                                <span>Envio em massa {bulkCurrentPosition || 1}/{bulkQueueIds.length}</span>
-                                <button
-                                    type="button"
-                                    onClick={skipBulkActiveProduct}
-                                    className="rounded-full bg-white/10 px-2 py-1 text-white transition-colors hover:bg-white/20"
-                                >
-                                    Pular
-                                </button>
+                            <div className="fixed left-1/2 top-4 z-[80] w-[min(92vw,520px)] -translate-x-1/2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-semibold text-white shadow-lg">
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <span>Envio em massa {bulkCurrentPosition || 1}/{bulkQueueIds.length}</span>
+                                    <span>{bulkProgressPercent}%</span>
+                                </div>
+                                <div className="mb-2 h-2 overflow-hidden rounded-full bg-white/15">
+                                    <div
+                                        className="h-full rounded-full bg-orange-400 transition-all duration-500"
+                                        style={{ width: `${bulkProgressPercent}%` }}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="truncate text-white/80">
+                                        {bulkActiveRunItem?.name || bulkActiveProduct.name}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={skipBulkActiveProduct}
+                                        className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-white transition-colors hover:bg-white/20"
+                                    >
+                                        Pular
+                                    </button>
+                                </div>
                             </div>
                             <ShopeeSyncModal
                                 product={bulkActiveProduct}
@@ -2156,6 +2237,9 @@ export function ShopeeSyncModal({
     const initialGtinMode = gtinValue && isNoGtinValue(gtinValue) ? 'no_gtin' : 'code';
     const initialGtinInput = initialGtinMode === 'code' ? gtinValue.trim() : '';
     const normalizedDimensions = normalizeProductDimensions(product.dimensions) as Record<string, any> | null;
+    const specsPackageLength = readPositiveSpecValue(product.specs, ['dimensions.depth_cm', 'dimensions.depth', 'dimensions.length_cm', 'dimensions.length', 'dimensions.comprimento', 'dimensions.profundidade', 'depth_cm', 'depth', 'length_cm', 'length', 'comprimento', 'profundidade']);
+    const specsPackageWidth = readPositiveSpecValue(product.specs, ['dimensions.width_cm', 'dimensions.width', 'dimensions.largura', 'width_cm', 'width', 'largura']);
+    const specsPackageHeight = readPositiveSpecValue(product.specs, ['dimensions.height_cm', 'dimensions.height', 'dimensions.altura', 'height_cm', 'height', 'altura']);
     const packageLength = Number(
         normalizedDimensions?.depth_cm ??
         normalizedDimensions?.depth ??
@@ -2163,23 +2247,20 @@ export function ShopeeSyncModal({
         normalizedDimensions?.length ??
         normalizedDimensions?.comprimento ??
         normalizedDimensions?.profundidade ??
-        product.shipping_length ??
         0
-    ) || 0;
+    ) || specsPackageLength || Number(product.shipping_length ?? 0) || 0;
     const packageWidth = Number(
         normalizedDimensions?.width_cm ??
         normalizedDimensions?.width ??
         normalizedDimensions?.largura ??
-        product.shipping_width ??
         0
-    ) || 0;
+    ) || specsPackageWidth || Number(product.shipping_width ?? 0) || 0;
     const packageHeight = Number(
         normalizedDimensions?.height_cm ??
         normalizedDimensions?.height ??
         normalizedDimensions?.altura ??
-        product.shipping_height ??
         0
-    ) || 0;
+    ) || specsPackageHeight || Number(product.shipping_height ?? 0) || 0;
     const packageDimension = {
         package_length: Math.max(1, Math.round(packageLength || 20)),
         package_width: Math.max(1, Math.round(packageWidth || 15)),
