@@ -1,6 +1,6 @@
-# Bling webhook - sincronizacao de precos
+# Bling webhook - sincronizacao de produto
 
-Documento operacional para diagnostico de alteracoes de valor vindas do Bling.
+Documento operacional para diagnostico de alteracoes de nome, valor e estoque vindas do Bling.
 
 ## Rotas envolvidas
 
@@ -11,10 +11,12 @@ Documento operacional para diagnostico de alteracoes de valor vindas do Bling.
 
 ## Comportamento esperado
 
-Quando o Bling envia `product.updated` com `data.preco`, o webhook converte o valor em reais para centavos e atualiza:
+Quando o Bling envia `product.updated`, o webhook atualiza os campos disponiveis no payload:
 
+- `products.name` no Supabase e na VPS, quando `data.nome` ou `data.name` vem no payload.
 - `products.price_retail` no Supabase, filtrando pelo `bling_id`.
 - `products.price_retail` na VPS, chamando `PATCH /products/prices-stock` com o contrato em lote `{ "products": [{ "sku": "...", "price_retail": 1499 }] }`.
+- `products.stock_quantity` no Supabase e na VPS quando o payload de produto traz estoque (`estoque.saldoFisicoTotal`, `saldoFisicoTotal` ou campos equivalentes).
 
 Exemplo:
 
@@ -24,7 +26,11 @@ Exemplo:
   "data": {
     "id": 16067598992,
     "codigo": "CA10PRE",
-    "preco": 14.99
+    "nome": "Capa de Silicone para Redmi 13 4G | Poco M6 4G",
+    "preco": 14.99,
+    "estoque": {
+      "saldoFisicoTotal": 3
+    }
   }
 }
 ```
@@ -34,7 +40,9 @@ Resultado esperado no sistema:
 ```json
 {
   "sku": "CA10PRE",
-  "price_retail": 1499
+  "name": "Capa de Silicone para Redmi 13 4G | Poco M6 4G",
+  "price_retail": 1499,
+  "stock_quantity": 3
 }
 ```
 
@@ -42,20 +50,20 @@ Resultado esperado no sistema:
 
 O webhook e a rotina `sync-prices-vps` nao fazem a mesma coisa:
 
-- `api/bling-webhook.ts` recebe eventos em tempo real do Bling. Para preco, usa `data.preco` do payload do evento.
+- `api/bling-webhook.ts` recebe eventos em tempo real do Bling. Para produto, usa `data.nome`, `data.preco` e estoque presente no payload do evento.
 - `api/bling.ts?resource=sync-prices-vps` sincroniza dados ja salvos no Supabase para a VPS, em lotes de 50 produtos. Ela nao consulta o Bling em tempo real.
 
-Se o preco mudou no Bling mas nao apareceu na loja:
+Se nome, preco ou estoque mudou no Bling mas nao apareceu na loja:
 
 1. Consultar `webhook-logs` e procurar `event: "product.updated"` do SKU ou `bling_id`.
-2. Confirmar se o payload tem `data.preco`.
+2. Confirmar se o payload tem o campo esperado (`data.nome`, `data.preco` ou estoque).
 3. Consultar a VPS com `status=all` e `search` para evitar cache:
 
 ```text
 https://api.xiaomipetrolina.com.br/products?search=SKU&status=all&limit=10&compact=true&_t=diag
 ```
 
-4. Se o payload tem `preco`, mas a VPS nao mudou, verificar logs da Vercel para `product -> SKU=... price_retail=... VPS=...`.
+4. Se o payload tem o campo, mas a VPS nao mudou, verificar logs da Vercel para `product -> SKU=... price_retail=... stock_quantity=... VPS=...`.
 5. Se o webhook nao chegou, conferir a configuracao de Webhooks no Bling.
 
 ## Observacoes

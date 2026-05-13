@@ -51,8 +51,20 @@ assert.match(
 
 assert.match(
   webhookSource,
+  /const\s+payloadStock\s*=\s*readBlingPayloadStock\(productData,\s*body\);/,
+  'product.updated webhooks must read stock from Bling product payloads when present',
+);
+
+assert.match(
+  webhookSource,
+  /updates\.stock_quantity\s*=\s*Math\.max\(0,\s*Math\.trunc\(Number\(payloadStock\)\)\);/,
+  'product.updated webhooks must normalize Bling stock payloads into stock_quantity',
+);
+
+assert.match(
+  webhookSource,
   /patchVps\('\/products\/prices-stock',\s*\{\s*products:\s*\[\s*\{\s*sku:\s*resolvedSku,\s*\.\.\.updates\s*\}\s*\]\s*\}\)/,
-  'product.updated price changes must sync to the VPS commercial fields endpoint using the products array contract',
+  'product.updated price and stock changes must sync to the VPS commercial fields endpoint using the products array contract',
 );
 
 console.log('bling-webhook regression guard ok');

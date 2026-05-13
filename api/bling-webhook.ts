@@ -12,7 +12,7 @@
  * - stock / movimentacaoEstoque / stock.created / virtual_stock.updated
  * - product / products / product.created / product.updated
  *   - name updates sync through /products/name
- *   - price updates from data.preco sync as local price_retail cents through /products/prices-stock
+ *   - price and stock updates sync through /products/prices-stock
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -292,6 +292,10 @@ export default async function handler(req: any, res: any) {
             if (preco !== undefined && preco !== null && Number.isFinite(Number(preco))) {
                 updates.price_retail = Math.round(Number(preco) * 100);
             }
+            const payloadStock = readBlingPayloadStock(productData, body);
+            if (payloadStock !== undefined && payloadStock !== null && Number.isFinite(Number(payloadStock))) {
+                updates.stock_quantity = Math.max(0, Math.trunc(Number(payloadStock)));
+            }
 
             if (Object.keys(updates).length === 0) {
                 return res.status(200).json({ ok: true, message: 'Nothing to update' });
@@ -310,7 +314,7 @@ export default async function handler(req: any, res: any) {
                 .update(updates)
                 .eq('bling_id', blingId);
 
-            console.log(`[bling-webhook] product -> SKU=${resolvedSku} name="${resolvedName}" price_retail=${updates.price_retail ?? 'unchanged'} VPS=${vpsUpdated}`);
+            console.log(`[bling-webhook] product -> SKU=${resolvedSku} name="${resolvedName}" price_retail=${updates.price_retail ?? 'unchanged'} stock_quantity=${updates.stock_quantity ?? 'unchanged'} VPS=${vpsUpdated}`);
             return res.status(200).json({ ok: true, event, sku: resolvedSku, updates, vpsUpdated });
         }
 
@@ -319,6 +323,21 @@ export default async function handler(req: any, res: any) {
         console.error('[bling-webhook] Fatal error:', err.message);
         return res.status(200).json({ ok: false, error: err.message });
     }
+}
+
+function readBlingPayloadStock(productData: any, body: any): number | undefined {
+    const estoque = productData?.estoque || body?.data?.estoque || body?.dados?.estoque;
+    return productData?.stock_quantity
+        ?? productData?.saldoFisicoTotal
+        ?? productData?.saldoFisico
+        ?? productData?.saldoVirtualTotal
+        ?? productData?.saldoVirtual
+        ?? estoque?.saldoFisicoTotal
+        ?? estoque?.saldoFisico
+        ?? estoque?.saldoVirtualTotal
+        ?? estoque?.saldoVirtual
+        ?? body?.data?.saldoFisicoTotal
+        ?? body?.dados?.saldoFisicoTotal;
 }
 
 async function patchVps(path: string, body: object): Promise<boolean> {
