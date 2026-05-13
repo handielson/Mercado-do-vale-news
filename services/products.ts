@@ -5,6 +5,7 @@ import { logPriceChange } from './priceHistoryService';
 import { vpsApiService } from './vpsApiService';
 import { buildProductVideoUrl } from '../utils/video-url';
 import { getCompanyId } from './companyContext';
+import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
@@ -305,6 +306,15 @@ async function create(input: ProductInput): Promise<Product> {
         production_days: input.production_days != null ? input.production_days : null,
     };
 
+    // Auto-tag: garante que a marca apareça em specs.tags_venda (cross-sell).
+    // Comparação case/accent-insensitive evita duplicar com tag já existente.
+    if (brand) {
+        payload.specs = {
+            ...payload.specs,
+            tags_venda: ensureTag(parseTagsVenda(payload.specs?.tags_venda), brand),
+        };
+    }
+
     const result = await vpsApiService.createProduct(payload);
     if (result.errors.length > 0) throw new Error(`Failed to create product: ${result.errors[0].error}`);
 
@@ -434,6 +444,14 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         kits: input.kits && input.kits.length > 0 ? input.kits : null,
         production_days: input.production_days != null ? input.production_days : null,
     };
+
+    // Auto-tag: garante que a marca atual apareça em specs.tags_venda.
+    if (brand) {
+        payload.specs = {
+            ...payload.specs,
+            tags_venda: ensureTag(parseTagsVenda(payload.specs?.tags_venda), brand),
+        };
+    }
 
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);

@@ -6057,6 +6057,28 @@ fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, re
   return { ok: true, affectedRows: result.affectedRows };
 });
 
+// Update specs.tags_venda (cross-sell) by product id. Usa JSON_SET pra mexer
+// só nessa chave dentro do JSON de specs.
+fastify.patch('/products/:id/tags-venda', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { tags_venda } = req.body || {};
+  if (!Array.isArray(tags_venda)) {
+    return reply.code(400).send({ error: 'tags_venda deve ser um array' });
+  }
+  const cleaned = tags_venda
+    .filter(t => typeof t === 'string')
+    .map(t => t.trim())
+    .filter(Boolean);
+  const [result] = await pool.query(
+    `UPDATE products
+       SET specs = JSON_SET(COALESCE(specs, JSON_OBJECT()), '$.tags_venda', CAST(? AS JSON)),
+           updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [JSON.stringify(cleaned), req.params.id]
+  );
+  if (!result.affectedRows) return reply.code(404).send({ error: 'not found' });
+  return { ok: true, tags_venda: cleaned };
+});
+
 // Update description + technical_specifications by SKU (used by description sync)
 fastify.patch('/products/description', { preHandler: requireSyncKey }, async (req, reply) => {
   const { sku, description, technical_specifications } = req.body || {};

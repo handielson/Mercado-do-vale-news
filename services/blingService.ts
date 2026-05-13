@@ -5,6 +5,7 @@ import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { vpsApiService } from './vpsApiService';
 import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
+import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 
 const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -685,8 +686,15 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         track_inventory: true,
         // Cor mapeada — armazenada em _color_id (auxiliar, não vai para products)
         _color_id: resolveColorId(variacaoNome ? variacaoNome.split(';').find((p: string) => p.toLowerCase().startsWith('cor'))?.split(':')[1]?.trim() : undefined) || null,
-        // Specs (variação: color, size...)
-        specs,
+        // Specs (variação: color, size...) + auto-tag da marca para cross-sell
+        specs: (() => {
+            const brandValue = typeof item.marca === 'object' ? item.marca?.nome || null : item.marca || null;
+            if (!brandValue) return specs;
+            return {
+                ...specs,
+                tags_venda: ensureTag(parseTagsVenda((specs as any).tags_venda), brandValue),
+            } as any;
+        })(),
         // Mídia
         images: imagens
             .slice(0, 5)
