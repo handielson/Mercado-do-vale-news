@@ -799,6 +799,7 @@ export default function ShopeePage() {
     const [renamingProductId, setRenamingProductId] = useState<string | null>(null);
     const [renameInput, setRenameInput] = useState('');
     const [savingRenameProductId, setSavingRenameProductId] = useState<string | null>(null);
+    const [unlinkingProductId, setUnlinkingProductId] = useState<string | null>(null);
 
     useEffect(() => {
         if (requestedTab === 'config' || requestedTab === 'products' || requestedTab === 'bulk' || requestedTab === 'orders' || requestedTab === 'finance' || requestedTab === 'printers') {
@@ -1125,6 +1126,45 @@ export default function ShopeePage() {
             setLinkInput('');
             loadProducts();
         } catch { toast.error('Erro ao vincular produto.'); }
+    };
+
+    const handleDeleteShopeeProductAndLink = async (p: ShopeeProduct) => {
+        if (!p.shopee_item_id) {
+            toast.error('Produto sem vínculo Shopee para apagar.');
+            return;
+        }
+
+        const confirmed = window.confirm(
+            `Apagar o anúncio Shopee #${p.shopee_item_id} e excluir o vínculo local? Essa ação remove o anúncio da Shopee.`
+        );
+        if (!confirmed) return;
+
+        setUnlinkingProductId(p.product_id);
+        try {
+            const shopeeRes = await fetch('/api/shopee-catalog?action=delete_item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: p.shopee_item_id }),
+            });
+            const shopeeData = await shopeeRes.json();
+            if (!shopeeRes.ok || (shopeeData.error && shopeeData.error !== '')) {
+                throw new Error(shopeeData.message || shopeeData.error || 'Falha ao apagar produto na Shopee.');
+            }
+
+            const { error } = await supabase
+                .from('shopee_products')
+                .delete()
+                .eq('shopee_item_id', p.shopee_item_id);
+
+            if (error) throw error;
+
+            toast.success('Produto apagado da Shopee e vínculo local excluído. Você já pode reenviar.');
+            loadProducts();
+        } catch (error: any) {
+            toast.error(`Erro ao apagar da Shopee: ${error?.message || 'tente novamente.'}`);
+        } finally {
+            setUnlinkingProductId(null);
+        }
     };
 
     const handleToggleStatus = async (p: ShopeeProduct) => {
@@ -1833,6 +1873,19 @@ export default function ShopeePage() {
                                                                 }
                                                             </button>
                                                         )}
+                                                        {p.shopee_item_id && (
+                                                            <button
+                                                                onClick={() => handleDeleteShopeeProductAndLink(p)}
+                                                                disabled={unlinkingProductId === p.product_id}
+                                                                title="Apagar da Shopee e excluir vinculo"
+                                                                className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-slate-500 disabled:opacity-50"
+                                                            >
+                                                                {unlinkingProductId === p.product_id
+                                                                    ? <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+                                                                    : <Trash2 className="w-4 h-4 text-red-500" />
+                                                                }
+                                                            </button>
+                                                        )}
                                                         {/* Actions */}
                                                         {p.status === 'not_synced' ? (
                                                             linkingProductId === p.product_id ? (
@@ -2399,6 +2452,10 @@ export function ShopeeSyncModal({
         if (!vpsVariationGroup || groups.some((group) => group.id === vpsVariationGroup.id)) return groups;
         return [...groups, vpsVariationGroup];
     }, [variationGroups, vpsVariationGroup]);
+    const nameSuggestedVariationGroup = useMemo(() => suggestShopeeVariationGroupByName(
+        product,
+        historicalProducts.map((candidate) => toLocalProduct(candidate))
+    ), [historicalProducts, product]);
     const suggestedVariationGroup = useMemo(() => {
         const alreadyGrouped = availableVariationGroups.some((group) =>
             group.parent.id === product.id ||
@@ -2406,16 +2463,35 @@ export function ShopeeSyncModal({
         );
         if (alreadyGrouped) return null;
 
-        return suggestShopeeVariationGroupByName(
-            product,
-            historicalProducts.map((candidate) => toLocalProduct(candidate))
-        );
-    }, [availableVariationGroups, historicalProducts, product]);
+        return nameSuggestedVariationGroup;
+    }, [availableVariationGroups, nameSuggestedVariationGroup, product.id]);
     const rawSelectedVariationGroup = useMemo(
         () => availableVariationGroups.find((group) => group.id === selectedVariationGroupId) || null,
         [availableVariationGroups, selectedVariationGroupId]
     );
-    const selectedVariationGroup = rawSelectedVariationGroup;
+    const selectedVariationGroup = useMemo(() => {
+        if (!rawSelectedVariationGroup) return null;
+        if (!nameSuggestedVariationGroup) return rawSelectedVariationGroup;
+
+        const selectedIds = new Set([
+            rawSelectedVariationGroup.parent.id,
+            ...rawSelectedVariationGroup.children.map((child) => child.id),
+        ]);
+        const nameSuggestionTouchesSelectedGroup = [
+            nameSuggestedVariationGroup.parent,
+            ...nameSuggestedVariationGroup.children,
+        ].some((candidate) => selectedIds.has(candidate.id));
+
+        if (!nameSuggestionTouchesSelectedGroup) return rawSelectedVariationGroup;
+
+        return normalizeShopeeVariationGroupForPublish({
+            ...rawSelectedVariationGroup,
+            children: [
+                ...rawSelectedVariationGroup.children,
+                ...nameSuggestedVariationGroup.children,
+            ],
+        });
+    }, [nameSuggestedVariationGroup, rawSelectedVariationGroup]);
     const variationDimensions = useMemo(
         () => selectedVariationGroup ? detectShopeeVariationDimensions(selectedVariationGroup) : [],
         [selectedVariationGroup]
@@ -3483,6 +3559,33 @@ export function ShopeeSyncModal({
             const cleanItemName = (itemName.trim() || product.name || '').slice(0, 120);
             const cleanItemSku = String(product.sku || '').trim().slice(0, 100);
             const cleanDescription = (normalizeShopeeDescription(itemDescription) || cleanItemName).slice(0, 3000);
+            const existingProductItemId = normalizePositiveId(product.shopee_item_id);
+            let proactiveDuplicateItem: any = null;
+            let proactiveDuplicateItemId: number | null = null;
+            if (!existingVariationItemId && !existingProductItemId) {
+                proactiveDuplicateItem = await findExistingShopeeItemForDuplicate({
+                    item_sku: cleanItemSku || undefined,
+                    item_name: cleanItemName,
+                });
+                proactiveDuplicateItemId = normalizePositiveId(proactiveDuplicateItem?.item_id);
+            }
+            const resolvedExistingVariationItemId = publishWithVariations
+                ? existingVariationItemId || proactiveDuplicateItemId
+                : existingVariationItemId;
+            const resolvedExistingProductItemId = publishWithVariations
+                ? existingProductItemId
+                : existingProductItemId || proactiveDuplicateItemId;
+
+            pushSyncDebug('existing_variation_item_id_source', {
+                local_variation_item_id: existingVariationItemId || null,
+                local_product_item_id: existingProductItemId || null,
+                proactive_duplicate_item_id: proactiveDuplicateItemId,
+                resolved_variation_item_id: resolvedExistingVariationItemId || null,
+                resolved_product_item_id: resolvedExistingProductItemId || null,
+                duplicate_item_sku: proactiveDuplicateItem?.item_sku || null,
+                duplicate_item_name: proactiveDuplicateItem?.item_name || null,
+            });
+
             const imageIdList: string[] = [];
             const videoUploadIdList: string[] = [];
             let videoUploadSkipped = false;
@@ -3599,22 +3702,22 @@ export function ShopeeSyncModal({
                 });
             }
 
-            if (expectedVideoCandidateCount > 0 && existingVariationItemId) {
+            if (expectedVideoCandidateCount > 0 && resolvedExistingVariationItemId) {
                 try {
                     const existingVideoData = await getShopeeDebug('get_item_base_info', 'video_precheck:existing_item', {
-                        item_id_list: existingVariationItemId,
+                        item_id_list: resolvedExistingVariationItemId,
                     });
                     const existingItem = existingVideoData?.response?.item_list?.[0] || null;
                     const existingVideoCount = getShopeeSavedVideoCount(existingItem);
                     videoAlreadyPresentOnShopee = existingVideoCount > 0;
                     pushSyncDebug('video_precheck:existing_item_summary', {
-                        item_id: existingVariationItemId,
+                        item_id: resolvedExistingVariationItemId,
                         saved_video_count: existingVideoCount,
                         will_upload_video: !videoAlreadyPresentOnShopee,
                     });
                 } catch (error: any) {
                     pushSyncDebug('video_precheck:existing_item_error', {
-                        item_id: existingVariationItemId,
+                        item_id: resolvedExistingVariationItemId,
                         message: error?.message || String(error),
                     });
                 }
@@ -3622,7 +3725,7 @@ export function ShopeeSyncModal({
 
             if (videoAlreadyPresentOnShopee) {
                 pushSyncDebug('upload_video:skipped_existing_video', {
-                    item_id: existingVariationItemId,
+                    item_id: resolvedExistingVariationItemId,
                     reason: 'Item Shopee ja possui video salvo.',
                 });
             } else {
@@ -3689,7 +3792,6 @@ export function ShopeeSyncModal({
                     imageIdsByProductId: variationImageIdsByProductId,
                 })
                 : null;
-            const existingProductItemId = normalizePositiveId(product.shopee_item_id);
 
             const finalPayload = variationPayloadParts
                 ? {
@@ -3699,18 +3801,18 @@ export function ShopeeSyncModal({
                     model_list: variationPayloadParts.model_list,
                 }
                 : basePayload;
-            const existingVariationModelData = variationPayloadParts && existingVariationItemId
+            const existingVariationModelData = variationPayloadParts && resolvedExistingVariationItemId
                 ? await getShopeeDebug('get_model_list', 'existing_variation:model_list_before_update', {
-                    item_id: existingVariationItemId,
+                    item_id: resolvedExistingVariationItemId,
                 })
                 : null;
             const existingVariationModelList = existingVariationModelData?.response?.model || existingVariationModelData?.response?.model_list || [];
-            const variationModelListForPublish = variationPayloadParts && existingVariationItemId
+            const variationModelListForPublish = variationPayloadParts && resolvedExistingVariationItemId
                 ? mergeExistingShopeeModelIds(variationPayloadParts.model_list, existingVariationModelList)
                 : variationPayloadParts?.model_list || [];
-            if (variationPayloadParts && existingVariationItemId) {
+            if (variationPayloadParts && resolvedExistingVariationItemId) {
                 pushSyncDebug('existing_variation:model_id_merge', {
-                    item_id: existingVariationItemId,
+                    item_id: resolvedExistingVariationItemId,
                     existing_model_count: Array.isArray(existingVariationModelList) ? existingVariationModelList.length : 0,
                     requested_skus: variationPayloadParts.model_list.map((model: any) => model.model_sku),
                     matched_skus: variationModelListForPublish
@@ -3719,9 +3821,9 @@ export function ShopeeSyncModal({
                 });
             }
             const data = variationPayloadParts
-                ? existingVariationItemId
+                ? resolvedExistingVariationItemId
                     ? await postShopeeDebug('update_model', {
-                        item_id: existingVariationItemId,
+                        item_id: resolvedExistingVariationItemId,
                         tier_variation: variationPayloadParts.tier_variation,
                         model_list: variationModelListForPublish,
                     }, 'add_item:existing_variation')
@@ -3729,15 +3831,15 @@ export function ShopeeSyncModal({
                         tier_variation: variationPayloadParts.tier_variation,
                         model_list: variationModelListForPublish,
                     }, parsedStock)
-                : existingProductItemId
+                : resolvedExistingProductItemId
                     ? await postShopeeDebug('update_item', {
                         ...finalPayload,
-                        item_id: existingProductItemId,
+                        item_id: resolvedExistingProductItemId,
                     }, 'update_item:existing_item')
                     : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
 
             // Save to Supabase
-            const shopeeItemId = existingVariationItemId || existingProductItemId || data.response?.item_id;
+            const shopeeItemId = resolvedExistingVariationItemId || resolvedExistingProductItemId || data.response?.item_id;
             const videoUploadIdsForPostPublish = data?.omitted_video_upload_id ? [] : videoUploadIdList;
             let publishedModelList: any[] = [];
             let shouldKeepDebugOpen = false;

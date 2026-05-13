@@ -430,6 +430,10 @@ export default async function handler(req: any, res: any) {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
             return res.status(200).json(await shopeePost('/api/v2/product/init_tier_variation', creds, req.body));
         }
+        if (action === 'delete_item') {
+            if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+            return res.status(200).json(await shopeePost('/api/v2/product/delete_item', creds, req.body));
+        }
         if (action === 'update_item_status') {
             if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
             return res.status(200).json(await shopeePost('/api/v2/product/update_item_status', creds, req.body));

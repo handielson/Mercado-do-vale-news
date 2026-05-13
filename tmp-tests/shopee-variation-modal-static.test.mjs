@@ -45,6 +45,12 @@ assert.match(page, /publishedProductIds/, 'bulk runner should advance all produc
 assert.match(page, /findExistingShopeeItemForDuplicate/, 'variation fallback should recover from duplicate base items');
 assert.match(page, /duplicate_lookup:match/, 'duplicate recovery should log the reused Shopee item');
 assert.match(page, /add_item:variation_fallback_duplicate_reused/, 'variation fallback should reuse duplicate items before init_tier_variation');
+assert.match(page, /proactiveDuplicateItem[\s\S]*findExistingShopeeItemForDuplicate\(\{[\s\S]*item_sku: cleanItemSku/, 'publish flow should proactively look up an existing Shopee item before add_item can create a duplicate');
+assert.match(page, /existing_variation_item_id_source/, 'variation publish should log whether it reused local or remote duplicate linkage');
+assert.match(page, /handleDeleteShopeeProductAndLink/, 'Shopee page should expose a focused delete-and-unlink action for bad Shopee items');
+assert.match(page, /action=delete_item[\s\S]*item_id:\s*p\.shopee_item_id/, 'delete action should remove the selected item from Shopee before unlinking locally');
+assert.match(page, /from\('shopee_products'\)[\s\S]*\.delete\(\)[\s\S]*\.eq\('shopee_item_id',\s*p\.shopee_item_id\)/, 'delete action should delete only local link rows for the selected Shopee item id');
+assert.match(page, /Apagar da Shopee e excluir vinculo/, 'linked products should show a delete-and-unlink button for operators');
 assert.match(page, /isShopeeVideoDispatcherError/, 'add_item should detect Shopee MMS video dispatcher failures');
 assert.match(page, /add_item:video_dispatcher_retry_without_video/, 'add_item should retry without video when Shopee MMS validation times out');
 assert.match(page, /delete retryPayload\.video_upload_id/, 'video dispatcher retry should remove video_upload_id from add_item payload');
@@ -59,6 +65,8 @@ assert.match(page, /postShopeeDebugWithRetry\('init_tier_variation'/, 'variation
 assert.match(page, /debugLabel\}:retry/, 'variation init retry attempts should be logged');
 assert.match(api, /action === 'init_tier_variation'/, 'API must expose init_tier_variation action');
 assert.match(api, /\/api\/v2\/product\/init_tier_variation/, 'API must call Shopee init_tier_variation endpoint');
+assert.match(api, /action === 'delete_item'/, 'API must expose delete_item action');
+assert.match(api, /\/api\/v2\/product\/delete_item/, 'API must call Shopee delete_item endpoint');
 assert.match(docs, /Primeira entrega: variacoes manuais/, 'Shopee docs should document the first manual variation delivery');
 
 console.log('shopee variation modal static checks passed');
