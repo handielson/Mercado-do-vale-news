@@ -205,6 +205,29 @@ function normalizePositiveId(value: unknown): number | null {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+async function fetchAllVpsProducts(params: Parameters<typeof vpsApiService.getProducts>[0] = {}): Promise<any[]> {
+    const pageSize = 2000;
+    const maxProducts = 20000;
+    const byId = new Map<string, any>();
+
+    for (let offset = 0; offset < maxProducts; offset += pageSize) {
+        const page = await vpsApiService.getProducts({
+            ...params,
+            limit: pageSize,
+            offset,
+        }) || [];
+        const sizeBefore = byId.size;
+        for (const product of page) {
+            const key = String(product?.id || product?.sku || `${offset}:${byId.size}`);
+            byId.set(key, product);
+        }
+
+        if (page.length < pageSize || byId.size === sizeBefore) break;
+    }
+
+    return Array.from(byId.values());
+}
+
 function normalizeProductDimensions(value: unknown): LocalProduct['dimensions'] {
     if (!value) return null;
     if (typeof value === 'string') {
@@ -830,7 +853,7 @@ export default function ShopeePage() {
         setLoadingProducts(true);
         try {
             // Fetch products from VPS (source of truth for catalog), bypassing 5-min cache to ensure Bling cost is fresh
-            const localProds = await vpsApiService.getProducts({ limit: 5000, status: 'all', noCache: true });
+            const localProds = await fetchAllVpsProducts({ status: 'all', noCache: true });
 
             // Fetch Shopee sync records from Supabase (integration metadata)
             const { data: shopeeRecords } = await supabase
@@ -992,7 +1015,7 @@ export default function ShopeePage() {
             }
 
             // 2. Fetch VPS products for matching
-            const localProds = await vpsApiService.getProducts({ limit: 5000, noCache: true }) || [];
+            const localProds = await fetchAllVpsProducts({ noCache: true });
             // Build SKU map: both exact and cleaned (no hyphens/spaces) → works for "RMP-12P" vs "RMP12P"
             const cleanSku = (s: string) => s.toLowerCase().replace(/[-\s]/g, '');
             const skuMap    = new Map<string, any>();

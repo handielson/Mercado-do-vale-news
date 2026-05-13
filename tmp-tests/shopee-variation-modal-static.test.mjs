@@ -51,6 +51,8 @@ assert.match(page, /handleDeleteShopeeProductAndLink/, 'Shopee page should expos
 assert.match(page, /action=delete_item[\s\S]*item_id:\s*p\.shopee_item_id/, 'delete action should remove the selected item from Shopee before unlinking locally');
 assert.match(page, /from\('shopee_products'\)[\s\S]*\.delete\(\)[\s\S]*\.eq\('shopee_item_id',\s*p\.shopee_item_id\)/, 'delete action should delete only local link rows for the selected Shopee item id');
 assert.match(page, /Apagar da Shopee e excluir vinculo/, 'linked products should show a delete-and-unlink button for operators');
+assert.match(page, /fetchAllVpsProducts[\s\S]*pageSize\s*=\s*2000[\s\S]*offset/, 'Shopee product list should page through the VPS 2000-item cap');
+assert.doesNotMatch(page, /getProducts\(\{\s*limit:\s*5000/, 'Shopee product list should not rely on a single VPS request above the server cap');
 assert.match(page, /isShopeeVideoDispatcherError/, 'add_item should detect Shopee MMS video dispatcher failures');
 assert.match(page, /add_item:video_dispatcher_retry_without_video/, 'add_item should retry without video when Shopee MMS validation times out');
 assert.match(page, /delete retryPayload\.video_upload_id/, 'video dispatcher retry should remove video_upload_id from add_item payload');
