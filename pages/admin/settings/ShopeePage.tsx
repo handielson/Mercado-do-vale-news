@@ -52,6 +52,7 @@ import {
     buildShopeeVariationModels,
     detectShopeeVariationDimensions,
     groupShopeeVariationCandidates,
+    normalizeShopeeVariationGroupForPublish,
     suggestShopeeVariationGroupByName,
     validateShopeeVariationGroup,
 } from '../../../services/shopeeVariationEngine';
@@ -2459,11 +2460,11 @@ export function ShopeeSyncModal({
                     ? [parentLocalProduct, ...childProducts.filter((child) => child.id !== parentLocalProduct.id)]
                     : childProducts;
 
-                setVpsVariationGroup({
+                setVpsVariationGroup(normalizeShopeeVariationGroupForPublish({
                     id: String(parentId),
                     parent: parentLocalProduct,
                     children: groupChildren,
-                });
+                }));
             } catch (error) {
                 console.warn('[Shopee Sync] Failed to load VPS variation group:', error);
                 if (!cancelled) setVpsVariationGroup(null);

@@ -35,6 +35,15 @@ function readSpec(product: ShopeeVariationProduct, key: ShopeeVariationDimension
   return text(specs[key]);
 }
 
+function hasSaleableStock(product: ShopeeVariationProduct): boolean {
+  if (product.track_inventory === false) return true;
+  return Number(product.stock_quantity ?? 0) > 0;
+}
+
+function hasVariationOptionValue(product: ShopeeVariationProduct): boolean {
+  return DIMENSION_KEYS.some((key) => Boolean(readSpec(product, key)));
+}
+
 function normalizeName(value: unknown): string {
   return text(value)
     .normalize('NFD')
@@ -75,6 +84,21 @@ function firstEan(product: ShopeeVariationProduct): string {
   return text(eans.find((ean) => text(ean)));
 }
 
+export function normalizeShopeeVariationGroupForPublish(group: ShopeeVariationGroup): ShopeeVariationGroup {
+  const candidates = [group.parent, ...group.children];
+  const children = Array.from(new Map(
+    candidates
+      .filter((product) => hasVariationOptionValue(product))
+      .filter((product) => hasSaleableStock(product))
+      .map((product) => [product.id, product] as const)
+  ).values());
+
+  return {
+    ...group,
+    children,
+  };
+}
+
 export function groupShopeeVariationCandidates(products: ShopeeVariationProduct[]): ShopeeVariationGroup[] {
   const byId = new Map(products.map((product) => [product.id, product]));
   const idByBlingId = new Map(
@@ -96,11 +120,13 @@ export function groupShopeeVariationCandidates(products: ShopeeVariationProduct[
     .map(([parentId, children]) => {
       const parent = byId.get(parentId);
       if (!parent || children.length < 2) return null;
-      return {
+      const group = normalizeShopeeVariationGroupForPublish({
         id: parentId,
         parent,
         children: children.slice(),
-      };
+      });
+      if (group.children.length < 2) return null;
+      return group;
     })
     .filter((group): group is ShopeeVariationGroup => Boolean(group));
 }
@@ -114,7 +140,9 @@ export function suggestShopeeVariationGroupByName(
 
   const matches = products
     .map(withInferredColor)
-    .filter((candidate) => variationNameBase(candidate.name) === targetBase);
+    .filter((candidate) => variationNameBase(candidate.name) === targetBase)
+    .filter((candidate) => hasVariationOptionValue(candidate))
+    .filter((candidate) => hasSaleableStock(candidate));
 
   const uniqueById = Array.from(new Map(matches.map((candidate) => [candidate.id, candidate])).values());
   const colorCount = new Set(uniqueById.map((candidate) => readSpec(candidate, 'color')).filter(Boolean)).size;

@@ -3,6 +3,7 @@ import {
   buildShopeeVariationModels,
   detectShopeeVariationDimensions,
   groupShopeeVariationCandidates,
+  normalizeShopeeVariationGroupForPublish,
   suggestShopeeVariationGroupByName,
   validateShopeeVariationGroup,
 } from '../services/shopeeVariationEngine.ts';
@@ -175,6 +176,50 @@ const groupReloadedFromVpsWithoutColorSpecs = {
 const inferredDimensions = detectShopeeVariationDimensions(groupReloadedFromVpsWithoutColorSpecs);
 assert.deepEqual(inferredDimensions, [{ name: 'Cor', key: 'color', options: ['Azul Claro', 'Rosa Magenta'] }]);
 assert.equal(validateShopeeVariationGroup(groupReloadedFromVpsWithoutColorSpecs, inferredDimensions).ok, true);
+
+const vpsGroupWithBaseAndOutOfStockOptions = normalizeShopeeVariationGroupForPublish({
+  id: 'redmi13-azul-claro',
+  parent: {
+    id: 'redmi13-azul-claro',
+    name: 'Capa de Silicone para Redmi 13 4G | Poco M6 4G Cor:Azul Claro',
+    sku: 'CSR134GAZBB',
+    price_retail: 1499,
+    stock_quantity: 1,
+    images: ['https://cdn.test/redmi13-azul-claro.jpg'],
+    specs: { color: 'Azul Claro' },
+  },
+  children: [
+    {
+      id: 'base-without-color',
+      name: 'Capa de Silicone para Redmi 13 4G | Poco M6 4G',
+      sku: 'CSR134G',
+      price_retail: 1499,
+      stock_quantity: 0,
+      images: ['https://cdn.test/base.jpg'],
+      specs: {},
+    },
+    {
+      id: 'out-of-stock-color',
+      name: 'Capa de Silicone para Redmi 13 4G | Poco M6 4G Cor:Azul',
+      sku: 'CSR134GA',
+      price_retail: 1499,
+      stock_quantity: 0,
+      images: ['https://cdn.test/azul.jpg'],
+      specs: { color: 'Azul' },
+    },
+    {
+      id: 'redmi13-ciano',
+      name: 'Capa de Silicone para Redmi 13 4G | Poco M6 4G Cor:Ciano',
+      sku: 'CSR134GCI',
+      price_retail: 1499,
+      stock_quantity: 1,
+      images: ['https://cdn.test/ciano.jpg'],
+      specs: { color: 'Ciano' },
+    },
+  ],
+});
+
+assert.deepEqual(vpsGroupWithBaseAndOutOfStockOptions.children.map((child) => child.sku), ['CSR134GAZBB', 'CSR134GCI']);
 
 const dimensions = detectShopeeVariationDimensions(groups[0]);
 assert.deepEqual(dimensions, [{ name: 'Cor', key: 'color', options: ['Vermelho', 'Azul'] }]);
