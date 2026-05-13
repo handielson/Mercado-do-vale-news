@@ -220,7 +220,7 @@ export function buildShopeeVariationModels(
 
   const model_list = group.children.map((child) => {
     const tierIndex = dimensions.map((dimension) => Math.max(0, dimension.options.indexOf(readSpec(child, dimension.key))));
-    const gtin = firstEan(child) || 'SEM GTIN';
+    const gtin = context.gtinMode === 'no_gtin' ? 'SEM GTIN' : firstEan(child) || 'SEM GTIN';
     return {
       tier_index: tierIndex,
       model_sku: text(child.sku),

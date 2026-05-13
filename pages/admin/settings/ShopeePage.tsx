@@ -58,7 +58,10 @@ import {
 } from '../../../services/shopeeVariationEngine';
 import {
     findExistingShopeeItemIdForGroup,
+    getMissingShopeeVariationSkus,
+    mergeShopeeModelIdsBySku,
     matchShopeeModelsBySku,
+    shouldInitTierVariationForExistingItem,
 } from '../../../services/shopeeVariationLinking';
 import type { ShopeeVariationGroup } from '../../../types/shopee-variation';
 
@@ -3247,26 +3250,6 @@ export function ShopeeSyncModal({
         return videoInfo?.video_id ? 1 : 0;
     };
 
-    const mergeExistingShopeeModelIds = (
-        modelList: any[],
-        existingModelList: any[],
-    ) => {
-        const existingBySku = new Map<string, any>();
-        for (const model of Array.isArray(existingModelList) ? existingModelList : []) {
-            const sku = normalizeShopeeDuplicateLookup(model?.model_sku).toUpperCase();
-            if (sku && !existingBySku.has(sku)) existingBySku.set(sku, model);
-        }
-
-        return modelList.map((model) => {
-            const sku = normalizeShopeeDuplicateLookup(model?.model_sku).toUpperCase();
-            const existing = sku ? existingBySku.get(sku) : null;
-            const modelId = Number(existing?.model_id);
-            return Number.isFinite(modelId) && modelId > 0
-                ? { ...model, model_id: modelId }
-                : model;
-        });
-    };
-
     const findExistingShopeeItemForDuplicate = async (payload: Record<string, any>) => {
         const targetSku = normalizeShopeeDuplicateLookup(payload.item_sku);
         const targetName = normalizeShopeeDuplicateLookup(payload.item_name);
@@ -3495,7 +3478,7 @@ export function ShopeeSyncModal({
             });
             const existingModelList = modelListData?.response?.model || modelListData?.response?.model_list || [];
             if (Array.isArray(existingModelList) && existingModelList.length > 0) {
-                const modelListForUpdate = mergeExistingShopeeModelIds(variationPayloadParts.model_list, existingModelList);
+                const modelListForUpdate = mergeShopeeModelIdsBySku(variationPayloadParts.model_list, existingModelList);
                 pushSyncDebug('duplicate_variation:update_existing_models', {
                     item_id: itemId,
                     existing_model_count: existingModelList.length,
@@ -3813,6 +3796,7 @@ export function ShopeeSyncModal({
             const variationPayloadParts = publishWithVariations && selectedVariationGroup
                 ? buildShopeeVariationModels(selectedVariationGroup, variationDimensions, {
                     imageIdsByProductId: variationImageIdsByProductId,
+                    gtinMode: gtinMode === 'no_gtin' ? 'no_gtin' : 'child',
                 })
                 : null;
 
@@ -3831,8 +3815,14 @@ export function ShopeeSyncModal({
                 : null;
             const existingVariationModelList = existingVariationModelData?.response?.model || existingVariationModelData?.response?.model_list || [];
             const variationModelListForPublish = variationPayloadParts && resolvedExistingVariationItemId
-                ? mergeExistingShopeeModelIds(variationPayloadParts.model_list, existingVariationModelList)
+                ? mergeShopeeModelIdsBySku(variationPayloadParts.model_list, existingVariationModelList)
                 : variationPayloadParts?.model_list || [];
+            const shouldInitExistingVariation = Boolean(
+                variationPayloadParts &&
+                resolvedExistingVariationItemId &&
+                selectedVariationGroup &&
+                shouldInitTierVariationForExistingItem(existingVariationModelList, selectedVariationGroup.children)
+            );
             if (variationPayloadParts && resolvedExistingVariationItemId) {
                 pushSyncDebug('existing_variation:model_id_merge', {
                     item_id: resolvedExistingVariationItemId,
@@ -3841,15 +3831,26 @@ export function ShopeeSyncModal({
                     matched_skus: variationModelListForPublish
                         .filter((model: any) => Number(model?.model_id) > 0)
                         .map((model: any) => model.model_sku),
+                    next_action: shouldInitExistingVariation ? 'init_tier_variation' : 'update_model',
                 });
             }
             const data = variationPayloadParts
                 ? resolvedExistingVariationItemId
-                    ? await postShopeeDebug('update_model', {
-                        item_id: resolvedExistingVariationItemId,
-                        tier_variation: variationPayloadParts.tier_variation,
-                        model_list: variationModelListForPublish,
-                    }, 'add_item:existing_variation')
+                    ? shouldInitExistingVariation
+                        ? await postShopeeDebugWithRetry('init_tier_variation', {
+                            item_id: resolvedExistingVariationItemId,
+                            tier_variation: variationPayloadParts.tier_variation,
+                            model: variationPayloadParts.model_list,
+                        }, 'existing_variation:init_tier_variation', {
+                            retries: 2,
+                            delaysMs: [5000, 12000],
+                            shouldRetry: (error) => isShopeeGtinValidationRateLimitError(error?.message || error),
+                        })
+                        : await postShopeeDebug('update_model', {
+                            item_id: resolvedExistingVariationItemId,
+                            tier_variation: variationPayloadParts.tier_variation,
+                            model_list: variationModelListForPublish,
+                        }, 'add_item:existing_variation')
                     : await publishShopeeVariationItem(basePayload, finalPayload, {
                         tier_variation: variationPayloadParts.tier_variation,
                         model_list: variationModelListForPublish,
@@ -3866,6 +3867,8 @@ export function ShopeeSyncModal({
             const videoUploadIdsForPostPublish = data?.omitted_video_upload_id ? [] : videoUploadIdList;
             let publishedModelList: any[] = [];
             let shouldKeepDebugOpen = false;
+            let variationModelListVerificationFailed = false;
+            let missingPublishedVariationSkus: string[] = [];
             if (shopeeItemId) {
                 try {
                     const verification = await getShopeeDebug('get_item_base_info', 'post_publish:verification', {
@@ -3896,6 +3899,15 @@ export function ShopeeSyncModal({
                             item_id: shopeeItemId,
                         });
                         publishedModelList = modelListData?.response?.model || modelListData?.response?.model_list || [];
+                        missingPublishedVariationSkus = selectedVariationGroup
+                            ? getMissingShopeeVariationSkus(selectedVariationGroup.children, publishedModelList)
+                            : [];
+                        pushSyncDebug('post_publish:model_list_summary', {
+                            item_id: shopeeItemId,
+                            expected_skus: selectedVariationGroup?.children.map((child) => child.sku || null) || [],
+                            returned_skus: publishedModelList.map((model: any) => model?.model_sku || null),
+                            missing_skus: missingPublishedVariationSkus,
+                        });
                     }
 
                     if (expectedVideoCandidateCount > 0 && videoUploadIdsForPostPublish.length > 0 && savedVideoCount === 0) {
@@ -3920,7 +3932,16 @@ export function ShopeeSyncModal({
                 } catch (verifyError: any) {
                     pushSyncDebug('post_publish:verification_error', verifyError?.message || verifyError);
                     shouldKeepDebugOpen = true;
+                    if (publishWithVariations) variationModelListVerificationFailed = true;
                 }
+            }
+
+            if (publishWithVariations && variationModelListVerificationFailed) {
+                throw new Error('A Shopee aceitou o envio, mas nao foi possivel confirmar as variacoes. Verifique o debug antes de marcar como publicado.');
+            }
+
+            if (publishWithVariations && missingPublishedVariationSkus.length > 0) {
+                throw new Error(`A Shopee publicou o item ${shopeeItemId}, mas nao retornou estas variacoes: ${missingPublishedVariationSkus.join(', ')}.`);
             }
 
             try {

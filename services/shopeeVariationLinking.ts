@@ -65,3 +65,41 @@ export function matchShopeeModelsBySku(
 
   return matches;
 }
+
+export function getMissingShopeeVariationSkus(
+  products: ShopeeLinkedLocalProduct[],
+  modelList: ShopeeModelListRow[],
+): string[] {
+  const publishedSkus = new Set(modelList.map((model) => cleanSku(model.model_sku)).filter(Boolean));
+  return products
+    .map((product) => clean(product.sku))
+    .filter((sku) => sku && !publishedSkus.has(cleanSku(sku)));
+}
+
+export function mergeShopeeModelIdsBySku<T extends Record<string, any>>(
+  requestedModelList: T[],
+  existingModelList: ShopeeModelListRow[],
+): T[] {
+  const existingBySku = new Map<string, ShopeeModelListRow>();
+  for (const model of Array.isArray(existingModelList) ? existingModelList : []) {
+    const sku = cleanSku(model.model_sku);
+    if (sku && !existingBySku.has(sku)) existingBySku.set(sku, model);
+  }
+
+  return requestedModelList.map((model) => {
+    const sku = cleanSku(model.model_sku);
+    const existing = sku ? existingBySku.get(sku) : null;
+    const modelId = existing ? numericId(existing.model_id) : null;
+    return modelId ? { ...model, model_id: modelId } : model;
+  });
+}
+
+export function shouldInitTierVariationForExistingItem(
+  existingModelList: ShopeeModelListRow[],
+  requestedProducts: ShopeeLinkedLocalProduct[],
+): boolean {
+  const requestedSkuCount = requestedProducts.map((product) => cleanSku(product.sku)).filter(Boolean).length;
+  if (requestedSkuCount <= 1) return false;
+  if (!Array.isArray(existingModelList) || existingModelList.length <= 1) return true;
+  return false;
+}

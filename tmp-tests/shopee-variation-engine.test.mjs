@@ -301,4 +301,26 @@ assert.deepEqual(noGtinPayloadParts.model_list[0], {
   tax_info: { gtin: 'SEM GTIN' },
 });
 
+const forcedNoGtinPayloadParts = buildShopeeVariationModels(groups[0], dimensions, {
+  imageIdsByProductId: { red: 'sg-red', blue: 'sg-blue' },
+  gtinMode: 'no_gtin',
+});
+
+assert.deepEqual(forcedNoGtinPayloadParts.model_list.map((model) => ({
+  model_sku: model.model_sku,
+  gtin_code: model.gtin_code,
+  tax_info: model.tax_info,
+})), [
+  {
+    model_sku: 'CAPA-RN13-RED',
+    gtin_code: 'SEM GTIN',
+    tax_info: { gtin: 'SEM GTIN' },
+  },
+  {
+    model_sku: 'CAPA-RN13-BLUE',
+    gtin_code: 'SEM GTIN',
+    tax_info: { gtin: 'SEM GTIN' },
+  },
+]);
+
 console.log('shopee variation engine tests passed');

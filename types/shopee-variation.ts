@@ -43,6 +43,7 @@ export interface ShopeeVariationValidationResult {
 export interface ShopeeVariationBuildContext {
   imageIdsByProductId: Record<string, string>;
   stockByProductId?: Record<string, number>;
+  gtinMode?: 'child' | 'no_gtin';
 }
 
 export interface ShopeeVariationPayloadParts {

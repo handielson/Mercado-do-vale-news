@@ -19,7 +19,7 @@ assert.match(page, /findExistingShopeeItemIdForGroup/, 'ShopeePage must detect s
 assert.match(page, /Adicionar variacao ao anuncio existente/, 'UI must show existing-listing variation action');
 assert.match(page, /rawSelectedVariationGroup/, 'existing-listing detection should prefer the selected full variation group');
 assert.match(page, /existing_variation:model_list_before_update/, 'existing variation update should fetch current Shopee models before update_model');
-assert.match(page, /mergeExistingShopeeModelIds/, 'existing variation update should preserve model_id for already published SKUs');
+assert.match(page, /mergeShopeeModelIdsBySku/, 'existing variation update should preserve model_id for already published SKUs');
 assert.match(page, /existing_variation:model_id_merge/, 'existing variation update should log which SKUs were matched to model_id');
 assert.match(page, /duplicate_variation:model_list_before_update/, 'duplicate recovery should inspect existing Shopee models before init_tier_variation');
 assert.match(page, /duplicate_variation:update_existing_models/, 'duplicate recovery should update existing models when duplicate item already has variations');
