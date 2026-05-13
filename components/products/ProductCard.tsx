@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Barcode, Edit, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2 } from 'lucide-react';
+import { Barcode, Edit, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { Company } from '../../types/company';
@@ -9,6 +9,7 @@ import { cn } from '../../utils/cn';
 import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
+import { ProductQuickTagsModal } from './ProductQuickTagsModal';
 import { supabase } from '../../services/supabase';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
@@ -149,6 +150,14 @@ const pollSynologyUploadStatus = async (uploadId: string, token: string | undefi
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect }) => {
     const [fetchedImages, setFetchedImages] = useState<string[]>([]);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
+    // Tags de cross-sell vivem no modelo. Lemos do produto (que herda via specs)
+    // pra exibir contagem sem carregar o modelo. O modal carrega o modelo só ao abrir.
+    const [currentTags, setCurrentTags] = useState<string[]>(() => {
+        const raw = product.specs?.tags_venda;
+        if (Array.isArray(raw)) return raw.filter((t: any) => typeof t === 'string' && t.trim());
+        return [];
+    });
     const [currentStatus, setCurrentStatus] = useState<ProductStatus>(product.status);
     const [currentStock, setCurrentStock] = useState<number | undefined>(product.stock_quantity);
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
@@ -733,6 +742,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             </button>
                         )}
                         <button
+                            onClick={(e) => { e.stopPropagation(); setIsTagsModalOpen(true); }}
+                            className="relative shrink-0 p-1.5 hover:bg-purple-50 rounded-lg transition-colors group"
+                            title={currentTags.length > 0 ? `${currentTags.length} tag(s) aplicada(s)` : 'Gerenciar tags'}
+                        >
+                            <Tags className="w-4 h-4 text-slate-400 group-hover:text-purple-600" />
+                            {currentTags.length > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                    {currentTags.length}
+                                </span>
+                            )}
+                        </button>
+                        <button
                             onClick={() => onEdit?.(product)}
                             className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
                             title="Editar produto"
@@ -906,6 +927,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             </button>
                         )}
                         <button
+                            onClick={(e) => { e.stopPropagation(); setIsTagsModalOpen(true); }}
+                            className="relative p-1.5 hover:bg-purple-50 rounded-lg transition-colors group"
+                            title={currentTags.length > 0 ? `${currentTags.length} tag(s) aplicada(s)` : 'Gerenciar tags'}
+                        >
+                            <Tags className="w-4 h-4 text-slate-400 group-hover:text-purple-600" />
+                            {currentTags.length > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                    {currentTags.length}
+                                </span>
+                            )}
+                        </button>
+                        <button
                             onClick={() => onEdit?.(product)}
                             className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
                             title="Editar produto"
@@ -1040,6 +1073,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 isOpen={isPrintModalOpen}
                 onClose={() => setIsPrintModalOpen(false)}
                 product={product}
+            />
+
+            {/* Quick Tags Modal */}
+            <ProductQuickTagsModal
+                product={product}
+                isOpen={isTagsModalOpen}
+                onClose={() => setIsTagsModalOpen(false)}
+                onSaved={(tagIds) => setCurrentTags(tagIds)}
             />
 
             {isShopeeModalOpen && (

@@ -48,6 +48,33 @@ export function filterAdminProducts(products: Product[], filters: ProductFilters
         filtered = filtered.filter(product => product.is_parent);
     }
 
+    if (filters.brand && filters.brand !== 'all') {
+        const target = filters.brand.toLowerCase();
+        filtered = filtered.filter(product => (product.brand || '').toLowerCase() === target);
+    }
+
+    if (filters.categoryId && filters.categoryId !== 'all') {
+        filtered = filtered.filter(product => product.category_id === filters.categoryId);
+    }
+
+    if (filters.shopeeStatus === 'synced') {
+        filtered = filtered.filter(product => {
+            const id = (product as any).shopee_item_id;
+            return id != null && String(id).trim() !== '' && Number(id) > 0;
+        });
+    } else if (filters.shopeeStatus === 'not_synced') {
+        filtered = filtered.filter(product => {
+            const id = (product as any).shopee_item_id;
+            return !id || String(id).trim() === '' || Number(id) <= 0;
+        });
+    }
+
+    if (filters.videoStatus === 'with_video') {
+        filtered = filtered.filter(product => !!((product as any).video_url || '').trim());
+    } else if (filters.videoStatus === 'without_video') {
+        filtered = filtered.filter(product => !((product as any).video_url || '').trim());
+    }
+
     filtered.sort((a, b) => {
         switch (filters.sortBy) {
             case 'newest':

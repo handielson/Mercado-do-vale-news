@@ -146,7 +146,11 @@ export const useProducts = () => {
         status: 'all',
         sortBy: 'newest',
         imageStatus: 'all',
-        parentVisibility: 'hide_parents'
+        parentVisibility: 'hide_parents',
+        brand: 'all',
+        categoryId: 'all',
+        shopeeStatus: 'all',
+        videoStatus: 'all',
     });
 
     // Pagination
