@@ -21,7 +21,9 @@ assert.match(page, /selectBulkReadyProducts[\s\S]*hasBulkPublishStock\(p\)[\s\S]
 assert.match(page, /Atualiza(?:ção|cao|Ã§Ã£o) pronta/, 'bulk page should label already-sent items as update-ready');
 assert.match(page, /Revisar atualiza(?:ção|cao|Ã§Ã£o)/, 'bulk page should label blocked already-sent items as update review');
 assert.match(page, /Item ja enviado: sera atualizado na Shopee\./, 'bulk page should explain that linked items will be updated');
-assert.match(page, /bg-sky-50\/50/, 'bulk update rows should use a distinct blue layout');
+assert.match(page, /bg-blue-100\/80/, 'bulk update rows should use a stronger blue highlight');
+assert.match(page, /border-blue-600/, 'bulk update rows should use a strong blue left border');
+assert.match(page, /bg-blue-700 text-white/, 'bulk update status should use a filled blue badge');
 assert.match(docs, /Pre-validacao para envio automatico/, 'Shopee docs should document the automatic prevalidation phase');
 
 console.log('shopee auto publish bulk UI static checks passed');

@@ -209,6 +209,14 @@ type ShopeeBrandOption = {
 const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
 
+const SHOPEE_WARRANTY_TYPE_ATTRIBUTE_IDS = new Set([100370]);
+const SHOPEE_SUPPLIER_WARRANTY_OPTION: ShopeeAttributeOption = {
+    value_id: 2437,
+    label: 'Garantia do Fornecedor',
+    raw_name: 'Supplier Warranty',
+    original_value_name: 'Supplier Warranty',
+};
+
 function normalizePositiveId(value: unknown): number | null {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -279,6 +287,20 @@ function normalizeLookupText(value: unknown): string {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, ' ')
         .trim();
+}
+
+function ensureWarrantyTypeOptions(attributeId: number, options: ShopeeAttributeOption[]): ShopeeAttributeOption[] {
+    if (!SHOPEE_WARRANTY_TYPE_ATTRIBUTE_IDS.has(attributeId)) return options;
+
+    const hasSupplierWarranty = options.some((option) =>
+        option.value_id === SHOPEE_SUPPLIER_WARRANTY_OPTION.value_id ||
+        normalizeLookupText(option.raw_name) === 'supplier warranty' ||
+        normalizeLookupText(option.original_value_name) === 'supplier warranty'
+    );
+
+    if (hasSupplierWarranty) return options;
+
+    return [SHOPEE_SUPPLIER_WARRANTY_OPTION, ...options];
 }
 
 function translateShopeeText(entity: any, fallbackKeys: string[] = []): string {
@@ -364,6 +386,7 @@ function normalizeShopeeAttributes(data: any): ShopeeAttributeField[] {
                     })
                     .filter((option: ShopeeAttributeOption) => option.label)
                 : [];
+            const normalizedOptions = ensureWarrantyTypeOptions(Number(attr?.attribute_id) || 0, options);
 
             const allowsMultiple =
                 inputTypeText.includes('MULTIPLE') ||
@@ -376,7 +399,7 @@ function normalizeShopeeAttributes(data: any): ShopeeAttributeField[] {
             let inputKind: ShopeeAttributeField['input_kind'];
             if (supportSearchValue) {
                 inputKind = 'searchable';
-            } else if (options.length > 0) {
+            } else if (normalizedOptions.length > 0) {
                 inputKind = allowsMultiple ? 'multiselect' : 'select';
             } else {
                 inputKind = 'text';
@@ -389,7 +412,7 @@ function normalizeShopeeAttributes(data: any): ShopeeAttributeField[] {
                     `Atributo ${attr?.attribute_id || ''}`.trim(),
                 mandatory: Boolean(attr?.mandatory ?? attr?.is_mandatory),
                 input_kind: inputKind,
-                attribute_value_list: options,
+                attribute_value_list: normalizedOptions,
                 raw_input_type: rawInputType,
                 support_search_value: supportSearchValue,
             } satisfies ShopeeAttributeField;
@@ -2250,7 +2273,7 @@ export default function ShopeePage() {
                                                 ...(readiness?.warnings || []),
                                             ].slice(0, 3);
                                             return (
-                                                <tr key={p.product_id} className={`${isUpdate ? 'bg-sky-50/50 hover:bg-sky-50 border-l-4 border-sky-400' : 'hover:bg-slate-50/50'} transition-colors`}>
+                                                <tr key={p.product_id} className={`${isUpdate ? 'bg-blue-100/80 hover:bg-blue-100 border-l-4 border-blue-600 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.12)]' : 'hover:bg-slate-50/50'} transition-colors`}>
                                                     <td className="px-4 py-3">
                                                         <input
                                                             type="checkbox"
@@ -2288,11 +2311,11 @@ export default function ShopeePage() {
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         {readiness?.status === 'ready' ? (
-                                                            <span className={`text-xs font-semibold ${isUpdate ? 'text-sky-700' : 'text-green-700'}`}>
+                                                            <span className={`text-xs font-semibold ${isUpdate ? 'inline-flex rounded-full bg-blue-700 text-white px-2 py-1 shadow-sm' : 'text-green-700'}`}>
                                                                 {isUpdate ? 'Atualização pronta' : 'Automatico pronto'}
                                                             </span>
                                                         ) : (
-                                                            <span className={`text-xs font-semibold ${isUpdate ? 'text-blue-700' : 'text-amber-700'}`}>
+                                                            <span className={`text-xs font-semibold ${isUpdate ? 'inline-flex rounded-full bg-blue-700 text-white px-2 py-1 shadow-sm' : 'text-amber-700'}`}>
                                                                 {isUpdate ? 'Revisar atualização' : 'Revisar mídia'}
                                                             </span>
                                                         )}
@@ -2303,7 +2326,7 @@ export default function ShopeePage() {
                                                         ) : (
                                                             <div className="space-y-1">
                                                                 {reasons.map(reason => (
-                                                                    <p key={`${p.product_id}-${reason.code}`} className={`text-xs ${reason.level === 'blocker' ? 'text-red-700' : reason.code === 'update_existing_item' ? 'text-sky-700' : 'text-amber-700'}`}>
+                                                                    <p key={`${p.product_id}-${reason.code}`} className={`text-xs ${reason.level === 'blocker' ? 'text-red-700' : reason.code === 'update_existing_item' ? 'font-medium text-blue-800' : 'text-amber-700'}`}>
                                                                         {reason.message}
                                                                     </p>
                                                                 ))}
