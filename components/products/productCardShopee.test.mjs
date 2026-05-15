@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  buildShopeeProductUrl,
   getShopeeButtonVisualState,
   mapProductToShopeeLocalProduct,
 } from './productCardShopee.js';
@@ -12,6 +13,13 @@ assert.match(syncedState.title, /Shopee/i);
 const pendingState = getShopeeButtonVisualState({ shopee_item_id: null });
 assert.equal(pendingState.isSynced, false);
 assert.equal(pendingState.itemId, null);
+
+assert.equal(
+  buildShopeeProductUrl('12345', 987654321),
+  'https://shopee.com.br/product/12345/987654321',
+);
+assert.equal(buildShopeeProductUrl('', 987654321), null);
+assert.equal(buildShopeeProductUrl('12345', null), null);
 
 const mapped = mapProductToShopeeLocalProduct({
   id: 'prod-1',

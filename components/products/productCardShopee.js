@@ -14,6 +14,15 @@ function normalizePositiveNumber(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+export function buildShopeeProductUrl(shopId, itemId) {
+  const normalizedShopId = normalizeString(shopId).trim();
+  const normalizedItemId = normalizePositiveNumber(itemId);
+
+  if (!normalizedShopId || normalizedItemId === null) return null;
+
+  return `https://shopee.com.br/product/${encodeURIComponent(normalizedShopId)}/${normalizedItemId}`;
+}
+
 export function getShopeeButtonVisualState(product) {
   const itemId = normalizePositiveNumber(product?.shopee_item_id);
 

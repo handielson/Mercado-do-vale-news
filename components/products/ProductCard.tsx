@@ -13,7 +13,7 @@ import { ProductQuickTagsModal } from './ProductQuickTagsModal';
 import { supabase } from '../../services/supabase';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
-import { getShopeeButtonVisualState, mapProductToShopeeLocalProduct } from './productCardShopee.js';
+import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct } from './productCardShopee.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 
 interface ProductCardProps {
@@ -451,7 +451,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 : await refreshShopeeLinkState();
 
             if (existingItemId) {
-                toast.info(`Este produto ja esta sincronizado na Shopee (#${existingItemId}).`);
+                const company = await ensureShopeeCompany();
+                const shopeeUrl = buildShopeeProductUrl(company?.shopee_shop_id, existingItemId);
+                if (!shopeeUrl) {
+                    toast.warning('Shop ID da Shopee nao configurado. Nao foi possivel abrir o anuncio.');
+                    return;
+                }
+
+                window.open(shopeeUrl, '_blank', 'noopener,noreferrer');
                 return;
             }
 
