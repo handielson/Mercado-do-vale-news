@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   applyShopeeStockFields,
   buildShopeeAddItemStockVariants,
+  buildShopeeUpdateStockPayload,
   extractShopeeLocationIds,
   isShopeeSellerStockConstraintError,
 } from './shopeeStockPayloads.js';
@@ -31,6 +32,23 @@ assert.deepEqual(
     { stock_info_v2: { seller_stock: [{ stock: 1 }] } }
   ),
   { item_name: 'Produto', stock_info_v2: { seller_stock: [{ stock: 1 }] } }
+);
+
+assert.deepEqual(
+  buildShopeeUpdateStockPayload({ itemId: 123, stock: 3.8 }),
+  {
+    item_id: 123,
+    stock_list: [
+      {
+        model_id: 0,
+        seller_stock: [
+          {
+            stock: 3,
+          },
+        ],
+      },
+    ],
+  }
 );
 
 assert.equal(

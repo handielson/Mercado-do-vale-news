@@ -12,6 +12,7 @@ assert.match(page, /shopeeVariationEngine/, 'Shopee page should import the varia
 assert.match(page, /variationGroups/, 'Shopee page should discover selectable variation groups');
 assert.match(page, /selectedVariationGroupId/, 'Shopee modal should track the selected variation group');
 assert.match(page, /buildShopeeVariationModels/, 'publish flow should build tier_variation and model_list');
+assert.match(page, /buildShopeeUpdateStockPayload/, 'simple item publish/update should build an explicit update_stock payload');
 assert.match(page, /tier_variation/, 'add_item payload should include Shopee tier variations');
 assert.match(page, /model_list/, 'add_item payload should include Shopee model list');
 assert.match(page, /Publicar como anuncio com variacoes/, 'operator should explicitly opt in to variation publish');
@@ -35,6 +36,7 @@ assert.match(page, /getProductsByParentId/, 'Shopee modal should fetch missing v
 assert.doesNotMatch(page, /seller_stock:\s*undefined/, 'variation add_item payload must not send a null seller_stock field');
 assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*variationPayload,\s*'add_item:variation',[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'variation add_item should retry transient Shopee GTIN rate limits');
 assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*payload,\s*`add_item:\$\{variant\.key\}`,[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'simple add_item should retry transient Shopee GTIN rate limits');
+assert.match(page, /postShopeeDebug\('update_stock',\s*stockPayload,\s*'post_publish:update_stock'\)/, 'simple item publish/update must explicitly sync stock after Shopee accepts the item');
 assert.match(page, /postShopeeDebugWithRetry\('add_item',\s*retryPayload,\s*`add_item:\$\{variant\.key\}:without_video`,[\s\S]*shouldRetry:\s*\(error\)\s*=>\s*isShopeeGtinValidationRateLimitError\(error\?\.message\s*\|\|\s*error\)/, 'video fallback add_item should also retry transient Shopee GTIN rate limits');
 assert.match(page, /isShopeeAttributeValidationError/, 'add_item should detect Shopee category attribute validation failures');
 assert.match(page, /add_item:attribute_retry_without_optional_custom_values/, 'add_item should retry without optional custom-value attributes after Shopee attribute validation failures');

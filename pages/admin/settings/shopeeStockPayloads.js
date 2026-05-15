@@ -96,6 +96,18 @@ export function applyShopeeStockFields(basePayload, stockFields) {
   };
 }
 
+export function buildShopeeUpdateStockPayload({ itemId, stock }) {
+  return {
+    item_id: Number(itemId),
+    stock_list: [
+      {
+        model_id: 0,
+        seller_stock: buildSellerStockEntries(stock),
+      },
+    ],
+  };
+}
+
 export function isShopeeSellerStockConstraintError(message) {
   const normalized = String(message || '').toLowerCase();
   return normalized.includes('seller_stock') && normalized.includes('must not null');

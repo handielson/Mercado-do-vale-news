@@ -20,6 +20,7 @@ import { resolveShopeeSyncDefaults } from './shopeeSyncDefaults.js';
 import {
     applyShopeeStockFields,
     buildShopeeAddItemStockVariants,
+    buildShopeeUpdateStockPayload,
     extractShopeeLocationIds,
     isShopeeSellerStockConstraintError,
 } from './shopeeStockPayloads.js';
@@ -4052,6 +4053,19 @@ export function ShopeeSyncModal({
             let missingPublishedVariationSkus: string[] = [];
             if (shopeeItemId) {
                 try {
+                    if (!publishWithVariations) {
+                        const stockPayload = buildShopeeUpdateStockPayload({
+                            itemId: shopeeItemId,
+                            stock: parsedStock,
+                        });
+                        const stockUpdate = await postShopeeDebug('update_stock', stockPayload, 'post_publish:update_stock');
+                        pushSyncDebug('post_publish:update_stock_summary', {
+                            item_id: shopeeItemId,
+                            stock: parsedStock,
+                            response: stockUpdate?.response || null,
+                        });
+                    }
+
                     const verification = await getShopeeDebug('get_item_base_info', 'post_publish:verification', {
                         item_id_list: shopeeItemId,
                     });
