@@ -5633,7 +5633,10 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        warranty_type, warranty_template_id,
        ${imgCol},
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
+       slug, origin, specs, custom_fields, kits,
+       offer_type, offer_parent_product_id, offer_visibility,
+       shopee_strategy, shopee_offer_status, shopee_offer_error,
+       exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans, description,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
@@ -5642,7 +5645,10 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
-       slug, origin, specs, custom_fields, kits, exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
+       slug, origin, specs, custom_fields, kits,
+       offer_type, offer_parent_product_id, offer_visibility,
+       shopee_strategy, shopee_offer_status, shopee_offer_error,
+       exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
 
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
@@ -5872,8 +5878,10 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           ncm, cest, origin, bling_id, bling_parent_id, parent_id,
           video_url, track_inventory, is_gift, is_virtual,
           warranty_type, warranty_template_id, company_id, kits,
+          offer_type, offer_parent_product_id, offer_visibility,
+          shopee_strategy, shopee_offer_status, shopee_offer_error,
           meta_title, meta_description, keywords
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=IF(VALUES(name) IS NULL, name, VALUES(name)),
           slug=IF(VALUES(slug) IS NULL, slug, VALUES(slug)),
@@ -5911,6 +5919,12 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           warranty_type=IF(VALUES(warranty_type) IS NULL, warranty_type, VALUES(warranty_type)),
           warranty_template_id=IF(VALUES(warranty_template_id) IS NULL, warranty_template_id, VALUES(warranty_template_id)),
           kits=IF(VALUES(kits) IS NULL, kits, VALUES(kits)),
+          offer_type=VALUES(offer_type),
+          offer_parent_product_id=VALUES(offer_parent_product_id),
+          offer_visibility=VALUES(offer_visibility),
+          shopee_strategy=VALUES(shopee_strategy),
+          shopee_offer_status=VALUES(shopee_offer_status),
+          shopee_offer_error=VALUES(shopee_offer_error),
           meta_title=IF(VALUES(meta_title) IS NULL, meta_title, VALUES(meta_title)),
           meta_description=IF(VALUES(meta_description) IS NULL, meta_description, VALUES(meta_description)),
           keywords=IF(VALUES(keywords) IS NULL, keywords, VALUES(keywords)),
@@ -5931,6 +5945,8 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           optionalBool(p.track_inventory), optionalBool(p.is_gift), optionalBool(p.is_virtual),
           p.warranty_type ?? null, p.warranty_template_id || null,
           p.company_id || null, jsonStr(p.kits),
+          p.offer_type || null, p.offer_parent_product_id || null, p.offer_visibility || 'visible',
+          p.shopee_strategy || 'variation', p.shopee_offer_status || null, p.shopee_offer_error || null,
           p.meta_title || null, p.meta_description || null, p.keywords || null,
         ]
       );
@@ -6405,13 +6421,17 @@ fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
         id, name, slug, sku, is_combo, combo_discount_type, combo_discount_value,
         price_retail, price_wholesale, price_cost, price_reseller,
         status, track_inventory, images, category_id, brand,
-        description, specs, dimensions, weight_kg, is_virtual
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        description, specs, dimensions, weight_kg, is_virtual,
+        offer_type, offer_parent_product_id, offer_visibility,
+        shopee_strategy, shopee_offer_status, shopee_offer_error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, p.name, p.slug || null, p.sku || null, 1, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
         p.status || 'active', p.track_inventory ? 1 : 0, jsonStr(p.images), p.category_id || null, p.brand || null,
-        sanitizeDescription(p.description), jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0
+        sanitizeDescription(p.description), jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0,
+        p.offer_type || null, p.offer_parent_product_id || null, p.offer_visibility || 'visible',
+        p.shopee_strategy || 'variation', p.shopee_offer_status || null, p.shopee_offer_error || null
       ]
     );
 
@@ -6445,13 +6465,18 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
       `UPDATE products SET 
         name=?, slug=?, sku=?, is_combo=1, combo_discount_type=?, combo_discount_value=?,
         price_retail=?, price_wholesale=?, price_cost=?, price_reseller=?,
-        status=?, images=?, category_id=?, brand=?, description=?, specs=?, dimensions=?, weight_kg=?, is_virtual=?, updated_at=CURRENT_TIMESTAMP
+        status=?, images=?, category_id=?, brand=?, description=?, specs=?, dimensions=?, weight_kg=?, is_virtual=?,
+        offer_type=?, offer_parent_product_id=?, offer_visibility=?,
+        shopee_strategy=?, shopee_offer_status=?, shopee_offer_error=?,
+        updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
       [
         p.name, p.slug || null, p.sku || null, p.combo_discount_type || null, p.combo_discount_value || 0,
         p.price_retail || 0, p.price_wholesale || 0, p.price_cost || 0, p.price_reseller || 0,
         p.status || 'active', jsonStr(p.images), p.category_id || null, p.brand || null,
         sanitizeDescription(p.description), jsonStr({ technical_specifications: p.technical_specifications, tags: p.tags }), jsonStr(p.dimensions), p.weight_kg || null, p.is_virtual ? 1 : 0,
+        p.offer_type || null, p.offer_parent_product_id || null, p.offer_visibility || 'visible',
+        p.shopee_strategy || 'variation', p.shopee_offer_status || null, p.shopee_offer_error || null,
         comboId
       ]
     );
@@ -6478,6 +6503,47 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
 
 
 // ─── Image Bank ────────────────────────────────────────────────────────────
+
+// Offers (read/write)
+fastify.get('/offers', async (req, reply) => {
+  const [rows] = await pool.query(
+    `SELECT *,
+      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+     FROM products
+     WHERE offer_type IS NOT NULL
+     ORDER BY updated_at DESC`
+  );
+  return rows.map(r => ({
+    ...r,
+    images: typeof r.images === 'string' ? JSON.parse(r.images || '[]') : (r.images ?? []),
+    specs: typeof r.specs === 'string' ? JSON.parse(r.specs || '{}') : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans || '[]') : r.alternative_eans,
+    custom_fields: typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields || '{}') : r.custom_fields,
+    kits: typeof r.kits === 'string' ? JSON.parse(r.kits || '[]') : r.kits,
+  }));
+});
+
+fastify.post('/offers', { preHandler: requireSyncKey }, async (req, reply) => {
+  const response = await fastify.inject({
+    method: 'POST',
+    url: '/combos',
+    headers: { 'x-vps-sync-key': req.headers['x-vps-sync-key'] },
+    payload: { ...(req.body || {}), is_combo: true },
+  });
+  const payload = response.body ? JSON.parse(response.body) : {};
+  return reply.code(response.statusCode).send(payload);
+});
+
+fastify.put('/offers/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const response = await fastify.inject({
+    method: 'PUT',
+    url: `/combos/${req.params.id}`,
+    headers: { 'x-vps-sync-key': req.headers['x-vps-sync-key'] },
+    payload: req.body || {},
+  });
+  const payload = response.body ? JSON.parse(response.body) : {};
+  return reply.code(response.statusCode).send(payload);
+});
 
 // POST /images/upload — salva arquivo no filesystem
 // multipart/form-data: file (binary) + path (string)

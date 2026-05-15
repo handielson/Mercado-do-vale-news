@@ -532,6 +532,36 @@ class VpsApiService {
     return this.fetchSafe<any[]>(`/products/${id}/combo`, true);
   }
 
+  async getOffers(): Promise<any[]> {
+    return this.fetchSafe<any[]>('/offers', true) || [];
+  }
+
+  async createOffer(payload: unknown): Promise<{ok: boolean, id?: string}> {
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(proxyUrl('/offers', 'POST'), {
+        method: 'POST',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) return { ok: false };
+      return await res.json();
+    } catch { return {ok:false}; }
+  }
+
+  async updateOffer(id: string, payload: unknown): Promise<{ok: boolean}> {
+    this.invalidateProductCache();
+    try {
+      const res = await fetch(proxyUrl(`/offers/${id}`, 'PUT'), {
+        method: 'PUT',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) return { ok: false };
+      return await res.json();
+    } catch { return {ok:false}; }
+  }
+
   async getFavoritesRanking(limit: number = 100): Promise<any[]> {
     const res = await this.fetchSafe<any[]>(`/admin/reports/favorites-ranking?limit=${limit}`, false);
     return res || [];
