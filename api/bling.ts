@@ -615,6 +615,8 @@ export default async function handler(req: any, res: any) {
 
             const allowedExactHosts = new Set<string>([
                 'orgbling.s3.amazonaws.com',
+                'i.imgur.com',
+                'imgur.com',
             ]);
             const allowedSuffixes: string[] = [
                 'xiaomipetrolina.com.br',
@@ -1260,5 +1262,4 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|nf-detail|sync-prices-vps|product-update-fiscal|reconcile' });
 
 }
-
 
