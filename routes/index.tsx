@@ -300,6 +300,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/admin/products/offers",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ProductCombosPage initialOfferMode /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
     path: "/admin/products/bulk",
     element: (
       <ProtectedRoute requireAdmin={true}>

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode } from 'lucide-react';
+import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
 import { ProductList } from '../../../components/products/ProductList';
@@ -244,6 +244,13 @@ export const ProductListPage: React.FC = () => {
                     >
                         <Package className="w-3.5 h-3.5" />
                         Cadastro em Massa
+                    </button>
+                    <button
+                        onClick={() => navigate('/admin/products/offers')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors shadow-sm text-xs font-medium"
+                    >
+                        <Store className="w-3.5 h-3.5" />
+                        Ofertas
                     </button>
                     <button
                         onClick={() => navigate('/admin/products/combos')}

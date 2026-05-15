@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Package, Plus, Search, Trash2, Edit2, ChevronLeft, Save, X, Calculator } from 'lucide-react';
+import { Package, Plus, Search, Trash2, Edit2, ChevronLeft, Save, X, Calculator, Store } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { supabase } from '../../../services/supabase';
 import { formatCurrency } from '../../../utils/saleCalculations';
+import {
+  buildDefaultOfferSku,
+  calculateOfferStock,
+  chooseShopeeOfferStrategy,
+  hasMissingBlingLink,
+} from '../../../services/productOfferEngine';
+import type { ProductOfferShopeeStrategy, ProductOfferType, ProductOfferVisibility } from '../../../types/product-offer';
 
 interface ProductComboFormData {
   id?: string;
@@ -20,6 +27,12 @@ interface ProductComboFormData {
   price_wholesale: number;
   status: 'active' | 'inactive';
   track_inventory: boolean;
+  offer_type?: ProductOfferType | null;
+  offer_parent_product_id?: string | null;
+  offer_visibility?: ProductOfferVisibility;
+  shopee_strategy?: ProductOfferShopeeStrategy;
+  shopee_offer_status?: string | null;
+  shopee_offer_error?: string | null;
   combo_children: Array<{
     id: string;
     quantity: number;
@@ -44,11 +57,16 @@ const generateSlug = (name: string) => {
     .replace(/(^-|-$)+/g, "");
 };
 
-export const ProductCombosPage: React.FC = () => {
+type ProductCombosPageProps = {
+  initialOfferMode?: boolean;
+};
+
+export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOfferMode = false }) => {
   const navigate = useNavigate();
   const [combos, setCombos] = useState<any[]>([]);
   const [allProducts, setAllProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'all' | 'combos' | 'offers'>(initialOfferMode ? 'offers' : 'all');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCombo, setEditingCombo] = useState<ProductComboFormData | null>(null);
@@ -58,13 +76,24 @@ export const ProductCombosPage: React.FC = () => {
   const [childSearchTerm, setChildSearchTerm] = useState('');
   const [imageStyle, setImageStyle] = useState<'auto' | 'mosaic' | 'manual'>('auto');
 
+  const editingOfferItems = useMemo(() => {
+    if (!editingCombo?.offer_type) return [];
+    return editingCombo.combo_children.map(child => ({
+      product: allProducts.find(p => p.id === child.id) || child,
+      quantity: child.quantity,
+    }));
+  }, [allProducts, editingCombo]);
+
+  const editingOfferStock = useMemo(() => calculateOfferStock(editingOfferItems), [editingOfferItems]);
+  const editingOfferHasMissingBling = useMemo(() => hasMissingBlingLink(editingOfferItems), [editingOfferItems]);
+
   const loadData = async () => {
     setLoading(true);
     try {
       const prods = await vpsApiService.getProducts({ noCache: true, limit: 9999 });
       if (prods) {
-        setAllProducts(prods.filter(p => !p.is_combo));
-        setCombos(prods.filter(p => p.is_combo));
+        setAllProducts(prods.filter(p => !p.is_combo && !p.offer_type));
+        setCombos(prods.filter(p => p.is_combo || p.offer_type));
       }
     } catch (e) {
       toast.error('Erro ao carregar combos');
@@ -89,6 +118,34 @@ export const ProductCombosPage: React.FC = () => {
       price_wholesale: 0,
       status: 'active',
       track_inventory: true,
+      offer_type: null,
+      offer_visibility: 'visible',
+      shopee_strategy: 'variation',
+      combo_children: [],
+      tags: []
+    });
+    setImageStyle('auto');
+    setIsModalOpen(true);
+  };
+
+  const openNewOfferModal = () => {
+    setEditingCombo({
+      name: '',
+      sku: '',
+      combo_discount_type: 'percentage',
+      combo_discount_value: 0,
+      price_cost: 0,
+      price_retail: 0,
+      price_reseller: 0,
+      price_wholesale: 0,
+      status: 'active',
+      track_inventory: true,
+      offer_type: 'quantity_kit',
+      offer_parent_product_id: null,
+      offer_visibility: 'visible',
+      shopee_strategy: 'variation',
+      shopee_offer_status: null,
+      shopee_offer_error: null,
       combo_children: [],
       tags: []
     });
@@ -112,6 +169,12 @@ export const ProductCombosPage: React.FC = () => {
         ...combo,
         combo_discount_type: combo.combo_discount_type || 'percentage',
         combo_discount_value: combo.combo_discount_value || 0,
+        offer_type: combo.offer_type || null,
+        offer_parent_product_id: combo.offer_parent_product_id || null,
+        offer_visibility: combo.offer_visibility || 'visible',
+        shopee_strategy: combo.shopee_strategy || 'variation',
+        shopee_offer_status: combo.shopee_offer_status || null,
+        shopee_offer_error: combo.shopee_offer_error || null,
         combo_children: children?.map(c => ({
           id: c.id,
           name: c.name,
@@ -134,9 +197,17 @@ export const ProductCombosPage: React.FC = () => {
 
   const handleSaveCombo = async () => {
     if (!editingCombo) return;
-    if (!editingCombo.name) return toast.error('Nome do combo é obrigatório');
     if (!editingCombo.combo_children || editingCombo.combo_children.length === 0) {
       return toast.error('Adicione pelo menos um produto ao combo');
+    }
+
+    const isOffer = Boolean(editingCombo.offer_type);
+    if (!isOffer && !editingCombo.name) return toast.error('Nome do combo é obrigatório');
+    if (editingCombo.offer_type === 'quantity_kit' && editingCombo.combo_children.length !== 1) {
+      return toast.error('Kit de quantidade deve ter exatamente um produto base');
+    }
+    if (editingCombo.offer_type === 'product_combo' && editingCombo.combo_children.length < 2) {
+      return toast.error('Combo de oferta deve ter pelo menos dois produtos');
     }
 
     setSaving(true);
@@ -224,14 +295,47 @@ export const ProductCombosPage: React.FC = () => {
       const finalDescription = editingCombo.description?.trim() || mergedDescription;
       const finalTechSpecs = editingCombo.technical_specifications?.trim() || mergedSpecs;
 
+      const offerItems = editingCombo.combo_children.map(child => ({
+        product: allProducts.find(p => p.id === child.id) || child,
+        quantity: child.quantity,
+      }));
+      const primaryItem = offerItems[0];
+      const primaryProduct = primaryItem?.product as any;
+      const offerType = editingCombo.offer_type || null;
+      const autoOfferName = offerType === 'quantity_kit'
+        ? `${primaryItem?.quantity || 1}x ${primaryProduct?.name || 'Produto'}`
+        : `Kit ${editingCombo.combo_children.map(c => c.name).filter(Boolean).join(' + ')}`;
+      const autoOfferSku = offerType
+        ? buildDefaultOfferSku(
+            primaryProduct?.sku || editingCombo.sku,
+            offerType,
+            primaryItem?.quantity || 1,
+            editingCombo.combo_children.map(c => c.sku || c.name).filter(Boolean).join('-'),
+          )
+        : editingCombo.sku;
+      const offerStrategy = isOffer
+        ? (editingCombo.shopee_strategy || chooseShopeeOfferStrategy({
+            existingDimensionCount: offerType === 'quantity_kit' ? 1 : 0,
+            requestedOfferDimensionCount: 1,
+          }))
+        : null;
+      const finalName = editingCombo.name?.trim() || autoOfferName;
+
       const payload = {
         ...editingCombo,
         is_combo: true,
-        slug: editingCombo.slug || generateSlug(editingCombo.name),
+        name: finalName,
+        sku: editingCombo.sku?.trim() || autoOfferSku,
+        slug: editingCombo.slug || generateSlug(finalName),
         description: finalDescription,
         technical_specifications: finalTechSpecs,
         images: finalImages,
         tags: currentTags,
+        track_inventory: true,
+        offer_type: offerType,
+        offer_parent_product_id: isOffer ? primaryProduct?.id || null : null,
+        offer_visibility: isOffer ? (editingCombo.offer_visibility || 'visible') : null,
+        shopee_strategy: offerStrategy,
         weight_kg: total_weight_kg || 0.3,
         dimensions: {
             width_cm: total_width || 15,
@@ -242,13 +346,17 @@ export const ProductCombosPage: React.FC = () => {
 
       let res;
       if (editingCombo.id) {
-        res = await vpsApiService.updateCombo(editingCombo.id, payload);
+        res = isOffer
+          ? await vpsApiService.updateOffer(editingCombo.id, payload)
+          : await vpsApiService.updateCombo(editingCombo.id, payload);
       } else {
-        res = await vpsApiService.createCombo(payload);
+        res = isOffer
+          ? await vpsApiService.createOffer(payload)
+          : await vpsApiService.createCombo(payload);
       }
 
       if (res && res.ok) {
-        toast.success('Combo salvo com sucesso!', { id: toastId });
+        toast.success(isOffer ? 'Oferta salva com sucesso!' : 'Combo salvo com sucesso!', { id: toastId });
         setIsModalOpen(false);
         loadData();
       } else {
@@ -286,8 +394,26 @@ export const ProductCombosPage: React.FC = () => {
       discount = editingCombo.combo_discount_value * 100; // Assuming value is in Reais but we need centavos
     }
 
+    const firstChild = editingCombo.combo_children[0];
+    const firstProduct = firstChild ? (allProducts.find(p => p.id === firstChild.id) || firstChild) : null;
+    const autoOfferName = editingCombo.offer_type === 'quantity_kit' && firstProduct
+      ? `${firstChild.quantity}x ${firstProduct.name || 'Produto'}`
+      : editingCombo.offer_type === 'product_combo'
+        ? `Kit ${editingCombo.combo_children.map(c => c.name).filter(Boolean).join(' + ')}`
+        : editingCombo.name;
+    const autoOfferSku = editingCombo.offer_type && firstProduct
+      ? buildDefaultOfferSku(
+          firstProduct.sku || editingCombo.sku,
+          editingCombo.offer_type,
+          firstChild.quantity,
+          editingCombo.combo_children.map(c => c.sku || c.name).filter(Boolean).join('-'),
+        )
+      : editingCombo.sku;
+
     setEditingCombo({
       ...editingCombo,
+      name: editingCombo.name || autoOfferName,
+      sku: editingCombo.sku || autoOfferSku,
       price_cost: sumCost,
       price_retail: Math.max(0, sumRetail - discount),
       price_reseller: Math.max(0, sumReseller - discount),
@@ -299,6 +425,17 @@ export const ProductCombosPage: React.FC = () => {
 
   const addChildProduct = (prod: any) => {
     if (!editingCombo) return;
+    if (editingCombo.offer_type === 'quantity_kit') {
+      setEditingCombo({
+        ...editingCombo,
+        offer_parent_product_id: prod.id,
+        combo_children: [
+          { id: prod.id, name: prod.name, sku: prod.sku, quantity: editingCombo.combo_children[0]?.quantity || 2, price_retail: prod.price_retail, stock_quantity: prod.stock_quantity }
+        ]
+      });
+      setChildSearchTerm('');
+      return;
+    }
     const exists = editingCombo.combo_children.find(c => c.id === prod.id);
     if (exists) {
       toast.info('Produto já está no combo');
@@ -331,8 +468,12 @@ export const ProductCombosPage: React.FC = () => {
   };
 
   const filteredCombos = useMemo(() => {
-    return combos.filter(c => c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.sku?.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [combos, searchTerm]);
+    return combos.filter(c => {
+      if (viewMode === 'offers' && !c.offer_type) return false;
+      if (viewMode === 'combos' && c.offer_type) return false;
+      return c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || c.sku?.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+  }, [combos, searchTerm, viewMode]);
 
   const filteredProductsToSelect = useMemo(() => {
     if (!childSearchTerm) return [];
@@ -353,31 +494,57 @@ export const ProductCombosPage: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
               <Package className="text-teal-600" />
-              Kits & Combos
+              Kits, Ofertas & Combos
             </h1>
-            <p className="text-sm text-slate-500 mt-1">Crie pacotes de produtos sincronizados com o estoque real</p>
+            <p className="text-sm text-slate-500 mt-1">Crie pacotes para o site e ofertas que podem refletir na Shopee</p>
           </div>
         </div>
-        <button
-          onClick={openNewComboModal}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
-        >
-          <Plus size={20} />
-          <span className="font-medium">Novo Combo</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openNewOfferModal}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors shadow-sm"
+          >
+            <Store size={20} />
+            <span className="font-medium">Nova Oferta</span>
+          </button>
+          <button
+            onClick={openNewComboModal}
+            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
+          >
+            <Plus size={20} />
+            <span className="font-medium">Novo Combo</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-        <div className="p-4 border-b border-slate-100">
+        <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
           <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Buscar combos..."
+              placeholder="Buscar kits, ofertas ou combos..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
+          </div>
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+            {[
+              { id: 'all', label: 'Todos' },
+              { id: 'offers', label: 'Ofertas' },
+              { id: 'combos', label: 'Combos' },
+            ].map(option => (
+              <button
+                key={option.id}
+                onClick={() => setViewMode(option.id as typeof viewMode)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === option.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -386,8 +553,8 @@ export const ProductCombosPage: React.FC = () => {
         ) : filteredCombos.length === 0 ? (
           <div className="p-8 text-center text-slate-400 flex flex-col items-center">
             <Package size={48} className="text-slate-200 mb-4" />
-            <p className="text-lg font-medium text-slate-600">Nenhum combo encontrado</p>
-            <p>Crie um pacote de produtos para oferecer descontos agregados.</p>
+            <p className="text-lg font-medium text-slate-600">Nenhum registro encontrado</p>
+            <p>Crie uma oferta para site/Shopee ou um combo interno.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -396,9 +563,11 @@ export const ProductCombosPage: React.FC = () => {
                 <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                   <th className="p-4 font-semibold uppercase tracking-wider">Nome</th>
                   <th className="p-4 font-semibold uppercase tracking-wider">SKU</th>
+                  <th className="p-4 font-semibold uppercase tracking-wider">Tipo</th>
                   <th className="p-4 font-semibold uppercase tracking-wider text-right">Preço (Varejo)</th>
                   <th className="p-4 font-semibold uppercase tracking-wider text-right">Desconto Config</th>
                   <th className="p-4 font-semibold uppercase tracking-wider text-center">Estoque Estimado</th>
+                  <th className="p-4 font-semibold uppercase tracking-wider text-center">Shopee</th>
                   <th className="p-4 font-semibold uppercase tracking-wider text-center">Status</th>
                   <th className="p-4 font-semibold uppercase tracking-wider w-20">Ações</th>
                 </tr>
@@ -419,6 +588,13 @@ export const ProductCombosPage: React.FC = () => {
                       </a>
                     </td>
                     <td className="p-4 text-slate-500 text-sm whitespace-nowrap">{combo.sku || '-'}</td>
+                    <td className="p-4">
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+                        combo.offer_type ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'
+                      }`}>
+                        {combo.offer_type === 'quantity_kit' ? 'Kit qtd.' : combo.offer_type === 'product_combo' ? 'Oferta combo' : 'Combo'}
+                      </span>
+                    </td>
                     <td className="p-4 text-right font-medium text-teal-700">
                       {formatCurrency(combo.price_retail)}
                     </td>
@@ -429,6 +605,18 @@ export const ProductCombosPage: React.FC = () => {
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${combo.stock_quantity > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {combo.stock_quantity} un
                       </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      {combo.offer_type ? (
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
+                          combo.shopee_strategy === 'variation' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          <Store size={12} />
+                          {combo.shopee_strategy === 'variation' ? 'Variação' : 'Item separado'}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">-</span>
+                      )}
                     </td>
                     <td className="p-4 text-center">
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${combo.status === 'active' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -456,8 +644,8 @@ export const ProductCombosPage: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <Package className="text-teal-600" />
-                {editingCombo.id ? 'Editar Combo' : 'Novo Combo'}
+                {editingCombo.offer_type ? <Store className="text-orange-600" /> : <Package className="text-teal-600" />}
+                {editingCombo.id ? (editingCombo.offer_type ? 'Editar Oferta' : 'Editar Combo') : (editingCombo.offer_type ? 'Nova Oferta' : 'Novo Combo')}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-100 rounded-full">
                 <X size={20} />
@@ -468,7 +656,7 @@ export const ProductCombosPage: React.FC = () => {
               {/* Basic Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Nome do Combo</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">{editingCombo.offer_type ? 'Nome da Oferta' : 'Nome do Combo'}</label>
                   <input
                     type="text"
                     value={editingCombo.name}
@@ -478,7 +666,7 @@ export const ProductCombosPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">SKU do Combo</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">{editingCombo.offer_type ? 'SKU da Oferta' : 'SKU do Combo'}</label>
                   <input
                     type="text"
                     value={editingCombo.sku}
@@ -486,6 +674,74 @@ export const ProductCombosPage: React.FC = () => {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
+              </div>
+
+              {/* Offer Mode */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">Tipo de registro</h3>
+                    <p className="text-xs text-slate-500 mt-1">Oferta aparece no site e fica preparada para sincronizar com a Shopee.</p>
+                  </div>
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+                    {[
+                      { id: null, label: 'Combo interno' },
+                      { id: 'quantity_kit', label: 'Kit de quantidade' },
+                      { id: 'product_combo', label: 'Oferta combo' },
+                    ].map(option => (
+                      <button
+                        key={option.label}
+                        type="button"
+                        onClick={() => setEditingCombo({
+                          ...editingCombo,
+                          offer_type: option.id as ProductOfferType | null,
+                          offer_visibility: option.id ? (editingCombo.offer_visibility || 'visible') : undefined,
+                          shopee_strategy: option.id ? (editingCombo.shopee_strategy || 'variation') : undefined,
+                        })}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                          editingCombo.offer_type === option.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {editingCombo.offer_type && (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-semibold uppercase text-slate-500">Estoque oferta</p>
+                      <p className={`mt-1 text-xl font-bold ${editingOfferStock > 0 ? 'text-green-700' : 'text-red-600'}`}>{editingOfferStock} un</p>
+                    </div>
+                    <label className="rounded-lg border border-slate-200 bg-white p-3">
+                      <span className="text-xs font-semibold uppercase text-slate-500">Vitrine site</span>
+                      <select
+                        value={editingCombo.offer_visibility || 'visible'}
+                        onChange={e => setEditingCombo({ ...editingCombo, offer_visibility: e.target.value as ProductOfferVisibility })}
+                        className="mt-2 w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                      >
+                        <option value="visible">Visível</option>
+                        <option value="hidden">Oculto</option>
+                      </select>
+                    </label>
+                    <label className="rounded-lg border border-slate-200 bg-white p-3">
+                      <span className="text-xs font-semibold uppercase text-slate-500">Shopee</span>
+                      <select
+                        value={editingCombo.shopee_strategy || 'variation'}
+                        onChange={e => setEditingCombo({ ...editingCombo, shopee_strategy: e.target.value as ProductOfferShopeeStrategy })}
+                        className="mt-2 w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm"
+                      >
+                        <option value="variation">Variação no anúncio</option>
+                        <option value="separate_item">Anúncio separado</option>
+                      </select>
+                    </label>
+                    <div className={`rounded-lg border p-3 ${editingOfferHasMissingBling ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-green-200 bg-green-50 text-green-700'}`}>
+                      <p className="text-xs font-semibold uppercase">Bling</p>
+                      <p className="mt-2 text-sm font-medium">{editingOfferHasMissingBling ? 'Há item sem vínculo' : 'Itens vinculados'}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Combo Image Style */}
@@ -533,14 +789,16 @@ export const ProductCombosPage: React.FC = () => {
 
               {/* Composition */}
               <div>
-                <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">Itens do Combo</h3>
+                <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">
+                  {editingCombo.offer_type === 'quantity_kit' ? 'Produto base do kit' : 'Itens do Combo'}
+                </h3>
                 
                 {/* Search & Add Child */}
                 <div className="relative mb-4">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                   <input
                     type="text"
-                    placeholder="Buscar produto para adicionar ao combo..."
+                    placeholder={editingCombo.offer_type === 'quantity_kit' ? 'Buscar produto base para o kit...' : 'Buscar produto para adicionar ao combo...'}
                     value={childSearchTerm}
                     onChange={e => setChildSearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-teal-500"
@@ -600,7 +858,7 @@ export const ProductCombosPage: React.FC = () => {
                   </div>
                 ) : (
                   <div className="p-4 border-2 border-dashed border-slate-300 rounded-lg text-center text-slate-500 text-sm">
-                    Nenhum produto adicionado ao combo ainda.
+                    {editingCombo.offer_type === 'quantity_kit' ? 'Escolha o produto base do kit.' : 'Nenhum produto adicionado ao combo ainda.'}
                   </div>
                 )}
               </div>
@@ -705,7 +963,7 @@ export const ProductCombosPage: React.FC = () => {
                 className="flex items-center gap-2 px-6 py-2 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-50"
               >
                 <Save size={20} />
-                {saving ? 'Gravando...' : 'Salvar Combo'}
+                {saving ? 'Gravando...' : (editingCombo.offer_type ? 'Salvar Oferta' : 'Salvar Combo')}
               </button>
             </div>
           </div>
