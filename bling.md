@@ -159,6 +159,10 @@ Destino:
 
 - Supabase: `products.price_retail`, filtrando por `bling_id`.
 - VPS: `PATCH /products/prices-stock`.
+- Quando o evento de preco vem de um produto pai do Bling, o webhook tambem atualiza
+  as variacoes locais cujo `bling_parent_id` aponta para o `bling_id` do pai. O lote
+  enviado para a VPS inclui o SKU do pai e os SKUs filhos, mas propaga somente
+  `price_retail` para os filhos; estoque de pai nao e copiado para variacoes.
 
 Contrato VPS:
 

@@ -63,8 +63,14 @@ assert.match(
 
 assert.match(
   webhookSource,
-  /patchVps\('\/products\/prices-stock',\s*\{\s*products:\s*\[\s*\{\s*sku:\s*resolvedSku,\s*\.\.\.updates\s*\}\s*\]\s*\}\)/,
+  /patchVps\(\s*'\/products\/prices-stock'[\s\S]*buildBlingPriceStockPayload\(priceTargetSkus,/m,
   'product.updated price and stock changes must sync to the VPS commercial fields endpoint using the products array contract',
+);
+
+assert.match(
+  webhookSource,
+  /\.from\('products'\)[\s\S]*\.select\('sku'\)[\s\S]*\.eq\('bling_parent_id',\s*String\(blingId\)\)/m,
+  'parent product price webhooks must look up Bling child SKUs through bling_parent_id',
 );
 
 console.log('bling-webhook regression guard ok');

@@ -16,6 +16,10 @@ Quando o Bling envia `product.updated`, o webhook atualiza os campos disponiveis
 - `products.name` no Supabase e na VPS, quando `data.nome` ou `data.name` vem no payload.
 - `products.price_retail` no Supabase, filtrando pelo `bling_id`.
 - `products.price_retail` na VPS, chamando `PATCH /products/prices-stock` com o contrato em lote `{ "products": [{ "sku": "...", "price_retail": 1499 }] }`.
+- Se o evento de preco for do produto pai do Bling, o webhook procura filhos locais
+  por `bling_parent_id` e envia um lote com o SKU do pai e os SKUs das variacoes.
+  Essa propagacao altera somente `price_retail`; estoque recebido no produto pai
+  nao e replicado nos filhos.
 - `products.stock_quantity` no Supabase e na VPS quando o payload de produto traz estoque (`estoque.saldoFisicoTotal`, `saldoFisicoTotal` ou campos equivalentes).
 
 Exemplo:

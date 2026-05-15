@@ -18,6 +18,12 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { isMercadoPagoWebhook, handleMercadoPagoWebhook } from './_lib/mp-webhook-core.js';
+import {
+    buildBlingPriceStockPayload,
+    buildBlingPriceTargetSkus,
+    pickBlingPriceStockUpdates,
+    shouldFanOutBlingParentPrice,
+} from './_lib/bling-price-targets.js';
 
 const VPS_BASE_URL = process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
 const VPS_SYNC_KEY = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
@@ -301,11 +307,34 @@ export default async function handler(req: any, res: any) {
                 return res.status(200).json({ ok: true, message: 'Nothing to update' });
             }
 
+            let childPriceTargets: any[] = [];
+            if (shouldFanOutBlingParentPrice({ blingId, priceRetail: updates.price_retail })) {
+                const { data: children } = await supabase
+                    .from('products')
+                    .select('sku')
+                    .eq('bling_parent_id', String(blingId));
+                childPriceTargets = Array.isArray(children) ? children : [];
+            }
+
+            const priceTargetSkus = updates.price_retail !== undefined
+                ? buildBlingPriceTargetSkus(resolvedSku, childPriceTargets)
+                : [resolvedSku];
+
             const vpsNameUpdated = updates.name
                 ? await patchVps('/products/name', { sku: resolvedSku, name: updates.name })
                 : true;
-            const vpsPriceUpdated = updates.price_retail !== undefined
-                ? await patchVps('/products/prices-stock', { products: [{ sku: resolvedSku, ...updates }] })
+            const vpsPriceUpdated = Object.keys(pickBlingPriceStockUpdates(updates)).length > 0
+                ? await patchVps(
+                    '/products/prices-stock',
+                    updates.price_retail !== undefined
+                        ? buildBlingPriceStockPayload(priceTargetSkus, {
+                            price_retail: updates.price_retail,
+                            ...(priceTargetSkus.length === 1 && updates.stock_quantity !== undefined
+                                ? { stock_quantity: updates.stock_quantity }
+                                : {}),
+                        })
+                        : { products: [{ sku: resolvedSku, ...pickBlingPriceStockUpdates(updates) }] }
+                )
                 : true;
             const vpsUpdated = vpsNameUpdated && vpsPriceUpdated;
 
@@ -314,8 +343,15 @@ export default async function handler(req: any, res: any) {
                 .update(updates)
                 .eq('bling_id', blingId);
 
-            console.log(`[bling-webhook] product -> SKU=${resolvedSku} name="${resolvedName}" price_retail=${updates.price_retail ?? 'unchanged'} stock_quantity=${updates.stock_quantity ?? 'unchanged'} VPS=${vpsUpdated}`);
-            return res.status(200).json({ ok: true, event, sku: resolvedSku, updates, vpsUpdated });
+            if (updates.price_retail !== undefined && childPriceTargets.length > 0) {
+                await supabase
+                    .from('products')
+                    .update({ price_retail: updates.price_retail })
+                    .eq('bling_parent_id', String(blingId));
+            }
+
+            console.log(`[bling-webhook] product -> SKU=${resolvedSku} targets=${priceTargetSkus.join(',')} name="${resolvedName}" price_retail=${updates.price_retail ?? 'unchanged'} stock_quantity=${updates.stock_quantity ?? 'unchanged'} VPS=${vpsUpdated}`);
+            return res.status(200).json({ ok: true, event, sku: resolvedSku, priceTargetSkus, updates, vpsUpdated });
         }
 
         return res.status(200).json({ ok: true, message: `Event '${event}' not handled` });

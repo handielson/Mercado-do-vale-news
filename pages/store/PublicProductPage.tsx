@@ -82,6 +82,35 @@ export const PublicProductPage: React.FC = () => {
     const textSecondary = catalogTheme?.text_secondary || '#64748b';
     const productVideoPlaylist = useMemo(() => buildProductVideoPlaylist(effectiveVideoUrl), [effectiveVideoUrl]);
     const currentVideoUrl = productVideoPlaylist[videoPlaylistIndex] || effectiveVideoUrl;
+    const formatDisplayPrice = (value: number) => value.toFixed(2).replace('.', ',');
+    const variantPriceRange = useMemo(() => {
+        if (!product || selectedKitQuantity > 1) {
+            return { min: 0, max: 0, hasRange: false };
+        }
+
+        const variantsById = new Map<string, CatalogProduct>();
+        [product as CatalogProduct, ...siblings].forEach((item) => {
+            if (item?.id) variantsById.set(String(item.id), item);
+        });
+
+        const prices = Array.from(variantsById.values())
+            .map((item) => {
+                const price = getEffectivePrice(item, customer) / 100;
+                const discounted = item.discount_percentage
+                    ? price * (1 - item.discount_percentage / 100)
+                    : price;
+                return Number.isFinite(discounted) && discounted > 0 ? discounted : null;
+            })
+            .filter((price): price is number => price !== null);
+
+        if (prices.length < 2) {
+            return { min: prices[0] || 0, max: prices[0] || 0, hasRange: false };
+        }
+
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+        return { min, max, hasRange: Math.round(min * 100) !== Math.round(max * 100) };
+    }, [product, siblings, customer, selectedKitQuantity]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1065,18 +1094,26 @@ export const PublicProductPage: React.FC = () => {
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className="text-lg text-slate-400 line-through">
-                                                R$ {originalPrice.toFixed(2).replace('.', ',')}
+                                                R$ {formatDisplayPrice(originalPrice)}
                                             </span>
                                             <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                                                 -{product.discount_percentage}% OFF
                                             </span>
                                         </div>
                                         <div className="text-4xl font-extrabold text-slate-900">
-                                            R$ {displayPrice.toFixed(2).replace('.', ',')}
+                                            {variantPriceRange.hasRange ? (
+                                                <>
+                                                    R$ {formatDisplayPrice(variantPriceRange.min)}
+                                                    <span className="mx-2 text-2xl text-slate-500">a</span>
+                                                    R$ {formatDisplayPrice(variantPriceRange.max)}
+                                                </>
+                                            ) : (
+                                                <>R$ {formatDisplayPrice(displayPrice)}</>
+                                            )}
                                         </div>
                                         {customerType !== 'wholesale' && (
                                             <p className="text-sm font-medium text-green-600 mt-1">
-                                                ou em até <span className="font-bold">12x de R$ {value12x.toFixed(2).replace('.', ',')}</span> sem juros
+                                                ou em até <span className="font-bold">12x de R$ {formatDisplayPrice(value12x)}</span> sem juros
                                             </p>
                                         )}
                                         {customerType !== 'wholesale' && (companySettings?.pix_discount_percentage || 0) > 0 && (
@@ -1094,11 +1131,19 @@ export const PublicProductPage: React.FC = () => {
                                 ) : (
                                     <div>
                                         <div className="text-4xl font-extrabold text-slate-900">
-                                            R$ {displayPrice.toFixed(2).replace('.', ',')}
+                                            {variantPriceRange.hasRange ? (
+                                                <>
+                                                    R$ {formatDisplayPrice(variantPriceRange.min)}
+                                                    <span className="mx-2 text-2xl text-slate-500">a</span>
+                                                    R$ {formatDisplayPrice(variantPriceRange.max)}
+                                                </>
+                                            ) : (
+                                                <>R$ {formatDisplayPrice(displayPrice)}</>
+                                            )}
                                         </div>
                                         {customerType !== 'wholesale' && (
                                             <p className="text-sm font-medium text-green-600 mt-1">
-                                                ou em até <span className="font-bold">12x de R$ {value12x.toFixed(2).replace('.', ',')}</span> sem juros
+                                                ou em até <span className="font-bold">12x de R$ {formatDisplayPrice(value12x)}</span> sem juros
                                             </p>
                                         )}
                                         {customerType !== 'wholesale' && (companySettings?.pix_discount_percentage || 0) > 0 && (
