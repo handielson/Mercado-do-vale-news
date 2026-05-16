@@ -24,6 +24,7 @@ import {
     pickBlingPriceStockUpdates,
     shouldFanOutBlingParentPrice,
 } from './_lib/bling-price-targets.js';
+import { syncShopeeStockFromBlingTargets } from './_lib/shopee-stock-sync.js';
 
 const VPS_BASE_URL = process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
 const VPS_SYNC_KEY = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
@@ -240,15 +241,18 @@ export default async function handler(req: any, res: any) {
             const vpsPayload = blingId
                 ? { bling_id: blingId, stock_quantity: stockQty }
                 : { sku: resolvedSku, stock_quantity: stockQty };
-            const vpsUpdated = await patchVps('/products/stock', vpsPayload);
+            const vpsStockResult = await patchVpsJson('/products/stock', vpsPayload);
+            const vpsUpdated = Boolean(vpsStockResult?.ok);
 
             const supaFilter = blingId
                 ? supabase.from('products').update({ stock_quantity: stockQty }).eq('bling_id', blingId)
                 : supabase.from('products').update({ stock_quantity: stockQty }).eq('sku', resolvedSku);
             await supaFilter;
 
-            console.log(`[bling-webhook] stock -> SKU=${resolvedSku ?? '?'} blingId=${blingId} qty=${stockQty} source=${stockSource} VPS=${vpsUpdated}`);
-            return res.status(200).json({ ok: true, event, sku: resolvedSku, bling_id: blingId, stock_quantity: stockQty, vpsUpdated });
+            const shopeeStockSync = await syncShopeeStockFromBlingTargets(supabase, vpsStockResult?.stockTargets || []);
+
+            console.log(`[bling-webhook] stock -> SKU=${resolvedSku ?? '?'} blingId=${blingId} qty=${stockQty} source=${stockSource} VPS=${vpsUpdated} Shopee=${shopeeStockSync.updated || 0}`);
+            return res.status(200).json({ ok: true, event, sku: resolvedSku, bling_id: blingId, stock_quantity: stockQty, vpsUpdated, shopeeStockSync });
         }
 
         const isProductEvent = event.includes('product') || event.includes('produto');
@@ -323,8 +327,8 @@ export default async function handler(req: any, res: any) {
             const vpsNameUpdated = updates.name
                 ? await patchVps('/products/name', { sku: resolvedSku, name: updates.name })
                 : true;
-            const vpsPriceUpdated = Object.keys(pickBlingPriceStockUpdates(updates)).length > 0
-                ? await patchVps(
+            const vpsPriceStockResult = Object.keys(pickBlingPriceStockUpdates(updates)).length > 0
+                ? await patchVpsJson(
                     '/products/prices-stock',
                     updates.price_retail !== undefined
                         ? buildBlingPriceStockPayload(priceTargetSkus, {
@@ -335,8 +339,8 @@ export default async function handler(req: any, res: any) {
                         })
                         : { products: [{ sku: resolvedSku, ...pickBlingPriceStockUpdates(updates) }] }
                 )
-                : true;
-            const vpsUpdated = vpsNameUpdated && vpsPriceUpdated;
+                : { ok: true, stockTargets: [] };
+            const vpsUpdated = vpsNameUpdated && Boolean(vpsPriceStockResult?.ok);
 
             await supabase
                 .from('products')
@@ -350,8 +354,12 @@ export default async function handler(req: any, res: any) {
                     .eq('bling_parent_id', String(blingId));
             }
 
-            console.log(`[bling-webhook] product -> SKU=${resolvedSku} targets=${priceTargetSkus.join(',')} name="${resolvedName}" price_retail=${updates.price_retail ?? 'unchanged'} stock_quantity=${updates.stock_quantity ?? 'unchanged'} VPS=${vpsUpdated}`);
-            return res.status(200).json({ ok: true, event, sku: resolvedSku, priceTargetSkus, updates, vpsUpdated });
+            const shopeeStockSync = updates.stock_quantity !== undefined
+                ? await syncShopeeStockFromBlingTargets(supabase, vpsPriceStockResult?.stockTargets || [])
+                : { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] };
+
+            console.log(`[bling-webhook] product -> SKU=${resolvedSku} targets=${priceTargetSkus.join(',')} name="${resolvedName}" price_retail=${updates.price_retail ?? 'unchanged'} stock_quantity=${updates.stock_quantity ?? 'unchanged'} VPS=${vpsUpdated} Shopee=${shopeeStockSync.updated || 0}`);
+            return res.status(200).json({ ok: true, event, sku: resolvedSku, priceTargetSkus, updates, vpsUpdated, shopeeStockSync });
         }
 
         return res.status(200).json({ ok: true, message: `Event '${event}' not handled` });
@@ -377,6 +385,11 @@ function readBlingPayloadStock(productData: any, body: any): number | undefined 
 }
 
 async function patchVps(path: string, body: object): Promise<boolean> {
+    const result = await patchVpsJson(path, body);
+    return Boolean(result?.ok);
+}
+
+async function patchVpsJson(path: string, body: object): Promise<any | null> {
     if (!VPS_SYNC_KEY) return false;
     try {
         const res = await fetch(`${VPS_BASE_URL}${path}`, {
@@ -388,9 +401,10 @@ async function patchVps(path: string, body: object): Promise<boolean> {
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(10000),
         });
-        return res.ok;
+        if (!res.ok) return { ok: false, status: res.status };
+        return await res.json();
     } catch {
-        return false;
+        return null;
     }
 }
 

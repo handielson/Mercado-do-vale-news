@@ -5960,6 +5960,31 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
 });
 
 // Price/stock sync: deliberately updates only commercial fields.
+async function getShopeeStockTargetsForProductIds(productIds) {
+  const ids = [...new Set((productIds || []).map(id => String(id || '').trim()).filter(Boolean))];
+  if (!ids.length) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  const comboStock = `(CASE WHEN p.is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / NULLIF(pc.quantity, 0))) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = p.id), 0) ELSE p.stock_quantity END)`;
+  const [rows] = await pool.query(
+    `SELECT p.id, p.sku, p.offer_type, p.shopee_strategy, p.track_inventory, ${comboStock} AS stock_quantity
+       FROM products p
+      WHERE p.id IN (${placeholders})
+     UNION
+     SELECT p.id, p.sku, p.offer_type, p.shopee_strategy, p.track_inventory, ${comboStock} AS stock_quantity
+       FROM product_combos pc
+       JOIN products p ON p.id = pc.combo_product_id
+      WHERE pc.child_product_id IN (${placeholders})`,
+    [...ids, ...ids]
+  );
+  return rows.map(row => ({
+    id: row.id,
+    sku: row.sku,
+    offer_type: row.offer_type || null,
+    shopee_strategy: row.shopee_strategy || null,
+    stock_quantity: Number(row.track_inventory) === 0 ? 999 : Math.max(0, Math.trunc(Number(row.stock_quantity || 0))),
+  }));
+}
+
 fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (req, reply) => {
   const products = Array.isArray(req.body) ? req.body : req.body?.products;
   if (!Array.isArray(products) || products.length === 0) {
@@ -5980,6 +6005,7 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
     'track_inventory',
   ];
   const results = { updated: 0, skipped: 0, errors: [] };
+  const changedProductIds = [];
 
   for (const p of products) {
     try {
@@ -6005,11 +6031,17 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
         params
       );
       results.updated += result.affectedRows || 0;
+      if (result.affectedRows && p.stock_quantity !== undefined) {
+        const lookupWhere = p.id ? 'id=?' : 'sku=?';
+        const [changedRows] = await pool.query(`SELECT id FROM products WHERE ${lookupWhere}`, [p.id || p.sku]);
+        changedRows.forEach(row => changedProductIds.push(row.id));
+      }
     } catch (err) {
       results.errors.push({ id: p.id, sku: p.sku, error: err.message });
     }
   }
 
+  results.stockTargets = await getShopeeStockTargetsForProductIds(changedProductIds);
   return results;
 });
 
@@ -6113,18 +6145,22 @@ fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, rep
   if (stock_quantity === undefined || stock_quantity === null) return reply.code(400).send({ error: 'stock_quantity required' });
   const qty = Math.max(0, parseInt(stock_quantity, 10) || 0);
   let result;
+  let changedRows = [];
   if (sku) {
     [result] = await pool.query(
       'UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
       [qty, sku]
     );
+    [changedRows] = await pool.query('SELECT id FROM products WHERE sku=?', [sku]);
   } else {
     [result] = await pool.query(
       'UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE bling_id=?',
       [qty, String(bling_id)]
     );
+    [changedRows] = await pool.query('SELECT id FROM products WHERE bling_id=?', [String(bling_id)]);
   }
-  return { ok: true, affectedRows: result.affectedRows };
+  const stockTargets = await getShopeeStockTargetsForProductIds(changedRows.map(row => row.id));
+  return { ok: true, affectedRows: result.affectedRows, stockTargets };
 });
 
 // Update product name by SKU (used by Bling webhook — produto event)
