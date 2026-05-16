@@ -186,6 +186,41 @@ const normalizeChoiceGroupsFromComboRows = (rows: any[] | null | undefined): Non
   return Array.from(groups.values());
 };
 
+const normalizeComboFamilyText = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const getComboFamilyBaseName = (product: any) => {
+  const name = String(product?.name || '').trim();
+  if (!name) return '';
+  return name.split(/\s+cor\s*:/i)[0].trim();
+};
+
+const getComboFamilyKey = (product: any) => {
+  if (product?.parent_id) return `parent:${product.parent_id}`;
+  const baseName = normalizeComboFamilyText(getComboFamilyBaseName(product));
+  return baseName ? `name:${baseName}` : `product:${product?.id || ''}`;
+};
+
+const isSameComboFamily = (candidate: any, reference: any) => {
+  if (!candidate || !reference) return false;
+  if (reference.parent_id) {
+    return String(candidate.parent_id || candidate.id) === String(reference.parent_id);
+  }
+  const referenceBase = normalizeComboFamilyText(getComboFamilyBaseName(reference));
+  const candidateBase = normalizeComboFamilyText(getComboFamilyBaseName(candidate));
+  return Boolean(referenceBase && candidateBase && referenceBase === candidateBase);
+};
+
+const preferVariationOptions = (products: any[]) => {
+  const unique = Array.from(new Map(products.filter(Boolean).map(product => [product.id, product])).values());
+  const colored = unique.filter(product => /\s+cor\s*:/i.test(String(product?.name || '')));
+  return colored.length > 0 ? colored : unique;
+};
+
 export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOfferMode = false }) => {
   const navigate = useNavigate();
   const [combos, setCombos] = useState<any[]>([]);
@@ -729,8 +764,10 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     if (!editingCombo) return;
     const validOptions = options.filter(option => option?.id);
     if (!validOptions.length) return;
-    const parentId = String(parentProduct?.id || validOptions[0].parent_id || validOptions[0].id);
-    const groupKey = `parent:${parentId}`;
+    const parentId = String(validOptions[0]?.parent_id || parentProduct?.parent_id || parentProduct?.id || validOptions[0].id);
+    const groupKey = validOptions[0]?.parent_id || parentProduct?.parent_id
+      ? `parent:${parentId}`
+      : getComboFamilyKey(parentProduct || validOptions[0]);
     const existingGroups = editingCombo.combo_choice_groups || [];
     if (existingGroups.some(group => group.group_key === groupKey || group.parent_product_id === parentId)) {
       toast.info('Esta familia ja esta como grupo de escolha do combo');
@@ -739,12 +776,13 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
     setEditingCombo({
       ...editingCombo,
+      combo_children: editingCombo.combo_children.filter(child => !isSameComboFamily(child, parentProduct || validOptions[0])),
       combo_choice_groups: [
         ...existingGroups,
         {
           group_key: groupKey,
           parent_product_id: parentId,
-          label: parentProduct?.name || validOptions[0].name || 'Escolha uma opcao',
+          label: getComboFamilyBaseName(parentProduct) || parentProduct?.name || validOptions[0].name || 'Escolha uma opcao',
           quantity: 1,
           options: validOptions.map(option => toComboChild(option)),
         },
@@ -785,8 +823,18 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     const toastId = toast.loading('Carregando familia do produto...');
     try {
       const rows = await vpsApiService.getProductsByParentId(parentId);
-      const family = (rows || []).filter(item => !item.is_combo && !item.offer_type);
-      const productsToAdd = family.length > 0 ? family : [product];
+      let family = (rows || []).filter(item => !item.is_combo && !item.offer_type);
+
+      if (family.length <= 1) {
+        const baseName = getComboFamilyBaseName(product);
+        const fallbackRows = baseName
+          ? await vpsApiService.getProducts({ search: baseName, status: 'all', limit: 120, noCache: true })
+          : [];
+        family = (fallbackRows || [])
+          .filter(item => !item.is_combo && !item.offer_type && isSameComboFamily(item, product));
+      }
+
+      const productsToAdd = preferVariationOptions(family.length > 0 ? family : [product]);
 
       setAllProducts(prev => {
         const merged = new Map(prev.map(item => [item.id, item]));
@@ -796,7 +844,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
       addChoiceGroupToCombo(product, productsToAdd);
       clearComboSearch();
-      toast.success(family.length > 0 ? `Grupo de escolha criado com ${family.length} opcao(oes)` : 'Grupo de escolha criado', { id: toastId });
+      toast.success(productsToAdd.length > 0 ? `Grupo de escolha criado com ${productsToAdd.length} opcao(oes)` : 'Grupo de escolha criado', { id: toastId });
     } catch {
       toast.error('Nao foi possivel carregar as variacoes do produto', { id: toastId });
     }
@@ -864,19 +912,19 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
     const groups = new Map<string, { parentId: string; parent: any; matches: any[] }>();
     filteredProductsToSelect.forEach(product => {
-      const parentId = String(product.parent_id || product.id);
-      const current = groups.get(parentId) || {
-        parentId,
-        parent: productById.get(parentId) || product,
+      const familyKey = getComboFamilyKey(product);
+      const current = groups.get(familyKey) || {
+        parentId: familyKey,
+        parent: product.parent_id ? (productById.get(String(product.parent_id)) || product) : product,
         matches: [],
       };
       current.matches.push(product);
-      if (String(product.id) === parentId || product.is_parent) current.parent = product;
-      groups.set(parentId, current);
+      if (product.is_parent || !/\s+cor\s*:/i.test(String(product.name || ''))) current.parent = product;
+      groups.set(familyKey, current);
     });
 
     return Array.from(groups.values())
-      .filter(group => group.matches.length > 1 || String(group.matches[0]?.id) !== group.parentId || group.parent?.is_parent)
+      .filter(group => group.matches.length > 1 || Boolean(group.parent?.parent_id) || group.parent?.is_parent)
       .sort((a, b) => (a.parent?.name || '').localeCompare(b.parent?.name || ''));
   }, [allProducts, childSearchResults, filteredProductsToSelect]);
 
