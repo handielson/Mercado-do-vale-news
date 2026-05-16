@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { getCompanyId } from './companyContext';
+import { vpsApiService } from './vpsApiService';
 import {
   ProductStockLocation,
   StockDeposit,
@@ -18,6 +19,7 @@ import {
   StockLocationOrderReservationInput,
   StockLocationOrderReservationResult,
   StockLocationProductSearchResult,
+  LocationContentItem,
   StockLocationTransferInput,
   StockLocationOrderRestoreInput,
   StockLocationOrderRestoreResult,
@@ -168,6 +170,46 @@ class StockLocationService {
     return (data || []) as ProductStockLocation[];
   }
 
+  /**
+   * Lista todos os produtos que têm saldo num local específico, com nome/SKU/EAN
+   * e quantidades (físico/reservado/disponível).
+   */
+  async getLocationContents(locationId: string): Promise<LocationContentItem[]> {
+    const { data, error } = await supabase
+      .from('product_stock_locations')
+      .select(`
+        product_id,
+        quantity,
+        reserved_quantity,
+        deposit:stock_deposits(id, name),
+        location:stock_locations(id, name, code),
+        product:products(id, name, sku, ean, stock_quantity, images, specs)
+      `)
+      .eq('location_id', locationId)
+      .gt('quantity', 0)
+      .order('quantity', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || [])
+      .map((row: any) => ({
+      product_id: row.product_id,
+      product_name: row.product?.name || '(sem nome)',
+      sku: row.product?.sku || null,
+      ean: row.product?.ean || null,
+      product_image: Array.isArray(row.product?.images) ? row.product.images[0] || null : null,
+      total_stock: Number(row.product?.stock_quantity || 0),
+      quantity: Number(row.quantity || 0),
+      reserved_quantity: Number(row.reserved_quantity || 0),
+      available: Number(row.quantity || 0) - Number(row.reserved_quantity || 0),
+      deposit_id: row.deposit?.id,
+      deposit_name: row.deposit?.name || null,
+      location_id: row.location?.id,
+      location_name: row.location?.name || null,
+      specs: row.product?.specs || null,
+    })) as LocationContentItem[];
+  }
+
   async searchProducts(term: string): Promise<StockLocationProductSearchResult[]> {
     const cleanTerm = term.trim();
 
@@ -177,21 +219,31 @@ class StockLocationService {
 
     const searchTerm = cleanTerm.replace(/[,%]/g, '');
 
-    const { data, error } = await supabase
-      .from('products')
-      .select('id, name, sku, ean, stock_quantity, images')
-      .or(`name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%,ean.ilike.%${searchTerm}%`)
-      .order('name', { ascending: true })
-      .limit(8);
+    // Busca direto na VPS (fonte de verdade) — já trás is_parent e estoque agregado.
+    const rows = await vpsApiService.getProducts({
+      search: searchTerm,
+      status: 'all',
+      limit: 32,
+    });
+    if (!Array.isArray(rows)) return [];
 
-    if (error) {
-      throw error;
-    }
-
-    return (data || []).map((product: any) => ({
-      ...product,
-      stock_quantity: Number(product.stock_quantity || 0),
-    })) as StockLocationProductSearchResult[];
+    return rows
+      .filter((p: any) => {
+        const qty = Number(p?.stock_quantity || 0);
+        if (qty <= 0) return false;
+        const isParent = p?.is_parent;
+        if (isParent === true || isParent === 1) return false;
+        return true;
+      })
+      .slice(0, 8)
+      .map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku || null,
+        ean: p.ean || null,
+        stock_quantity: Number(p.stock_quantity || 0),
+        images: Array.isArray(p.images) ? p.images : null,
+      })) as StockLocationProductSearchResult[];
   }
 
   async getStockDivergences(): Promise<StockLocationDivergence[]> {

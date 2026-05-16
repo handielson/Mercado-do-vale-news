@@ -251,3 +251,20 @@ export interface StockLocationProductSearchResult {
   stock_quantity: number;
   images?: string[] | null;
 }
+
+export interface LocationContentItem {
+  product_id: string;
+  product_name: string;
+  sku: string | null;
+  ean: string | null;
+  product_image: string | null;
+  total_stock: number;        // estoque total do produto (somando todos os locais)
+  quantity: number;           // físico neste local
+  reserved_quantity: number;  // reservado neste local
+  available: number;          // quantity - reserved_quantity
+  deposit_id?: string;
+  deposit_name: string | null;
+  location_id?: string;
+  location_name: string | null;
+  specs?: Record<string, any> | null;  // pra montar variação a partir de cor/RAM/etc.
+}

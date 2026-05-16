@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowRightLeft, Boxes, Building2, History, Loader2, MapPin, PackageSearch, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Boxes, Building2, Eye, FileDown, History, Loader2, MapPin, PackageSearch, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { stockLocationService } from '../../../services/stockLocationService';
 import {
+  LocationContentItem,
   ProductStockLocation,
   StockDeposit,
   StockLocation,
@@ -73,6 +76,33 @@ export function StockLocationsPage() {
   const [transferError, setTransferError] = useState<string | null>(null);
   const [quickTransferDepositId, setQuickTransferDepositId] = useState('');
   const [quickTransferLocationId, setQuickTransferLocationId] = useState('');
+
+  // Location-contents modal: mostra o que tem dentro de um local específico.
+  const [contentsOpen, setContentsOpen] = useState(false);
+  const [contentsLocation, setContentsLocation] = useState<StockLocation | null>(null);
+  const [contentsItems, setContentsItems] = useState<LocationContentItem[]>([]);
+  const [contentsLoading, setContentsLoading] = useState(false);
+  const [contentsError, setContentsError] = useState<string | null>(null);
+
+  // Batch transfer: carrinho de produtos pra mandar todos pra mesmo destino.
+  type BatchItem = {
+    product: StockLocationProductSearchResult;
+    fromDepositId: string;
+    fromLocationId: string;
+    available: number;
+    quantity: string;
+    distribution: ProductStockLocation[];
+  };
+  const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
+  const [batchSearch, setBatchSearch] = useState('');
+  const [batchResults, setBatchResults] = useState<StockLocationProductSearchResult[]>([]);
+  const [batchToDepositId, setBatchToDepositId] = useState('');
+  const [batchToLocationId, setBatchToLocationId] = useState('');
+  const [batchReason, setBatchReason] = useState('');
+  const [batchNotes, setBatchNotes] = useState('');
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -375,6 +405,312 @@ export function StockLocationsPage() {
   const closeTransferModal = () => {
     if (transferSaving) return;
     setTransferOpen(false);
+  };
+
+  const openLocationContents = async (location: StockLocation) => {
+    setContentsLocation(location);
+    setContentsOpen(true);
+    setContentsLoading(true);
+    setContentsError(null);
+    setContentsItems([]);
+    try {
+      const items = await stockLocationService.getLocationContents(location.id);
+      setContentsItems(items);
+    } catch (err: any) {
+      setContentsError(err?.message || 'Erro ao carregar conteúdo do local.');
+    } finally {
+      setContentsLoading(false);
+    }
+  };
+
+  const closeLocationContents = () => {
+    setContentsOpen(false);
+    setContentsLocation(null);
+    setContentsItems([]);
+    setContentsError(null);
+  };
+
+  /**
+   * Quebra o nome completo em "produto base" + "variação". Primeiro tenta detectar
+   * padrões "Cor:X" / "Tamanho:Y" no próprio nome. Se não achar, recorre ao specs
+   * do produto (color, size, ram, storage, voltage) — comum em produtos cujo nome
+   * não traz o sufixo da variação.
+   */
+  const splitNameVariation = (fullName: string, specs?: Record<string, any> | null): { name: string; variation: string } => {
+    const match = fullName.match(/^(.*?)\s+((?:Cor|Tamanho|Capacidade|RAM|Armazenamento|Memória|Voltagem)\s*:\s*.+)$/i);
+    if (match) {
+      return { name: match[1].trim(), variation: match[2].trim() };
+    }
+    if (specs && typeof specs === 'object') {
+      const labels: Array<[string, string]> = [
+        ['color', 'Cor'],
+        ['size', 'Tamanho'],
+        ['ram', 'RAM'],
+        ['storage', 'Armazenamento'],
+        ['voltage', 'Voltagem'],
+        ['capacity', 'Capacidade'],
+        ['memory', 'Memória'],
+      ];
+      const parts: string[] = [];
+      for (const [key, label] of labels) {
+        const v = specs[key];
+        if (v && typeof v === 'string' && v.trim()) parts.push(`${label}:${v.trim()}`);
+      }
+      if (parts.length > 0) {
+        return { name: fullName.trim(), variation: parts.join(' · ') };
+      }
+    }
+    return { name: fullName.trim(), variation: '' };
+  };
+
+  const printContentsToPdf = () => {
+    if (!contentsLocation || contentsItems.length === 0) return;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Cabeçalho
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(`Conteúdo do local: ${contentsLocation.name}`, 14, 18);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    const depositName = depositById[contentsLocation.deposit_id]?.name || '-';
+    doc.text(`Código: ${contentsLocation.code} · Depósito: ${depositName}`, 14, 24);
+    const generatedAt = new Date().toLocaleString('pt-BR');
+    doc.text(`Gerado em ${generatedAt}`, pageWidth - 14, 24, { align: 'right' });
+    doc.setTextColor(0);
+
+    // Tabela
+    const rows = contentsItems.map((item) => {
+      const { name, variation } = splitNameVariation(item.product_name, item.specs);
+      return [
+        String(item.quantity),
+        name,
+        variation || '-',
+        item.sku || '-',
+        item.ean || '-',
+      ];
+    });
+    const totalQty = contentsItems.reduce((s, i) => s + i.quantity, 0);
+    autoTable(doc, {
+      startY: 32,
+      head: [['Qtd', 'Produto', 'Variação', 'SKU', 'EAN']],
+      body: rows,
+      foot: [['', `Total (${contentsItems.length} produto${contentsItems.length === 1 ? '' : 's'})`, '', '', String(totalQty)]],
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      footStyles: { fillColor: [241, 245, 249], textColor: 30, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 9 },
+      columnStyles: {
+        0: { halign: 'right', cellWidth: 14 },
+        1: { cellWidth: 75 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 32 },
+      },
+      didDrawPage: () => {
+        const str = `Página ${doc.getCurrentPageInfo().pageNumber}`;
+        doc.setFontSize(8);
+        doc.setTextColor(120);
+        doc.text(str, pageWidth - 14, doc.internal.pageSize.getHeight() - 8, { align: 'right' });
+      },
+    });
+
+    const slug = (contentsLocation.code || contentsLocation.name)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    doc.save(`conteudo-${slug}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  /**
+   * A partir do modal de conteúdo, dispara o fluxo de transferência já pré-preenchido:
+   * busca o produto na seção "Estoque por produto" e abre o modal de transferência
+   * com origem = local atual.
+   */
+  // ---------- Batch transfer helpers ----------
+  useEffect(() => {
+    const term = batchSearch.trim();
+    if (term.length < 2) {
+      setBatchResults([]);
+      return;
+    }
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const results = await stockLocationService.searchProducts(term);
+        const existingIds = new Set(batchItems.map(i => i.product.id));
+        setBatchResults(results.filter(r => !existingIds.has(r.id)));
+      } catch {
+        setBatchResults([]);
+      }
+    }, 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [batchSearch, batchItems]);
+
+  const handleBatchToDepositChange = (depositId: string) => {
+    setBatchToDepositId(depositId);
+    const first = locations.find((l) => l.deposit_id === depositId);
+    setBatchToLocationId(first?.id || '');
+  };
+
+  /**
+   * Enter no campo de busca do lote: ideal pra scanner de código de barras.
+   * Resolve o produto na ordem: EAN exato → SKU exato → primeiro resultado.
+   * Se a busca debounce ainda não rodou (scan rápido), força uma chamada síncrona.
+   */
+  const handleBatchSearchEnter = async () => {
+    const term = batchSearch.trim();
+    if (!term) return;
+    setBatchError(null);
+    const existingIds = new Set(batchItems.map(i => i.product.id));
+
+    let candidate = batchResults.find(r => r.ean === term)
+      || batchResults.find(r => r.sku === term)
+      || batchResults[0];
+
+    if (!candidate) {
+      // Resultados ainda não chegaram (scan mais rápido que o debounce de 300ms)
+      try {
+        const fresh = (await stockLocationService.searchProducts(term))
+          .filter(r => !existingIds.has(r.id));
+        candidate = fresh.find(r => r.ean === term)
+          || fresh.find(r => r.sku === term)
+          || fresh[0];
+      } catch {
+        // ignora — vai cair no "não encontrado" abaixo
+      }
+    }
+
+    if (!candidate) {
+      setBatchError(`Produto não encontrado para "${term}".`);
+      return;
+    }
+
+    await addBatchItem(candidate);
+  };
+
+  const addBatchItem = async (product: StockLocationProductSearchResult) => {
+    setBatchError(null);
+    try {
+      const distribution = await stockLocationService.getProductStockDistribution(product.id);
+      const best = [...distribution]
+        .filter(d => d.quantity - d.reserved_quantity > 0)
+        .sort((a, b) => (b.quantity - b.reserved_quantity) - (a.quantity - a.reserved_quantity))[0]
+        || distribution[0];
+      const available = best ? best.quantity - best.reserved_quantity : 0;
+      const item: BatchItem = {
+        product,
+        fromDepositId: best?.deposit_id || '',
+        fromLocationId: best?.location_id || '',
+        available,
+        quantity: available > 0 ? '1' : '0',
+        distribution,
+      };
+      setBatchItems(prev => [...prev, item]);
+      setBatchSearch('');
+      setBatchResults([]);
+    } catch (err: any) {
+      setBatchError(err?.message || 'Erro ao adicionar produto ao lote.');
+    }
+  };
+
+  const removeBatchItem = (productId: string) => {
+    setBatchItems(prev => prev.filter(i => i.product.id !== productId));
+  };
+
+  const updateBatchItem = (productId: string, patch: Partial<BatchItem>) => {
+    setBatchItems(prev => prev.map(i => {
+      if (i.product.id !== productId) return i;
+      const next = { ...i, ...patch };
+      // Recalcula available quando troca origem
+      if (patch.fromLocationId !== undefined) {
+        const dist = next.distribution.find(d => d.location_id === patch.fromLocationId);
+        next.available = dist ? dist.quantity - dist.reserved_quantity : 0;
+      }
+      return next;
+    }));
+  };
+
+  const submitBatchTransfer = async () => {
+    setBatchError(null);
+    if (batchItems.length === 0) {
+      setBatchError('Adicione pelo menos um produto à lista.');
+      return;
+    }
+    if (!batchToDepositId || !batchToLocationId) {
+      setBatchError('Selecione o depósito e o local de destino.');
+      return;
+    }
+    const validItems = batchItems.filter(i => {
+      const qty = Number(i.quantity);
+      return Number.isFinite(qty) && qty > 0 && i.fromLocationId && i.fromLocationId !== batchToLocationId;
+    });
+    if (validItems.length === 0) {
+      setBatchError('Nenhum item tem quantidade/origem válida para transferir.');
+      return;
+    }
+
+    setBatchSubmitting(true);
+    setBatchProgress({ done: 0, total: validItems.length });
+    const failed: { sku: string | null; error: string }[] = [];
+    for (let i = 0; i < validItems.length; i++) {
+      const item = validItems[i];
+      try {
+        await stockLocationService.transferStockLocation({
+          product_id: item.product.id,
+          from_deposit_id: item.fromDepositId,
+          from_location_id: item.fromLocationId,
+          to_deposit_id: batchToDepositId,
+          to_location_id: batchToLocationId,
+          quantity: Number(item.quantity),
+          reason: batchReason.trim() || 'Transferência em lote',
+          notes: batchNotes.trim() || undefined,
+        });
+      } catch (err: any) {
+        failed.push({ sku: item.product.sku || null, error: err?.message || 'falha' });
+      }
+      setBatchProgress({ done: i + 1, total: validItems.length });
+    }
+    setBatchSubmitting(false);
+
+    const okCount = validItems.length - failed.length;
+    if (failed.length > 0) {
+      setBatchError(`${okCount} transferência(s) ok, ${failed.length} falharam: ${failed.slice(0, 3).map(f => f.sku || '?').join(', ')}${failed.length > 3 ? '…' : ''}`);
+    } else {
+      // Sucesso total: limpa lista e fecha
+      setBatchItems([]);
+      setBatchReason('');
+      setBatchNotes('');
+      setBatchProgress(null);
+      // Recarrega divergências/movimentos
+      loadData();
+    }
+  };
+
+  const handleTransferFromContents = async (item: LocationContentItem) => {
+    closeLocationContents();
+    // Reaproveita o fluxo existente de seleção de produto
+    try {
+      const results = await stockLocationService.searchProducts(item.sku || item.product_name);
+      const productMatch = results.find((p) => p.id === item.product_id) || results[0];
+      if (productMatch) {
+        await selectProduct(productMatch);
+        // Aguarda o productDistribution carregar antes de abrir o modal — agendamos pra próximo tick
+        window.setTimeout(() => {
+          setTransferFromDepositId(item.deposit_id || '');
+          setTransferFromLocationId(item.location_id || '');
+          setTransferQuantity('1');
+          setTransferReason('');
+          setTransferNotes('');
+          setTransferError(null);
+          setTransferOpen(true);
+        }, 300);
+      }
+    } catch (err: any) {
+      console.error('[StockLocationsPage] transfer from contents', err);
+    }
   };
 
   const handleAdjustmentDepositChange = (depositId: string) => {
@@ -739,13 +1075,14 @@ export function StockLocationsPage() {
                   <th className="px-5 py-3">Código</th>
                   <th className="px-5 py-3">Depósito</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={4}><LoadingBlock label="Carregando locais..." /></td></tr>
+                  <tr><td colSpan={5}><LoadingBlock label="Carregando locais..." /></td></tr>
                 ) : filteredLocations.length === 0 ? (
-                  <tr><td colSpan={4}><EmptyBlock label="Nenhum local encontrado para os filtros." /></td></tr>
+                  <tr><td colSpan={5}><EmptyBlock label="Nenhum local encontrado para os filtros." /></td></tr>
                 ) : (
                   filteredLocations.map((location) => (
                     <tr key={location.id} className="hover:bg-slate-50">
@@ -762,6 +1099,17 @@ export function StockLocationsPage() {
                           {location.is_default ? 'Padrão' : 'Ativo'}
                         </span>
                       </td>
+                      <td className="px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => openLocationContents(location)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                          title="Ver produtos armazenados neste local"
+                        >
+                          <Eye size={14} />
+                          Ver conteúdo
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -774,12 +1122,7 @@ export function StockLocationsPage() {
       <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Estoque por produto</h2>
-              <p className="mt-1 text-sm text-slate-500">Pesquise por nome, SKU ou EAN e confira a distribuição por local.</p>
-            </div>
-
-            <div className="relative w-full lg:w-[420px]">
+            <div className="relative w-full lg:flex-1 lg:max-w-2xl">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="search"
@@ -801,7 +1144,7 @@ export function StockLocationsPage() {
                       key={product.id}
                       type="button"
                       onClick={() => selectProduct(product)}
-                      className="flex w-full items-center gap-3 border-b border-slate-100 px-3 py-3 text-left last:border-b-0 hover:bg-slate-50"
+                      className="flex w-full items-start gap-3 border-b border-slate-100 px-3 py-3 text-left last:border-b-0 hover:bg-slate-50"
                     >
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
                         {product.images?.[0] ? (
@@ -811,7 +1154,7 @@ export function StockLocationsPage() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-900">{product.name}</p>
+                        <p className="text-sm font-semibold text-slate-900 whitespace-normal break-words">{product.name}</p>
                         <p className="mt-0.5 text-xs text-slate-500">
                           SKU: {product.sku || '-'} {product.ean ? `· EAN: ${product.ean}` : ''} · Total: {product.stock_quantity}
                         </p>
@@ -820,6 +1163,11 @@ export function StockLocationsPage() {
                   ))}
                 </div>
               )}
+            </div>
+
+            <div className="lg:max-w-md lg:text-right">
+              <h2 className="text-lg font-bold text-slate-900">Estoque por produto</h2>
+              <p className="mt-1 text-sm text-slate-500">Pesquise por nome, SKU ou EAN e confira a distribuição por local.</p>
             </div>
           </div>
         </div>
@@ -966,6 +1314,250 @@ export function StockLocationsPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 p-5">
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <ArrowRightLeft size={18} className="text-blue-600" />
+            Transferência em lote
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Selecione vários produtos por nome/SKU/EAN e envie todos pro mesmo destino numa ação só.
+          </p>
+        </div>
+
+        <div className="space-y-5 p-5">
+          {/* Busca pra adicionar produto */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={batchSearch}
+              onChange={(event) => setBatchSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleBatchSearchEnter();
+                }
+              }}
+              placeholder="Bipar EAN, digitar SKU ou nome — Enter adiciona à lista"
+              autoFocus
+              className="h-10 w-full rounded-lg border-2 border-blue-300 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+            {batchResults.length > 0 && (
+              <div className="absolute z-20 mt-2 max-h-80 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+                {batchResults.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => addBatchItem(product)}
+                    className="flex w-full items-start gap-3 border-b border-slate-100 px-3 py-3 text-left last:border-b-0 hover:bg-slate-50"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                      {product.images?.[0] ? (
+                        <img src={product.images[0]} alt={product.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <PackageSearch className="h-5 w-5 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-900 whitespace-normal break-words">{product.name}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        SKU: {product.sku || '-'} {product.ean ? `· EAN: ${product.ean}` : ''} · Estoque total: {product.stock_quantity}
+                      </p>
+                    </div>
+                    <Plus size={16} className="text-blue-600 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Tabela de itens do lote */}
+          {batchItems.length === 0 ? (
+            <EmptyBlock label="Nenhum produto na lista. Pesquise acima pra adicionar." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full min-w-[780px] text-left text-sm">
+                <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3">Produto</th>
+                    <th className="px-3 py-3">Origem</th>
+                    <th className="px-3 py-3 text-right">Disponível</th>
+                    <th className="px-3 py-3 text-center">Quantidade</th>
+                    <th className="px-3 py-3 text-right">&nbsp;</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {batchItems.map((item) => {
+                    const originLocations = item.distribution.filter(d => d.quantity > 0);
+                    return (
+                      <tr key={item.product.id}>
+                        <td className="px-3 py-3">
+                          <p className="text-sm font-semibold text-slate-900 whitespace-normal break-words">{item.product.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {item.product.sku || '-'}
+                            {item.product.ean ? ` · EAN: ${item.product.ean}` : ''}
+                          </p>
+                        </td>
+                        <td className="px-3 py-3">
+                          <select
+                            value={item.fromLocationId}
+                            onChange={(e) => {
+                              const dist = originLocations.find(d => d.location_id === e.target.value);
+                              updateBatchItem(item.product.id, {
+                                fromLocationId: e.target.value,
+                                fromDepositId: dist?.deposit_id || '',
+                              });
+                            }}
+                            className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                          >
+                            {originLocations.length === 0 && (
+                              <option value="">Sem saldo</option>
+                            )}
+                            {originLocations.map((d) => (
+                              <option key={d.location_id} value={d.location_id}>
+                                {d.deposit?.name || '-'} · {d.location?.name || '-'}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-3 text-right font-semibold text-emerald-700">{item.available}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={item.quantity}
+                              onChange={(e) => updateBatchItem(item.product.id, { quantity: e.target.value })}
+                              className="h-9 w-20 rounded-lg border border-slate-200 bg-white px-2 text-sm text-center"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateBatchItem(item.product.id, { quantity: '1' })}
+                              className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              1
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => item.available > 0 && updateBatchItem(item.product.id, { quantity: String(item.available) })}
+                              disabled={item.available <= 0}
+                              className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                            >
+                              Tudo
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => removeBatchItem(item.product.id)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            title="Remover do lote"
+                          >
+                            <X size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="border-t border-slate-200 bg-slate-50">
+                  <tr>
+                    <td colSpan={3} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Total ({batchItems.length} produto{batchItems.length === 1 ? '' : 's'})
+                    </td>
+                    <td className="px-3 py-2 text-center text-sm font-bold text-slate-900">
+                      {batchItems.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0)}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          {/* Destino comum */}
+          {batchItems.length > 0 && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-600">Depósito de destino</span>
+                  <select
+                    value={batchToDepositId}
+                    onChange={(e) => handleBatchToDepositChange(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="">Selecione</option>
+                    {deposits.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-600">Local de destino</span>
+                  <select
+                    value={batchToLocationId}
+                    onChange={(e) => setBatchToLocationId(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="">Selecione</option>
+                    {locations.filter(l => !batchToDepositId || l.deposit_id === batchToDepositId).map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-600">Motivo (opcional)</span>
+                  <input
+                    type="text"
+                    value={batchReason}
+                    onChange={(e) => setBatchReason(e.target.value)}
+                    placeholder="Ex.: organização caixa 13"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-600">Observações (opcional)</span>
+                  <input
+                    type="text"
+                    value={batchNotes}
+                    onChange={(e) => setBatchNotes(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                  />
+                </label>
+              </div>
+
+              {batchError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{batchError}</div>
+              )}
+
+              {batchProgress && batchSubmitting && (
+                <div className="mt-3 rounded-lg border border-blue-200 bg-white p-3 text-sm text-blue-700">
+                  Transferindo... {batchProgress.done}/{batchProgress.total}
+                </div>
+              )}
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={submitBatchTransfer}
+                  disabled={batchSubmitting || !batchToLocationId || batchItems.length === 0}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {batchSubmitting && <Loader2 size={16} className="animate-spin" />}
+                  <ArrowRightLeft size={16} />
+                  Transferir todos ({batchItems.length})
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 p-5">
           <h2 className="text-lg font-bold text-slate-900">Divergências</h2>
           <p className="mt-1 text-sm text-slate-500">Produtos cuja soma por local está diferente do estoque total atual.</p>
         </div>
@@ -1059,7 +1651,7 @@ export function StockLocationsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <form
             onSubmit={submitDeposit}
-            className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"
+            className="w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
@@ -1076,7 +1668,7 @@ export function StockLocationsPage() {
               </button>
             </div>
 
-            <div className="space-y-4 p-5">
+            <div className="flex-1 overflow-y-auto space-y-4 p-5">
               {depositError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                   {depositError}
@@ -1181,7 +1773,7 @@ export function StockLocationsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <form
             onSubmit={submitLocation}
-            className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"
+            className="w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
@@ -1198,7 +1790,7 @@ export function StockLocationsPage() {
               </button>
             </div>
 
-            <div className="space-y-4 p-5">
+            <div className="flex-1 overflow-y-auto space-y-4 p-5">
               {locationError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                   {locationError}
@@ -1291,7 +1883,7 @@ export function StockLocationsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <form
             onSubmit={submitEntry}
-            className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"
+            className="w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
@@ -1308,7 +1900,7 @@ export function StockLocationsPage() {
               </button>
             </div>
 
-            <div className="space-y-4 p-5">
+            <div className="flex-1 overflow-y-auto space-y-4 p-5">
               {entryError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                   {entryError}
@@ -1408,7 +2000,7 @@ export function StockLocationsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <form
             onSubmit={submitTransfer}
-            className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-2xl"
+            className="w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
@@ -1425,7 +2017,7 @@ export function StockLocationsPage() {
               </button>
             </div>
 
-            <div className="space-y-5 p-5">
+            <div className="flex-1 overflow-y-auto space-y-5 p-5">
               {transferError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                   {transferError}
@@ -1510,15 +2102,32 @@ export function StockLocationsPage() {
 
               <label className="block">
                 <span className="text-sm font-semibold text-slate-700">Quantidade para transferir</span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={transferQuantity}
-                  onChange={(event) => setTransferQuantity(event.target.value)}
-                  className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  required
-                />
+                <div className="mt-1 flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={transferQuantity}
+                    onChange={(event) => setTransferQuantity(event.target.value)}
+                    className="h-10 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTransferQuantity('1')}
+                    className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  >
+                    1 item
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => transferSourceAvailable > 0 && setTransferQuantity(String(transferSourceAvailable))}
+                    disabled={transferSourceAvailable <= 0}
+                    className="inline-flex h-10 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Todo o estoque ({transferSourceAvailable})
+                  </button>
+                </div>
               </label>
 
               <label className="block">
@@ -1568,7 +2177,7 @@ export function StockLocationsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
           <form
             onSubmit={submitAdjustment}
-            className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"
+            className="w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
@@ -1585,7 +2194,7 @@ export function StockLocationsPage() {
               </button>
             </div>
 
-            <div className="space-y-4 p-5">
+            <div className="flex-1 overflow-y-auto space-y-4 p-5">
               {adjustmentError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                   {adjustmentError}
@@ -1678,6 +2287,128 @@ export function StockLocationsPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Modal: Conteúdo do local */}
+      {contentsOpen && contentsLocation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={closeLocationContents}>
+          <div
+            className="w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Eye size={18} className="text-blue-600" />
+                  Conteúdo de {contentsLocation.name}
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {contentsLocation.code} · {depositById[contentsLocation.deposit_id]?.name || '-'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={printContentsToPdf}
+                  disabled={contentsItems.length === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Gerar PDF com a lista de produtos deste local"
+                >
+                  <FileDown size={14} />
+                  Imprimir PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={closeLocationContents}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100"
+                  aria-label="Fechar"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {contentsError && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{contentsError}</div>
+              )}
+
+              {contentsLoading ? (
+                <LoadingBlock label="Carregando produtos do local..." />
+              ) : contentsItems.length === 0 ? (
+                <EmptyBlock label="Nenhum produto com saldo neste local." />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-3">Produto</th>
+                        <th className="px-3 py-3">SKU</th>
+                        <th className="px-3 py-3 text-right">Físico</th>
+                        <th className="px-3 py-3 text-right">Reservado</th>
+                        <th className="px-3 py-3 text-right">Disponível</th>
+                        <th className="px-3 py-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {contentsItems.map((item) => (
+                        <tr key={item.product_id} className="hover:bg-slate-50">
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                                {item.product_image ? (
+                                  <img src={item.product_image} alt={item.product_name} className="h-full w-full object-cover" />
+                                ) : (
+                                  <PackageSearch className="m-auto h-5 w-5 text-slate-400" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-slate-900 whitespace-normal break-words">{item.product_name}</p>
+                                {item.ean && <p className="text-xs text-slate-500">EAN: {item.ean}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 font-mono text-xs text-slate-600">{item.sku || '-'}</td>
+                          <td className="px-3 py-3 text-right font-semibold text-slate-900">{item.quantity}</td>
+                          <td className="px-3 py-3 text-right text-slate-600">{item.reserved_quantity}</td>
+                          <td className="px-3 py-3 text-right font-bold text-emerald-700">{item.available}</td>
+                          <td className="px-3 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleTransferFromContents(item)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                              title="Transferir este produto a partir deste local"
+                            >
+                              <ArrowRightLeft size={12} />
+                              Transferir
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t border-slate-200 bg-slate-50">
+                      <tr>
+                        <td colSpan={2} className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Total ({contentsItems.length} produto{contentsItems.length === 1 ? '' : 's'})
+                        </td>
+                        <td className="px-3 py-3 text-right text-sm font-bold text-slate-900">
+                          {contentsItems.reduce((sum, it) => sum + it.quantity, 0)}
+                        </td>
+                        <td className="px-3 py-3 text-right text-sm text-slate-600">
+                          {contentsItems.reduce((sum, it) => sum + it.reserved_quantity, 0)}
+                        </td>
+                        <td className="px-3 py-3 text-right text-sm font-bold text-emerald-700">
+                          {contentsItems.reduce((sum, it) => sum + it.available, 0)}
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
