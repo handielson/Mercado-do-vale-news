@@ -23,6 +23,24 @@ function positiveInt(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export const MAX_OFFER_SKU_LENGTH = 100;
+
+function stableHash(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).toUpperCase();
+}
+
+function fitSku(value: string, maxLength = MAX_OFFER_SKU_LENGTH): string {
+  if (value.length <= maxLength) return value;
+  const hashSuffix = `-${stableHash(value)}`;
+  const prefixLength = Math.max(1, maxLength - hashSuffix.length);
+  return `${value.slice(0, prefixLength).replace(/-+$/g, '')}${hashSuffix}`;
+}
+
 export function buildDefaultOfferSku(
   baseSku: string | null | undefined,
   offerType: ProductOfferType,
@@ -30,9 +48,9 @@ export function buildDefaultOfferSku(
   suffix = '',
 ): string {
   const cleanBase = slugPart(baseSku) || 'OFERTA';
-  if (offerType === 'quantity_kit') return `${cleanBase}-KIT${positiveInt(quantity, 1)}`;
+  if (offerType === 'quantity_kit') return fitSku(`${cleanBase}-KIT${positiveInt(quantity, 1)}`);
   const cleanSuffix = slugPart(suffix) || 'COMBO';
-  return `${cleanBase}-COMBO-${cleanSuffix}`;
+  return fitSku(`${cleanBase}-COMBO-${cleanSuffix}`);
 }
 
 export function normalizeOfferComponents(

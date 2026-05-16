@@ -10,6 +10,7 @@ import {
   calculateOfferStock,
   chooseShopeeOfferStrategy,
   hasMissingBlingLink,
+  MAX_OFFER_SKU_LENGTH,
 } from '../../../services/productOfferEngine';
 import type { ProductOfferShopeeStrategy, ProductOfferType, ProductOfferVisibility } from '../../../types/product-offer';
 import type { VpsMutationResult } from '../../../services/vpsApiService';
@@ -677,12 +678,13 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
           }))
         : null;
       const finalName = editingCombo.name?.trim() || autoOfferName;
+      const finalSku = editingCombo.sku?.trim() || autoOfferSku;
 
       const payload = {
         ...editingCombo,
         is_combo: true,
         name: finalName,
-        sku: editingCombo.sku?.trim() || autoOfferSku,
+        sku: finalSku,
         slug: editingCombo.slug || generateSlug(finalName),
         description: finalDescription,
         technical_specifications: finalTechSpecs,
@@ -701,6 +703,11 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         }
       };
       savePayload = payload;
+
+      if (finalSku.length > MAX_OFFER_SKU_LENGTH) {
+        saveAction = 'validateSku';
+        throw new Error(`SKU muito longo (${finalSku.length}/${MAX_OFFER_SKU_LENGTH}). Encurte o SKU manual antes de salvar.`);
+      }
 
       if (editingCombo.id) {
         saveAction = isOffer ? 'updateOffer' : 'updateCombo';

@@ -34,6 +34,15 @@ assert.equal(buildDefaultOfferSku('   ', 'quantity_kit', 3), 'OFERTA-KIT3');
 assert.equal(buildDefaultOfferSku('', 'quantity_kit', 3), 'OFERTA-KIT3');
 assert.equal(buildDefaultOfferSku('BASE', 'product_combo', 1, '   '), 'BASE-COMBO-COMBO');
 
+const longComboSku = buildDefaultOfferSku(
+  'CSRN144GA',
+  'product_combo',
+  1,
+  'Capa de Silicone para Redmi Note 14 4G-Pelicula 3D para Redmi Note 14 4G 5G Poco M7 Pro 5G',
+);
+assert.ok(longComboSku.length <= 100, `generated combo SKU should fit MySQL sku column, got ${longComboSku.length}`);
+assert.match(longComboSku, /^CSRN144GA-COMBO-/);
+
 assert.deepEqual(
   normalizeOfferComponents([{ product: baseProduct, quantity: 3 }]),
   [{ product_id: 'prod-red', quantity: 3, sku: 'CAPA-RN8-VERM', name: 'Capa Redmi Note 8 Vermelha', bling_id: 111 }],
