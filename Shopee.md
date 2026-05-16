@@ -2,7 +2,7 @@
 
 Documentacao operacional da integracao Shopee Open Platform v2 no Mercado do Vale.
 
-Ultima revisao: 2026-05-11
+Ultima revisao: 2026-05-16
 
 ## Objetivo
 
@@ -17,6 +17,7 @@ Este arquivo cobre o fluxo atual de:
 - marca do anuncio e atributos de marca/modelo;
 - upload de imagens e video;
 - templates de categoria/campos, com o primeiro template para capa de celular.
+- ofertas/kits criados na VPS e publicados como variacao ou item separado.
 
 ## Arquivos principais
 
@@ -30,6 +31,9 @@ Este arquivo cobre o fluxo atual de:
 | Busca/sugestao de categoria | `pages/admin/settings/shopeeCategoryHelpers.js` |
 | Templates de categoria/campos | `pages/admin/settings/shopeeFieldTemplates.js` |
 | Vinculo local x Shopee | tabela `shopee_products` |
+| Ofertas/kits no site e Shopee | `docs/operacional/2026-05-15-ofertas-kits-site-shopee.md` |
+| Motor de ofertas | `services/productOfferEngine.ts` |
+| Mapeamento oferta -> Shopee | `services/shopeeOfferMapping.ts` |
 
 ## Fluxo de publicacao de produto
 
@@ -898,6 +902,93 @@ Manter fora do primeiro botao automatico:
 - alteracao automatica de produtos ja publicados;
 - republicacao ou conversao de anuncio simples para anuncio com variacao;
 - alteracao automatica de preco/estoque em anuncios ja existentes.
+
+## Ofertas, kits e combos para Shopee
+
+### Estado em 2026-05-16
+
+A entrega de ofertas/kits esta implementada e publicada em producao usando a VPS como fonte operacional. Nao foi aplicada nova migration no Supabase porque a direcao do projeto e reduzir e remover a dependencia do Supabase.
+
+Fluxo ativo:
+
+1. O operador cria a oferta em `Produtos > Ofertas/Kits`.
+2. A VPS grava a oferta como produto combo real, com `is_combo = 1`.
+3. O tipo comercial fica em `offer_type`:
+   - `quantity_kit`: kit por quantidade do mesmo produto;
+   - `product_combo`: combo com produtos diferentes.
+4. A visibilidade fica em `offer_visibility`:
+   - `visible`: aparece no site;
+   - `hidden`: pode ser usado operacionalmente e na Shopee sem aparecer na vitrine.
+5. A estrategia da Shopee fica em `shopee_strategy`:
+   - `variation`: publicar como modelo/variacao do anuncio base quando couber;
+   - `separate_item`: publicar como anuncio separado.
+
+### Estoque de oferta
+
+O estoque da oferta e calculado pela VPS a partir dos filhos em `product_combos`, nao por estoque manual da oferta.
+
+Regras:
+
+- kit por quantidade: `floor(estoque_do_produto / quantidade_do_kit)`;
+- combo: menor saldo possivel entre os componentes;
+- atualizacao do Bling recalcula kits afetados e aciona sincronizacao Shopee quando houver vinculo.
+
+Validacao operacional feita em 2026-05-16:
+
+- produto base `BOM-5495` tinha estoque `3`;
+- criada oferta oculta de teste `2x BOM-5495`;
+- `/offers` retornou `stock_quantity = 1`;
+- oferta de teste foi removida em seguida;
+- `/offers` voltou a `[]`.
+
+### Endpoints VPS
+
+Endpoints ativos:
+
+- `GET /offers`: lista ofertas criadas;
+- `POST /offers`: cria oferta e encaminha para `/combos`;
+- `PUT /offers/:id`: atualiza oferta e encaminha para `/combos/:id`.
+
+Observacao importante: em 2026-05-16 foi corrigido o repasse da chave interna. O endpoint `/offers` autentica com `x-sync-key` ou `x-api-key` e agora repassa `x-sync-key` corretamente para os writes internos de combo.
+
+Commit da correcao:
+
+- `1be18a7 fix(offers): forward sync key to combo writes`
+
+### Commits principais da entrega
+
+- `25a9501 feat(offers): add offer calculation engine`
+- `aaf0002 feat(offers): add offer metadata migrations`
+- `6d588bb feat(offers): expose VPS offer endpoints`
+- `8befd13 feat(offers): add admin offer center`
+- `7fe02a9 feat(offers): show site offers`
+- `cc565ab feat(offers): map offers to Shopee variations`
+- `0766fe9 feat(offers): sync kit stock to Shopee from Bling`
+- `4fdac85 docs(offers): document site and Shopee kit workflow`
+- `1be18a7 fix(offers): forward sync key to combo writes`
+
+### Verificacao executada
+
+Comandos/verificacoes ja executados:
+
+- `node tmp-tests\product-offer-schema-static.test.mjs`
+- `node tmp-tests\product-offer-vps-static.test.mjs`
+- `node tmp-tests\product-offer-admin-static.test.mjs`
+- `node tmp-tests\product-offer-storefront-static.test.mjs`
+- `node tmp-tests\bling-shopee-stock-sync.test.mjs`
+- `npx.cmd tsx tmp-tests\product-offer-engine.test.mjs`
+- `npx.cmd tsx tmp-tests\shopee-offer-mapping.test.mjs`
+- `npm.cmd run build`
+- Vercel `READY` para `1be18a7b4d5cfda182a57ca0c31035f1eb174c81`
+- VPS `mdv-api` online com `server.js` atualizado
+
+### Proximo passo operacional
+
+Criar uma oferta real no admin, preferencialmente primeiro como `hidden`, publicar/sincronizar pela tela da Shopee e conferir se:
+
+- o item ou modelo aparece na Shopee com SKU correto;
+- a linha em `shopee_products` guarda `shopee_item_id` e, se for variacao, `shopee_model_id`;
+- uma mudanca de estoque vinda do Bling atualiza o estoque do kit na Shopee.
 
 ## Variacoes no mesmo anuncio Shopee
 
