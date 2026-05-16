@@ -44,6 +44,18 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
+export type VpsMutationResult = {
+  ok: boolean;
+  id?: string;
+  method?: string;
+  path?: string;
+  status?: number;
+  statusText?: string;
+  responseText?: string;
+  responseJson?: unknown;
+  error?: string;
+};
+
 export interface FieldPreset {
   id: string;
   name: string;
@@ -160,6 +172,44 @@ class VpsApiService {
 
   invalidateProductCache() {
     [...this.cache.keys()].filter(k => k.startsWith('/products')).forEach(k => this.cache.delete(k));
+  }
+
+  private async parseMutationResponse(res: Response, method: string, path: string): Promise<VpsMutationResult> {
+    const responseText = await res.text().catch(() => '');
+    let responseJson: unknown;
+    if (responseText) {
+      try {
+        responseJson = JSON.parse(responseText);
+      } catch {
+        responseJson = undefined;
+      }
+    }
+
+    const jsonObject = responseJson && typeof responseJson === 'object' && !Array.isArray(responseJson)
+      ? responseJson as Record<string, any>
+      : null;
+
+    return {
+      ...(jsonObject || {}),
+      ok: res.ok && jsonObject?.ok !== false,
+      method,
+      path,
+      status: res.status,
+      statusText: res.statusText,
+      responseText,
+      responseJson,
+      error: jsonObject?.error || jsonObject?.message || (!res.ok ? `HTTP ${res.status} ${res.statusText}`.trim() : undefined),
+    };
+  }
+
+  private mutationExceptionResult(method: string, path: string, error: unknown): VpsMutationResult {
+    const message = error instanceof Error ? error.message : String(error || 'Erro desconhecido');
+    return {
+      ok: false,
+      method,
+      path,
+      error: message,
+    };
   }
 
   // ── Categories ─────────────────────────────────────────────────────────
@@ -502,7 +552,7 @@ class VpsApiService {
 
   // ── WRITE (fire-and-forget após Supabase) ─────────────────────────────
 
-  async createCombo(payload: unknown): Promise<{ok: boolean, id?: string}> {
+  async createCombo(payload: unknown): Promise<VpsMutationResult> {
     this.invalidateProductCache();
     try {
       const res = await fetch(proxyUrl('/combos', 'POST'), {
@@ -510,12 +560,11 @@ class VpsApiService {
         headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
         body: JSON.stringify(payload)
       });
-      if (!res.ok) return { ok: false };
-      return await res.json();
-    } catch { return {ok:false}; }
+      return this.parseMutationResponse(res, 'POST', '/combos');
+    } catch (error) { return this.mutationExceptionResult('POST', '/combos', error); }
   }
 
-  async updateCombo(id: string, payload: unknown): Promise<{ok: boolean}> {
+  async updateCombo(id: string, payload: unknown): Promise<VpsMutationResult> {
     this.invalidateProductCache();
     try {
       const res = await fetch(proxyUrl(`/combos/${id}`, 'PUT'), {
@@ -523,9 +572,8 @@ class VpsApiService {
         headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
         body: JSON.stringify(payload)
       });
-      if (!res.ok) return { ok: false };
-      return await res.json();
-    } catch { return {ok:false}; }
+      return this.parseMutationResponse(res, 'PUT', `/combos/${id}`);
+    } catch (error) { return this.mutationExceptionResult('PUT', `/combos/${id}`, error); }
   }
 
   async getComboChildren(id: string): Promise<any[] | null> {
@@ -536,7 +584,7 @@ class VpsApiService {
     return this.fetchSafe<any[]>('/offers', true) || [];
   }
 
-  async createOffer(payload: unknown): Promise<{ok: boolean, id?: string}> {
+  async createOffer(payload: unknown): Promise<VpsMutationResult> {
     this.invalidateProductCache();
     try {
       const res = await fetch(proxyUrl('/offers', 'POST'), {
@@ -544,12 +592,11 @@ class VpsApiService {
         headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
         body: JSON.stringify(payload)
       });
-      if (!res.ok) return { ok: false };
-      return await res.json();
-    } catch { return {ok:false}; }
+      return this.parseMutationResponse(res, 'POST', '/offers');
+    } catch (error) { return this.mutationExceptionResult('POST', '/offers', error); }
   }
 
-  async updateOffer(id: string, payload: unknown): Promise<{ok: boolean}> {
+  async updateOffer(id: string, payload: unknown): Promise<VpsMutationResult> {
     this.invalidateProductCache();
     try {
       const res = await fetch(proxyUrl(`/offers/${id}`, 'PUT'), {
@@ -557,9 +604,8 @@ class VpsApiService {
         headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
         body: JSON.stringify(payload)
       });
-      if (!res.ok) return { ok: false };
-      return await res.json();
-    } catch { return {ok:false}; }
+      return this.parseMutationResponse(res, 'PUT', `/offers/${id}`);
+    } catch (error) { return this.mutationExceptionResult('PUT', `/offers/${id}`, error); }
   }
 
   async getFavoritesRanking(limit: number = 100): Promise<any[]> {

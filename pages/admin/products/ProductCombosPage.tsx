@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Package, Plus, Search, Trash2, Edit2, ChevronLeft, Save, X, Calculator, Store } from 'lucide-react';
+import { Package, Plus, Search, Trash2, Edit2, ChevronLeft, Save, X, Calculator, Store, Clipboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { vpsApiService } from '../../../services/vpsApiService';
@@ -12,6 +12,7 @@ import {
   hasMissingBlingLink,
 } from '../../../services/productOfferEngine';
 import type { ProductOfferShopeeStrategy, ProductOfferType, ProductOfferVisibility } from '../../../types/product-offer';
+import type { VpsMutationResult } from '../../../services/vpsApiService';
 
 interface ProductComboFormData {
   id?: string;
@@ -221,6 +222,73 @@ const preferVariationOptions = (products: any[]) => {
   return colored.length > 0 ? colored : unique;
 };
 
+const sanitizeComboDebugValue = (value: unknown): unknown => {
+  if (typeof value === 'string') {
+    if (value.startsWith('data:')) return `[data-url:${value.length} chars]`;
+    return value.length > 1200 ? `${value.slice(0, 1200)}... [truncated ${value.length} chars]` : value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeComboDebugValue(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        sanitizeComboDebugValue(item),
+      ]),
+    );
+  }
+
+  return value;
+};
+
+const buildComboSaveDebug = (input: {
+  action: string;
+  payload?: unknown;
+  result?: VpsMutationResult | null;
+  error?: unknown;
+  editingCombo?: ProductComboFormData | null;
+  componentCount: number;
+}) => JSON.stringify({
+  capturedAt: new Date().toISOString(),
+  page: 'ProductCombosPage',
+  action: input.action,
+  componentCount: input.componentCount,
+  browserPath: typeof window !== 'undefined' ? window.location.pathname : null,
+  apiResult: sanitizeComboDebugValue(input.result),
+  error: input.error instanceof Error ? {
+    name: input.error.name,
+    message: input.error.message,
+    stack: input.error.stack,
+  } : sanitizeComboDebugValue(input.error),
+  payload: sanitizeComboDebugValue(input.payload),
+  editingSummary: sanitizeComboDebugValue({
+    id: input.editingCombo?.id,
+    name: input.editingCombo?.name,
+    sku: input.editingCombo?.sku,
+    offer_type: input.editingCombo?.offer_type,
+    offer_parent_product_id: input.editingCombo?.offer_parent_product_id,
+    combo_children: input.editingCombo?.combo_children?.map(child => ({
+      id: child.id,
+      sku: child.sku,
+      name: child.name,
+      quantity: child.quantity,
+      bling_id: child.bling_id,
+      parent_id: child.parent_id,
+    })),
+    combo_choice_groups: input.editingCombo?.combo_choice_groups?.map(group => ({
+      group_key: group.group_key,
+      parent_product_id: group.parent_product_id,
+      label: group.label,
+      quantity: group.quantity,
+      optionCount: group.options.length,
+      optionIds: group.options.map(option => option.id),
+    })),
+  }),
+}, null, 2);
+
 export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOfferMode = false }) => {
   const navigate = useNavigate();
   const [combos, setCombos] = useState<any[]>([]);
@@ -231,6 +299,8 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCombo, setEditingCombo] = useState<ProductComboFormData | null>(null);
   const [saving, setSaving] = useState(false);
+  const [captureSaveDebug, setCaptureSaveDebug] = useState(true);
+  const [lastSaveDebug, setLastSaveDebug] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [childSearchTerm, setChildSearchTerm] = useState('');
@@ -274,6 +344,16 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
   const handleRecalculatePackageFromItems = () => {
     setPackageMode('auto');
     setPackageDraft(calculatedPackage);
+  };
+
+  const copyLastSaveDebug = async () => {
+    if (!lastSaveDebug) return;
+    try {
+      await navigator.clipboard.writeText(lastSaveDebug);
+      toast.success('Debug copiado');
+    } catch {
+      toast.error('Nao foi possivel copiar o debug');
+    }
   };
 
   const loadData = async () => {
@@ -331,6 +411,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
   }, [childSearchTerm, isModalOpen]);
 
   const openNewComboModal = () => {
+    setLastSaveDebug(null);
     setEditingCombo({
       name: '',
       sku: '',
@@ -359,6 +440,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
   };
 
   const openNewOfferModal = () => {
+    setLastSaveDebug(null);
     setEditingCombo({
       name: '',
       sku: '',
@@ -390,6 +472,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
   };
 
   const openEditComboModal = async (combo: any) => {
+    setLastSaveDebug(null);
     const toastId = toast.loading('Carregando itens do combo...');
     try {
       const [children, supaResult] = await Promise.all([
@@ -467,7 +550,12 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     }
 
     setSaving(true);
+    setLastSaveDebug(null);
     const toastId = toast.loading('Salvando combo...');
+    let saveAction = 'unknown';
+    let savePayload: unknown;
+    let saveResult: VpsMutationResult | null = null;
+    let capturedDebug: string | null = null;
     
     try {
       let mergedDescription = '';
@@ -612,28 +700,51 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
             depth_cm: packageValues.depth_cm
         }
       };
+      savePayload = payload;
 
-      let res;
       if (editingCombo.id) {
-        res = isOffer
+        saveAction = isOffer ? 'updateOffer' : 'updateCombo';
+        saveResult = isOffer
           ? await vpsApiService.updateOffer(editingCombo.id, payload)
           : await vpsApiService.updateCombo(editingCombo.id, payload);
       } else {
-        res = isOffer
+        saveAction = isOffer ? 'createOffer' : 'createCombo';
+        saveResult = isOffer
           ? await vpsApiService.createOffer(payload)
           : await vpsApiService.createCombo(payload);
       }
 
-      if (res && res.ok) {
+      if (saveResult && saveResult.ok) {
         toast.success(isOffer ? 'Oferta salva com sucesso!' : 'Combo salvo com sucesso!', { id: toastId });
         setIsModalOpen(false);
+        setLastSaveDebug(null);
         loadData();
       } else {
-        throw new Error('Retorno false da API');
+        capturedDebug = buildComboSaveDebug({
+          action: saveAction,
+          payload,
+          result: saveResult,
+          editingCombo,
+          componentCount,
+        });
+        if (captureSaveDebug) setLastSaveDebug(capturedDebug);
+        const apiMessage = saveResult?.error || saveResult?.responseText || 'Retorno false da API';
+        throw new Error(apiMessage);
       }
     } catch (e) {
       console.error(e);
-      toast.error('Erro ao salvar combo', { id: toastId });
+      if (captureSaveDebug && !capturedDebug) {
+        setLastSaveDebug(buildComboSaveDebug({
+          action: saveAction,
+          payload: savePayload,
+          result: saveResult,
+          error: e,
+          editingCombo,
+          componentCount,
+        }));
+      }
+      const detail = e instanceof Error && e.message ? `: ${e.message.slice(0, 160)}` : '';
+      toast.error(`Erro ao salvar combo${detail}`, { id: toastId });
     } finally {
       setSaving(false);
     }
@@ -1611,21 +1722,44 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
             </div>
             
-            <div className="sticky bottom-0 bg-white border-t border-slate-100 p-4 flex justify-end gap-3 rounded-b-2xl">
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleSaveCombo}
-                disabled={saving}
-                className="flex items-center gap-2 px-6 py-2 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-50"
-              >
-                <Save size={20} />
-                {saving ? 'Gravando...' : (editingCombo.offer_type ? 'Salvar Oferta' : 'Salvar Combo')}
-              </button>
+            <div className="sticky bottom-0 bg-white border-t border-slate-100 p-4 flex flex-col gap-3 rounded-b-2xl md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={captureSaveDebug}
+                    onChange={event => setCaptureSaveDebug(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  Capturar debug
+                </label>
+                {lastSaveDebug && (
+                  <button
+                    type="button"
+                    onClick={copyLastSaveDebug}
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors"
+                  >
+                    <Clipboard size={16} />
+                    Copiar debug
+                  </button>
+                )}
+              </div>
+              <div className="flex justify-end gap-3">
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveCombo}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-6 py-2 bg-teal-600 text-white font-medium rounded-lg hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-50"
+                >
+                  <Save size={20} />
+                  {saving ? 'Gravando...' : (editingCombo.offer_type ? 'Salvar Oferta' : 'Salvar Combo')}
+                </button>
+              </div>
             </div>
           </div>
         </div>
