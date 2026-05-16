@@ -40,12 +40,17 @@ interface ProductComboFormData {
     sku?: string;
     price_retail?: number;
     stock_quantity?: number;
+    weight_kg?: number | null;
+    dimensions?: any;
+    bling_id?: number | null;
   }>;
   description?: string;
   technical_specifications?: string;
   tags?: string[];
   images?: string[];
   slug?: string;
+  weight_kg?: number | null;
+  dimensions?: any;
 }
 
 const generateSlug = (name: string) => {
@@ -61,6 +66,70 @@ type ProductCombosPageProps = {
   initialOfferMode?: boolean;
 };
 
+type PackageMode = 'auto' | 'manual';
+
+type ProductPhysicalPackage = {
+  weight_kg: number;
+  width_cm: number;
+  height_cm: number;
+  depth_cm: number;
+};
+
+const DEFAULT_PACKAGE: ProductPhysicalPackage = {
+  weight_kg: 0.3,
+  width_cm: 15,
+  height_cm: 10,
+  depth_cm: 20,
+};
+
+const toPositiveNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const normalizeProductDimensions = (dimensions: any) => {
+  if (!dimensions) return null;
+  const parsed = typeof dimensions === 'string'
+    ? (() => {
+        try { return JSON.parse(dimensions); } catch { return null; }
+      })()
+    : dimensions;
+  if (!parsed) return null;
+  return {
+    width_cm: toPositiveNumber(parsed.width_cm ?? parsed.largura ?? parsed.width),
+    height_cm: toPositiveNumber(parsed.height_cm ?? parsed.altura ?? parsed.height),
+    depth_cm: toPositiveNumber(parsed.depth_cm ?? parsed.comprimento ?? parsed.profundidade ?? parsed.length),
+  };
+};
+
+const calculatePhysicalPackage = (items: Array<{ product: any; quantity: number }>): ProductPhysicalPackage => {
+  if (!items.length) return DEFAULT_PACKAGE;
+
+  let weight = 0;
+  let width = 0;
+  let height = 0;
+  let depth = 0;
+
+  for (const { product, quantity } of items) {
+    const qty = Math.max(1, Math.trunc(Number(quantity) || 1));
+    weight += toPositiveNumber(product?.weight_kg) * qty;
+
+    const dimensions = normalizeProductDimensions(product?.dimensions);
+    if (dimensions) {
+      height += dimensions.height_cm * qty;
+      width = Math.max(width, dimensions.width_cm);
+      depth = Math.max(depth, dimensions.depth_cm);
+    }
+  }
+
+  return {
+    weight_kg: Number((weight || DEFAULT_PACKAGE.weight_kg).toFixed(3)),
+    width_cm: Number((width || DEFAULT_PACKAGE.width_cm).toFixed(1)),
+    height_cm: Number((height || DEFAULT_PACKAGE.height_cm).toFixed(1)),
+    depth_cm: Number((depth || DEFAULT_PACKAGE.depth_cm).toFixed(1)),
+  };
+};
+
 export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOfferMode = false }) => {
   const navigate = useNavigate();
   const [combos, setCombos] = useState<any[]>([]);
@@ -74,7 +143,11 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
   const [searchTerm, setSearchTerm] = useState('');
   const [childSearchTerm, setChildSearchTerm] = useState('');
+  const [childSearchResults, setChildSearchResults] = useState<any[]>([]);
+  const [childSearchLoading, setChildSearchLoading] = useState(false);
   const [imageStyle, setImageStyle] = useState<'auto' | 'mosaic' | 'manual'>('auto');
+  const [packageMode, setPackageMode] = useState<PackageMode>('auto');
+  const [packageDraft, setPackageDraft] = useState<ProductPhysicalPackage | null>(null);
 
   const editingOfferItems = useMemo(() => {
     if (!editingCombo?.offer_type) return [];
@@ -86,6 +159,22 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
   const editingOfferStock = useMemo(() => calculateOfferStock(editingOfferItems), [editingOfferItems]);
   const editingOfferHasMissingBling = useMemo(() => hasMissingBlingLink(editingOfferItems), [editingOfferItems]);
+  const calculatedPackage = useMemo(() => calculatePhysicalPackage(editingOfferItems), [editingOfferItems]);
+  const packageValues = packageMode === 'manual' && packageDraft ? packageDraft : calculatedPackage;
+
+  const handlePackageFieldChange = (field: keyof ProductPhysicalPackage, value: string) => {
+    const nextValue = toPositiveNumber(value, DEFAULT_PACKAGE[field]);
+    setPackageMode('manual');
+    setPackageDraft({
+      ...packageValues,
+      [field]: nextValue,
+    });
+  };
+
+  const handleRecalculatePackageFromItems = () => {
+    setPackageMode('auto');
+    setPackageDraft(calculatedPackage);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -106,6 +195,40 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     loadData();
   }, []);
 
+  useEffect(() => {
+    const query = childSearchTerm.trim();
+    if (!isModalOpen || query.length < 2) {
+      setChildSearchResults([]);
+      setChildSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setChildSearchLoading(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const rows = await vpsApiService.getProducts({ search: childSearchTerm.trim(), status: 'all', limit: 80, noCache: true });
+        if (cancelled) return;
+        const products = (rows || []).filter(p => !p.is_combo && !p.offer_type);
+        setChildSearchResults(products);
+        setAllProducts(prev => {
+          const merged = new Map(prev.map(product => [product.id, product]));
+          products.forEach(product => merged.set(product.id, { ...(merged.get(product.id) || {}), ...product }));
+          return Array.from(merged.values());
+        });
+      } catch {
+        if (!cancelled) setChildSearchResults([]);
+      } finally {
+        if (!cancelled) setChildSearchLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [childSearchTerm, isModalOpen]);
+
   const openNewComboModal = () => {
     setEditingCombo({
       name: '',
@@ -125,6 +248,10 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       tags: []
     });
     setImageStyle('auto');
+    setPackageMode('auto');
+    setPackageDraft(null);
+    setChildSearchResults([]);
+    setChildSearchTerm('');
     setIsModalOpen(true);
   };
 
@@ -150,6 +277,10 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       tags: []
     });
     setImageStyle('auto');
+    setPackageMode('auto');
+    setPackageDraft(null);
+    setChildSearchResults([]);
+    setChildSearchTerm('');
     setIsModalOpen(true);
   };
 
@@ -181,13 +312,25 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
           sku: c.sku,
           quantity: c.quantity,
           price_retail: c.price_retail,
-          stock_quantity: c.stock_quantity
+          stock_quantity: c.stock_quantity,
+          weight_kg: c.weight_kg,
+          dimensions: c.dimensions,
+          bling_id: c.bling_id
         })) || [],
         tags: combo.tags || [],
         description: savedDescription,
         technical_specifications: savedTechSpecs,
       });
       setImageStyle(combo.tags?.includes('mosaic_combo') ? 'mosaic' : 'auto');
+      setPackageMode('manual');
+      setPackageDraft({
+        weight_kg: toPositiveNumber(combo.weight_kg, DEFAULT_PACKAGE.weight_kg),
+        width_cm: toPositiveNumber(normalizeProductDimensions(combo.dimensions)?.width_cm, DEFAULT_PACKAGE.width_cm),
+        height_cm: toPositiveNumber(normalizeProductDimensions(combo.dimensions)?.height_cm, DEFAULT_PACKAGE.height_cm),
+        depth_cm: toPositiveNumber(normalizeProductDimensions(combo.dimensions)?.depth_cm, DEFAULT_PACKAGE.depth_cm),
+      });
+      setChildSearchResults([]);
+      setChildSearchTerm('');
       setIsModalOpen(true);
       toast.dismiss(toastId);
     } catch (e) {
@@ -214,10 +357,6 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     const toastId = toast.loading('Salvando combo...');
     
     try {
-      let total_weight_kg = 0;
-      let total_width = 0;
-      let total_height = 0;
-      let total_depth = 0;
       let mergedDescription = '';
       let mergedSpecs = '';
       let autoImages: string[] = [];
@@ -244,13 +383,6 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         }
 
         if (prodData) {
-          total_weight_kg += (prodData.weight_kg || 0) * c.quantity;
-          if (prodData.dimensions) {
-            total_height += (prodData.dimensions.height_cm || 0) * c.quantity;
-            total_width = Math.max(total_width, prodData.dimensions.width_cm || 0);
-            total_depth = Math.max(total_depth, prodData.dimensions.depth_cm || 0);
-          }
-          
           if (effectiveDesc) {
             mergedDescription += (mergedDescription ? '<hr class="my-6 border-slate-200">' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">${c.quantity}x ${prodData.name}</h4><div>${effectiveDesc}</div>`;
           }
@@ -336,11 +468,11 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         offer_parent_product_id: isOffer ? primaryProduct?.id || null : null,
         offer_visibility: isOffer ? (editingCombo.offer_visibility || 'visible') : null,
         shopee_strategy: offerStrategy,
-        weight_kg: total_weight_kg || 0.3,
+        weight_kg: packageValues.weight_kg,
         dimensions: {
-            width_cm: total_width || 15,
-            height_cm: total_height || 10,
-            depth_cm: total_depth || 20
+            width_cm: packageValues.width_cm,
+            height_cm: packageValues.height_cm,
+            depth_cm: packageValues.depth_cm
         }
       };
 
@@ -430,7 +562,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         ...editingCombo,
         offer_parent_product_id: prod.id,
         combo_children: [
-          { id: prod.id, name: prod.name, sku: prod.sku, quantity: editingCombo.combo_children[0]?.quantity || 2, price_retail: prod.price_retail, stock_quantity: prod.stock_quantity }
+          { id: prod.id, name: prod.name, sku: prod.sku, quantity: editingCombo.combo_children[0]?.quantity || 2, price_retail: prod.price_retail, stock_quantity: prod.stock_quantity, weight_kg: prod.weight_kg, dimensions: prod.dimensions, bling_id: prod.bling_id }
         ]
       });
       setChildSearchTerm('');
@@ -445,7 +577,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       ...editingCombo,
       combo_children: [
         ...editingCombo.combo_children,
-        { id: prod.id, name: prod.name, sku: prod.sku, quantity: 1, price_retail: prod.price_retail, stock_quantity: prod.stock_quantity }
+        { id: prod.id, name: prod.name, sku: prod.sku, quantity: 1, price_retail: prod.price_retail, stock_quantity: prod.stock_quantity, weight_kg: prod.weight_kg, dimensions: prod.dimensions, bling_id: prod.bling_id }
       ]
     });
     setChildSearchTerm('');
@@ -478,8 +610,14 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
   const filteredProductsToSelect = useMemo(() => {
     if (!childSearchTerm) return [];
     const term = childSearchTerm.toLowerCase();
-    return allProducts.filter(p => p.name?.toLowerCase().includes(term) || p.sku?.toLowerCase().includes(term)).slice(0, 20);
-  }, [allProducts, childSearchTerm]);
+    const merged = new Map<string, any>();
+    [...childSearchResults, ...allProducts].forEach(product => {
+      if (!product?.id || product.is_combo || product.offer_type) return;
+      const matches = product.name?.toLowerCase().includes(term) || product.sku?.toLowerCase().includes(term);
+      if (matches) merged.set(product.id, product);
+    });
+    return Array.from(merged.values()).slice(0, 80);
+  }, [allProducts, childSearchResults, childSearchTerm]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -744,6 +882,78 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                 )}
               </div>
 
+              {/* Package */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">Embalagem do kit</h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Valores usados para frete, Shopee e peso/dimensao do produto gerado.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                      packageMode === 'manual' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {packageMode === 'manual' ? 'Editado manualmente' : 'Calculado pelos itens'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRecalculatePackageFromItems}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      Recalcular pelos itens
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <label>
+                    <span className="block text-xs font-semibold uppercase text-slate-500 mb-1">Peso (kg)</span>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0.001"
+                      value={packageValues.weight_kg}
+                      onChange={e => handlePackageFieldChange('weight_kg', e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </label>
+                  <label>
+                    <span className="block text-xs font-semibold uppercase text-slate-500 mb-1">Comprimento (cm)</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      value={packageValues.depth_cm}
+                      onChange={e => handlePackageFieldChange('depth_cm', e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </label>
+                  <label>
+                    <span className="block text-xs font-semibold uppercase text-slate-500 mb-1">Largura (cm)</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      value={packageValues.width_cm}
+                      onChange={e => handlePackageFieldChange('width_cm', e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </label>
+                  <label>
+                    <span className="block text-xs font-semibold uppercase text-slate-500 mb-1">Altura (cm)</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      value={packageValues.height_cm}
+                      onChange={e => handlePackageFieldChange('height_cm', e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </label>
+                </div>
+              </div>
+
               {/* Combo Image Style */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Estilo Visual das Imagens (Vitrine)</label>
@@ -805,25 +1015,32 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                   />
                   {childSearchTerm && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
-                      {filteredProductsToSelect.length === 0 ? (
+                      {childSearchLoading ? (
+                        <div className="p-3 text-sm text-slate-500 text-center">Buscando produtos...</div>
+                      ) : filteredProductsToSelect.length === 0 ? (
                         <div className="p-3 text-sm text-slate-500 text-center">Nenhum produto encontrado.</div>
                       ) : (
-                        filteredProductsToSelect.map(p => (
-                          <div
-                            key={p.id}
-                            onClick={() => addChildProduct(p)}
-                            className="p-3 flex items-center justify-between hover:bg-slate-50 cursor-pointer border-b last:border-0 border-slate-100"
-                          >
-                            <div>
-                              <p className="font-semibold text-sm">{p.name}</p>
-                              <p className="text-xs text-slate-500">{p.sku}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-semibold text-teal-700">{formatCurrency(p.price_retail)}</p>
-                              <p className="text-xs text-slate-400">Estoque: {p.stock_quantity}</p>
-                            </div>
+                        <>
+                          <div className="px-3 py-2 text-xs font-semibold text-slate-500 border-b border-slate-100">
+                            {filteredProductsToSelect.length} resultado(s) encontrados
                           </div>
-                        ))
+                          {filteredProductsToSelect.map(p => (
+                            <div
+                              key={p.id}
+                              onClick={() => addChildProduct(p)}
+                              className="p-3 flex items-center justify-between hover:bg-slate-50 cursor-pointer border-b last:border-0 border-slate-100"
+                            >
+                              <div>
+                                <p className="font-semibold text-sm">{p.name}</p>
+                                <p className="text-xs text-slate-500">{p.sku}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-teal-700">{formatCurrency(p.price_retail)}</p>
+                                <p className="text-xs text-slate-400">Estoque: {p.stock_quantity}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </>
                       )}
                     </div>
                   )}
