@@ -49,10 +49,22 @@ export interface OrderItem {
     product_sku?: string;
     product_image_url?: string;  // URL da primeira imagem do produto
     product_color?: string;      // Cor/variante do produto
+    combo_selections?: ComboSelection[];
     quantity: number;
     unit_price: number;  // em centavos
     subtotal: number;    // em centavos
     created_at: string;
+}
+
+export interface ComboSelection {
+    group_key?: string;
+    label?: string;
+    quantity?: number;
+    option?: {
+        id?: string;
+        name?: string;
+        sku?: string;
+    };
 }
 
 export interface OrderItemInput {
@@ -61,6 +73,7 @@ export interface OrderItemInput {
     product_sku?: string;
     product_image_url?: string;  // URL da primeira imagem
     product_color?: string;      // Cor/variante
+    comboSelections?: ComboSelection[];
     quantity: number;
     unit_price: number;  // em centavos
     subtotal: number;    // em centavos

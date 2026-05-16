@@ -246,6 +246,7 @@ export default function CheckoutPage() {
                 product_color: (i.comboSelections || [])
                     .map(selection => `${selection.label}: ${selection.option?.name || selection.option?.sku}`)
                     .join(' | ') || i.product.specs?.color || i.product.specs?.Cor || undefined,
+                comboSelections: i.comboSelections,
                 quantity: i.quantity,
                 unit_price: i.unit_price,
                 subtotal: i.unit_price * i.quantity,

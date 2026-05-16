@@ -222,7 +222,8 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             syncStockToBling(
                 item.product_id!,
                 item.quantity,
-                `Venda #${sale.id} — PDV Mercado do Vale`
+                `Venda #${sale.id} — PDV Mercado do Vale`,
+                { comboSelections: item.comboSelections }
             ).catch(() => { /* já logado internamente */ });
         }
 

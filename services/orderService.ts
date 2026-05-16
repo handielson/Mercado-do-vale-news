@@ -22,6 +22,7 @@ import { addPendingCoinsForPurchase, confirmPendingCoins, cancelPendingCoins, ca
 import { unitService } from './units';
 import { UnitStatus } from '../utils/field-standards';
 import { stockLocationService } from './stockLocationService';
+import { syncStockToBling } from './blingService';
 
 
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -371,6 +372,19 @@ async function releaseOrderReservedStock(orderId: string): Promise<void> {
     }
 }
 
+async function syncOrderItemsStockToBling(items: any[] | null | undefined, notes: string): Promise<void> {
+    for (const item of items || []) {
+        if (!item?.product_id || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) continue;
+
+        await syncStockToBling(
+            item.product_id,
+            Number(item.quantity),
+            notes,
+            { comboSelections: item.combo_selections || item.comboSelections }
+        );
+    }
+}
+
 function orderHadNumericStockDecrement(order: { status?: string | null; payment_status?: string | null } | null | undefined): boolean {
     if (!order || order.status === 'cancelled') return false;
 
@@ -488,6 +502,7 @@ export async function createOrder(input: OrderInput): Promise<Order> {
         product_sku: item.product_sku ?? null,
         product_image_url: item.product_image_url ?? null,
         product_color: item.product_color ?? null,
+        combo_selections: item.comboSelections ?? null,
         quantity: item.quantity,
         unit_price: item.unit_price,
         subtotal: item.subtotal,
@@ -579,6 +594,7 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                     .update({
                         gateway_payment_id: String(mpResponse.id),
                         status: mpResponse.status === 'approved' ? 'paid' : 'awaiting_payment',
+                        payment_status: mpResponse.status === 'approved' ? 'paid' : 'pending',
                     })
                     .eq('id', order.id);
 
@@ -588,6 +604,11 @@ export async function createOrder(input: OrderInput): Promise<Order> {
 
                     if (mpResponse.status === 'approved') {
                         confirmPendingCoins(order.id).catch(console.error);
+                        await finalizeOrderStockByPriority(input.items, order.id);
+                        syncOrderItemsStockToBling(
+                            input.items,
+                            `Pedido online #${order.id} — Mercado do Vale`
+                        ).catch(e => console.error('[orderService] Falha ao sincronizar estoque Bling (card approved):', e));
                         // Auto-reserva de unidades serializadas (cartão aprovado na hora)
                         autoReserveOrderItems(input.items, order.id).catch(e =>
                             console.error('[orderService] Falha na reserva serializada (card approved):', e)
@@ -730,11 +751,12 @@ export async function confirmPayment(
 ): Promise<void> {
     const { data: order, error: fetchError } = await supabase
         .from('orders')
-        .select('id, subtotal, discount, total, customer_phone, customer_email, payment_method, delivery_type, shipping_address, referral_code, customer_id, customer_name, items:order_items(product_id, product_name, quantity, unit_price, subtotal)')
+        .select('id, status, payment_status, subtotal, discount, total, customer_phone, customer_email, payment_method, delivery_type, shipping_address, referral_code, customer_id, customer_name, items:order_items(product_id, product_name, quantity, unit_price, subtotal, combo_selections)')
         .eq('gateway_payment_id', gatewayPaymentId)
         .single();
 
     if (fetchError || !order) throw new Error('Pedido não encontrado para este pagamento.');
+    const alreadyHadStockDecrement = orderHadNumericStockDecrement(order);
 
     // Atualiza status do pedido
     const { error: updateError } = await supabase
@@ -743,6 +765,7 @@ export async function confirmPayment(
         .eq('id', order.id);
 
     if (updateError) throw new Error(updateError.message);
+    if (alreadyHadStockDecrement) return;
 
     // Confirma moedas pendentes
     confirmPendingCoins(order.id).catch(e => console.error("Erro confirmando moedas:", e));
@@ -772,6 +795,10 @@ export async function confirmPayment(
 
     // Deduz estoque numérico dos itens, consumindo reserva quando existir
     await finalizeOrderStockByPriority(items, order.id);
+    syncOrderItemsStockToBling(
+        items,
+        `Pedido online #${order.id} — Mercado do Vale`
+    ).catch(e => console.error('[orderService] Falha ao sincronizar estoque Bling (confirmPayment):', e));
 
     // Auto-reserva de unidades serializadas (IMEI/Serial) — FIFO
     // Roda após dedução de estoque, para qualquer produto que tenha unidades cadastradas
@@ -785,11 +812,12 @@ export async function confirmPayment(
 export async function completeOnDeliveryOrder(id: string): Promise<void> {
     const { data: order, error: fetchError } = await supabase
         .from('orders')
-        .select('id, subtotal, discount, total, customer_phone, customer_email, payment_method, delivery_type, shipping_address, referral_code, customer_id, customer_name, items:order_items(product_id, product_name, quantity, unit_price, subtotal)')
+        .select('id, status, payment_status, subtotal, discount, total, customer_phone, customer_email, payment_method, delivery_type, shipping_address, referral_code, customer_id, customer_name, items:order_items(product_id, product_name, quantity, unit_price, subtotal, combo_selections)')
         .eq('id', id)
         .single();
 
     if (fetchError || !order) throw new Error('Pedido não encontrado.');
+    const alreadyHadStockDecrement = orderHadNumericStockDecrement(order);
 
     // Atualiza status
     const { error: updateError } = await supabase
@@ -798,6 +826,7 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
         .eq('id', id);
 
     if (updateError) throw new Error(updateError.message);
+    if (alreadyHadStockDecrement) return;
 
     // Confirma moedas pendentes
     confirmPendingCoins(id).catch(e => console.error("Erro confirmando moedas entregues:", e));
@@ -827,6 +856,10 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
     );
 
     await finalizeOrderStockByPriority(items, id);
+    syncOrderItemsStockToBling(
+        items,
+        `Pedido online #${id} — Mercado do Vale`
+    ).catch(e => console.error('[orderService] Falha ao sincronizar estoque Bling (onDelivery):', e));
 
     // Auto-reserva de unidades serializadas (IMEI/Serial) — FIFO
     // Aguarda concluir antes de marcar como sold pra não perder units recém-reservadas.

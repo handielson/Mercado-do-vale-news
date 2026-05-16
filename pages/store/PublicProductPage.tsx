@@ -793,6 +793,14 @@ export const PublicProductPage: React.FC = () => {
         // Scroll suave para o topo
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
+
+    const handleComboOptionSelect = (groupKey: string, option: any) => {
+        setSelectedComboOptions(prev => ({ ...prev, [groupKey]: option }));
+        if (Array.isArray(option?.images) && option.images[0]) {
+            setSelectedImage(option.images[0]);
+        }
+    };
+
     const handleCalculateShipping = async () => {
         const cleanCep = cep.replace(/\D/g, '');
         if (cleanCep.length < 8) return toast.error("CEP inválido");
@@ -1402,7 +1410,7 @@ export const PublicProductPage: React.FC = () => {
                                                                 <button
                                                                     key={option.id}
                                                                     type="button"
-                                                                    onClick={() => setSelectedComboOptions(prev => ({ ...prev, [group.group_key]: option }))}
+                                                                    onClick={() => handleComboOptionSelect(group.group_key, option)}
                                                                     className={`min-h-[40px] rounded-full border px-4 py-2 text-sm font-bold transition-all ${
                                                                         selected
                                                                             ? 'border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-500'

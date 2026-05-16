@@ -57,6 +57,18 @@ export interface SaleItem {
         imei2?: string;
         serial?: string;
     };
+
+    // Selecoes de componentes variaveis de um combo (ex.: cor da capa)
+    comboSelections?: Array<{
+        group_key?: string;
+        label?: string;
+        quantity?: number;
+        option?: {
+            id?: string;
+            name?: string;
+            sku?: string;
+        };
+    }>;
 }
 
 /**

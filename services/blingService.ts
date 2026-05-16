@@ -6,6 +6,7 @@ import { crossSellTagsService } from './cross-sell-tags';
 import { vpsApiService } from './vpsApiService';
 import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
+import { buildComboStockDeductionTargets, type BlingComboSelection } from './blingComboStock';
 
 const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -715,7 +716,12 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
  * Deduz estoque de um produto no Bling após uma venda no PDV.
  * Fire-and-forget: erros do Bling não bloqueiam a venda.
  */
-export async function syncStockToBling(productId: string, quantity: number, notes?: string): Promise<void> {
+export async function syncStockToBling(
+    productId: string,
+    quantity: number,
+    notes?: string,
+    options?: { comboSelections?: BlingComboSelection[] }
+): Promise<void> {
     try {
         // Busca o bling_id do produto no banco
         const { supabase } = await import('./supabase');
@@ -726,14 +732,20 @@ export async function syncStockToBling(productId: string, quantity: number, note
             .maybeSingle();
 
         if (product?.is_combo) {
-            const { vpsApiService } = await import('./vpsApiService');
             try {
                 const children = await vpsApiService.getComboChildren(productId);
-                if (children && children.length > 0) {
-                    for (const child of children) {
-                        // Deduz o estoque proporcionalmente para cada item (recursivo)
-                        await syncStockToBling(child.child_id, quantity * child.quantity, `${notes || ''} (Combo)`.trim());
-                    }
+                const targets = buildComboStockDeductionTargets(
+                    children,
+                    quantity,
+                    options?.comboSelections
+                );
+
+                for (const target of targets) {
+                    await syncStockToBling(
+                        target.productId,
+                        target.quantity,
+                        `${notes || ''} (Combo)`.trim()
+                    );
                 }
             } catch (comboErr) {
                 console.warn(`[syncStockToBling] Falha ao buscar filhos do combo ${productId}:`, comboErr);

@@ -164,6 +164,16 @@ type Tab = 'config' | 'products' | 'bulk' | 'orders' | 'finance' | 'printers';
 type Filter = 'all' | 'synced' | 'not_synced' | 'inactive';
 type BulkRunItemStatus = 'queued' | 'active' | 'published' | 'skipped' | 'failed';
 type BulkAutoFilter = 'all' | 'ready' | 'review';
+type SyncStepStatus = 'idle' | 'running' | 'done' | 'error' | 'skipped';
+type SyncStepKey =
+    | 'validate'
+    | 'download_images'
+    | 'upload_images'
+    | 'prepare_video'
+    | 'upload_video'
+    | 'publish_item'
+    | 'update_stock'
+    | 'save_link';
 
 type BulkRunItem = {
     productId: string;
@@ -200,6 +210,20 @@ type SyncDebugEntry = {
     payload: string;
 };
 
+type SyncStep = {
+    key: SyncStepKey;
+    label: string;
+    status: SyncStepStatus;
+    detail?: string;
+};
+
+type SyncResult = {
+    status: 'success' | 'error';
+    itemId?: number | null;
+    message?: string;
+    publishedProductIds?: string[];
+};
+
 type ShopeeAttributeOption = {
     value_id: number;
     label: string;
@@ -226,6 +250,21 @@ type ShopeeBrandOption = {
 // ─── Helper ───────────────────────────────────────────────────────────────────
 const fmt = (cents: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+
+const SHOPEE_SYNC_STEP_DEFINITIONS: Array<Omit<SyncStep, 'status' | 'detail'>> = [
+    { key: 'validate', label: 'Validando categoria e atributos' },
+    { key: 'download_images', label: 'Baixando fotos' },
+    { key: 'upload_images', label: 'Enviando fotos a Shopee' },
+    { key: 'prepare_video', label: 'Preparando video' },
+    { key: 'upload_video', label: 'Enviando video a Shopee' },
+    { key: 'publish_item', label: 'Publicando anuncio' },
+    { key: 'update_stock', label: 'Atualizando estoque/preco' },
+    { key: 'save_link', label: 'Salvando vinculo local' },
+];
+
+function createShopeeSyncSteps(): SyncStep[] {
+    return SHOPEE_SYNC_STEP_DEFINITIONS.map((step) => ({ ...step, status: 'idle' }));
+}
 
 const SHOPEE_WARRANTY_TYPE_ATTRIBUTE_IDS = new Set([100370]);
 const SHOPEE_SUPPLIER_WARRANTY_OPTION: ShopeeAttributeOption = {
@@ -2566,6 +2605,8 @@ export function ShopeeSyncModal({
     );
     const [mediaBusy, setMediaBusy] = useState(false);
     const [syncDebugEntries, setSyncDebugEntries] = useState<SyncDebugEntry[]>([]);
+    const [syncSteps, setSyncSteps] = useState<SyncStep[]>(() => createShopeeSyncSteps());
+    const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
     const syncDebugEntriesRef = useRef<SyncDebugEntry[]>([]);
     const descriptionDirtyRef = useRef(false);
     const stockDirtyRef = useRef(false);
@@ -2959,6 +3000,22 @@ export function ShopeeSyncModal({
     const debugText = syncDebugEntries
         .map((entry) => `[${entry.timestamp}] ${entry.stage}\n${entry.payload}`)
         .join('\n\n');
+    const sellerProductUrl = syncResult?.itemId
+        ? `https://seller.shopee.com.br/portal/product/${syncResult.itemId}`
+        : '';
+    const publicProductUrl = syncResult?.itemId && company?.shopee_shop_id
+        ? `https://shopee.com.br/product/${encodeURIComponent(String(company.shopee_shop_id))}/${syncResult.itemId}`
+        : '';
+
+    const updateSyncStep = (key: SyncStepKey, status: SyncStepStatus, detail?: string) => {
+        setSyncSteps((prev) => prev.map((step) =>
+            step.key === key ? { ...step, status, detail } : step
+        ));
+    };
+    const setSyncStepRunning = (key: SyncStepKey, detail?: string) => updateSyncStep(key, 'running', detail);
+    const setSyncStepDone = (key: SyncStepKey, detail?: string) => updateSyncStep(key, 'done', detail);
+    const setSyncStepSkipped = (key: SyncStepKey, detail?: string) => updateSyncStep(key, 'skipped', detail);
+    const setSyncStepError = (key: SyncStepKey, detail?: string) => updateSyncStep(key, 'error', detail);
 
     const updateAttributeValue = (attributeId: number, value: string | string[]) => {
         setAttrValues((prev) => ({ ...prev, [attributeId]: value }));
@@ -3797,8 +3854,11 @@ export function ShopeeSyncModal({
         setSyncing(true);
         setMediaBusy(true);
         setSyncDebugEntries([]);
+        setSyncSteps(createShopeeSyncSteps());
+        setSyncResult(null);
         syncDebugEntriesRef.current = [];
         try {
+            setSyncStepRunning('validate', 'Conferindo dados antes do envio');
             const attributeList = buildAttributePayload();
             const cleanItemName = (itemName.trim() || product.name || '').slice(0, 120);
             const cleanItemSku = String(product.sku || '').trim().slice(0, 100);
@@ -3865,19 +3925,34 @@ export function ShopeeSyncModal({
                 gtin_mode: gtinMode,
                 gtin_value: gtinPayloadValue || null,
             });
+            setSyncStepDone('validate', `${attributeList.length} atributo(s) prontos`);
 
+            setSyncStepRunning('download_images', `Preparando ${availableImages.length} foto(s)`);
+            const imageUploadInputs: Array<{ image_id?: string; data_url?: string; file_name?: string }> = [];
             for (const image of availableImages) {
                 if (image.image_id) {
-                    imageIdList.push(String(image.image_id));
+                    imageUploadInputs.push({ image_id: String(image.image_id), file_name: image.file_name });
                     continue;
                 }
 
                 if (!image.data_url && !image.image_url) continue;
                 const resolvedImageDataUrl = image.data_url || (image.image_url ? await readRemoteUrlAsDataUrl(image.image_url) : '');
                 if (!resolvedImageDataUrl) continue;
+                imageUploadInputs.push({
+                    data_url: resolvedImageDataUrl,
+                    file_name: image.file_name || 'image.jpg',
+                });
+            }
+            setSyncStepDone('download_images', `${imageUploadInputs.length} foto(s) prontas`);
 
+            setSyncStepRunning('upload_images', `Enviando ${imageUploadInputs.length} foto(s)`);
+            for (const image of imageUploadInputs) {
+                if (image.image_id) {
+                    imageIdList.push(String(image.image_id));
+                    continue;
+                }
                 const uploadData = await postShopeeDebug('upload_image', {
-                    image_data_url: resolvedImageDataUrl,
+                    image_data_url: image.data_url,
                     file_name: image.file_name || 'image.jpg',
                 });
                 const uploadedId = uploadData?.response?.image_info?.image_id || uploadData?.response?.image_id;
@@ -3886,6 +3961,7 @@ export function ShopeeSyncModal({
                 }
                 imageIdList.push(String(uploadedId));
             }
+            setSyncStepDone('upload_images', `${imageIdList.length} foto(s) na Shopee`);
 
             if (imageIdList.length === 0) {
                 throw new Error('O produto precisa ter pelo menos 1 imagem valida para publicar.');
@@ -3946,6 +4022,7 @@ export function ShopeeSyncModal({
                 });
             }
 
+            setSyncStepRunning('prepare_video', `${expectedVideoCandidateCount} video(s) encontrado(s)`);
             if (expectedVideoCandidateCount > 0 && resolvedExistingVariationItemId) {
                 try {
                     const existingVideoData = await getShopeeDebug('get_item_base_info', 'video_precheck:existing_item', {
@@ -3966,13 +4043,23 @@ export function ShopeeSyncModal({
                     });
                 }
             }
+            setSyncStepDone(
+                'prepare_video',
+                expectedVideoCandidateCount > 0
+                    ? (videoAlreadyPresentOnShopee ? 'Video ja existe na Shopee' : 'Video pronto para envio')
+                    : 'Sem video para enviar'
+            );
 
             if (videoAlreadyPresentOnShopee) {
+                setSyncStepSkipped('upload_video', 'Item ja possui video salvo');
                 pushSyncDebug('upload_video:skipped_existing_video', {
                     item_id: resolvedExistingVariationItemId,
                     reason: 'Item Shopee ja possui video salvo.',
                 });
+            } else if (expectedVideoCandidateCount === 0) {
+                setSyncStepSkipped('upload_video', 'Nenhum video selecionado');
             } else {
+                setSyncStepRunning('upload_video', 'Enviando video a Shopee');
                 for (const video of availableVideos) {
                     if (video.video_id) {
                         videoUploadIdList.push(String(video.video_id));
@@ -3998,14 +4085,19 @@ export function ShopeeSyncModal({
                     } catch (error: any) {
                         if (isUnsupportedVideoUploadMessage(error?.message)) {
                             videoUploadSkipped = true;
+                            setSyncStepSkipped('upload_video', 'Backend sem suporte a upload_video');
                             pushSyncDebug('upload_video:skipped', 'Backend atual sem suporte a upload_video. Vamos publicar sem video.');
                             break;
                         }
                         throw error;
                     }
                 }
+                if (!videoUploadSkipped) {
+                    setSyncStepDone('upload_video', `${videoUploadIdList.length} video(s) enviado(s)`);
+                }
             }
 
+            setSyncStepRunning('publish_item', publishWithVariations ? 'Publicando anuncio com variacoes' : 'Publicando anuncio simples');
             const logisticInfo = await collectShopeeLogisticInfo();
             const brandInfo = await collectShopeeBrandInfo();
             const basePayload = {
@@ -4099,6 +4191,7 @@ export function ShopeeSyncModal({
                         item_id: resolvedExistingProductItemId,
                     }, 'update_item:existing_item')
                     : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
+            setSyncStepDone('publish_item', 'Anuncio aceito pela Shopee');
 
             // Save to Supabase
             const shopeeItemId = resolvedExistingVariationItemId || resolvedExistingProductItemId || data.response?.item_id;
@@ -4109,6 +4202,7 @@ export function ShopeeSyncModal({
             let missingPublishedVariationSkus: string[] = [];
             if (shopeeItemId) {
                 try {
+                    setSyncStepRunning('update_stock', 'Conferindo estoque/preco na Shopee');
                     if (!publishWithVariations) {
                         const stockPayload = buildShopeeUpdateStockPayload({
                             itemId: shopeeItemId,
@@ -4180,11 +4274,15 @@ export function ShopeeSyncModal({
                             video_info: recheckedVideoInfo || null,
                         });
                     }
+                    setSyncStepDone('update_stock', publishWithVariations ? 'Variacoes conferidas' : `${parsedStock} un. sincronizadas`);
                 } catch (verifyError: any) {
+                    setSyncStepError('update_stock', verifyError?.message || 'Falha na conferencia pos-publicacao');
                     pushSyncDebug('post_publish:verification_error', verifyError?.message || verifyError);
                     shouldKeepDebugOpen = true;
                     if (publishWithVariations) variationModelListVerificationFailed = true;
                 }
+            } else {
+                setSyncStepSkipped('update_stock', 'Shopee nao retornou item_id');
             }
 
             if (publishWithVariations && variationModelListVerificationFailed) {
@@ -4203,6 +4301,7 @@ export function ShopeeSyncModal({
             } catch {
                 // Best-effort debug recovery only.
             }
+            setSyncStepRunning('save_link', 'Gravando vinculo Shopee no sistema');
             await supabase.from('shopee_products').upsert({
                 product_id: product.id,
                 shopee_item_id: shopeeItemId,
@@ -4232,6 +4331,7 @@ export function ShopeeSyncModal({
                     }, { onConflict: 'product_id' });
                 }
             }
+            setSyncStepDone('save_link', `Item ${shopeeItemId} vinculado`);
 
             toast.success(existingProductItemId ? 'Produto atualizado na Shopee!' : 'Produto publicado na Shopee! 🎉');
             if (videoUploadSkipped) {
@@ -4239,6 +4339,12 @@ export function ShopeeSyncModal({
             }
             if (shouldKeepDebugOpen) {
                 toast.warning('A Shopee publicou, mas nao confirmou marca/video. Mantive o debug aberto para copiar.');
+                setSyncResult({
+                    status: 'success',
+                    itemId: normalizePositiveId(shopeeItemId),
+                    message: 'Produto publicado, mas a Shopee nao confirmou todos os detalhes. Confira os logs.',
+                    publishedProductIds: [product.id],
+                });
                 return;
             }
             onBulkAutoPresetReady?.({
@@ -4253,11 +4359,19 @@ export function ShopeeSyncModal({
                     ...selectedVariationGroup.children.map((child) => child.id),
                 ]))
                 : [product.id];
-            onSuccess(syncedProductIds);
+            setSyncResult({
+                status: 'success',
+                itemId: normalizePositiveId(shopeeItemId),
+                message: existingProductItemId ? 'Produto atualizado na Shopee.' : 'Produto publicado na Shopee.',
+                publishedProductIds: syncedProductIds,
+            });
         } catch (e: any) {
             pushSyncDebug('sync:error', e?.message || e);
             const errorMessage = e?.message || 'Erro ao sincronizar produto.';
-            onError?.(errorMessage);
+            setSyncSteps((prev) => prev.map((step) =>
+                step.status === 'running' ? { ...step, status: 'error', detail: errorMessage } : step
+            ));
+            setSyncResult({ status: 'error', message: errorMessage });
             toast.error(errorMessage);
         } finally {
             setMediaBusy(false);
@@ -4926,6 +5040,147 @@ export function ShopeeSyncModal({
                                 <div className="flex justify-between"><span className="text-slate-500">Atributos preenchidos</span><span className="font-medium">{Object.keys(attrValues).length}</span></div>
                                 <div className="flex justify-between"><span className="text-slate-500">Fotos / Video</span><span className="font-medium">{availableImages.length} / {availableVideos.length}</span></div>
                             </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800">Progresso do envio</p>
+                                        <p className="text-xs text-slate-500">Cada etapa muda para OK assim que a Shopee responde.</p>
+                                    </div>
+                                    {(syncing || mediaBusy) && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            Enviando
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="grid gap-2 md:grid-cols-2">
+                                    {syncSteps.map((syncStep) => (
+                                        <div
+                                            key={syncStep.key}
+                                            className={`rounded-lg border px-3 py-2 ${
+                                                syncStep.status === 'done'
+                                                    ? 'border-emerald-200 bg-emerald-50'
+                                                    : syncStep.status === 'running'
+                                                        ? 'border-orange-200 bg-orange-50'
+                                                        : syncStep.status === 'error'
+                                                            ? 'border-red-200 bg-red-50'
+                                                            : syncStep.status === 'skipped'
+                                                                ? 'border-slate-200 bg-slate-50'
+                                                                : 'border-slate-200 bg-white'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                {syncStep.status === 'running' ? (
+                                                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-orange-600" />
+                                                ) : syncStep.status === 'done' ? (
+                                                    <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+                                                ) : syncStep.status === 'error' ? (
+                                                    <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+                                                ) : syncStep.status === 'skipped' ? (
+                                                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                                                ) : (
+                                                    <span className="h-4 w-4 shrink-0 rounded-full border border-slate-300" />
+                                                )}
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="truncate text-xs font-bold text-slate-800">{syncStep.label}</span>
+                                                        <span className="shrink-0 text-[11px] font-bold uppercase text-slate-500">
+                                                            {syncStep.status === 'done'
+                                                                ? 'OK'
+                                                                : syncStep.status === 'running'
+                                                                    ? '...'
+                                                                    : syncStep.status === 'error'
+                                                                        ? 'Erro'
+                                                                        : syncStep.status === 'skipped'
+                                                                            ? 'Pulado'
+                                                                            : 'Aguardando'}
+                                                        </span>
+                                                    </div>
+                                                    {syncStep.detail && (
+                                                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{syncStep.detail}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            {syncResult?.status === 'success' && (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+                                    <div className="flex items-start gap-3">
+                                        <Check className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+                                        <div>
+                                            <p className="text-sm font-bold text-emerald-900">{syncResult.message || 'Produto enviado com sucesso.'}</p>
+                                            {syncResult.itemId && <p className="text-xs text-emerald-700">Item Shopee #{syncResult.itemId}</p>}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => onSuccess(syncResult.publishedProductIds || [product.id])}
+                                            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"
+                                        >
+                                            Enviar outro produto
+                                        </button>
+                                        {sellerProductUrl && (
+                                            <a
+                                                href={sellerProductUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                                            >
+                                                <ExternalLink className="h-4 w-4" />
+                                                Ver no Seller
+                                            </a>
+                                        )}
+                                        {publicProductUrl && (
+                                            <a
+                                                href={publicProductUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                                            >
+                                                <ExternalLink className="h-4 w-4" />
+                                                Ver anuncio
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            {syncResult?.status === 'error' && (
+                                <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
+                                    <div className="flex items-start gap-3">
+                                        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-700" />
+                                        <div>
+                                            <p className="text-sm font-bold text-red-900">Falha no envio</p>
+                                            <p className="text-xs text-red-700">{syncResult.message || 'Erro ao sincronizar produto.'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const text = debugText || syncResult.message || 'Sem logs disponiveis.';
+                                                navigator.clipboard.writeText(text);
+                                                toast.success('Logs copiados.');
+                                            }}
+                                            className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50"
+                                        >
+                                            Copiar logs do erro
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (autoPublish && onError) onError(syncResult.message || 'Erro ao sincronizar produto.');
+                                                else onClose();
+                                            }}
+                                            className="inline-flex items-center justify-center rounded-lg bg-red-600 px-3 py-2 text-sm font-bold text-white hover:bg-red-700"
+                                        >
+                                            Fechar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                             <details open={syncDebugEntries.length > 0} className="rounded-xl border border-slate-200 bg-white">
                                 <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between gap-3 text-sm font-semibold text-slate-700">
                                     <span>Debug da publicação</span>
@@ -4959,10 +5214,10 @@ export function ShopeeSyncModal({
                                     ))}
                                 </div>
                             </details>
-                            <button onClick={handleSync} disabled={syncing || mediaBusy}
+                            {!syncResult && <button onClick={handleSync} disabled={syncing || mediaBusy}
                                 className="w-full py-3 bg-[#ee4d2d] text-white rounded-xl font-bold hover:bg-[#d73f21] transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
                                 {(syncing || mediaBusy) ? <><Loader2 className="w-4 h-4 animate-spin" />Publicando...</> : <><Upload className="w-4 h-4" />Publicar na Shopee</>}
-                            </button>
+                            </button>}
                             <button onClick={() => setStep(2)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-800">← Voltar e ajustar</button>
                         </div>
                     )}
