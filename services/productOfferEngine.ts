@@ -18,12 +18,20 @@ function slugPart(value: unknown): string {
     .toUpperCase();
 }
 
+function codePart(value: unknown): string {
+  return text(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toUpperCase();
+}
+
 function positiveInt(value: unknown, fallback = 0): number {
   const parsed = Math.trunc(Number(value));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export const MAX_OFFER_SKU_LENGTH = 100;
+export const MAX_OFFER_SKU_LENGTH = 10;
 
 function stableHash(value: string): string {
   let hash = 2166136261;
@@ -34,11 +42,12 @@ function stableHash(value: string): string {
   return (hash >>> 0).toString(36).toUpperCase();
 }
 
-function fitSku(value: string, maxLength = MAX_OFFER_SKU_LENGTH): string {
-  if (value.length <= maxLength) return value;
-  const hashSuffix = `-${stableHash(value)}`;
-  const prefixLength = Math.max(1, maxLength - hashSuffix.length);
-  return `${value.slice(0, prefixLength).replace(/-+$/g, '')}${hashSuffix}`;
+function fitSku(seed: string, preferredPrefix: string, maxLength = MAX_OFFER_SKU_LENGTH): string {
+  const cleanPrefix = codePart(preferredPrefix) || 'OF';
+  const prefixLength = Math.min(4, Math.max(2, maxLength - 6), cleanPrefix.length);
+  const hashLength = maxLength - prefixLength;
+  const hash = stableHash(seed).padStart(hashLength, '0').slice(0, hashLength);
+  return `${cleanPrefix.slice(0, prefixLength)}${hash}`.slice(0, maxLength);
 }
 
 export function buildDefaultOfferSku(
@@ -48,9 +57,12 @@ export function buildDefaultOfferSku(
   suffix = '',
 ): string {
   const cleanBase = slugPart(baseSku) || 'OFERTA';
-  if (offerType === 'quantity_kit') return fitSku(`${cleanBase}-KIT${positiveInt(quantity, 1)}`);
+  if (offerType === 'quantity_kit') {
+    const seed = `${cleanBase}|KIT|${positiveInt(quantity, 1)}|${slugPart(suffix)}`;
+    return fitSku(seed, cleanBase);
+  }
   const cleanSuffix = slugPart(suffix) || 'COMBO';
-  return fitSku(`${cleanBase}-COMBO-${cleanSuffix}`);
+  return fitSku(`${cleanBase}|COMBO|${cleanSuffix}`, cleanBase);
 }
 
 export function normalizeOfferComponents(

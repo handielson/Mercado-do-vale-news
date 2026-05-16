@@ -28,11 +28,15 @@ const filmProduct = {
   bling_id: 222,
 };
 
-assert.equal(buildDefaultOfferSku(baseProduct.sku, 'quantity_kit', 3), 'CAPA-RN8-VERM-KIT3');
-assert.equal(buildDefaultOfferSku(baseProduct.sku, 'product_combo', 1, 'capa-pelicula'), 'CAPA-RN8-VERM-COMBO-CAPA-PELICULA');
-assert.equal(buildDefaultOfferSku('   ', 'quantity_kit', 3), 'OFERTA-KIT3');
-assert.equal(buildDefaultOfferSku('', 'quantity_kit', 3), 'OFERTA-KIT3');
-assert.equal(buildDefaultOfferSku('BASE', 'product_combo', 1, '   '), 'BASE-COMBO-COMBO');
+assert.match(buildDefaultOfferSku(baseProduct.sku, 'quantity_kit', 3), /^[A-Z0-9]{10}$/);
+assert.match(buildDefaultOfferSku(baseProduct.sku, 'product_combo', 1, 'capa-pelicula'), /^[A-Z0-9]{10}$/);
+assert.match(buildDefaultOfferSku('   ', 'quantity_kit', 3), /^[A-Z0-9]{10}$/);
+assert.match(buildDefaultOfferSku('', 'quantity_kit', 3), /^[A-Z0-9]{10}$/);
+assert.match(buildDefaultOfferSku('BASE', 'product_combo', 1, '   '), /^[A-Z0-9]{10}$/);
+assert.notEqual(
+  buildDefaultOfferSku(baseProduct.sku, 'product_combo', 1, 'capa-pelicula'),
+  buildDefaultOfferSku(baseProduct.sku, 'product_combo', 1, 'capa-pelicula-2'),
+);
 
 const longComboSku = buildDefaultOfferSku(
   'CSRN144GA',
@@ -40,8 +44,8 @@ const longComboSku = buildDefaultOfferSku(
   1,
   'Capa de Silicone para Redmi Note 14 4G-Pelicula 3D para Redmi Note 14 4G 5G Poco M7 Pro 5G',
 );
-assert.ok(longComboSku.length <= 100, `generated combo SKU should fit MySQL sku column, got ${longComboSku.length}`);
-assert.match(longComboSku, /^CSRN144GA-COMBO-/);
+assert.equal(longComboSku.length, 10);
+assert.match(longComboSku, /^[A-Z0-9]{10}$/);
 
 assert.deepEqual(
   normalizeOfferComponents([{ product: baseProduct, quantity: 3 }]),

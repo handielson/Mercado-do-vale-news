@@ -319,9 +319,19 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       quantity: child.quantity,
     }));
     const choiceItems = (editingCombo.combo_choice_groups || []).map(group => {
-      const firstOption = group.options[0];
+      const options = group.options
+        .map(option => allProducts.find(p => p.id === option.id) || option)
+        .filter(Boolean);
       return {
-        product: allProducts.find(p => p.id === firstOption?.id) || firstOption || group,
+        product: {
+          ...(options[0] || {}),
+          id: group.parent_product_id,
+          name: group.label,
+          sku: options[0]?.sku || group.group_key,
+          stock_quantity: options.reduce((sum, option) => sum + (Number(option.stock_quantity) || 0), 0),
+          bling_id: options.find(option => option.bling_id)?.bling_id || null,
+          parent_id: group.parent_product_id,
+        },
         quantity: group.quantity,
       };
     });
@@ -370,6 +380,42 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     } finally {
       setLoading(false);
     }
+  };
+
+  const ensureUniqueOfferSku = async (input: {
+    currentId?: string;
+    manualSku: string;
+    baseSku: string;
+    offerType: ProductOfferType;
+    quantity: number;
+    suffix: string;
+  }) => {
+    const manualSku = input.manualSku.trim().toUpperCase();
+    const isManual = Boolean(manualSku);
+    const firstCandidate = isManual
+      ? manualSku
+      : buildDefaultOfferSku(input.baseSku, input.offerType, input.quantity, input.suffix);
+
+    const candidates = [firstCandidate];
+    if (!isManual) {
+      for (let attempt = 2; attempt <= 30; attempt += 1) {
+        candidates.push(buildDefaultOfferSku(input.baseSku, input.offerType, input.quantity, `${input.suffix}-${attempt}`));
+      }
+    }
+
+    for (const candidate of candidates) {
+      if (!/^[A-Z0-9]{1,10}$/.test(candidate)) {
+        throw new Error(`SKU deve ter ate ${MAX_OFFER_SKU_LENGTH} caracteres, usando apenas letras e numeros.`);
+      }
+      const matches = await vpsApiService.getProducts({ sku: candidate, status: 'all', limit: 5, noCache: true });
+      const conflict = (matches || []).some(product => String(product.id) !== String(input.currentId || ''));
+      if (!conflict) return candidate;
+      if (isManual) {
+        throw new Error(`SKU ${candidate} ja existe. Escolha outro codigo.`);
+      }
+    }
+
+    throw new Error('Nao foi possivel gerar um SKU unico para a oferta.');
   };
 
   useEffect(() => {
@@ -644,9 +690,19 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         quantity: child.quantity,
         })),
         ...(editingCombo.combo_choice_groups || []).map(group => {
-          const firstOption = group.options[0];
+          const options = group.options
+            .map(option => allProducts.find(p => p.id === option.id) || option)
+            .filter(Boolean);
           return {
-            product: allProducts.find(p => p.id === firstOption?.id) || firstOption || group,
+            product: {
+              ...(options[0] || {}),
+              id: group.parent_product_id,
+              name: group.label,
+              sku: options[0]?.sku || group.group_key,
+              stock_quantity: options.reduce((sum, option) => sum + (Number(option.stock_quantity) || 0), 0),
+              bling_id: options.find(option => option.bling_id)?.bling_id || null,
+              parent_id: group.parent_product_id,
+            },
             quantity: group.quantity,
           };
         }),
@@ -654,23 +710,19 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       const primaryItem = offerItems[0];
       const primaryProduct = primaryItem?.product as any;
       const offerType = editingCombo.offer_type || null;
+      const offerParentProductId = isOffer
+        ? (editingCombo.combo_choice_groups?.[0]?.parent_product_id || primaryProduct?.id || null)
+        : null;
       const autoOfferName = offerType === 'quantity_kit'
         ? `${primaryItem?.quantity || 1}x ${primaryProduct?.name || 'Produto'}`
         : `Kit ${[
             ...editingCombo.combo_children.map(c => c.name),
             ...(editingCombo.combo_choice_groups || []).map(group => group.label),
           ].filter(Boolean).join(' + ')}`;
-      const autoOfferSku = offerType
-        ? buildDefaultOfferSku(
-            primaryProduct?.sku || editingCombo.sku,
-            offerType,
-            primaryItem?.quantity || 1,
-            [
-              ...editingCombo.combo_children.map(c => c.sku || c.name),
-              ...(editingCombo.combo_choice_groups || []).map(group => group.label),
-            ].filter(Boolean).join('-'),
-          )
-        : editingCombo.sku;
+      const skuSuffix = [
+        ...editingCombo.combo_children.map(c => c.sku || c.name),
+        ...(editingCombo.combo_choice_groups || []).map(group => group.label),
+      ].filter(Boolean).join('-');
       const offerStrategy = isOffer
         ? (editingCombo.shopee_strategy || chooseShopeeOfferStrategy({
             existingDimensionCount: offerType === 'quantity_kit' ? 1 : 0,
@@ -678,7 +730,16 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
           }))
         : null;
       const finalName = editingCombo.name?.trim() || autoOfferName;
-      const finalSku = editingCombo.sku?.trim() || autoOfferSku;
+      const finalSku = offerType
+        ? await ensureUniqueOfferSku({
+            currentId: editingCombo.id,
+            manualSku: editingCombo.sku || '',
+            baseSku: primaryProduct?.sku || editingCombo.sku,
+            offerType,
+            quantity: primaryItem?.quantity || 1,
+            suffix: skuSuffix,
+          })
+        : editingCombo.sku?.trim();
 
       const payload = {
         ...editingCombo,
@@ -692,7 +753,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         tags: currentTags,
         track_inventory: true,
         offer_type: offerType,
-        offer_parent_product_id: isOffer ? primaryProduct?.id || null : null,
+        offer_parent_product_id: offerParentProductId,
         offer_visibility: isOffer ? (editingCombo.offer_visibility || 'visible') : null,
         shopee_strategy: offerStrategy,
         weight_kg: packageValues.weight_kg,
@@ -703,11 +764,6 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         }
       };
       savePayload = payload;
-
-      if (finalSku.length > MAX_OFFER_SKU_LENGTH) {
-        saveAction = 'validateSku';
-        throw new Error(`SKU muito longo (${finalSku.length}/${MAX_OFFER_SKU_LENGTH}). Encurte o SKU manual antes de salvar.`);
-      }
 
       if (editingCombo.id) {
         saveAction = isOffer ? 'updateOffer' : 'updateCombo';
