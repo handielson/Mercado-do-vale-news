@@ -20,6 +20,11 @@ for (const [name, source] of Object.entries({ vpsCjs: files.vpsCjs, vpsJs: files
   assert.match(source, /choice_group/u, `${name} must persist choice group rows`);
   assert.match(source, /parent_product_id/u, `${name} must persist parent product id`);
   assert.match(source, /combo_choice_groups/u, `${name} must accept combo_choice_groups payload`);
+  assert.match(
+    source,
+    /GROUP BY pc\.combo_product_id,\s*COALESCE\(pc\.component_type,\s*'fixed'\),/u,
+    `${name} combo stock query must satisfy ONLY_FULL_GROUP_BY for component_type`,
+  );
 }
 
 console.log('combo choice group static checks passed');

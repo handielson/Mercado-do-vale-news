@@ -5607,13 +5607,14 @@ function comboStockSql(productAlias = 'products') {
     FROM (
       SELECT pc.combo_product_id,
         CASE
-          WHEN COALESCE(pc.component_type, 'fixed') = 'choice_group'
+          WHEN MAX(COALESCE(pc.component_type, 'fixed')) = 'choice_group'
             THEN FLOOR(SUM(child.stock_quantity) / NULLIF(MAX(pc.quantity), 0))
           ELSE MIN(FLOOR(child.stock_quantity / NULLIF(pc.quantity, 0)))
         END AS component_stock
       FROM product_combos pc
       JOIN products child ON child.id = pc.child_product_id
       GROUP BY pc.combo_product_id,
+        COALESCE(pc.component_type, 'fixed'),
         CASE
           WHEN COALESCE(pc.component_type, 'fixed') = 'choice_group' THEN COALESCE(pc.group_key, pc.parent_product_id, pc.id)
           ELSE pc.id
