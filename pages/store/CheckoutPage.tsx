@@ -243,7 +243,9 @@ export default function CheckoutPage() {
                 product_name: i.product.name,
                 product_sku: i.product.sku || undefined,
                 product_image_url: i.product.images?.[0] || undefined,
-                product_color: i.product.specs?.color || i.product.specs?.Cor || undefined,
+                product_color: (i.comboSelections || [])
+                    .map(selection => `${selection.label}: ${selection.option?.name || selection.option?.sku}`)
+                    .join(' | ') || i.product.specs?.color || i.product.specs?.Cor || undefined,
                 quantity: i.quantity,
                 unit_price: i.unit_price,
                 subtotal: i.unit_price * i.quantity,

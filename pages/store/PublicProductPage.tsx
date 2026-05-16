@@ -55,6 +55,7 @@ export const PublicProductPage: React.FC = () => {
     const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
     const [catalogTheme, setCatalogTheme] = useState<Pick<CatalogSettings, 'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'card_background' | 'text_primary' | 'text_secondary'> | null>(null);
     const [comboChildren, setComboChildren] = useState<any[]>([]);
+    const [selectedComboOptions, setSelectedComboOptions] = useState<Record<string, any>>({});
     const [selectedKitQuantity, setSelectedKitQuantity] = useState<number>(1);
     const [isQuoteCartOpen, setIsQuoteCartOpen] = useState(false);
 
@@ -83,6 +84,27 @@ export const PublicProductPage: React.FC = () => {
     const productVideoPlaylist = useMemo(() => buildProductVideoPlaylist(effectiveVideoUrl), [effectiveVideoUrl]);
     const currentVideoUrl = productVideoPlaylist[videoPlaylistIndex] || effectiveVideoUrl;
     const formatDisplayPrice = (value: number) => value.toFixed(2).replace('.', ',');
+    const fixedComboChildren = useMemo(
+        () => comboChildren.filter(item => item?.component_type !== 'choice_group'),
+        [comboChildren]
+    );
+    const comboChoiceGroups = useMemo(() => {
+        const groups = new Map<string, { group_key: string; label: string; quantity: number; options: any[] }>();
+        comboChildren
+            .filter(item => item?.component_type === 'choice_group')
+            .forEach(item => {
+                const key = String(item.group_key || item.parent_product_id || item.parent_id || item.id);
+                const current = groups.get(key) || {
+                    group_key: key,
+                    label: item.group_label || item.label || item.name || 'Escolha uma opcao',
+                    quantity: Math.max(1, Number(item.quantity) || 1),
+                    options: [],
+                };
+                current.options.push(item);
+                groups.set(key, current);
+            });
+        return Array.from(groups.values());
+    }, [comboChildren]);
     const variantPriceRange = useMemo(() => {
         if (!product || selectedKitQuantity > 1) {
             return { min: 0, max: 0, hasRange: false };
@@ -295,14 +317,15 @@ export const PublicProductPage: React.FC = () => {
                 if (data.is_combo) {
                     const children = await vpsApiService.getComboChildren(data.id);
                     setComboChildren(children || []);
-                    
+                    setSelectedComboOptions({});
+
                     // Auto-generate combo description from children if empty
                     if (!data.description && children && children.length > 0) {
                         let mergedDesc = '';
                         let mergedSpecs = '';
                         
                         // Busca a descrição rica de cada item do combo diretamente da VPS
-                        for (const child of children) {
+                        for (const child of children.filter((item: any) => item?.component_type !== 'choice_group')) {
                             try {
                                 const childData = await vpsApiService.getProductById(child.id);
                                 if (childData && !childData.error) {
@@ -598,7 +621,26 @@ export const PublicProductPage: React.FC = () => {
     const description = product.meta_description || resolvedDescription || `Compre ${product.name} no Mercado do Vale.`;
 
     const handleAddToCart = () => {
-        addItem(product, selectedKitQuantity);
+        if (comboChoiceGroups.length > 0) {
+            const missingGroup = comboChoiceGroups.find(group => !selectedComboOptions[group.group_key]);
+            if (missingGroup) {
+                toast.error(`Escolha uma opcao para ${missingGroup.label}`);
+                return;
+            }
+        }
+
+        const comboSelections = comboChoiceGroups.map(group => ({
+            group_key: group.group_key,
+            label: group.label,
+            quantity: group.quantity,
+            option: {
+                id: selectedComboOptions[group.group_key]?.id,
+                name: selectedComboOptions[group.group_key]?.name,
+                sku: selectedComboOptions[group.group_key]?.sku,
+            },
+        }));
+
+        addItem(product, selectedKitQuantity, { comboSelections });
         toast.success(selectedKitQuantity > 1 ? `${selectedKitQuantity}x Produtos adicionados ao carrinho!` : 'Produto adicionado ao carrinho!', {
             icon: '🛒',
             duration: 3000
@@ -1263,7 +1305,7 @@ export const PublicProductPage: React.FC = () => {
                                             O que vem neste Combo:
                                         </h4>
                                         <div className="space-y-3">
-                                            {comboChildren.map((item, idx) => {
+                                            {fixedComboChildren.map((item, idx) => {
                                                 const itemPrice = typeof item.promotional_price === 'number' && item.promotional_price > 0 
                                                     ? item.promotional_price 
                                                     : (item.price || item.price_retail || 0);
@@ -1297,11 +1339,51 @@ export const PublicProductPage: React.FC = () => {
                                                 </div>
                                                 );
                                             })}
+                                            {comboChoiceGroups.map(group => (
+                                                <div key={group.group_key} className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm">
+                                                    <div className="mb-3 flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <p className="text-slate-900 font-bold leading-snug">{group.label}</p>
+                                                            <p className="text-xs text-slate-500">Escolha {group.quantity} opcao para este combo</p>
+                                                        </div>
+                                                        <div className="bg-orange-50 text-orange-700 font-black text-sm px-3 py-1.5 rounded-lg border border-orange-100">
+                                                            {group.quantity}x
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                        {group.options.map(option => {
+                                                            const selected = selectedComboOptions[group.group_key]?.id === option.id;
+                                                            return (
+                                                                <button
+                                                                    key={option.id}
+                                                                    type="button"
+                                                                    onClick={() => setSelectedComboOptions(prev => ({ ...prev, [group.group_key]: option }))}
+                                                                    className={`text-left rounded-lg border px-3 py-2 transition-all ${
+                                                                        selected
+                                                                            ? 'border-orange-500 bg-orange-50 ring-1 ring-orange-500'
+                                                                            : 'border-slate-200 bg-slate-50 hover:border-orange-200'
+                                                                    }`}
+                                                                >
+                                                                    <span className="block text-sm font-semibold text-slate-800 line-clamp-2">{option.name}</span>
+                                                                    <span className="mt-1 block text-xs text-slate-500">{option.sku} • Estoque: {option.stock_quantity ?? 0}</span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
 
                                         {/* Total e Desconto do Combo */}
                                         {(() => {
-                                            const indivTotalCents = comboChildren.reduce((acc, item) => {
+                                            const selectedChoiceItems = comboChoiceGroups
+                                                .map(group => selectedComboOptions[group.group_key] || group.options[0])
+                                                .filter(Boolean)
+                                                .map((option, index) => ({
+                                                    ...option,
+                                                    quantity: comboChoiceGroups[index]?.quantity || option.quantity || 1,
+                                                }));
+                                            const indivTotalCents = [...fixedComboChildren, ...selectedChoiceItems].reduce((acc, item) => {
                                                 const p = typeof item.promotional_price === 'number' && item.promotional_price > 0 
                                                     ? item.promotional_price 
                                                     : (item.price || item.price_retail || 0);
@@ -1356,12 +1438,14 @@ export const PublicProductPage: React.FC = () => {
                                     )}
                                     <button
                                         onClick={handleAddToCart}
-                                        disabled={!product.track_inventory ? false : (product.stock_quantity || 0) <= 0}
-                                        style={(!product.track_inventory ? false : (product.stock_quantity || 0) <= 0) ? undefined : { backgroundColor: primaryColor, boxShadow: `0 10px 24px -10px ${primaryColor}66` }}
+                                        disabled={comboChoiceGroups.some(group => !selectedComboOptions[group.group_key]) || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)}
+                                        style={(comboChoiceGroups.some(group => !selectedComboOptions[group.group_key]) || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)) ? undefined : { backgroundColor: primaryColor, boxShadow: `0 10px 24px -10px ${primaryColor}66` }}
                                         className="w-full flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-xl transition-opacity hover:opacity-90 shadow-lg text-lg"
                                     >
                                         <ShoppingCart size={24} />
-                                        {(!product.track_inventory || (product.stock_quantity || 0) > 0) ? 'Adicionar ao Carrinho' : 'Fora de Estoque'}
+                                        {comboChoiceGroups.some(group => !selectedComboOptions[group.group_key])
+                                            ? 'Escolha as opcoes do combo'
+                                            : (!product.track_inventory || (product.stock_quantity || 0) > 0) ? 'Adicionar ao Carrinho' : 'Fora de Estoque'}
                                     </button>
                                 </div>
                             </div>

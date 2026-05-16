@@ -196,7 +196,9 @@ export function NewOrderModal({ items, delivery, paymentLabel, grandTotal, whats
             product: item.product,
             unit_price: item.unit_price,
             quantity: item.quantity,
-            selected_color: variantStates[item.id]?.selectedColor,
+            selected_color: (item.comboSelections || [])
+                .map(selection => `${selection.label}: ${selection.option?.name || selection.option?.sku}`)
+                .join(' | ') || variantStates[item.id]?.selectedColor,
             selected_memory: variantStates[item.id]?.selectedMemory,
         }));
 

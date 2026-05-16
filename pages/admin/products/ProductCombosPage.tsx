@@ -39,11 +39,34 @@ interface ProductComboFormData {
     name?: string;
     sku?: string;
     price_retail?: number;
+    price_cost?: number;
+    price_reseller?: number;
+    price_wholesale?: number;
     stock_quantity?: number;
     weight_kg?: number | null;
     dimensions?: any;
     bling_id?: number | null;
     parent_id?: string | null;
+  }>;
+  combo_choice_groups?: Array<{
+    group_key: string;
+    parent_product_id: string;
+    label: string;
+    quantity: number;
+    options: Array<{
+      id: string;
+      name?: string;
+      sku?: string;
+      price_retail?: number;
+      price_cost?: number;
+      price_reseller?: number;
+      price_wholesale?: number;
+      stock_quantity?: number;
+      weight_kg?: number | null;
+      dimensions?: any;
+      bling_id?: number | null;
+      parent_id?: string | null;
+    }>;
   }>;
   description?: string;
   technical_specifications?: string;
@@ -131,6 +154,38 @@ const calculatePhysicalPackage = (items: Array<{ product: any; quantity: number 
   };
 };
 
+const normalizeChoiceGroupsFromComboRows = (rows: any[] | null | undefined): NonNullable<ProductComboFormData['combo_choice_groups']> => {
+  const groups = new Map<string, NonNullable<ProductComboFormData['combo_choice_groups']>[number]>();
+  (rows || [])
+    .filter(row => row?.component_type === 'choice_group')
+    .forEach(row => {
+      const key = String(row.group_key || row.parent_product_id || row.parent_id || row.id);
+      const current = groups.get(key) || {
+        group_key: key,
+        parent_product_id: String(row.parent_product_id || row.parent_id || row.id),
+        label: row.group_label || row.label || row.parent_name || row.name || 'Escolha uma opcao',
+        quantity: Math.max(1, Number(row.quantity) || 1),
+        options: [],
+      };
+      current.options.push({
+        id: row.id,
+        name: row.name,
+        sku: row.sku,
+        price_retail: row.price_retail,
+        price_cost: row.price_cost,
+        price_reseller: row.price_reseller,
+        price_wholesale: row.price_wholesale,
+        stock_quantity: row.stock_quantity,
+        weight_kg: row.weight_kg,
+        dimensions: row.dimensions,
+        bling_id: row.bling_id,
+        parent_id: row.parent_id,
+      });
+      groups.set(key, current);
+    });
+  return Array.from(groups.values());
+};
+
 export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOfferMode = false }) => {
   const navigate = useNavigate();
   const [combos, setCombos] = useState<any[]>([]);
@@ -153,10 +208,18 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
   const editingOfferItems = useMemo(() => {
     if (!editingCombo?.offer_type) return [];
-    return editingCombo.combo_children.map(child => ({
+    const fixedItems = editingCombo.combo_children.map(child => ({
       product: allProducts.find(p => p.id === child.id) || child,
       quantity: child.quantity,
     }));
+    const choiceItems = (editingCombo.combo_choice_groups || []).map(group => {
+      const firstOption = group.options[0];
+      return {
+        product: allProducts.find(p => p.id === firstOption?.id) || firstOption || group,
+        quantity: group.quantity,
+      };
+    });
+    return [...fixedItems, ...choiceItems];
   }, [allProducts, editingCombo]);
 
   const editingOfferStock = useMemo(() => calculateOfferStock(editingOfferItems), [editingOfferItems]);
@@ -248,6 +311,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       offer_visibility: 'visible',
       shopee_strategy: 'variation',
       combo_children: [],
+      combo_choice_groups: [],
       tags: []
     });
     setImageStyle('auto');
@@ -278,6 +342,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       shopee_offer_status: null,
       shopee_offer_error: null,
       combo_children: [],
+      combo_choice_groups: [],
       tags: []
     });
     setImageStyle('auto');
@@ -301,6 +366,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       const savedDescription = supaResult.data?.description || combo.description || '';
       const savedTechSpecs = supaResult.data?.technical_specifications || combo.technical_specifications || '';
 
+      const fixedChildren = (children || []).filter(c => c?.component_type !== 'choice_group');
       setEditingCombo({
         ...combo,
         combo_discount_type: combo.combo_discount_type || 'percentage',
@@ -311,18 +377,22 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         shopee_strategy: combo.shopee_strategy || 'variation',
         shopee_offer_status: combo.shopee_offer_status || null,
         shopee_offer_error: combo.shopee_offer_error || null,
-        combo_children: children?.map(c => ({
+        combo_children: fixedChildren?.map(c => ({
           id: c.id,
           name: c.name,
           sku: c.sku,
           quantity: c.quantity,
           price_retail: c.price_retail,
+          price_cost: c.price_cost,
+          price_reseller: c.price_reseller,
+          price_wholesale: c.price_wholesale,
           stock_quantity: c.stock_quantity,
           weight_kg: c.weight_kg,
           dimensions: c.dimensions,
           bling_id: c.bling_id,
           parent_id: c.parent_id
         })) || [],
+        combo_choice_groups: normalizeChoiceGroupsFromComboRows(children),
         tags: combo.tags || [],
         description: savedDescription,
         technical_specifications: savedTechSpecs,
@@ -347,7 +417,8 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
   const handleSaveCombo = async () => {
     if (!editingCombo) return;
-    if (!editingCombo.combo_children || editingCombo.combo_children.length === 0) {
+    const componentCount = (editingCombo.combo_children?.length || 0) + (editingCombo.combo_choice_groups?.length || 0);
+    if (componentCount === 0) {
       return toast.error('Adicione pelo menos um produto ao combo');
     }
 
@@ -356,7 +427,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     if (editingCombo.offer_type === 'quantity_kit' && editingCombo.combo_children.length !== 1) {
       return toast.error('Kit de quantidade deve ter exatamente um produto base');
     }
-    if (editingCombo.offer_type === 'product_combo' && editingCombo.combo_children.length < 2) {
+    if (editingCombo.offer_type === 'product_combo' && componentCount < 2) {
       return toast.error('Combo de oferta deve ter pelo menos dois produtos');
     }
 
@@ -369,7 +440,16 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       let autoImages: string[] = [];
 
       // Buscando dados enriquecidos diretamente da VPS (já pré-carregados no allProducts e vpsApiService)
-      for (const c of editingCombo.combo_children) {
+      const descriptionItems = [
+        ...editingCombo.combo_children,
+        ...(editingCombo.combo_choice_groups || []).map(group => ({
+          ...group.options[0],
+          name: group.label,
+          quantity: group.quantity,
+        })).filter(item => item?.id),
+      ];
+
+      for (const c of descriptionItems) {
         let prodData = allProducts.find(p => p.id === c.id);
 
         let effectiveDesc = prodData?.description || '';
@@ -434,22 +514,37 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       const finalDescription = editingCombo.description?.trim() || mergedDescription;
       const finalTechSpecs = editingCombo.technical_specifications?.trim() || mergedSpecs;
 
-      const offerItems = editingCombo.combo_children.map(child => ({
+      const offerItems = [
+        ...editingCombo.combo_children.map(child => ({
         product: allProducts.find(p => p.id === child.id) || child,
         quantity: child.quantity,
-      }));
+        })),
+        ...(editingCombo.combo_choice_groups || []).map(group => {
+          const firstOption = group.options[0];
+          return {
+            product: allProducts.find(p => p.id === firstOption?.id) || firstOption || group,
+            quantity: group.quantity,
+          };
+        }),
+      ];
       const primaryItem = offerItems[0];
       const primaryProduct = primaryItem?.product as any;
       const offerType = editingCombo.offer_type || null;
       const autoOfferName = offerType === 'quantity_kit'
         ? `${primaryItem?.quantity || 1}x ${primaryProduct?.name || 'Produto'}`
-        : `Kit ${editingCombo.combo_children.map(c => c.name).filter(Boolean).join(' + ')}`;
+        : `Kit ${[
+            ...editingCombo.combo_children.map(c => c.name),
+            ...(editingCombo.combo_choice_groups || []).map(group => group.label),
+          ].filter(Boolean).join(' + ')}`;
       const autoOfferSku = offerType
         ? buildDefaultOfferSku(
             primaryProduct?.sku || editingCombo.sku,
             offerType,
             primaryItem?.quantity || 1,
-            editingCombo.combo_children.map(c => c.sku || c.name).filter(Boolean).join('-'),
+            [
+              ...editingCombo.combo_children.map(c => c.sku || c.name),
+              ...(editingCombo.combo_choice_groups || []).map(group => group.label),
+            ].filter(Boolean).join('-'),
           )
         : editingCombo.sku;
       const offerStrategy = isOffer
@@ -525,6 +620,18 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         sumWholesale += (originalInfo.price_wholesale || 0) * c.quantity;
       }
     });
+    (editingCombo.combo_choice_groups || []).forEach(group => {
+      const optionPrices = group.options
+        .map(option => allProducts.find(p => p.id === option.id) || option)
+        .filter(Boolean);
+      const reference = optionPrices.sort((a, b) => (a.price_retail || 0) - (b.price_retail || 0))[0];
+      if (reference) {
+        sumCost += (reference.price_cost || 0) * group.quantity;
+        sumRetail += (reference.price_retail || 0) * group.quantity;
+        sumReseller += (reference.price_reseller || 0) * group.quantity;
+        sumWholesale += (reference.price_wholesale || 0) * group.quantity;
+      }
+    });
 
     let discount = 0;
     if (editingCombo.combo_discount_type === 'percentage') {
@@ -538,14 +645,20 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     const autoOfferName = editingCombo.offer_type === 'quantity_kit' && firstProduct
       ? `${firstChild.quantity}x ${firstProduct.name || 'Produto'}`
       : editingCombo.offer_type === 'product_combo'
-        ? `Kit ${editingCombo.combo_children.map(c => c.name).filter(Boolean).join(' + ')}`
+        ? `Kit ${[
+            ...editingCombo.combo_children.map(c => c.name),
+            ...(editingCombo.combo_choice_groups || []).map(group => group.label),
+          ].filter(Boolean).join(' + ')}`
         : editingCombo.name;
     const autoOfferSku = editingCombo.offer_type && firstProduct
       ? buildDefaultOfferSku(
           firstProduct.sku || editingCombo.sku,
           editingCombo.offer_type,
           firstChild.quantity,
-          editingCombo.combo_children.map(c => c.sku || c.name).filter(Boolean).join('-'),
+          [
+            ...editingCombo.combo_children.map(c => c.sku || c.name),
+            ...(editingCombo.combo_choice_groups || []).map(group => group.label),
+          ].filter(Boolean).join('-'),
         )
       : editingCombo.sku;
 
@@ -568,6 +681,9 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     sku: prod.sku,
     quantity,
     price_retail: prod.price_retail,
+    price_cost: prod.price_cost,
+    price_reseller: prod.price_reseller,
+    price_wholesale: prod.price_wholesale,
     stock_quantity: prod.stock_quantity,
     weight_kg: prod.weight_kg,
     dimensions: prod.dimensions,
@@ -607,6 +723,33 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       ]
     });
     setSelectedChildProductIds([]);
+  };
+
+  const addChoiceGroupToCombo = (parentProduct: any, options: any[]) => {
+    if (!editingCombo) return;
+    const validOptions = options.filter(option => option?.id);
+    if (!validOptions.length) return;
+    const parentId = String(parentProduct?.id || validOptions[0].parent_id || validOptions[0].id);
+    const groupKey = `parent:${parentId}`;
+    const existingGroups = editingCombo.combo_choice_groups || [];
+    if (existingGroups.some(group => group.group_key === groupKey || group.parent_product_id === parentId)) {
+      toast.info('Esta familia ja esta como grupo de escolha do combo');
+      return;
+    }
+
+    setEditingCombo({
+      ...editingCombo,
+      combo_choice_groups: [
+        ...existingGroups,
+        {
+          group_key: groupKey,
+          parent_product_id: parentId,
+          label: parentProduct?.name || validOptions[0].name || 'Escolha uma opcao',
+          quantity: 1,
+          options: validOptions.map(option => toComboChild(option)),
+        },
+      ],
+    });
   };
 
   const clearComboSearch = () => {
@@ -651,9 +794,9 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         return Array.from(merged.values());
       });
 
-      addProductsToCombo(productsToAdd);
+      addChoiceGroupToCombo(product, productsToAdd);
       clearComboSearch();
-      toast.success(family.length > 0 ? `${family.length} variacao(oes) adicionada(s)` : 'Produto adicionado', { id: toastId });
+      toast.success(family.length > 0 ? `Grupo de escolha criado com ${family.length} opcao(oes)` : 'Grupo de escolha criado', { id: toastId });
     } catch {
       toast.error('Nao foi possivel carregar as variacoes do produto', { id: toastId });
     }
@@ -672,6 +815,24 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     setEditingCombo({
       ...editingCombo,
       combo_children: editingCombo.combo_children.filter(c => c.id !== id)
+    });
+  };
+
+  const updateChoiceGroupQuantity = (groupKey: string, qty: number) => {
+    if (!editingCombo || qty < 1) return;
+    setEditingCombo({
+      ...editingCombo,
+      combo_choice_groups: (editingCombo.combo_choice_groups || []).map(group =>
+        group.group_key === groupKey ? { ...group, quantity: qty } : group
+      ),
+    });
+  };
+
+  const removeChoiceGroup = (groupKey: string) => {
+    if (!editingCombo) return;
+    setEditingCombo({
+      ...editingCombo,
+      combo_choice_groups: (editingCombo.combo_choice_groups || []).filter(group => group.group_key !== groupKey),
     });
   };
 
@@ -1107,10 +1268,10 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-bold text-slate-900">
-                        {editingCombo.combo_children.length} item(ns) incluso(s) no combo
+                        {editingCombo.combo_children.length} item(ns) fixo(s) e {(editingCombo.combo_choice_groups || []).length} grupo(s) de escolha
                       </p>
                       <p className="text-xs text-slate-500">
-                        Marcar um produto na busca já inclui ele nesta lista.
+                        Item fixo entra sempre no combo. Familia vira escolha para o cliente selecionar uma variacao.
                       </p>
                     </div>
                     {editingCombo.combo_children.length > 0 && (
@@ -1125,6 +1286,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                   </div>
                   {editingCombo.combo_children.length > 0 ? (
                     <div className="space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wide text-teal-700">Itens fixos</p>
                       {editingCombo.combo_children.map(child => (
                         <div key={child.id} className="flex items-center justify-between gap-3 rounded-lg border border-teal-100 bg-white p-3">
                           <div className="min-w-0 flex-1">
@@ -1152,6 +1314,50 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                   ) : (
                     <div className="rounded-lg border border-dashed border-teal-200 bg-white/70 p-3 text-center text-sm text-slate-500">
                       {editingCombo.offer_type === 'quantity_kit' ? 'Escolha o produto base do kit.' : 'Nenhum produto incluído ainda.'}
+                    </div>
+                  )}
+                  {(editingCombo.combo_choice_groups || []).length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wide text-orange-700">Grupos de escolha</p>
+                      {(editingCombo.combo_choice_groups || []).map(group => (
+                        <div key={group.group_key} className="rounded-lg border border-orange-100 bg-white p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold text-slate-800">{group.label}</p>
+                              <p className="text-xs text-slate-500">
+                                Cliente escolhe {group.quantity} de {group.options.length} opcao(oes). Estoque considerado pela soma das variacoes.
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                Qtd:
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={group.quantity}
+                                  onChange={e => updateChoiceGroupQuantity(group.group_key, parseInt(e.target.value) || 1)}
+                                  className="w-16 rounded border border-slate-300 px-2 py-1 text-center text-sm"
+                                />
+                              </label>
+                              <button type="button" onClick={() => removeChoiceGroup(group.group_key)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {group.options.slice(0, 10).map(option => (
+                              <span key={option.id} className="rounded-full border border-orange-100 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-800">
+                                {option.sku || option.name}
+                              </span>
+                            ))}
+                            {group.options.length > 10 && (
+                              <span className="rounded-full border border-slate-100 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                                +{group.options.length - 10}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1214,7 +1420,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                                       onClick={() => handleAddProductFamily(group.parent || group.matches[0])}
                                       className="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700"
                                     >
-                                      Selecionar PAI e incluir família
+                                      Selecionar PAI como escolha
                                     </button>
                                   </div>
                                 ))}
@@ -1256,7 +1462,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                                     onClick={() => handleAddProductFamily(p)}
                                     className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-100"
                                   >
-                                    Adicionar familia
+                                    Familia como escolha
                                   </button>
                                 </div>
                               </div>

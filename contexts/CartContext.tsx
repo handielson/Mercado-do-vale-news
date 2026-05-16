@@ -16,11 +16,21 @@ export interface CartItem {
     product: CatalogProduct;
     quantity: number;
     unit_price: number;          // em centavos (preço efetivo)
+    comboSelections?: Array<{
+        group_key: string;
+        label: string;
+        quantity: number;
+        option: {
+            id: string;
+            name?: string;
+            sku?: string;
+        };
+    }>;
 }
 
 interface CartContextType {
     items: CartItem[];
-    addItem: (product: CatalogProduct, quantity?: number) => void;
+    addItem: (product: CatalogProduct, quantity?: number, options?: { comboSelections?: CartItem['comboSelections'] }) => void;
     removeItem: (id: string) => void;
     updateQuantity: (id: string, quantity: number) => void;
     clear: () => void;
@@ -128,9 +138,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return effectivePriceCents;
     };
 
-    const addItem = (product: CatalogProduct, quantity = 1) => {
+    const comboSelectionKey = (selections: CartItem['comboSelections']) =>
+        JSON.stringify((selections || []).map(selection => ({
+            group_key: selection.group_key,
+            option_id: selection.option?.id,
+        })).sort((a, b) => a.group_key.localeCompare(b.group_key)));
+
+    const addItem = (product: CatalogProduct, quantity = 1, options?: { comboSelections?: CartItem['comboSelections'] }) => {
+        const nextComboSelections = options?.comboSelections || (product as any).comboSelections;
+        const nextComboKey = comboSelectionKey(nextComboSelections);
         setItems(prev => {
-            const existing = prev.find(i => i.product.id === product.id);
+            const existing = prev.find(i => i.product.id === product.id && comboSelectionKey(i.comboSelections) === nextComboKey);
             let newItems: CartItem[];
             if (existing) {
                 const totalWanted = existing.quantity + quantity;
@@ -159,6 +177,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                         product,
                         quantity,
                         unit_price,
+                        comboSelections: nextComboSelections,
                     }
                 ];
             }

@@ -5601,6 +5601,28 @@ function normalizeCatalogProductSearchText(value) {
     .trim();
 }
 
+function comboStockSql(productAlias = 'products') {
+  return `(CASE WHEN ${productAlias}.is_combo = 1 THEN COALESCE((
+    SELECT MIN(component_stock)
+    FROM (
+      SELECT pc.combo_product_id,
+        CASE
+          WHEN COALESCE(pc.component_type, 'fixed') = 'choice_group'
+            THEN FLOOR(SUM(child.stock_quantity) / NULLIF(MAX(pc.quantity), 0))
+          ELSE MIN(FLOOR(child.stock_quantity / NULLIF(pc.quantity, 0)))
+        END AS component_stock
+      FROM product_combos pc
+      JOIN products child ON child.id = pc.child_product_id
+      GROUP BY pc.combo_product_id,
+        CASE
+          WHEN COALESCE(pc.component_type, 'fixed') = 'choice_group' THEN COALESCE(pc.group_key, pc.parent_product_id, pc.id)
+          ELSE pc.id
+        END
+    ) combo_components
+    WHERE combo_components.combo_product_id = ${productAlias}.id
+  ), 0) ELSE ${productAlias}.stock_quantity END)`;
+}
+
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;
@@ -5628,7 +5650,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
        is_combo, combo_discount_type, combo_discount_value,
-       (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
+       ${comboStockSql('products')} AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
@@ -5641,7 +5663,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
        is_combo, combo_discount_type, combo_discount_value,
-       (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity,
+       ${comboStockSql('products')} AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
@@ -5745,7 +5767,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
 fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT *,
-      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+      ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE id = ?`, 
     [req.params.id]
   );
@@ -5769,7 +5791,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   let rows;
   [rows] = await pool.query(
     `SELECT *,
-      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+      ${comboStockSql('products')} AS stock_quantity
      FROM products WHERE slug = ?`,
     [slugParam]
   );
@@ -5778,7 +5800,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   if (!rows.length && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(slugParam)) {
     [rows] = await pool.query(
       `SELECT *,
-        (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+        ${comboStockSql('products')} AS stock_quantity
        FROM products WHERE id = ?`,
       [slugParam]
     );
@@ -5826,7 +5848,7 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
 fastify.get('/products/by-ean/:ean', async (req, reply) => {
   const ean = req.params.ean;
   const [rows] = await pool.query(
-    `SELECT *, (CASE WHEN is_combo = 1 THEN 0 ELSE stock_quantity END) AS stock_quantity
+    `SELECT *, ${comboStockSql('products')} AS stock_quantity
      FROM products
      WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
     [ean, ean]
@@ -5842,7 +5864,11 @@ fastify.get('/products/by-ean/:ean', async (req, reply) => {
 
 fastify.get('/products/:id/combo', async (req, reply) => {
   const [rows] = await pool.query(
-    `SELECT pc.child_product_id as id, pc.quantity, p.name, p.sku, p.price_retail, p.price_cost, p.images, p.stock_quantity
+    `SELECT pc.child_product_id as id, pc.quantity,
+            COALESCE(pc.component_type, 'fixed') AS component_type,
+            pc.group_key, pc.parent_product_id, pc.group_label,
+            p.name, p.sku, p.price_retail, p.price_cost, p.price_reseller, p.price_wholesale,
+            p.images, p.stock_quantity, p.weight_kg, p.dimensions, p.bling_id, p.parent_id
      FROM product_combos pc
      JOIN products p ON p.id = pc.child_product_id
      WHERE pc.combo_product_id = ?`,
@@ -5850,7 +5876,8 @@ fastify.get('/products/:id/combo', async (req, reply) => {
   );
   return rows.map(r => ({
     ...r,
-    images: typeof r.images === 'string' ? JSON.parse(r.images) : r.images
+    images: typeof r.images === 'string' ? JSON.parse(r.images) : r.images,
+    dimensions: typeof r.dimensions === 'string' ? JSON.parse(r.dimensions || '{}') : r.dimensions
   }));
 });
 
@@ -5964,7 +5991,7 @@ async function getShopeeStockTargetsForProductIds(productIds) {
   const ids = [...new Set((productIds || []).map(id => String(id || '').trim()).filter(Boolean))];
   if (!ids.length) return [];
   const placeholders = ids.map(() => '?').join(',');
-  const comboStock = `(CASE WHEN p.is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / NULLIF(pc.quantity, 0))) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = p.id), 0) ELSE p.stock_quantity END)`;
+  const comboStock = comboStockSql('p');
   const [rows] = await pool.query(
     `SELECT p.id, p.sku, p.offer_type, p.shopee_strategy, p.track_inventory, ${comboStock} AS stock_quantity
        FROM products p
@@ -6444,10 +6471,11 @@ fastify.delete('/units/:id', { preHandler: requireSyncKey }, async (req, reply) 
 // ─── Combos (write) ─────────────────────────────────────────────────────────
 
 fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
-  // expects body to be a Product payload + `combo_children` (array of { id, quantity })
+  // expects body to be a Product payload + `combo_children` and optional `combo_choice_groups`
   const p = req.body;
   const id = p.id || require('crypto').randomUUID();
   const children = p.combo_children || [];
+  const choiceGroups = p.combo_choice_groups || [];
   
   const connection = await pool.getConnection();
   try {
@@ -6474,9 +6502,26 @@ fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
     for (const child of children) {
       const pcId = require('crypto').randomUUID();
       await connection.query(
-        `INSERT INTO product_combos (id, combo_product_id, child_product_id, quantity) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO product_combos
+          (id, combo_product_id, child_product_id, quantity, component_type, group_key, parent_product_id, group_label)
+         VALUES (?, ?, ?, ?, 'fixed', NULL, NULL, NULL)`,
         [pcId, id, child.id, child.quantity || 1]
       );
+    }
+
+    for (const group of choiceGroups) {
+      const groupKey = group.group_key || `parent:${group.parent_product_id || require('crypto').randomUUID()}`;
+      const options = Array.isArray(group.options) ? group.options : [];
+      for (const option of options) {
+        if (!option?.id) continue;
+        const pcId = require('crypto').randomUUID();
+        await connection.query(
+          `INSERT INTO product_combos
+            (id, combo_product_id, child_product_id, quantity, component_type, group_key, parent_product_id, group_label)
+           VALUES (?, ?, ?, ?, 'choice_group', ?, ?, ?)`,
+          [pcId, id, option.id, group.quantity || 1, groupKey, group.parent_product_id || null, group.label || null]
+        );
+      }
     }
     
     await connection.commit();
@@ -6493,6 +6538,7 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
   const p = req.body;
   const comboId = req.params.id;
   const children = p.combo_children || [];
+  const choiceGroups = p.combo_choice_groups || [];
   
   const connection = await pool.getConnection();
   try {
@@ -6522,9 +6568,26 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
     for (const child of children) {
       const pcId = require('crypto').randomUUID();
       await connection.query(
-        `INSERT INTO product_combos (id, combo_product_id, child_product_id, quantity) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO product_combos
+          (id, combo_product_id, child_product_id, quantity, component_type, group_key, parent_product_id, group_label)
+         VALUES (?, ?, ?, ?, 'fixed', NULL, NULL, NULL)`,
         [pcId, comboId, child.id, child.quantity || 1]
       );
+    }
+
+    for (const group of choiceGroups) {
+      const groupKey = group.group_key || `parent:${group.parent_product_id || require('crypto').randomUUID()}`;
+      const options = Array.isArray(group.options) ? group.options : [];
+      for (const option of options) {
+        if (!option?.id) continue;
+        const pcId = require('crypto').randomUUID();
+        await connection.query(
+          `INSERT INTO product_combos
+            (id, combo_product_id, child_product_id, quantity, component_type, group_key, parent_product_id, group_label)
+           VALUES (?, ?, ?, ?, 'choice_group', ?, ?, ?)`,
+          [pcId, comboId, option.id, group.quantity || 1, groupKey, group.parent_product_id || null, group.label || null]
+        );
+      }
     }
     
     await connection.commit();
@@ -6544,7 +6607,7 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
 fastify.get('/offers', async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT *,
-      (CASE WHEN is_combo = 1 THEN COALESCE((SELECT MIN(FLOOR(child.stock_quantity / pc.quantity)) FROM product_combos pc JOIN products child ON child.id = pc.child_product_id WHERE pc.combo_product_id = products.id), 0) ELSE stock_quantity END) AS stock_quantity
+      ${comboStockSql('products')} AS stock_quantity
      FROM products
      WHERE offer_type IS NOT NULL
      ORDER BY updated_at DESC`
@@ -8433,6 +8496,18 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_combos (
+      id CHAR(36) PRIMARY KEY,
+      combo_product_id CHAR(36) NOT NULL,
+      child_product_id CHAR(36) NOT NULL,
+      quantity INT DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_product_combos_combo (combo_product_id),
+      INDEX idx_product_combos_child (child_product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");
@@ -8446,6 +8521,10 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'bling_id',        'BIGINT DEFAULT NULL');
   await addColumnIfMissing('products', 'bling_parent_id', 'BIGINT DEFAULT NULL');
   await addColumnIfMissing('products', 'is_parent',       'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('product_combos', 'component_type',    "VARCHAR(32) NOT NULL DEFAULT 'fixed'");
+  await addColumnIfMissing('product_combos', 'group_key',         'VARCHAR(120) DEFAULT NULL');
+  await addColumnIfMissing('product_combos', 'parent_product_id', 'CHAR(36) DEFAULT NULL');
+  await addColumnIfMissing('product_combos', 'group_label',       'VARCHAR(255) DEFAULT NULL');
 
   await addColumnIfMissing('shipping_settings', 'extra_config', 'JSON NULL');
   console.log('[migration] company_settings synology columns: OK');

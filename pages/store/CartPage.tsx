@@ -505,6 +505,11 @@ function CartPageContent() {
                                             {sku}
                                         </span>
                                     )}
+                                    {(item.comboSelections || []).map(selection => (
+                                        <span key={selection.group_key} className="inline-flex items-center gap-1 text-[11px] text-orange-700 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-full">
+                                            {selection.label}: {selection.option?.name || selection.option?.sku}
+                                        </span>
+                                    ))}
                                 </div>
                             );
                         })()}
