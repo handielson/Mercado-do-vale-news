@@ -84,6 +84,19 @@ export const PublicProductPage: React.FC = () => {
     const productVideoPlaylist = useMemo(() => buildProductVideoPlaylist(effectiveVideoUrl), [effectiveVideoUrl]);
     const currentVideoUrl = productVideoPlaylist[videoPlaylistIndex] || effectiveVideoUrl;
     const formatDisplayPrice = (value: number) => value.toFixed(2).replace('.', ',');
+    const getComboOptionStock = (option: any) => Math.max(0, Math.trunc(Number(option?.stock_quantity ?? 0) || 0));
+    const getComboOptionDisplayName = (option: any, groupLabel: string) => {
+        const name = String(option?.name || '').trim();
+        const colorMatch = name.match(/\bCor\s*:\s*(.+)$/i);
+        if (colorMatch?.[1]) return colorMatch[1].trim();
+
+        const label = String(groupLabel || '').trim();
+        if (label && name.toLowerCase().startsWith(label.toLowerCase())) {
+            return name.slice(label.length).replace(/^[-\s|:]+/, '').trim() || name;
+        }
+
+        return name || option?.sku || 'Opcao';
+    };
     const fixedComboChildren = useMemo(
         () => comboChildren.filter(item => item?.component_type !== 'choice_group'),
         [comboChildren]
@@ -100,11 +113,19 @@ export const PublicProductPage: React.FC = () => {
                     quantity: Math.max(1, Number(item.quantity) || 1),
                     options: [],
                 };
-                current.options.push(item);
+                if (getComboOptionStock(item) > 0) current.options.push(item);
                 groups.set(key, current);
             });
         return Array.from(groups.values());
     }, [comboChildren]);
+    const visibleComboChoiceGroups = useMemo(
+        () => comboChoiceGroups.filter(group => group.options.length > 1),
+        [comboChoiceGroups]
+    );
+    const hasMissingComboChoice = useMemo(
+        () => comboChoiceGroups.some(group => group.options.length === 0 || (group.options.length > 1 && !selectedComboOptions[group.group_key])),
+        [comboChoiceGroups, selectedComboOptions]
+    );
     const variantPriceRange = useMemo(() => {
         if (!product || selectedKitQuantity > 1) {
             return { min: 0, max: 0, hasRange: false };
@@ -622,7 +643,7 @@ export const PublicProductPage: React.FC = () => {
 
     const handleAddToCart = () => {
         if (comboChoiceGroups.length > 0) {
-            const missingGroup = comboChoiceGroups.find(group => !selectedComboOptions[group.group_key]);
+            const missingGroup = comboChoiceGroups.find(group => group.options.length === 0 || (group.options.length > 1 && !selectedComboOptions[group.group_key]));
             if (missingGroup) {
                 toast.error(`Escolha uma opcao para ${missingGroup.label}`);
                 return;
@@ -634,9 +655,9 @@ export const PublicProductPage: React.FC = () => {
             label: group.label,
             quantity: group.quantity,
             option: {
-                id: selectedComboOptions[group.group_key]?.id,
-                name: selectedComboOptions[group.group_key]?.name,
-                sku: selectedComboOptions[group.group_key]?.sku,
+                id: (selectedComboOptions[group.group_key] || group.options[0])?.id,
+                name: (selectedComboOptions[group.group_key] || group.options[0])?.name,
+                sku: (selectedComboOptions[group.group_key] || group.options[0])?.sku,
             },
         }));
 
@@ -1339,7 +1360,7 @@ export const PublicProductPage: React.FC = () => {
                                                 </div>
                                                 );
                                             })}
-                                            {comboChoiceGroups.map(group => (
+                                            {visibleComboChoiceGroups.map(group => (
                                                 <div key={group.group_key} className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm">
                                                     <div className="mb-3 flex items-start justify-between gap-3">
                                                         <div>
@@ -1350,7 +1371,7 @@ export const PublicProductPage: React.FC = () => {
                                                             {group.quantity}x
                                                         </div>
                                                     </div>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    <div className="flex flex-wrap gap-2">
                                                         {group.options.map(option => {
                                                             const selected = selectedComboOptions[group.group_key]?.id === option.id;
                                                             return (
@@ -1358,14 +1379,13 @@ export const PublicProductPage: React.FC = () => {
                                                                     key={option.id}
                                                                     type="button"
                                                                     onClick={() => setSelectedComboOptions(prev => ({ ...prev, [group.group_key]: option }))}
-                                                                    className={`text-left rounded-lg border px-3 py-2 transition-all ${
+                                                                    className={`min-h-[40px] rounded-full border px-4 py-2 text-sm font-bold transition-all ${
                                                                         selected
-                                                                            ? 'border-orange-500 bg-orange-50 ring-1 ring-orange-500'
-                                                                            : 'border-slate-200 bg-slate-50 hover:border-orange-200'
+                                                                            ? 'border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-500'
+                                                                            : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50/60'
                                                                     }`}
                                                                 >
-                                                                    <span className="block text-sm font-semibold text-slate-800 line-clamp-2">{option.name}</span>
-                                                                    <span className="mt-1 block text-xs text-slate-500">{option.sku} • Estoque: {option.stock_quantity ?? 0}</span>
+                                                                    {getComboOptionDisplayName(option, group.label)}
                                                                 </button>
                                                             );
                                                         })}
@@ -1438,12 +1458,12 @@ export const PublicProductPage: React.FC = () => {
                                     )}
                                     <button
                                         onClick={handleAddToCart}
-                                        disabled={comboChoiceGroups.some(group => !selectedComboOptions[group.group_key]) || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)}
-                                        style={(comboChoiceGroups.some(group => !selectedComboOptions[group.group_key]) || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)) ? undefined : { backgroundColor: primaryColor, boxShadow: `0 10px 24px -10px ${primaryColor}66` }}
+                                        disabled={hasMissingComboChoice || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)}
+                                        style={(hasMissingComboChoice || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)) ? undefined : { backgroundColor: primaryColor, boxShadow: `0 10px 24px -10px ${primaryColor}66` }}
                                         className="w-full flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-xl transition-opacity hover:opacity-90 shadow-lg text-lg"
                                     >
                                         <ShoppingCart size={24} />
-                                        {comboChoiceGroups.some(group => !selectedComboOptions[group.group_key])
+                                        {hasMissingComboChoice
                                             ? 'Escolha as opcoes do combo'
                                             : (!product.track_inventory || (product.stock_quantity || 0) > 0) ? 'Adicionar ao Carrinho' : 'Fora de Estoque'}
                                     </button>

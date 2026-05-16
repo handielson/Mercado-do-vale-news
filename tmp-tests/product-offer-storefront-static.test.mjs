@@ -10,6 +10,10 @@ assert.match(catalogService, /removeHiddenOffers/);
 assert.match(catalogService, /offer_visibility !== 'hidden'/);
 assert.match(catalogConfigService, /product\.offer_type && product\.offer_visibility === 'hidden'/);
 assert.match(publicProductPage, /data\.offer_type && data\.offer_visibility === 'hidden'/);
+assert.match(publicProductPage, /getComboOptionStock\(item\) > 0/);
+assert.match(publicProductPage, /getComboOptionDisplayName\(option,\s*group\.label\)/);
+assert.match(publicProductPage, /group\.options\.length > 1/);
+assert.doesNotMatch(publicProductPage, /Estoque:\s*\{option\.stock_quantity/);
 assert.match(modernCard, /isOfferProduct/);
 assert.match(modernCard, /offerBadgeLabel/);
 
