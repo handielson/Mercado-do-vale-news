@@ -64,6 +64,7 @@ import {
     matchShopeeModelsBySku,
     shouldInitTierVariationForExistingItem,
 } from '../../../services/shopeeVariationLinking';
+import { buildShopeeOfferVariationGroups } from '../../../services/shopeeOfferMapping';
 import type { ShopeeVariationGroup } from '../../../types/shopee-variation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -94,6 +95,14 @@ export interface ShopeeProduct {
     track_inventory?: boolean;
     parent_id?: string | null;
     is_parent?: boolean | number | null;
+    is_combo?: boolean | number | null;
+    combo_children?: Array<{ id: string; quantity?: number }>;
+    offer_type?: 'quantity_kit' | 'product_combo' | null;
+    offer_parent_product_id?: string | null;
+    offer_visibility?: 'visible' | 'hidden';
+    shopee_strategy?: 'variation' | 'separate_item' | null;
+    shopee_offer_status?: string | null;
+    shopee_offer_error?: string | null;
     specs?: Record<string, any> | null;
     eans?: string[];
     weight_kg?: number;
@@ -128,6 +137,14 @@ export interface LocalProduct {
     track_inventory?: boolean;
     parent_id?: string | null;
     is_parent?: boolean | number | null;
+    is_combo?: boolean | number | null;
+    combo_children?: Array<{ id: string; quantity?: number }>;
+    offer_type?: 'quantity_kit' | 'product_combo' | null;
+    offer_parent_product_id?: string | null;
+    offer_visibility?: 'visible' | 'hidden';
+    shopee_strategy?: 'variation' | 'separate_item' | null;
+    shopee_offer_status?: string | null;
+    shopee_offer_error?: string | null;
     specs?: Record<string, any> | null;
     eans?: string[];
     weight_kg?: number;
@@ -801,6 +818,14 @@ function toLocalProduct(p: ShopeeProduct): LocalProduct {
         track_inventory: p.track_inventory !== false,
         parent_id: p.parent_id ?? null,
         is_parent: p.is_parent ?? null,
+        is_combo: p.is_combo ?? null,
+        combo_children: p.combo_children || [],
+        offer_type: p.offer_type || null,
+        offer_parent_product_id: p.offer_parent_product_id || null,
+        offer_visibility: p.offer_visibility || 'visible',
+        shopee_strategy: p.shopee_strategy || null,
+        shopee_offer_status: p.shopee_offer_status || null,
+        shopee_offer_error: p.shopee_offer_error || null,
         specs: p.specs || {},
         eans: p.eans || [],
         weight_kg: p.weight_kg,
@@ -832,6 +857,14 @@ function toLocalProductFromVpsProduct(p: any, shopeeItemId?: number | null): Loc
         track_inventory: p.track_inventory !== false,
         parent_id: p.parent_id ?? null,
         is_parent: p.is_parent ?? null,
+        is_combo: p.is_combo ?? null,
+        combo_children: Array.isArray(p.combo_children) ? p.combo_children : [],
+        offer_type: p.offer_type || null,
+        offer_parent_product_id: p.offer_parent_product_id || null,
+        offer_visibility: p.offer_visibility || 'visible',
+        shopee_strategy: p.shopee_strategy || null,
+        shopee_offer_status: p.shopee_offer_status || null,
+        shopee_offer_error: p.shopee_offer_error || null,
         specs: p.specs || {},
         eans: Array.isArray(p.eans) ? p.eans : (Array.isArray(p.alternative_eans) && p.alternative_eans.length ? p.alternative_eans : (p.ean ? [p.ean] : [])),
         weight_kg: p.weight_kg,
@@ -957,6 +990,14 @@ export default function ShopeePage() {
                     track_inventory: p.track_inventory !== false,
                     parent_id: p.parent_id ?? null,
                     is_parent: p.is_parent ?? null,
+                    is_combo: p.is_combo ?? null,
+                    combo_children: Array.isArray(p.combo_children) ? p.combo_children : [],
+                    offer_type: p.offer_type || null,
+                    offer_parent_product_id: p.offer_parent_product_id || null,
+                    offer_visibility: p.offer_visibility || 'visible',
+                    shopee_strategy: p.shopee_strategy || null,
+                    shopee_offer_status: p.shopee_offer_status || null,
+                    shopee_offer_error: p.shopee_offer_error || null,
                     specs: p.specs || {},
                     eans: Array.isArray(p.eans) ? p.eans : (p.ean ? [p.ean] : []),
                     weight_kg: p.weight_kg,
@@ -1501,7 +1542,13 @@ export default function ShopeePage() {
     };
 
     const variationGroups = useMemo(
-        () => groupShopeeVariationCandidates(products.map((product) => toLocalProduct(product))),
+        () => {
+            const localProducts = products.map((product) => toLocalProduct(product));
+            return [
+                ...groupShopeeVariationCandidates(localProducts),
+                ...buildShopeeOfferVariationGroups(localProducts),
+            ];
+        },
         [products]
     );
 
@@ -2545,6 +2592,15 @@ export function ShopeeSyncModal({
         if (!vpsVariationGroup || groups.some((group) => group.id === vpsVariationGroup.id)) return groups;
         return [...groups, vpsVariationGroup];
     }, [variationGroups, vpsVariationGroup]);
+    useEffect(() => {
+        if (!product.offer_type || product.shopee_strategy !== 'variation') return;
+        const offerGroup = availableVariationGroups.find((group) =>
+            group.children.some((child) => child.id === product.id)
+        );
+        if (!offerGroup) return;
+        setPublishWithVariations(true);
+        setSelectedVariationGroupId((current) => current || offerGroup.id);
+    }, [availableVariationGroups, product.id, product.offer_type, product.shopee_strategy]);
     const nameSuggestedVariationGroup = useMemo(() => suggestShopeeVariationGroupByName(
         product,
         historicalProducts.map((candidate) => toLocalProduct(candidate))
