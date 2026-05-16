@@ -223,6 +223,35 @@ const preferVariationOptions = (products: any[]) => {
   return colored.length > 0 ? colored : unique;
 };
 
+const buildComboReceiptSummary = (input: Pick<ProductComboFormData, 'combo_children' | 'combo_choice_groups'>) => {
+  const items = [
+    ...(input.combo_choice_groups || []).map(group => ({
+      quantity: group.quantity,
+      name: group.label,
+    })),
+    ...(input.combo_children || []).map(child => ({
+      quantity: child.quantity,
+      name: child.name || child.sku || 'Produto',
+    })),
+  ].filter(item => String(item.name || '').trim());
+
+  if (!items.length) return '';
+
+  const orderedItems = [...items].sort((a, b) => {
+    const aName = normalizeComboFamilyText(a.name);
+    const bName = normalizeComboFamilyText(b.name);
+    if (aName.includes('pelicula') && !bName.includes('pelicula')) return -1;
+    if (!aName.includes('pelicula') && bName.includes('pelicula')) return 1;
+    return 0;
+  });
+
+  const lines = orderedItems
+    .map(item => `<li>${Math.max(1, Number(item.quantity) || 1)}x ${String(item.name).trim()}</li>`)
+    .join('');
+
+  return `<hr class="my-6 border-slate-200"><h3>Voce recebera nesse combo:</h3><ul>${lines}</ul>`;
+};
+
 const sanitizeComboDebugValue = (value: unknown): unknown => {
   if (typeof value === 'string') {
     if (value.startsWith('data:')) return `[data-url:${value.length} chars]`;
@@ -611,10 +640,14 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
       // Buscando dados enriquecidos diretamente da VPS (já pré-carregados no allProducts e vpsApiService)
       const descriptionItems = [
-        ...editingCombo.combo_children,
+        ...editingCombo.combo_children.map(child => ({
+          ...child,
+          descriptionTitle: child.name,
+        })),
         ...(editingCombo.combo_choice_groups || []).map(group => ({
           ...group.options[0],
           name: group.label,
+          descriptionTitle: group.label,
           quantity: group.quantity,
         })).filter(item => item?.id),
       ];
@@ -641,10 +674,10 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
 
         if (prodData) {
           if (effectiveDesc) {
-            mergedDescription += (mergedDescription ? '<hr class="my-6 border-slate-200">' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">${c.quantity}x ${prodData.name}</h4><div>${effectiveDesc}</div>`;
+            mergedDescription += (mergedDescription ? '<hr class="my-6 border-slate-200">' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">${c.quantity}x ${c.descriptionTitle || prodData.name}</h4><div>${effectiveDesc}</div>`;
           }
           if (effectiveSpecs) {
-            mergedSpecs += (mergedSpecs ? '<hr class="my-6 border-slate-200">' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">Especificações: ${prodData.name}</h4><div>${effectiveSpecs}</div>`;
+            mergedSpecs += (mergedSpecs ? '<hr class="my-6 border-slate-200">' : '') + `<h4 class="text-lg font-bold text-slate-800 mb-3">Especificações: ${c.descriptionTitle || prodData.name}</h4><div>${effectiveSpecs}</div>`;
           }
           
           // Imagens diretamente da VPS
@@ -681,7 +714,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       }
 
       // Usa descrição manual se preenchida; senão usa a auto-gerada dos filhos
-      const finalDescription = editingCombo.description?.trim() || mergedDescription;
+      const finalDescription = editingCombo.description?.trim() || `${mergedDescription}${buildComboReceiptSummary(editingCombo)}`;
       const finalTechSpecs = editingCombo.technical_specifications?.trim() || mergedSpecs;
 
       const offerItems = [

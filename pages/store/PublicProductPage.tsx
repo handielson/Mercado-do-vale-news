@@ -122,6 +122,10 @@ export const PublicProductPage: React.FC = () => {
         () => comboChoiceGroups.filter(group => group.options.length > 1),
         [comboChoiceGroups]
     );
+    const autoSelectedComboGroups = useMemo(
+        () => comboChoiceGroups.filter(group => group.options.length === 1),
+        [comboChoiceGroups]
+    );
     const hasMissingComboChoice = useMemo(
         () => comboChoiceGroups.some(group => group.options.length === 0 || (group.options.length > 1 && !selectedComboOptions[group.group_key])),
         [comboChoiceGroups, selectedComboOptions]
@@ -1358,6 +1362,26 @@ export const PublicProductPage: React.FC = () => {
                                                         </div>
                                                     )}
                                                 </div>
+                                                );
+                                            })}
+                                            {autoSelectedComboGroups.map(group => {
+                                                const option = group.options[0];
+                                                return (
+                                                    <div key={group.group_key} className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-100 shadow-sm">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div className="flex items-start gap-3">
+                                                                <ShieldCheck size={20} className="mt-0.5 text-emerald-600 flex-shrink-0" />
+                                                                <div>
+                                                                    <p className="text-slate-900 font-bold leading-snug">{group.label}</p>
+                                                                    <p className="text-sm text-emerald-700 font-semibold mt-1">Selecionado</p>
+                                                                    <p className="text-xs text-slate-500 mt-0.5">{getComboOptionDisplayName(option, group.label)}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="bg-white text-emerald-700 font-black text-sm px-3 py-1.5 rounded-lg border border-emerald-100">
+                                                                Incluso no combo
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 );
                                             })}
                                             {visibleComboChoiceGroups.map(group => (

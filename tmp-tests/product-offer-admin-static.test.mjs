@@ -16,6 +16,9 @@ assert.match(combosPage, /getProducts\(\{\s*sku:\s*candidate,\s*status:\s*'all'/
 assert.match(combosPage, /offer_parent_product_id:\s*offerParentProductId/);
 assert.match(combosPage, /id:\s*group\.parent_product_id/);
 assert.match(combosPage, /stock_quantity:\s*options\.reduce/);
+assert.match(combosPage, /buildComboReceiptSummary/);
+assert.match(combosPage, /Voce recebera nesse combo/);
+assert.match(combosPage, /descriptionTitle:\s*group\.label/);
 assert.match(combosPage, /Kit de quantidade/);
 assert.match(productListPage, /\/admin\/products\/offers/);
 assert.match(routes, /path: "\/admin\/products\/offers"/);
