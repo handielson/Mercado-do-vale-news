@@ -11,6 +11,8 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /fastify\.get\('\/offers'/);
   assert.match(source, /fastify\.post\('\/offers'/);
   assert.match(source, /fastify\.put\('\/offers\/:id'/);
+  assert.match(source, /headers:\s*\{\s*'x-sync-key':\s*req\.headers\['x-sync-key'\]\s*\|\|\s*req\.headers\['x-api-key'\]\s*\}/);
+  assert.doesNotMatch(source, /headers:\s*\{\s*'x-vps-sync-key'/);
 }
 
 assert.match(service, /async getOffers/);

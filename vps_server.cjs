@@ -6563,7 +6563,7 @@ fastify.post('/offers', { preHandler: requireSyncKey }, async (req, reply) => {
   const response = await fastify.inject({
     method: 'POST',
     url: '/combos',
-    headers: { 'x-vps-sync-key': req.headers['x-vps-sync-key'] },
+    headers: { 'x-sync-key': req.headers['x-sync-key'] || req.headers['x-api-key'] },
     payload: { ...(req.body || {}), is_combo: true },
   });
   const payload = response.body ? JSON.parse(response.body) : {};
@@ -6574,7 +6574,7 @@ fastify.put('/offers/:id', { preHandler: requireSyncKey }, async (req, reply) =>
   const response = await fastify.inject({
     method: 'PUT',
     url: `/combos/${req.params.id}`,
-    headers: { 'x-vps-sync-key': req.headers['x-vps-sync-key'] },
+    headers: { 'x-sync-key': req.headers['x-sync-key'] || req.headers['x-api-key'] },
     payload: req.body || {},
   });
   const payload = response.body ? JSON.parse(response.body) : {};
