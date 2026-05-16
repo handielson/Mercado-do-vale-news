@@ -685,6 +685,30 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     return Array.from(merged.values());
   }, [allProducts, childSearchResults, childSearchTerm]);
 
+  const filteredProductFamiliesToSelect = useMemo(() => {
+    const productById = new Map<string, any>();
+    [...allProducts, ...childSearchResults].forEach(product => {
+      if (product?.id) productById.set(String(product.id), product);
+    });
+
+    const groups = new Map<string, { parentId: string; parent: any; matches: any[] }>();
+    filteredProductsToSelect.forEach(product => {
+      const parentId = String(product.parent_id || product.id);
+      const current = groups.get(parentId) || {
+        parentId,
+        parent: productById.get(parentId) || product,
+        matches: [],
+      };
+      current.matches.push(product);
+      if (String(product.id) === parentId || product.is_parent) current.parent = product;
+      groups.set(parentId, current);
+    });
+
+    return Array.from(groups.values())
+      .filter(group => group.matches.length > 1 || String(group.matches[0]?.id) !== group.parentId || group.parent?.is_parent)
+      .sort((a, b) => (a.parent?.name || '').localeCompare(b.parent?.name || ''));
+  }, [allProducts, childSearchResults, filteredProductsToSelect]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
@@ -1102,6 +1126,35 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                               Adicionar selecionados
                             </button>
                           </div>
+                          {filteredProductFamiliesToSelect.length > 0 && (
+                            <div className="border-b border-orange-100 bg-orange-50/60">
+                              <div className="px-3 pt-3 pb-2 text-xs font-bold uppercase tracking-wide text-orange-700">
+                                Famílias encontradas
+                              </div>
+                              <div className="space-y-2 px-3 pb-3">
+                                {filteredProductFamiliesToSelect.map(group => (
+                                  <div
+                                    key={group.parentId}
+                                    className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border border-orange-100 bg-white p-3"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-bold text-slate-900">{group.parent?.name || group.matches[0]?.name}</p>
+                                      <p className="text-xs text-slate-500">
+                                        PAI: {group.parent?.sku || group.matches[0]?.sku || group.parentId} • {group.matches.length} item(ns) encontrado(s) na busca
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddProductFamily(group.parent || group.matches[0])}
+                                      className="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700"
+                                    >
+                                      Selecionar PAI e incluir família
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           <div className="divide-y divide-slate-100">
                             {filteredProductsToSelect.map(p => (
                               <div

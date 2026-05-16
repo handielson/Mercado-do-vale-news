@@ -40,8 +40,23 @@ assert.match(
 );
 assert.match(
   page,
+  /filteredProductFamiliesToSelect/,
+  'offer modal must group matching products by parent/family before adding variations',
+);
+assert.match(
+  page,
   /getProductsByParentId\(parentId\)/,
   'offer modal must fetch variation siblings by parent id instead of requiring one-by-one selection',
+);
+assert.match(
+  page,
+  /Famílias encontradas/,
+  'offer modal must render a dedicated parent/family selection area',
+);
+assert.match(
+  page,
+  /Selecionar PAI e incluir família/,
+  'offer modal must expose a clear parent selection action that adds the full family',
 );
 assert.match(
   page,
