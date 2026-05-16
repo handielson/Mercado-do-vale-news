@@ -15,8 +15,48 @@ assert.match(
 );
 assert.doesNotMatch(
   page,
-  /filteredProductsToSelect[\s\S]*\.slice\(0,\s*20\)/,
-  'offer modal product search must not silently cap visible results at 20',
+  /top-full[\s\S]*max-h-60[\s\S]*overflow-y-auto/,
+  'offer modal product search results must expand inline instead of using an internal scroll dropdown',
+);
+assert.match(
+  page,
+  /selectedChildProductIds/,
+  'offer modal must allow selecting multiple search results before adding them to the combo',
+);
+assert.match(
+  page,
+  /handleToggleSearchProductSelection/,
+  'offer modal must expose a checkbox-style selection handler for search results',
+);
+assert.match(
+  page,
+  /handleAddSelectedProducts/,
+  'offer modal must add selected search results to the combo in one action',
+);
+assert.match(
+  page,
+  /handleAddProductFamily/,
+  'offer modal must allow adding all variations from a parent product',
+);
+assert.match(
+  page,
+  /getProductsByParentId\(parentId\)/,
+  'offer modal must fetch variation siblings by parent id instead of requiring one-by-one selection',
+);
+assert.match(
+  page,
+  /Adicionar selecionados/,
+  'offer modal must render a clear action for selected products',
+);
+assert.match(
+  page,
+  /Adicionar familia/,
+  'offer modal must render a clear action for adding a product family',
+);
+assert.match(
+  page,
+  /const packageValues = packageMode === 'manual' && packageDraft \? packageDraft : calculatedPackage;/,
+  'offer modal package fields must have visible default values even before products are selected',
 );
 assert.match(
   page,

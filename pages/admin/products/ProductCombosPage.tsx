@@ -43,6 +43,7 @@ interface ProductComboFormData {
     weight_kg?: number | null;
     dimensions?: any;
     bling_id?: number | null;
+    parent_id?: string | null;
   }>;
   description?: string;
   technical_specifications?: string;
@@ -145,6 +146,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
   const [childSearchTerm, setChildSearchTerm] = useState('');
   const [childSearchResults, setChildSearchResults] = useState<any[]>([]);
   const [childSearchLoading, setChildSearchLoading] = useState(false);
+  const [selectedChildProductIds, setSelectedChildProductIds] = useState<string[]>([]);
   const [imageStyle, setImageStyle] = useState<'auto' | 'mosaic' | 'manual'>('auto');
   const [packageMode, setPackageMode] = useState<PackageMode>('auto');
   const [packageDraft, setPackageDraft] = useState<ProductPhysicalPackage | null>(null);
@@ -200,6 +202,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     if (!isModalOpen || query.length < 2) {
       setChildSearchResults([]);
       setChildSearchLoading(false);
+      setSelectedChildProductIds([]);
       return;
     }
 
@@ -252,6 +255,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     setPackageDraft(null);
     setChildSearchResults([]);
     setChildSearchTerm('');
+    setSelectedChildProductIds([]);
     setIsModalOpen(true);
   };
 
@@ -281,6 +285,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     setPackageDraft(null);
     setChildSearchResults([]);
     setChildSearchTerm('');
+    setSelectedChildProductIds([]);
     setIsModalOpen(true);
   };
 
@@ -315,7 +320,8 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
           stock_quantity: c.stock_quantity,
           weight_kg: c.weight_kg,
           dimensions: c.dimensions,
-          bling_id: c.bling_id
+          bling_id: c.bling_id,
+          parent_id: c.parent_id
         })) || [],
         tags: combo.tags || [],
         description: savedDescription,
@@ -331,6 +337,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       });
       setChildSearchResults([]);
       setChildSearchTerm('');
+      setSelectedChildProductIds([]);
       setIsModalOpen(true);
       toast.dismiss(toastId);
     } catch (e) {
@@ -555,32 +562,91 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     toast.success('Preços recalculados com base nos itens!');
   };
 
-  const addChildProduct = (prod: any) => {
+  const toComboChild = (prod: any, quantity = 1) => ({
+    id: prod.id,
+    name: prod.name,
+    sku: prod.sku,
+    quantity,
+    price_retail: prod.price_retail,
+    stock_quantity: prod.stock_quantity,
+    weight_kg: prod.weight_kg,
+    dimensions: prod.dimensions,
+    bling_id: prod.bling_id,
+    parent_id: prod.parent_id,
+  });
+
+  const addProductsToCombo = (products: any[]) => {
     if (!editingCombo) return;
+    const validProducts = products.filter(Boolean);
+    if (!validProducts.length) return;
+
     if (editingCombo.offer_type === 'quantity_kit') {
+      const prod = validProducts[0];
       setEditingCombo({
         ...editingCombo,
-        offer_parent_product_id: prod.id,
-        combo_children: [
-          { id: prod.id, name: prod.name, sku: prod.sku, quantity: editingCombo.combo_children[0]?.quantity || 2, price_retail: prod.price_retail, stock_quantity: prod.stock_quantity, weight_kg: prod.weight_kg, dimensions: prod.dimensions, bling_id: prod.bling_id }
-        ]
+        offer_parent_product_id: prod.parent_id || prod.id,
+        combo_children: [toComboChild(prod, editingCombo.combo_children[0]?.quantity || 2)]
       });
       setChildSearchTerm('');
+      setSelectedChildProductIds([]);
       return;
     }
-    const exists = editingCombo.combo_children.find(c => c.id === prod.id);
-    if (exists) {
-      toast.info('Produto já está no combo');
+
+    const existingIds = new Set(editingCombo.combo_children.map(c => c.id));
+    const nextProducts = validProducts.filter(product => product.id && !existingIds.has(product.id));
+    if (!nextProducts.length) {
+      toast.info('Produtos selecionados ja estao no combo');
       return;
     }
+
     setEditingCombo({
       ...editingCombo,
       combo_children: [
         ...editingCombo.combo_children,
-        { id: prod.id, name: prod.name, sku: prod.sku, quantity: 1, price_retail: prod.price_retail, stock_quantity: prod.stock_quantity, weight_kg: prod.weight_kg, dimensions: prod.dimensions, bling_id: prod.bling_id }
+        ...nextProducts.map(product => toComboChild(product))
       ]
     });
+    setSelectedChildProductIds([]);
+  };
+
+  const addChildProduct = (prod: any) => {
+    if (!editingCombo) return;
+    addProductsToCombo([prod]);
     setChildSearchTerm('');
+  };
+
+  const handleToggleSearchProductSelection = (productId: string) => {
+    setSelectedChildProductIds(prev => (
+      prev.includes(productId)
+        ? prev.filter(id => id !== productId)
+        : [...prev, productId]
+    ));
+  };
+
+  const handleAddSelectedProducts = () => {
+    const selectedProducts = filteredProductsToSelect.filter(product => selectedChildProductIds.includes(product.id));
+    addProductsToCombo(selectedProducts);
+  };
+
+  const handleAddProductFamily = async (product: any) => {
+    const parentId = product.parent_id || product.id;
+    const toastId = toast.loading('Carregando familia do produto...');
+    try {
+      const rows = await vpsApiService.getProductsByParentId(parentId);
+      const family = (rows || []).filter(item => !item.is_combo && !item.offer_type);
+      const productsToAdd = family.length > 0 ? family : [product];
+
+      setAllProducts(prev => {
+        const merged = new Map(prev.map(item => [item.id, item]));
+        productsToAdd.forEach(item => merged.set(item.id, { ...(merged.get(item.id) || {}), ...item }));
+        return Array.from(merged.values());
+      });
+
+      addProductsToCombo(productsToAdd);
+      toast.success(family.length > 0 ? `${family.length} variacao(oes) adicionada(s)` : 'Produto adicionado', { id: toastId });
+    } catch {
+      toast.error('Nao foi possivel carregar as variacoes do produto', { id: toastId });
+    }
   };
 
   const updateChildQuantity = (id: string, qty: number) => {
@@ -616,7 +682,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       const matches = product.name?.toLowerCase().includes(term) || product.sku?.toLowerCase().includes(term);
       if (matches) merged.set(product.id, product);
     });
-    return Array.from(merged.values()).slice(0, 80);
+    return Array.from(merged.values());
   }, [allProducts, childSearchResults, childSearchTerm]);
 
   return (
@@ -1004,42 +1070,79 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                 </h3>
                 
                 {/* Search & Add Child */}
-                <div className="relative mb-4">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    placeholder={editingCombo.offer_type === 'quantity_kit' ? 'Buscar produto base para o kit...' : 'Buscar produto para adicionar ao combo...'}
-                    value={childSearchTerm}
-                    onChange={e => setChildSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-teal-500"
-                  />
+                <div className="mb-4 space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                    <input
+                      type="text"
+                      placeholder={editingCombo.offer_type === 'quantity_kit' ? 'Buscar produto base para o kit...' : 'Buscar produto para adicionar ao combo...'}
+                      value={childSearchTerm}
+                      onChange={e => setChildSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-teal-500"
+                    />
+                  </div>
                   {childSearchTerm && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                    <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
                       {childSearchLoading ? (
                         <div className="p-3 text-sm text-slate-500 text-center">Buscando produtos...</div>
                       ) : filteredProductsToSelect.length === 0 ? (
                         <div className="p-3 text-sm text-slate-500 text-center">Nenhum produto encontrado.</div>
                       ) : (
                         <>
-                          <div className="px-3 py-2 text-xs font-semibold text-slate-500 border-b border-slate-100">
-                            {filteredProductsToSelect.length} resultado(s) encontrados
-                          </div>
-                          {filteredProductsToSelect.map(p => (
-                            <div
-                              key={p.id}
-                              onClick={() => addChildProduct(p)}
-                              className="p-3 flex items-center justify-between hover:bg-slate-50 cursor-pointer border-b last:border-0 border-slate-100"
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 px-3 py-2 border-b border-slate-100">
+                            <span className="text-xs font-semibold text-slate-500">
+                              {filteredProductsToSelect.length} resultado(s) encontrados
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleAddSelectedProducts}
+                              disabled={selectedChildProductIds.length === 0}
+                              className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                             >
-                              <div>
-                                <p className="font-semibold text-sm">{p.name}</p>
-                                <p className="text-xs text-slate-500">{p.sku}</p>
+                              Adicionar selecionados
+                            </button>
+                          </div>
+                          <div className="divide-y divide-slate-100">
+                            {filteredProductsToSelect.map(p => (
+                              <div
+                                key={p.id}
+                                className="p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3 hover:bg-slate-50"
+                              >
+                                <label className="flex min-w-0 flex-1 items-start gap-3 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedChildProductIds.includes(p.id)}
+                                    onChange={() => handleToggleSearchProductSelection(p.id)}
+                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block font-semibold text-sm text-slate-900">{p.name}</span>
+                                    <span className="block text-xs text-slate-500">{p.sku}</span>
+                                  </span>
+                                </label>
+                                <div className="flex items-center justify-between md:justify-end gap-3">
+                                  <div className="text-right">
+                                    <p className="text-sm font-semibold text-teal-700">{formatCurrency(p.price_retail)}</p>
+                                    <p className="text-xs text-slate-400">Estoque: {p.stock_quantity}</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => addChildProduct(p)}
+                                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white"
+                                  >
+                                    Adicionar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddProductFamily(p)}
+                                    className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-100"
+                                  >
+                                    Adicionar familia
+                                  </button>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-sm font-semibold text-teal-700">{formatCurrency(p.price_retail)}</p>
-                                <p className="text-xs text-slate-400">Estoque: {p.stock_quantity}</p>
-                              </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </>
                       )}
                     </div>
