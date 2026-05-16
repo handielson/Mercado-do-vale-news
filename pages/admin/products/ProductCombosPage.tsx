@@ -609,23 +609,32 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     setSelectedChildProductIds([]);
   };
 
+  const clearComboSearch = () => {
+    setChildSearchTerm('');
+    setChildSearchResults([]);
+    setSelectedChildProductIds([]);
+  };
+
   const addChildProduct = (prod: any) => {
     if (!editingCombo) return;
     addProductsToCombo([prod]);
-    setChildSearchTerm('');
+    clearComboSearch();
   };
 
-  const handleToggleSearchProductSelection = (productId: string) => {
-    setSelectedChildProductIds(prev => (
-      prev.includes(productId)
-        ? prev.filter(id => id !== productId)
-        : [...prev, productId]
-    ));
+  const handleToggleSearchProductSelection = (product: any) => {
+    if (!editingCombo) return;
+    const isAlreadyInCombo = editingCombo.combo_children.some(child => child.id === product.id);
+    if (isAlreadyInCombo) {
+      removeChild(product.id);
+      return;
+    }
+    addProductsToCombo([product]);
   };
 
   const handleAddSelectedProducts = () => {
     const selectedProducts = filteredProductsToSelect.filter(product => selectedChildProductIds.includes(product.id));
     addProductsToCombo(selectedProducts);
+    clearComboSearch();
   };
 
   const handleAddProductFamily = async (product: any) => {
@@ -643,6 +652,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
       });
 
       addProductsToCombo(productsToAdd);
+      clearComboSearch();
       toast.success(family.length > 0 ? `${family.length} variacao(oes) adicionada(s)` : 'Produto adicionado', { id: toastId });
     } catch {
       toast.error('Nao foi possivel carregar as variacoes do produto', { id: toastId });
@@ -969,7 +979,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                       <p className="mt-2 text-sm font-medium">{editingOfferHasMissingBling ? 'Há item sem vínculo' : 'Itens vinculados'}</p>
                     </div>
                   </div>
-                )}
+                  )}
               </div>
 
               {/* Package */}
@@ -1092,6 +1102,59 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                 <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">
                   {editingCombo.offer_type === 'quantity_kit' ? 'Produto base do kit' : 'Itens do Combo'}
                 </h3>
+
+                <div className="mb-4 rounded-xl border border-teal-100 bg-teal-50/70 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">
+                        {editingCombo.combo_children.length} item(ns) incluso(s) no combo
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Marcar um produto na busca já inclui ele nesta lista.
+                      </p>
+                    </div>
+                    {editingCombo.combo_children.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleCalculatePrices}
+                        className="rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50"
+                      >
+                        Atualizar valores
+                      </button>
+                    )}
+                  </div>
+                  {editingCombo.combo_children.length > 0 ? (
+                    <div className="space-y-2">
+                      {editingCombo.combo_children.map(child => (
+                        <div key={child.id} className="flex items-center justify-between gap-3 rounded-lg border border-teal-100 bg-white p-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-800">{child.name}</p>
+                            <p className="text-xs text-slate-500">{child.sku} • {formatCurrency(child.price_retail || 0)}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                              Qtd:
+                              <input
+                                type="number"
+                                min="1"
+                                value={child.quantity}
+                                onChange={e => updateChildQuantity(child.id, parseInt(e.target.value) || 1)}
+                                className="w-16 rounded border border-slate-300 px-2 py-1 text-center text-sm"
+                              />
+                            </label>
+                            <button type="button" onClick={() => removeChild(child.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-teal-200 bg-white/70 p-3 text-center text-sm text-slate-500">
+                      {editingCombo.offer_type === 'quantity_kit' ? 'Escolha o produto base do kit.' : 'Nenhum produto incluído ainda.'}
+                    </div>
+                  )}
+                </div>
                 
                 {/* Search & Add Child */}
                 <div className="mb-4 space-y-3">
@@ -1119,11 +1182,14 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                             </span>
                             <button
                               type="button"
-                              onClick={handleAddSelectedProducts}
-                              disabled={selectedChildProductIds.length === 0}
+                              onClick={() => {
+                                addProductsToCombo(filteredProductsToSelect);
+                                clearComboSearch();
+                              }}
+                              disabled={filteredProductsToSelect.length === 0}
                               className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                             >
-                              Adicionar selecionados
+                              Incluir todos visíveis
                             </button>
                           </div>
                           {filteredProductFamiliesToSelect.length > 0 && (
@@ -1164,8 +1230,8 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                                 <label className="flex min-w-0 flex-1 items-start gap-3 cursor-pointer">
                                   <input
                                     type="checkbox"
-                                    checked={selectedChildProductIds.includes(p.id)}
-                                    onChange={() => handleToggleSearchProductSelection(p.id)}
+                                    checked={editingCombo.combo_children.some(child => child.id === p.id)}
+                                    onChange={() => handleToggleSearchProductSelection(p)}
                                     className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                                   />
                                   <span className="min-w-0">
@@ -1202,38 +1268,6 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
                   )}
                 </div>
 
-                {/* Selected Children */}
-                {editingCombo.combo_children.length > 0 ? (
-                  <div className="space-y-2">
-                    {editingCombo.combo_children.map(child => (
-                      <div key={child.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                        <div className="flex-1">
-                          <p className="font-semibold text-sm text-slate-800">{child.name}</p>
-                          <p className="text-xs text-slate-500">{child.sku} • {formatCurrency(child.price_retail || 0)}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs font-semibold text-slate-500">Qtd:</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={child.quantity}
-                              onChange={e => updateChildQuantity(child.id, parseInt(e.target.value) || 1)}
-                              className="w-16 px-2 py-1 border border-slate-300 rounded text-center text-sm"
-                            />
-                          </div>
-                          <button onClick={() => removeChild(child.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-4 border-2 border-dashed border-slate-300 rounded-lg text-center text-slate-500 text-sm">
-                    {editingCombo.offer_type === 'quantity_kit' ? 'Escolha o produto base do kit.' : 'Nenhum produto adicionado ao combo ainda.'}
-                  </div>
-                )}
               </div>
 
               {/* Pricing Config */}

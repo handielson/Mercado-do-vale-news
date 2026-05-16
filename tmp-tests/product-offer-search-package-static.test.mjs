@@ -20,18 +20,18 @@ assert.doesNotMatch(
 );
 assert.match(
   page,
-  /selectedChildProductIds/,
-  'offer modal must allow selecting multiple search results before adding them to the combo',
+  /item\(ns\) incluso\(s\) no combo/,
+  'offer modal must keep the included combo items visible while products are selected',
 );
 assert.match(
   page,
   /handleToggleSearchProductSelection/,
-  'offer modal must expose a checkbox-style selection handler for search results',
+  'offer modal must expose a checkbox-style handler that adds/removes products from the combo',
 );
 assert.match(
   page,
-  /handleAddSelectedProducts/,
-  'offer modal must add selected search results to the combo in one action',
+  /Marcar um produto na busca já inclui ele nesta lista/,
+  'offer modal must clarify that checked search results are already included in the combo',
 );
 assert.match(
   page,
@@ -60,8 +60,8 @@ assert.match(
 );
 assert.match(
   page,
-  /Adicionar selecionados/,
-  'offer modal must render a clear action for selected products',
+  /Incluir todos visíveis/,
+  'offer modal must render a clear action for adding all visible search results',
 );
 assert.match(
   page,
