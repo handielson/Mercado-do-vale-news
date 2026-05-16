@@ -134,6 +134,12 @@ export interface Product {
     is_combo?: boolean;        // Se true, é um pacote agrupador de SKUs filhos
     combo_discount_type?: 'percentage' | 'fixed' | null;
     combo_discount_value?: number;
+    offer_type?: 'quantity_kit' | 'product_combo' | null;
+    offer_parent_product_id?: string | null;
+    offer_visibility?: 'visible' | 'hidden';
+    shopee_strategy?: 'variation' | 'separate_item';
+    shopee_offer_status?: string | null;
+    shopee_offer_error?: string | null;
     combo_children?: Array<{
         id: string;
         quantity: number;
@@ -226,6 +232,12 @@ export interface ProductInput {
     is_combo?: boolean;
     combo_discount_type?: 'percentage' | 'fixed' | null;
     combo_discount_value?: number;
+    offer_type?: 'quantity_kit' | 'product_combo' | null;
+    offer_parent_product_id?: string | null;
+    offer_visibility?: 'visible' | 'hidden';
+    shopee_strategy?: 'variation' | 'separate_item';
+    shopee_offer_status?: string | null;
+    shopee_offer_error?: string | null;
     combo_children?: Array<{
         id: string;
         quantity: number;

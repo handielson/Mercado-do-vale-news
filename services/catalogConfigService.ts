@@ -183,6 +183,10 @@ class CatalogConfigService {
      */
     applyVisibilityRules(products: any[], settings: CatalogSettings): any[] {
         return products.filter(product => {
+            if (product.offer_type && product.offer_visibility === 'hidden') {
+                return false;
+            }
+
             // Regra: Ocultar inativos
             if (settings.hide_inactive) {
                 const s = String(product.status || '').toLowerCase();

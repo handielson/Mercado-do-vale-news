@@ -244,6 +244,12 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
+                if (data.offer_type && data.offer_visibility === 'hidden') {
+                    toast.error('Produto não encontrado');
+                    navigate('/');
+                    return;
+                }
+
                 // Busca marca/descrição do modelo no Supabase como fallback quando a VPS não envia.
                 // Modelo guarda uma descrição padrão herdada por todos os produtos do mesmo modelo.
                 // Trata descrições obviamente inválidas ('0', '<p>0</p>', muito curtas) como
@@ -371,6 +377,7 @@ export const PublicProductPage: React.FC = () => {
                     const sibs = await vpsApiService.getProducts({ model_id: data.model_id, status: 'active', limit: 50 });
                     if (sibs) {
                         const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
+                            (!s.offer_type || s.offer_visibility !== 'hidden') &&
                             String(s.model_id) === String(data.model_id)  // ← validação: só produtos do mesmo modelo
                         );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
@@ -379,6 +386,7 @@ export const PublicProductPage: React.FC = () => {
                     const sibs = await vpsApiService.getProducts({ parent_id: data.parent_id, status: 'active', limit: 50 });
                     if (sibs) {
                         const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
+                            (!s.offer_type || s.offer_visibility !== 'hidden') &&
                             String(s.parent_id) === String(data.parent_id)  // ← validação: só produtos do mesmo pai
                         );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
@@ -392,6 +400,7 @@ export const PublicProductPage: React.FC = () => {
                         const searchResults = await vpsApiService.getProducts({ search: searchStr, status: 'active', limit: 50 });
                         if (searchResults) {
                             const cleanSibs = searchResults.map(s => normalizeProduct(s)).filter(s =>
+                                (!s.offer_type || s.offer_visibility !== 'hidden') &&
                                 generateGroupKey(s as unknown as CatalogProduct) === myGroupKey
                             );
                             setSiblings(cleanSibs as unknown as CatalogProduct[]);
@@ -403,7 +412,9 @@ export const PublicProductPage: React.FC = () => {
                 if (data.category_id) {
                     const related = await vpsApiService.getProducts({ category: data.category_id, status: 'active', limit: 5 });
                     if (related) {
-                        const cleanRelated = related.map(s => normalizeProduct(s)).filter(s => s.id !== data.id).slice(0, 4);
+                        const cleanRelated = related.map(s => normalizeProduct(s))
+                            .filter(s => (!s.offer_type || s.offer_visibility !== 'hidden') && s.id !== data.id)
+                            .slice(0, 4);
                         setRelatedProducts(cleanRelated as unknown as CatalogProduct[]);
                     }
                 }
@@ -419,7 +430,7 @@ export const PublicProductPage: React.FC = () => {
                         if (crossSells) {
                             const cleanCross = crossSells.map(s => normalizeProduct(s))
                             // Evita sugerir os que já são relacionados da msm categoria
-                            .filter(s => s.id !== data.id && s.category_id !== data.category_id)
+                            .filter(s => (!s.offer_type || s.offer_visibility !== 'hidden') && s.id !== data.id && s.category_id !== data.category_id)
                             .slice(0, 4);
                             
                             setCrossSellProducts(cleanCross as unknown as CatalogProduct[]);

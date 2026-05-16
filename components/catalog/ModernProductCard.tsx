@@ -492,6 +492,10 @@ export function ModernProductCard({
     })();
 
     const effectivePriceReais = discountedPriceCents / 100;
+    const isOfferProduct = Boolean((productForDisplay as any).offer_type || (product as any).offer_type);
+    const offerBadgeLabel = ((productForDisplay as any).offer_type || (product as any).offer_type) === 'quantity_kit'
+        ? 'Kit'
+        : 'Oferta';
 
     return (
         <>
@@ -530,6 +534,12 @@ export function ModernProductCard({
                         </p>
                         {productForDisplay.brand && (
                             <p className="text-[10px] text-slate-400 mt-0.5">{productForDisplay.brand}</p>
+                        )}
+                        {isOfferProduct && (
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                                <ShoppingBag className="w-3 h-3" />
+                                {offerBadgeLabel}
+                            </span>
                         )}
                         <p className={`text-xs font-bold mt-1 ${getActivePromoPrice(product) !== null || selectedKit ? 'text-red-500' : 'text-slate-800'}`}>
                             {formatPrice(discountedPriceCents)}
@@ -630,6 +640,13 @@ export function ModernProductCard({
                             <span className="text-[10px] sm:text-xs bg-blue-600/90 backdrop-blur-sm text-white px-2 py-1 rounded-full font-medium shadow-sm flex items-center gap-1 animate-pulse">
                                 <ShoppingCart className="w-3 h-3" />
                                 <span className="hidden sm:inline">No Orçamento</span>
+                            </span>
+                        )}
+
+                        {isOfferProduct && (
+                            <span className="text-[10px] sm:text-xs bg-orange-500/90 backdrop-blur-sm text-white px-2 py-1 rounded-full font-medium shadow-sm flex items-center gap-1">
+                                <ShoppingBag className="w-3 h-3" />
+                                {offerBadgeLabel}
                             </span>
                         )}
 
