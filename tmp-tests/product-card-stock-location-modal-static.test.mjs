@@ -33,4 +33,22 @@ assert.match(
   'ProductCard stock modal must show available quantity per location'
 );
 
+assert.match(
+  source,
+  /fallbackStoreStockLocation/,
+  'ProductCard must fall back to the current stock as store stock when no location distribution exists yet'
+);
+
+assert.match(
+  source,
+  /Loja Principal/,
+  'ProductCard fallback stock location must use Loja Principal as the default deposit'
+);
+
+assert.match(
+  source,
+  /Estoque Geral/,
+  'ProductCard fallback stock location must use Estoque Geral as the default location'
+);
+
 console.log('product card stock location modal static checks passed');

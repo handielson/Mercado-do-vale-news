@@ -186,8 +186,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
     const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
-    const stockLocationTotal = stockLocationRows.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-    const stockLocationReserved = stockLocationRows.reduce((sum, item) => sum + Number(item.reserved_quantity || 0), 0);
+    const currentStockQuantity = Math.max(0, Number(currentStock || 0));
+    const displayStockLocationRows = stockLocationRows.length > 0
+        ? stockLocationRows.map((item) => ({
+            id: item.id,
+            depositName: item.deposit?.name || 'Deposito sem nome',
+            locationName: item.location?.name || '-',
+            locationCode: item.location?.code || null,
+            quantity: Number(item.quantity || 0),
+            reserved: Number(item.reserved_quantity || 0),
+            fallbackStoreStockLocation: false,
+        }))
+        : currentStockQuantity > 0
+            ? [{
+                id: 'fallback-store-stock',
+                depositName: 'Loja Principal',
+                locationName: 'Estoque Geral',
+                locationCode: 'LOJA',
+                quantity: currentStockQuantity,
+                reserved: 0,
+                fallbackStoreStockLocation: true,
+            }]
+            : [];
+    const stockLocationTotal = displayStockLocationRows.reduce((sum, item) => sum + item.quantity, 0);
+    const stockLocationReserved = displayStockLocationRows.reduce((sum, item) => sum + item.reserved, 0);
     const stockLocationAvailable = Math.max(0, stockLocationTotal - stockLocationReserved);
 
     // Check video: prioridade para video_url salvo no banco; fallback resiliente por SKU
@@ -621,22 +643,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     />
                 ) : (
                     <Package className="w-16 h-16 text-slate-300" />
-                )}
-
-                {/* Stock Badge - Esconde quando eh produto pai (pais nao vendem, nao tem estoque proprio) */}
-                {product.track_inventory && !isParentProduct && (
-                    <div className={cn(
-                        'absolute top-2 right-2 px-2 py-1 rounded-full text-xs font-semibold shadow-md',
-                        currentStock === 0
-                            ? 'bg-red-100 text-red-700 border border-red-300'
-                            : (currentStock ?? 0) < 5
-                                ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
-                                : 'bg-green-100 text-green-700 border border-green-300'
-                    )}>
-                        {currentStock === 0
-                            ? 'Sem Estoque'
-                            : `${currentStock} un.`}
-                    </div>
                 )}
 
                 {/* Badge "Produto Pai" - substitui o badge de estoque pra agregadores */}
@@ -1189,33 +1195,36 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
                                     {stockLocationError}
                                 </div>
-                            ) : stockLocationRows.length === 0 ? (
+                            ) : displayStockLocationRows.length === 0 ? (
                                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
                                     Nenhum deposito/local cadastrado para este produto.
                                 </div>
                             ) : (
                                 <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-100">
-                                    {stockLocationRows.map((item) => {
-                                        const quantity = Number(item.quantity || 0);
-                                        const reserved = Number(item.reserved_quantity || 0);
-                                        const available = Math.max(0, quantity - reserved);
+                                    {displayStockLocationRows.map((item) => {
+                                        const available = Math.max(0, item.quantity - item.reserved);
 
                                         return (
                                             <div key={item.id} className="border-b border-slate-100 px-4 py-3 last:border-b-0">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
                                                         <p className="truncate text-sm font-bold text-slate-900">
-                                                            {item.deposit?.name || 'Deposito sem nome'}
+                                                            {item.depositName}
                                                         </p>
                                                         <p className="mt-0.5 truncate text-xs text-slate-500">
-                                                            Local: {item.location?.name || '-'}
-                                                            {item.location?.code ? ` (${item.location.code})` : ''}
+                                                            Local: {item.locationName}
+                                                            {item.locationCode ? ` (${item.locationCode})` : ''}
                                                         </p>
+                                                        {item.fallbackStoreStockLocation && (
+                                                            <p className="mt-1 text-[10px] font-semibold uppercase text-emerald-600">
+                                                                Saldo atual considerado na loja ate redistribuir
+                                                            </p>
+                                                        )}
                                                     </div>
                                                     <div className="shrink-0 text-right">
                                                         <p className="text-sm font-black text-emerald-700">{available} disp.</p>
-                                                        <p className="text-[11px] text-slate-500">{quantity} total</p>
-                                                        {reserved > 0 && <p className="text-[11px] text-amber-600">{reserved} reservado</p>}
+                                                        <p className="text-[11px] text-slate-500">{item.quantity} total</p>
+                                                        {item.reserved > 0 && <p className="text-[11px] text-amber-600">{item.reserved} reservado</p>}
                                                     </div>
                                                 </div>
                                             </div>
