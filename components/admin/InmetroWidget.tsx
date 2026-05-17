@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ExternalLink, Loader2, CheckCircle2, AlertCircle, Save, Info, ShieldCheck, Copy } from 'lucide-react';
+import { ExternalLink, Loader2, CheckCircle2, AlertCircle, Save, Info, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { vpsApiService } from '../../services/vpsApiService';
 
@@ -8,8 +8,6 @@ interface InmetroWidgetProps {
   productId: string;
   /** Nome do produto — usado para sugestão no link ProdCert */
   productName?: string;
-  /** Marca/fabricante — usado para refinar a busca */
-  brand?: string;
   /** Valor atual do certificado (specs.inmetro_certificate) */
   currentCertificate?: string;
   /** Callback após salvar com sucesso */
@@ -20,19 +18,6 @@ interface InmetroWidgetProps {
   autoSave?: boolean;
   /** Specs atuais do produto (para merge correto) */
   currentSpecs?: Record<string, any>;
-}
-
-const PRODCERT_URL = 'http://www.inmetro.gov.br/prodcert/';
-const REGISTRO_OBJETOS_URL = 'http://www.inmetro.gov.br/registrosobjetos/';
-
-async function copyAndOpen(text: string, url: string, message: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast.success(message);
-  } catch {
-    toast.info('Copie manualmente o termo de busca: ' + text);
-  }
-  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 /**
@@ -47,7 +32,6 @@ async function copyAndOpen(text: string, url: string, message: string) {
 export function InmetroWidget({
   productId,
   productName = '',
-  brand = '',
   currentCertificate = '',
   onSaved,
   onChange,
@@ -63,26 +47,6 @@ export function InmetroWidget({
   const handleChange = (v: string) => {
     setValue(v);
     onChange?.(v);
-  };
-
-  const searchTerm = [brand, productName].map((v) => String(v || '').trim()).filter(Boolean).join(' ').slice(0, 120);
-
-  const handleOpenProdcert = () => {
-    const term = searchTerm || productName || '';
-    if (term) {
-      void copyAndOpen(term, PRODCERT_URL, `Termo "${term}" copiado. Cole no campo de busca do ProdCert.`);
-    } else {
-      window.open(PRODCERT_URL, '_blank', 'noopener,noreferrer');
-    }
-  };
-
-  const handleOpenRegistroObjetos = () => {
-    const term = searchTerm || productName || '';
-    if (term) {
-      void copyAndOpen(term, REGISTRO_OBJETOS_URL, `Termo "${term}" copiado. Cole no campo de busca do Registro de Objetos.`);
-    } else {
-      window.open(REGISTRO_OBJETOS_URL, '_blank', 'noopener,noreferrer');
-    }
   };
 
   const handleSave = async () => {
@@ -170,20 +134,22 @@ export function InmetroWidget({
             ou procure pelo produto no portal ProdCert do Inmetro.
           </p>
           <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleOpenProdcert}
+            <a
+              href="http://www.inmetro.gov.br/prodcert/"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-2 py-1 rounded-lg transition-colors"
             >
-              <Copy className="w-2.5 h-2.5" /> ProdCert <ExternalLink className="w-2.5 h-2.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleOpenRegistroObjetos}
+              🔍 ProdCert <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+            <a
+              href="http://www.inmetro.gov.br/registrosobjetos/"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-2 py-1 rounded-lg transition-colors"
             >
-              <Copy className="w-2.5 h-2.5" /> Registro de Objetos <ExternalLink className="w-2.5 h-2.5" />
-            </button>
+              📋 Registro de Objetos <ExternalLink className="w-2.5 h-2.5" />
+            </a>
           </div>
         </div>
       )}
@@ -212,26 +178,28 @@ export function InmetroWidget({
 
       {/* ── Links rápidos */}
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={handleOpenProdcert}
+        <a
+          href="http://www.inmetro.gov.br/prodcert/"
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-[10px] text-orange-500 hover:text-orange-700 hover:underline font-semibold"
         >
-          <Copy className="w-2.5 h-2.5" /> Consultar ProdCert <ExternalLink className="w-2.5 h-2.5" />
-        </button>
+          Consultar ProdCert <ExternalLink className="w-2.5 h-2.5" />
+        </a>
         <span className="text-slate-200">|</span>
-        <button
-          type="button"
-          onClick={handleOpenRegistroObjetos}
+        <a
+          href="http://www.inmetro.gov.br/registrosobjetos/"
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-[10px] text-orange-500 hover:text-orange-700 hover:underline font-semibold"
         >
-          <Copy className="w-2.5 h-2.5" /> Registro de Objetos <ExternalLink className="w-2.5 h-2.5" />
-        </button>
+          Registro de Objetos <ExternalLink className="w-2.5 h-2.5" />
+        </a>
       </div>
 
       <p className="text-[10px] text-slate-400 leading-snug">
         Exigido pela Shopee em eletrônicos, saúde e brinquedos.
-        O botão copia o nome do produto para a área de transferência antes de abrir o portal.
+        Consulte o número no rótulo do produto ou no portal ProdCert acima.
       </p>
 
     </div>

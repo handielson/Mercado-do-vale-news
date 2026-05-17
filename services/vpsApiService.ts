@@ -724,21 +724,16 @@ class VpsApiService {
    */
   async updateProductFiscal(
     id: string,
-    data: { ncm?: string; cest?: string; origin?: string; inmetro_certificate?: string; anatel_certificate?: string; specs?: Record<string, any> }
+    data: { ncm?: string; cest?: string; origin?: string; inmetro_certificate?: string; specs?: Record<string, any> }
   ): Promise<boolean> {
     this.cache.delete(`/products/${id}`);
     this.invalidateProductCache();
+    // Build payload
     const payload: Record<string, any> = {};
-    if (data.ncm !== undefined)    payload.ncm = data.ncm;
-    if (data.cest !== undefined)   payload.cest = data.cest;
-    if (data.origin !== undefined) payload.origin = data.origin;
-
-    const specsPatch: Record<string, any> = { ...(data.specs ?? {}) };
-    let specsTouched = false;
-    if (data.inmetro_certificate !== undefined) { specsPatch.inmetro_certificate = data.inmetro_certificate; specsTouched = true; }
-    if (data.anatel_certificate !== undefined)  { specsPatch.anatel_certificate = data.anatel_certificate;   specsTouched = true; }
-    if (specsTouched) payload.specs = specsPatch;
-
+    if (data.ncm !== undefined)                   payload.ncm = data.ncm;
+    if (data.cest !== undefined)                  payload.cest = data.cest;
+    if (data.origin !== undefined)                payload.origin = data.origin;
+    if (data.inmetro_certificate !== undefined)   payload.specs = { ...(data.specs ?? {}), inmetro_certificate: data.inmetro_certificate };
     return this.writeSafe('PATCH', `/products/${id}/fiscal`, payload);
   }
 

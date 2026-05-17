@@ -16,7 +16,6 @@ import { UnitList } from '../../../components/units/UnitList';
 import { UnitForm } from '../../../components/units/UnitForm';
 import { NcmSearchWidget } from '../../../components/admin/NcmSearchWidget';
 import { InmetroWidget } from '../../../components/admin/InmetroWidget';
-import { AnatelWidget } from '../../../components/admin/AnatelWidget';
 
 type TabType = 'product' | 'inventory';
 
@@ -398,7 +397,7 @@ export const ProductDetailPage: React.FC = () => {
                                     <span className="text-sm font-bold text-slate-700">Informações Fiscais</span>
                                     <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-semibold">VPS → Bling → Shopee</span>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <NcmSearchWidget
                                         productId={product.id}
                                         sku={product.sku}
@@ -410,16 +409,7 @@ export const ProductDetailPage: React.FC = () => {
                                     <InmetroWidget
                                         productId={product.id}
                                         productName={product.name}
-                                        brand={product.brand}
                                         currentCertificate={product.specs?.inmetro_certificate || ''}
-                                        currentSpecs={product.specs || {}}
-                                        autoSave={true}
-                                    />
-                                    <AnatelWidget
-                                        productId={product.id}
-                                        productName={product.name}
-                                        brand={product.brand}
-                                        currentCertificate={product.specs?.anatel_certificate || ''}
                                         currentSpecs={product.specs || {}}
                                         autoSave={true}
                                     />
